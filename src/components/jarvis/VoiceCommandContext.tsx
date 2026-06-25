@@ -22,6 +22,8 @@ type Ctx = {
   setEnabled: (v: boolean) => void;
   /** Module-init handoff for /sub-systems route */
   consumePendingModule: () => SubSystemId | null;
+  /** Route arbitrary text (chat input) through the same Gemini→action pipeline. */
+  routeText: (text: string) => Promise<void>;
 };
 
 const VoiceCtx = createContext<Ctx>({
@@ -31,6 +33,7 @@ const VoiceCtx = createContext<Ctx>({
   lastTranscript: "",
   setEnabled: () => {},
   consumePendingModule: () => null,
+  routeText: async () => {},
 });
 
 export const useVoiceCommands = () => useContext(VoiceCtx);
@@ -270,6 +273,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
         lastTranscript,
         setEnabled,
         consumePendingModule,
+        routeText: route,
       }}
     >
       {children}
