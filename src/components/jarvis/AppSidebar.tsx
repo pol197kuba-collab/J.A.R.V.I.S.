@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { useRouterState } from "@tanstack/react-router";
 import { LayoutDashboard, Bot, Terminal, Settings as SettingsIcon } from "lucide-react";
 import {
   Sidebar,
@@ -13,6 +13,8 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useHudNavigate } from "./TransitionContext";
+import { MiniArcReactor } from "./MiniArcReactor";
 
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -25,23 +27,17 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const { go, isTransitioning } = useHudNavigate();
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-3 px-2 py-2">
-          <div className="relative h-9 w-9 shrink-0">
-            <div className="absolute inset-0 rounded-full border border-primary/40" />
-            <div
-              className="animate-pulse-core absolute inset-1.5 rounded-full"
-              style={{ background: "var(--gradient-core)", boxShadow: "var(--glow-primary)" }}
-            />
-            <div className="absolute inset-[35%] rounded-full bg-foreground" />
-          </div>
+          <MiniArcReactor size={36} />
           {!collapsed && (
             <div className="leading-tight">
               <p className="font-display text-sm font-bold tracking-[0.25em] text-foreground">
-                JARVIS
+                J.A.R.V.I.S.
               </p>
               <p className="font-display text-[9px] uppercase tracking-[0.3em] text-primary/80">
                 v3.14 // online
@@ -65,21 +61,20 @@ export function AppSidebar() {
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
-                      asChild
                       isActive={active}
+                      disabled={isTransitioning}
+                      onClick={() => go(item.url)}
                       className="data-[active=true]:bg-primary/10 data-[active=true]:text-primary"
                     >
-                      <Link to={item.url} className="flex items-center gap-3">
-                        <item.icon className="h-4 w-4" />
-                        {!collapsed && (
-                          <span className="font-display text-xs uppercase tracking-[0.2em]">
-                            {item.title}
-                          </span>
-                        )}
-                        {active && (
-                          <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary shadow-[var(--glow-primary)]" />
-                        )}
-                      </Link>
+                      <item.icon className="h-4 w-4" />
+                      {!collapsed && (
+                        <span className="font-display text-xs uppercase tracking-[0.2em]">
+                          {item.title}
+                        </span>
+                      )}
+                      {active && (
+                        <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary shadow-[var(--glow-primary)]" />
+                      )}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
