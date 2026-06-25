@@ -17,6 +17,12 @@ import { BootSequence } from "@/components/jarvis/BootSequence";
 import { StarkLogin } from "@/components/jarvis/StarkLogin";
 import { DeactivateButton } from "@/components/jarvis/DeactivateButton";
 import { PhaseContext, type AppPhase } from "@/components/jarvis/PhaseContext";
+import {
+  TransitionProvider,
+  useRouteTransition,
+} from "@/components/jarvis/TransitionContext";
+import { HudRouteTransition } from "@/components/jarvis/HudRouteTransition";
+import { MiniArcReactor } from "@/components/jarvis/MiniArcReactor";
 
 function NotFoundComponent() {
   return (
@@ -101,7 +107,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700&family=Inter:wght@400;500;600&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@500;600;700&display=swap",
       },
     ],
   }),
@@ -165,50 +171,71 @@ function RootComponent() {
           />
         )}
         {showDashboardShell && (
-      <SidebarProvider>
-        <div className="relative flex min-h-screen w-full bg-background text-foreground">
-          <div className="bg-grid pointer-events-none fixed inset-0 opacity-40" aria-hidden />
-          <div
-            className="pointer-events-none fixed inset-0 opacity-60"
-            aria-hidden
-            style={{
-              background:
-                "radial-gradient(ellipse at 20% 0%, oklch(0.4 0.15 230 / 0.25), transparent 60%), radial-gradient(ellipse at 80% 100%, oklch(0.4 0.18 210 / 0.18), transparent 60%)",
-            }}
-          />
-          <AppSidebar />
-          <div className="relative flex min-h-screen flex-1 flex-col">
-            <header className="sticky top-0 z-10 flex h-12 items-center gap-3 border-b border-border/60 bg-background/70 px-4 backdrop-blur">
-              <SidebarTrigger className="text-primary hover:bg-primary/10" />
-              <div className="h-4 w-px bg-border" />
-              <span className="font-display text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                Stark Industries // Secure Terminal
-              </span>
-              <div className="ml-auto flex items-center gap-2 font-display text-[10px] uppercase tracking-widest">
-                <span
-                  className="h-1.5 w-1.5 animate-blink rounded-full"
-                  style={{ backgroundColor: "var(--success)" }}
-                />
-                <span style={{ color: "var(--success)" }}>All Systems Nominal</span>
-                <div className="ml-3 h-4 w-px bg-border" />
-                <DeactivateButton onClick={() => setPhase("shutdown")} />
-              </div>
-            </header>
-            <main className="relative flex-1">
-              {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-              <Outlet />
-            </main>
-            {phase === "shutdown" && (
-              <div
-                className="pointer-events-none fixed inset-0 z-[90] bg-black animate-shutdown-flash"
-                aria-hidden
-              />
-            )}
-          </div>
-        </div>
-      </SidebarProvider>
+          <TransitionProvider>
+            <DashboardShell phase={phase} onShutdown={() => setPhase("shutdown")} />
+          </TransitionProvider>
         )}
       </PhaseContext.Provider>
     </QueryClientProvider>
+  );
+}
+
+function DashboardShell({
+  phase,
+  onShutdown,
+}: {
+  phase: AppPhase;
+  onShutdown: () => void;
+}) {
+  const { transition } = useRouteTransition();
+  return (
+    <SidebarProvider>
+      <div className="relative flex min-h-screen w-full bg-background text-foreground">
+        <div className="bg-grid pointer-events-none fixed inset-0 opacity-30" aria-hidden />
+        <div
+          className="pointer-events-none fixed inset-0 opacity-50"
+          aria-hidden
+          style={{
+            background:
+              "radial-gradient(ellipse at 50% -10%, oklch(0.5 0.2 210 / 0.25), transparent 55%), radial-gradient(ellipse at 80% 100%, oklch(0.4 0.18 210 / 0.18), transparent 60%)",
+          }}
+        />
+        <AppSidebar />
+        <div className="relative flex min-h-screen flex-1 flex-col">
+          <header className="sticky top-0 z-10 flex h-12 items-center gap-3 border-b border-primary/30 bg-black/70 px-4 backdrop-blur">
+            <SidebarTrigger className="text-primary hover:bg-primary/10" />
+            <div className="h-4 w-px bg-primary/40" />
+            <MiniArcReactor size={20} />
+            <span className="font-display text-[10px] uppercase tracking-[0.3em] text-primary/80">
+              J.A.R.V.I.S. // STARK SECURE TERMINAL
+            </span>
+            <div className="ml-auto flex items-center gap-2 font-display text-[10px] uppercase tracking-widest">
+              <span
+                className="h-1.5 w-1.5 animate-blink rounded-full"
+                style={{ backgroundColor: "var(--success)" }}
+              />
+              <span style={{ color: "var(--success)" }}>All Systems Nominal</span>
+              <div className="ml-3 h-4 w-px bg-primary/40" />
+              <DeactivateButton onClick={onShutdown} />
+            </div>
+          </header>
+          <main
+            className={
+              "relative flex-1" +
+              (transition === "dematerialize" ? " animate-hud-dematerialize" : "")
+            }
+          >
+            <Outlet />
+          </main>
+          <HudRouteTransition />
+          {phase === "shutdown" && (
+            <div
+              className="pointer-events-none fixed inset-0 z-[90] bg-black animate-shutdown-flash"
+              aria-hidden
+            />
+          )}
+        </div>
+      </div>
+    </SidebarProvider>
   );
 }
