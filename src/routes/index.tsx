@@ -71,7 +71,7 @@ function Index() {
         <ThreatStream index={5} />
       </div>
 
-      <HudPanel index={4} title="CONVERSATION STREAM" className="flex flex-col">
+      <HudPanel index={6} title="CONVERSATION STREAM" className="flex flex-col">
         <ChatPanel />
       </HudPanel>
     </div>
