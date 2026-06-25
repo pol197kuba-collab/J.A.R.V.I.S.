@@ -6,6 +6,10 @@ import { askJarvis, hasGeminiKey } from "@/lib/ai/jarvisBrain";
 type Dispatch = { id: string; time: string; text: string };
 
 const STORAGE_KEY = "jarvis_intel_feed";
+const STORAGE_TS_KEY = "jarvis_intel_feed_ts";
+const MIN_REFRESH_MS = 5 * 60 * 1000;
+// Module-level guard so route remounts (back to dashboard) don't re-fetch.
+let inFlight: Promise<void> | null = null;
 
 function nowStamp() {
   const d = new Date();
@@ -44,7 +48,9 @@ export function GlobalIntelFeed({ index = 0 }: { index?: number }) {
   const ranRef = useRef(false);
 
   const refresh = useCallback(async () => {
+    if (inFlight) return inFlight;
     setLoading(true);
+    inFlight = (async () => {
     try {
       const lang = (typeof navigator !== "undefined" && navigator.language) || "en-US";
       const reply = await askJarvis({
@@ -68,20 +74,31 @@ export function GlobalIntelFeed({ index = 0 }: { index?: number }) {
       setItems(dispatches);
       try {
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(dispatches));
+        window.localStorage.setItem(STORAGE_TS_KEY, String(Date.now()));
       } catch {
         /* ignore */
       }
     } finally {
       setLoading(false);
     }
+    })();
+    try {
+      await inFlight;
+    } finally {
+      inFlight = null;
+    }
   }, []);
 
   useEffect(() => {
     if (ranRef.current) return;
     ranRef.current = true;
-    // Auto-fetch on mount only if we have a key; otherwise show fallback.
-    if (hasGeminiKey()) void refresh();
-    else if (items.length === 0) {
+    // Auto-fetch on mount only if we have a key AND cache is stale.
+    const ts = Number(
+      (typeof window !== "undefined" && window.localStorage.getItem(STORAGE_TS_KEY)) || 0,
+    );
+    const stale = Date.now() - ts > MIN_REFRESH_MS;
+    if (hasGeminiKey() && stale) void refresh();
+    else if (!hasGeminiKey() && items.length === 0) {
       const stamp = nowStamp();
       setItems(FALLBACK.map((t, i) => ({ id: `fb-${i}`, time: stamp, text: t })));
     }

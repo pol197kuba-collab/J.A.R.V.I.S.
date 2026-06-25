@@ -1,28 +1,43 @@
-## Goal
-Add mobile drawer sidebar + auto-fullscreen on Engage, without breaking the 3D core or landscape layout.
+Plan wdrożenia ochrony przed zapętleniem Gemini 429:
 
-## 1. Mobile Drawer Sidebar
-- Edit `src/components/jarvis/AppSidebar.tsx`: keep current `Sidebar` for desktop. The shadcn `Sidebar` already swaps to a `Sheet` on mobile (`useIsMobile`), so the sidebar markup itself doesn't change — but we currently rely on the header `SidebarTrigger` which is small/plain.
-- Edit `src/routes/__root.tsx` header: replace the default `SidebarTrigger` on mobile/landscape with a custom HUD button — cyan glow, sharp corners, label "MENU // SYS" + hamburger icon (lucide `Menu`). On desktop keep the current trigger. The button calls `setOpenMobile(true)` from `useSidebar()`.
-- Style the mobile `Sheet` variant of `Sidebar` (in `src/components/ui/sidebar.tsx` SheetContent for `data-mobile="true"`): override background to `bg-black/85 backdrop-blur`, add neon cyan border (`border-primary/60`), shadow glow, sharp corners. Add a visible HUD-styled close "X" button at top-right inside the sheet (shadcn Sheet ships a default close, but restyle/replace to match HUD: cyan ring, "[ X ] CLOSE").
-- Verify `SidebarMenuButton` still works inside the sheet and that `useHudNavigate` auto-closes the sheet after click (call `setOpenMobile(false)` after `go(...)`).
+1. **Wake Word tylko dla mikrofonu**
+   - W `VoiceCommandContext.tsx` rozdzielę obsługę wejścia na dwa tryby:
+     - `routeVoiceTranscript()` dla mikrofonu,
+     - `routeText()` dla czatu.
+   - Mikrofon zaakceptuje tylko frazy zaczynające się od `Jarvis`, `Jarvis,`, `Jarvis...`, niezależnie od wielkości liter.
+   - Po wykryciu wake word usunę samo słowo `Jarvis` i do Gemini trafi wyłącznie właściwa komenda, np. `otwórz monitor cen paliw`.
+   - Frazy bez wake word zostaną całkowicie zignorowane: bez wpisu do czatu, bez `speak()`, bez API.
 
-## 2. Auto Fullscreen on Engage
-- New helper `src/lib/fullscreen.ts`: `requestAppFullscreen()` tries `el.requestFullscreen()`, then `webkitRequestFullscreen`, then `webkitEnterFullscreen` on a fallback `<video>` (iOS Safari has no real element fullscreen — gracefully no-op there). Wrap in try/catch; never throw.
-- `src/components/jarvis/BootSequence.tsx` (engage mode): in the Engage button click handler, call `requestAppFullscreen()` before `onEngage()`. User-gesture requirement is satisfied because it's a click handler.
-- `src/routes/__root.tsx` header: add a small HUD icon button (lucide `Maximize2`) next to `DeactivateButton` that toggles fullscreen on demand for desktop / re-entry on mobile if user exited.
-- Listen to `fullscreenchange` to update the toggle icon (`Minimize2` when active).
+2. **Filtr szumów po wake word**
+   - Dodam walidację komendy głosowej po odcięciu `Jarvis`:
+     - minimum 3 znaki,
+     - ignorowanie wypełniaczy/szumów typu `eee`, `yyy`, `yym`, `umm`, `hmm`, pojedynczych sylab i pustych komend.
+   - Jeśli komenda nie przejdzie filtra, nie zostanie wysłana do Gemini.
 
-## 3. Layout integrity in fullscreen
-- `src/routes/__root.tsx` already uses `landscape:max-md:h-screen overflow-hidden` — verify it still fills correctly when `100vh` expands after browser chrome hides. Use `100dvh` via Tailwind arbitrary (`h-[100dvh]`) for the landscape mobile shell so the layout re-flows when chrome hides.
-- `ReactorCore` is sized by its parent (`max-w-[140px]` in landscape mobile). No change needed — it scales with the container, so fullscreen just gives more breathing room.
+3. **Globalny throttle 3 sekundy dla zapytań do Gemini**
+   - Dodam wspólną blokadę czasową w `VoiceCommandContext.tsx` dla prawidłowych komend z mikrofonu i czatu.
+   - Po wysłaniu jednej komendy do Gemini kolejne żądanie będzie ignorowane przez 3 sekundy.
+   - Czat nadal nie będzie wymagał słowa `Jarvis`, ale będzie respektował throttle, żeby nie dało się przypadkowo spamować API.
+   - W czacie przy zablokowanym wysłaniu zatrzymam stan „typing”, aby UI nie zostawał w sztucznym ładowaniu.
 
-## Files touched
-- `src/routes/__root.tsx` — custom mobile HUD menu button, fullscreen toggle icon, `100dvh` for mobile landscape shell.
-- `src/components/jarvis/AppSidebar.tsx` — auto-close mobile sheet after nav.
-- `src/components/ui/sidebar.tsx` — restyle the mobile Sheet variant (HUD frame + close button).
-- `src/components/jarvis/BootSequence.tsx` — call `requestAppFullscreen()` on Engage click.
-- `src/lib/fullscreen.ts` — new helper with vendor prefixes.
+4. **Ochrona automatycznych triggerów w tle**
+   - Sprawdzę miejsca automatycznie wywołujące Gemini:
+     - `GlobalIntelFeed.tsx`,
+     - `StarkLogin.tsx`,
+     - `SubSystemGrid.tsx`.
+   - W `GlobalIntelFeed` wzmocnię obecny `ranRef` i interwał tak, aby auto-fetch nie wykonywał się wielokrotnie przy remountach/StrictMode w tej samej sesji.
+   - Dla kliknięć modułów dodam jednorazowy guard per moduł/kliknięcie inicjalizacji, żeby szybkie podwójne tapnięcia nie generowały wielu wypowiedzi.
+   - Login greeting pozostanie pojedynczym triggerem na udane logowanie.
 
-## Out of scope
-No changes to phase state machine, audio engine, 3D core internals, or voice commands.
+5. **Bez zmiany logiki czatu i akcji UI**
+   - Zachowam obecne zachowanie: tekst z `Transmit Instruction` nadal przechodzi przez ten sam Gemini → `action` → fizyczna akcja UI pipeline.
+   - Wake word nie będzie wymagany w czacie.
+
+6. **Weryfikacja**
+   - Sprawdzę typy/build.
+   - Przetestuję logiczne przypadki:
+     - mikrofon: `Dzisiaj będzie pogoda` → ignoruj,
+     - mikrofon: `Jarvis, open fuel` → wyślij `open fuel`,
+     - mikrofon: `Jarvis eee` → ignoruj,
+     - czat: `Podaj przepis na sernik` → działa bez `Jarvis`,
+     - szybkie ponowne wysłanie w ciągu 3 sekund → brak kolejnego Gemini requestu.

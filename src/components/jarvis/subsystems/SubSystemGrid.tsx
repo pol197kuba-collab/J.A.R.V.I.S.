@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { Fuel, Building2, BrainCircuit, Play } from "lucide-react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { SUB_SYSTEMS, type SubSystemId } from "@/data/subSystems";
@@ -32,6 +33,9 @@ export function SubSystemGrid({
   onInitialize: (id: SubSystemId) => void;
   disabled?: boolean;
 }) {
+  // Guard: each module's "Initialize" button can only fire one Gemini speak
+  // per click burst. Prevents double-tap / re-render from spamming the API.
+  const lastClickRef = useRef<Map<SubSystemId, number>>(new Map());
   return (
     <div className="space-y-6 p-6 landscape:max-md:space-y-2 landscape:max-md:p-2">
       <HudPanel index={0} title="SUB-SYSTEMS // EXTERNAL MODULES" className="p-5 landscape:max-md:p-2">
@@ -86,6 +90,10 @@ export function SubSystemGrid({
                   onMouseEnter={() => audio.playClick()}
                   onClick={() => {
                     audio.playClick();
+                    const now = Date.now();
+                    const last = lastClickRef.current.get(mod.id) ?? 0;
+                    if (now - last < 3000) return;
+                    lastClickRef.current.set(mod.id, now);
                     const m = MODULE_PROMPT[mod.id];
                     void speakJarvis({ prompt: m.prompt, fallbackKind: "module", fallbackHint: m.hint });
                     onInitialize(mod.id);
