@@ -13,7 +13,10 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/jarvis/AppSidebar";
-import { JarvisBoot } from "@/components/jarvis/JarvisBoot";
+import { BootSequence } from "@/components/jarvis/BootSequence";
+import { StarkLogin } from "@/components/jarvis/StarkLogin";
+import { DeactivateButton } from "@/components/jarvis/DeactivateButton";
+import { PhaseContext, type AppPhase } from "@/components/jarvis/PhaseContext";
 
 function NotFoundComponent() {
   return (
@@ -124,18 +127,37 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  const [isBooted, setIsBooted] = useState(false);
+  const [phase, setPhase] = useState<AppPhase>("booting");
 
-  if (!isBooted) {
-    return (
-      <QueryClientProvider client={queryClient}>
-        <JarvisBoot onEnter={() => setIsBooted(true)} />
-      </QueryClientProvider>
-    );
-  }
+  // Auto-progress shutdown → booting after dissolve
+  useEffect(() => {
+    if (phase !== "shutdown") return;
+    const t = setTimeout(() => setPhase("booting"), 1600);
+    return () => clearTimeout(t);
+  }, [phase]);
+
+  // Auto-progress transition → dashboard_active
+  useEffect(() => {
+    if (phase !== "transition_to_dashboard") return;
+    const t = setTimeout(() => setPhase("dashboard_active"), 1400);
+    return () => clearTimeout(t);
+  }, [phase]);
+
+  const showDashboardShell =
+    phase === "transition_to_dashboard" ||
+    phase === "dashboard_active" ||
+    phase === "shutdown";
 
   return (
     <QueryClientProvider client={queryClient}>
+      <PhaseContext.Provider value={{ phase, setPhase }}>
+        {phase === "booting" && (
+          <BootSequence key="boot" onEngage={() => setPhase("login_screen")} />
+        )}
+        {phase === "login_screen" && (
+          <StarkLogin onGranted={() => setPhase("transition_to_dashboard")} />
+        )}
+        {showDashboardShell && (
       <SidebarProvider>
         <div className="relative flex min-h-screen w-full bg-background text-foreground">
           <div className="bg-grid pointer-events-none fixed inset-0 opacity-40" aria-hidden />
@@ -161,15 +183,25 @@ function RootComponent() {
                   style={{ backgroundColor: "var(--success)" }}
                 />
                 <span style={{ color: "var(--success)" }}>All Systems Nominal</span>
+                <div className="ml-3 h-4 w-px bg-border" />
+                <DeactivateButton onClick={() => setPhase("shutdown")} />
               </div>
             </header>
             <main className="relative flex-1">
               {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
               <Outlet />
             </main>
+            {phase === "shutdown" && (
+              <div
+                className="pointer-events-none fixed inset-0 z-[90] bg-black animate-shutdown-flash"
+                aria-hidden
+              />
+            )}
           </div>
         </div>
       </SidebarProvider>
+        )}
+      </PhaseContext.Provider>
     </QueryClientProvider>
   );
 }

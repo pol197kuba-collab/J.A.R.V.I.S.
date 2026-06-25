@@ -5,6 +5,7 @@ import { VoiceButton } from "@/components/jarvis/VoiceButton";
 import { ChatPanel } from "@/components/jarvis/ChatPanel";
 import { ActiveTasksWidget } from "@/components/jarvis/ActiveTasksWidget";
 import { SystemStatsStrip } from "@/components/jarvis/SystemStatsStrip";
+import { TileBuild } from "@/components/jarvis/TileBuild";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -22,6 +23,7 @@ function Index() {
   const [listening, setListening] = useState(false);
   return (
     <div className="relative space-y-6 p-6">
+      <TileBuild delay={40}>
       <header className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <p className="font-display text-[10px] uppercase tracking-[0.4em] text-primary">
@@ -36,10 +38,14 @@ function Index() {
           directive.
         </p>
       </header>
+      </TileBuild>
 
-      <SystemStatsStrip />
+      <TileBuild delay={160}>
+        <SystemStatsStrip />
+      </TileBuild>
 
       <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+        <TileBuild delay={320}>
         <section className="hud-panel relative flex flex-col items-center justify-center gap-6 p-8 backdrop-blur">
           <div className="font-display absolute left-4 top-4 text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             Arc Core // J-3140
@@ -50,11 +56,16 @@ function Index() {
           <ReactorCore active={listening} />
           <VoiceButton active={listening} onToggle={() => setListening((v) => !v)} />
         </section>
+        </TileBuild>
 
-        <ActiveTasksWidget />
+        <TileBuild delay={480}>
+          <ActiveTasksWidget />
+        </TileBuild>
       </div>
 
-      <ChatPanel />
+      <TileBuild delay={640}>
+        <ChatPanel />
+      </TileBuild>
     </div>
   );
 }
