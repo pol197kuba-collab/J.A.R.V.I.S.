@@ -370,3 +370,23 @@
   to { transform: rotate(360deg); }
 }
 .animate-mini-reactor-spin { animation: mini-reactor-spin 8s linear infinite; transform-origin: center; }
+
+/* Neon glow on hover for icons / interactive elements */
+.icon-neon {
+  filter: drop-shadow(0 0 1px color-mix(in oklab, var(--primary) 70%, transparent));
+  transition: filter .25s ease, color .25s ease;
+}
+.icon-neon:hover,
+.group:hover .icon-neon {
+  filter: drop-shadow(0 0 6px var(--primary)) drop-shadow(0 0 14px color-mix(in oklab, var(--primary) 60%, transparent));
+}
+
+/* Animated chart line draw */
+@keyframes line-draw {
+  to { stroke-dashoffset: 0; }
+}
+.animate-line-draw {
+  stroke-dasharray: 600;
+  stroke-dashoffset: 600;
+  animation: line-draw 1.6s ease-out forwards;
+}
