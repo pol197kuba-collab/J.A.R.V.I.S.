@@ -57,7 +57,7 @@ export function ModuleLoader({
   }, [mod, onReady]);
 
   return (
-    <div className="absolute inset-0 z-40 flex flex-col items-center justify-center overflow-hidden bg-black">
+    <div className="absolute inset-0 z-40 flex flex-col items-center justify-center overflow-hidden bg-black landscape:max-md:fixed landscape:max-md:z-[100]">
       {/* grid backdrop */}
       <div className="bg-grid pointer-events-none absolute inset-0 opacity-20" aria-hidden />
       <div
