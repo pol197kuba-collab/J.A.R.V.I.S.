@@ -1,87 +1,86 @@
-# Moduł SUB-SYSTEMS — plan implementacji
+## JARVIS — Advanced Gadgets & Modules
 
-Dodaję nową zakładkę „SUB-SYSTEMS" jako portal kontenerowy dla 3 zewnętrznych aplikacji, w pełni spójny ze stylistyką Stark HUD intra. Wszystko w jednym SPA, bez przeładowań.
+Five new HUD modules integrated with the existing phase/transition system, optimized for landscape mobile and decoupled from the 3D core's render loop.
 
-## 1. Nowa trasa i nawigacja
+---
 
-- `src/routes/sub-systems.tsx` — nowa trasa `/sub-systems` (TanStack file-route).
-- `src/components/jarvis/AppSidebar.tsx` — dodaję pozycję „SUB-SYSTEMS" z ikoną `Boxes` (lucide, `strokeWidth={1.5}`, neon cyan), używającą istniejącego `useHudNavigate` (re-używa systemu przejść HUD między zakładkami).
+### 1. Audio Spectrum Visualizer (around ARC CORE)
 
-## 2. State machine portalu (lokalny w trasie)
+- New component `CoreAudioSpectrum.tsx` rendered as an absolutely-positioned `<canvas>` layer inside `ReactorCore.tsx`, sitting *outside* the gyroscope's `preserve-3d` subtree so it never triggers 3D relayout.
+- Uses a shared `AnalyserNode` (extend `AudioEngine.ts` with `getAnalyser()` so mic + visualizer share one node — no double `getUserMedia`).
+- Draws 64 radial bars (neon cyan) on a circular path around the amber core; bar heights from `getByteFrequencyData()`. Idle state: gentle sine pulse so it's never visually dead.
+- Single rAF loop, writes to canvas only (no React state). Auto-pauses via `IntersectionObserver` and when `prefers-reduced-motion`.
 
-W `sub-systems.tsx` lokalny stan: `'grid' | 'loading' | 'active' | 'terminating'` + `activeModule: ModuleId | null`. Brak ingerencji w globalny `PhaseContext`.
+### 2. Vocal Override (continuous Web Speech Recognition)
 
-Flow:
+- New `VoiceCommandContext.tsx` provider mounted in `__root.tsx` (only active when `phase === 'dashboard_active'`).
+- Wraps `webkitSpeechRecognition` with auto-restart on `end`/`error`, language `en-US`, `continuous: true`, `interimResults: true`.
+- Switch UI: `VocalOverrideSwitch.tsx` placed in `ChatPanel` header — label "VOCAL OVERRIDE // CONTINUOUS LISTEN" with ACTIVE/INACTIVE state, pulsing cyan dot when listening.
+- Pattern matcher (case-insensitive, regex on final transcript):
+
+  ```text
+  /jarvis dashboard|show core/   → navigate "/"
+  /jarvis fuel|open fuel/        → navigate "/sub-systems" + auto-init fuel-monitor
+  /jarvis office|open calculator/→ navigate "/sub-systems" + auto-init rto-calculator
+  /jarvis job|open jobfit/       → navigate "/sub-systems" + auto-init jobfit-ai
+  /jarvis system shutdown|disconnect/ → trigger shutdown phase
+  ```
+
+- Auto-init handoff: `sub-systems.tsx` reads a `?init=<id>` search param (or a small `pendingModule` ref in context) and jumps straight to the loader sequence.
+- Uses existing `useHudNavigate` so transitions stay coherent. Falls back gracefully if `SpeechRecognition` unsupported (switch disabled with tooltip).
+
+### 3. Weather Telemetry Grid widget
+
+- New `WeatherTelemetry.tsx` on the dashboard (compact HUD panel, sharp corners, neon border).
+- Mock data (slowly jittered every 4s via `setInterval` for liveness): `THERMAL_INDEX`, `ATMOSPHERIC_PRESSURE`, `WIND_VECTOR`, `HUMIDITY`, plus `VISIBILITY` and `UV_INDEX` for density.
+- Right side: small SVG radar — concentric rings + rotating green-cyan sweep wedge (new `@keyframes radar-sweep-weather` reuses pattern from sub-systems radar, color shifted to green).
+
+### 4. Global Threat Stream widget
+
+- New `ThreatStream.tsx` — vertical auto-scrolling list (CSS `marquee` via `transform: translateY` + `animation`, pauses on hover).
+- Mock feed of ~12 entries with severity tag color (`ALERT` orange, `DATA` cyan, `WARNING` amber-red), timestamp, payload text. Severity left-border accent.
+- New entry pushed every ~6s (shift array, cap length 20) so the feed feels live.
+
+### 5. GEO-TRACKING route
+
+- New route `src/routes/geo-tracking.tsx` + sidebar entry in `AppSidebar.tsx` (icon: `Satellite` or `Crosshair` from lucide).
+- `bun add leaflet @types/leaflet` + `@import "leaflet/dist/leaflet.css"` at the top of `src/styles.css`.
+- Dark map: use CartoDB **dark_nolabels** tiles (no key required), apply CSS filter `invert(0) hue-rotate(180deg) saturate(2) brightness(0.6)` on `.leaflet-tile` to push it toward cyan/black.
+- Centered crosshair overlay (pure CSS/SVG, not a Leaflet marker — anchored to map container center so it stays fixed during pan).
+- Uses `navigator.geolocation.getCurrentPosition` to set initial view; on denial, fallback coords (Warsaw) + label `SIGNATURE_LOST // DEFAULT GRID`.
+- Caption bar: `HOST SIGNATURE PINPOINTED // LAT: xx.xxxx LON: xx.xxxx`, plus mock telemetry rows (accuracy, altitude, heading).
+
+---
+
+### Dashboard layout (landscape mobile fit)
+
+Reflow `src/routes/index.tsx` to a 3-column landscape grid so the new widgets fit without scrolling:
+
 ```text
-grid --[INITIALIZE]--> loading (4.5s) --> active (iframe + top bar)
-active --[TERMINATE]--> terminating (CRT off, ~700ms) --> grid
+┌──────────┬─────────────┬───────────────┐
+│ Active   │  ARC CORE   │ Weather       │
+│ Tasks    │  + spectrum │ Threat Stream │
+├──────────┴─────────────┴───────────────┤
+│ Chat (+ Vocal Override switch)         │
+└────────────────────────────────────────┘
 ```
 
-Lista modułów (placeholder URL — user podmieni):
-- `fuel-monitor` — „FUEL MONITOR" — Fuel surcharge monitoring & logistics analytics — `https://example.com/fuel-monitor`
-- `rto-calculator` — „RTO CALCULATOR" — Return To Office financial & commute impact calculator — `https://example.com/rto-calculator`
-- `jobfit-ai` — „JOBFIT AI" — AI-powered CV optimization & job advertisement matching platform — `https://example.com/jobfit-ai`
+Desktop keeps roomier 2-col layout. All new panels use existing `HudPanel` styling.
 
-Konfiguracja w `src/data/subSystems.ts` (id, name, description, url, sysRef, ikona) — łatwa do podmiany URL-i.
+---
 
-## 3. Komponenty (nowe pliki w `src/components/jarvis/subsystems/`)
+### Performance guardrails
 
-- `SubSystemGrid.tsx` — siatka 3 kafelków na `HudPanel` (`grid-cols-1 md:grid-cols-3`). Każdy kafelek: nazwa (font-display), opis (mono), mikroteksty w narożnikach (`HudTag` + losowy `SYS_REF`), pulsujący przycisk „INITIALIZE MODULE" (animowana neon obwódka + audio click przy hover/click). Wejście kafelków staggered (re-używam `animate-hud-tile-in`).
-- `ModuleLoader.tsx` — pełnoekranowy overlay (4.5s):
-  - centralny obracający się radar HUD (SVG: 3 koncentryczne pierścienie z `spin-cw`/`spin-ccw`, wiązka skanująca z `conic-gradient` + maska, podpis „DECRYPTING LINK // EXTERNAL_SERVER_CONNECT").
-  - pasek postępu skokowy (steps `[8, 23, 41, 58, 72, 88, 96, 100]` w czasie 4.5s przez `setInterval`).
-  - boczny log linii kodu (auto-scroll, monospace, cyjan): „INITIATING HANDSHAKE...", „CONNECTING TO {MODULE}.SYS...", „BYPASSING FIREWALL...", „NEGOTIATING TLS 1.3...", „STARK_SECURE_TUNNEL: ACTIVE", „MOUNTING REMOTE DOM..." (dodawane stopniowo).
-  - audio: `audio.playEngage()` na start, `audio.playAccessGranted()` na 100%.
-  - zakończenie: `iris-open` (re-używam istniejącej keyframe) → callback `onReady()`.
-- `ModuleFrame.tsx` — kontener aktywnego iframe:
-  - górny pasek HUD (sticky, `h-9`, cienka ramka, neon glow): mini Arc Reactor + „MODULE HOSTED VIA STARK_OS_V3 // SECURE TERMINAL // {MODULE_NAME}" po lewej, status „LINK: STABLE" (zielona blink-dot) w środku, czerwony przycisk „TERMINATE PROCESS // EXIT" po prawej (styl z `DeactivateButton`, kolor `--destructive`).
-  - `<iframe src={url} className="w-full h-[calc(100%-2.25rem)]" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" referrerPolicy="no-referrer" />` z `title={name}`.
-  - animacja wejścia: `animate-hud-tile-in` na całym kontenerze po `iris-open`.
-- `CrtShutdown.tsx` — overlay zamykający (700ms): efekt starego CRT — skala Y → 0.02 (pozioma linia), potem skala X → 0 (punkt), potem fade-out punktu. CSS keyframe `crt-off` zdefiniowany w `styles.css`.
+- Single shared `AnalyserNode` for mic (visualizer + existing `useMicAnalyser` both read from it).
+- Canvas drawing for the spectrum (no SVG/DOM bars), `willReadFrequently: false`, fixed DPR cap of 1.5.
+- Speech recognition lives outside React render path; only the switch state is reactive.
+- Threat stream uses CSS animation, not JS rAF.
+- Leaflet only loaded on `/geo-tracking` (lazy via route boundary).
 
-## 4. Animacje (dodaję do `src/styles.css`)
+---
 
-```text
-@keyframes crt-off { ... 0%→full, 55%→scaleY(0.02), 80%→scaleX(0.005), 100%→opacity 0 }
-@keyframes radar-sweep { conic rotate 0→360 }
-@keyframes init-pulse { box-shadow + opacity pulse dla przycisku INITIALIZE }
-@keyframes log-line-in { translateY(4px)+opacity 0→1 }
-```
-Plus mała klasa `.crt-frame` z `transform-origin:center` i `will-change:transform,opacity`.
+### Files
 
-## 5. Spójność wizualna
+**New:** `CoreAudioSpectrum.tsx`, `VoiceCommandContext.tsx`, `VocalOverrideSwitch.tsx`, `WeatherTelemetry.tsx`, `ThreatStream.tsx`, `src/routes/geo-tracking.tsx`, `src/data/threatStream.ts`.
 
-- Wszystko owinięte w `HudPanel` z istniejącymi `hud-corner` + `HudTag` (mikroteksty `SYS_REF`, `CH_`, itp. — istniejący generator).
-- Typografia mono (już globalnie), akcent `var(--primary)` (neon cyjan), destructive dla TERMINATE.
-- Ostre rogi (`rounded-none`), cienkie ramki 1px, neon drop-shadow.
-
-## 6. Audio (re-use `audio` engine)
-
-- `audio.playClick()` — hover/click na kafelku i TERMINATE.
-- `audio.playEngage()` — start ModuleLoader.
-- `audio.playAccessGranted()` — na 100% progressu.
-- `audio.playShutdown()` — przy TERMINATE (krótki sweep — re-use).
-
-## 7. Blokady / UX
-
-- Podczas `loading` i `terminating` interakcje wyłączone (`pointer-events-none` na siatce; overlay przykrywa wszystko).
-- Iframe ma `loading="lazy"` i `referrerPolicy="no-referrer"`. Sandbox flags konserwatywne, można poszerzyć per moduł później.
-- Brak hard-coded kolorów — wszystko przez tokeny w `styles.css`.
-
-## 8. Pliki
-
-**Nowe:**
-- `src/routes/sub-systems.tsx`
-- `src/data/subSystems.ts`
-- `src/components/jarvis/subsystems/SubSystemGrid.tsx`
-- `src/components/jarvis/subsystems/ModuleLoader.tsx`
-- `src/components/jarvis/subsystems/ModuleFrame.tsx`
-- `src/components/jarvis/subsystems/CrtShutdown.tsx`
-
-**Modyfikowane:**
-- `src/components/jarvis/AppSidebar.tsx` — pozycja menu „SUB-SYSTEMS".
-- `src/styles.css` — keyframes `crt-off`, `radar-sweep`, `init-pulse`, `log-line-in`.
-
-## Co NIE zmieniam
-
-Boot/Login flow, ReactorCore, istniejące zakładki, audio engine, system przejść HUD — bez zmian. Routing istniejących tras nietknięty.
+**Edited:** `ReactorCore.tsx` (mount spectrum), `AudioEngine.ts` (shared analyser), `useMicAnalyser.ts` (consume shared analyser), `ChatPanel.tsx` (switch), `routes/index.tsx` (layout + new widgets), `routes/__root.tsx` (provider), `routes/sub-systems.tsx` (auto-init from voice), `AppSidebar.tsx` (Geo-Tracking link), `styles.css` (radar-sweep-weather, threat-marquee, leaflet dark filter), `package.json` (leaflet).
