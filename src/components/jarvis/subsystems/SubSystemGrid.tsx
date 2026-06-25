@@ -2,11 +2,18 @@ import { Fuel, Building2, BrainCircuit, Play } from "lucide-react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { SUB_SYSTEMS, type SubSystemId } from "@/data/subSystems";
 import { audio } from "@/lib/audio/AudioEngine";
+import { speak } from "@/lib/audio/speak";
 
 const ICONS: Record<SubSystemId, typeof Fuel> = {
   "fuel-monitor": Fuel,
   "rto-calculator": Building2,
   "jobfit-ai": BrainCircuit,
+};
+
+const SPEECH: Record<SubSystemId, string> = {
+  "fuel-monitor": "Loading Fuel Monitor Matrix.",
+  "rto-calculator": "Accessing RTO calculation systems.",
+  "jobfit-ai": "Initializing AI resume optimizer.",
 };
 
 export function SubSystemGrid({
@@ -70,6 +77,7 @@ export function SubSystemGrid({
                   onMouseEnter={() => audio.playClick()}
                   onClick={() => {
                     audio.playClick();
+                    speak(SPEECH[mod.id]);
                     onInitialize(mod.id);
                   }}
                   className="group relative mt-2 flex items-center justify-center gap-2 border border-primary/60 bg-primary/10 px-4 py-2.5 font-display text-[11px] uppercase tracking-[0.35em] text-primary transition hover:bg-primary/20 disabled:opacity-40 landscape:max-md:mt-0 landscape:max-md:px-2 landscape:max-md:py-1 landscape:max-md:text-[8px] landscape:max-md:tracking-[0.18em]"
