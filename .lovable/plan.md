@@ -1,52 +1,70 @@
-## Goal
-Przekształcić obecny płaski (2D) komponent `ReactorCore` w trójwymiarowy holograficzny żyroskop z prawdziwą głębią Z, wielowymiarowymi orbitami pierścieni i efektem szklanej sfery.
+# Plan: Wydajność 3D + Audio JARVIS
 
-## Zakres zmian
-Edycja tylko warstwy prezentacji — bez zmian w logice, danych ani routingu.
+## 1. Optymalizacja wydajności rdzenia (`src/components/jarvis/ReactorCore.tsx`)
 
-### Pliki do modyfikacji
-- `src/components/jarvis/ReactorCore.tsx` — restrukturyzacja warstw na rzecz 3D.
-- `src/styles.css` — nowe keyframes 3D + utility klasy.
+**Problemy obecne:**
+- 26 cząsteczek = 26 osobnych elementów DOM z własnymi animacjami
+- `useCoord` i `useAudioLevel` aktualizują state co ~50–100 ms → React re-renderuje całe drzewo rdzenia
+- `mix-blend-mode: screen` + `drop-shadow` na 6 warstwach = kosztowny composite
+- `gyro-tilt` animuje cały kontener `transform`, wymuszając repaint warstw potomnych
 
-## Implementacja
+**Zmiany:**
+- Zastąpić chmurę cząsteczek **jednym `<canvas>` 2D** (rysowanym w `requestAnimationFrame`) — 1 element DOM zamiast 26.
+- Zamienić `useCoord` (setState) na **bezpośrednią mutację `ref.current.textContent`** w rAF — zero re-renderów React.
+- Audio level również propagowany przez CSS custom property (`element.style.setProperty('--audio', val)`) zamiast props/state → re-render tylko warstwy CSS, nie React.
+- Każda warstwa SVG dostaje `will-change: transform` i `contain: layout paint`.
+- Ograniczyć `drop-shadow` do 2 najjaśniejszych warstw (zewnętrznej i wewnętrznej) zamiast wszystkich 6.
+- `gyro-tilt` przeniesiony na osobny wrapper z `transform: translateZ(0)` (warstwa GPU) i animowany via CSS, nie JS.
+- Hook `useAudioLevel` (symulowany) zastąpiony realnym `AnalyserNode` (patrz sekcja Audio) — odpalany tylko gdy `active=true`.
 
-### 1. Przestrzeń 3D (kontener)
-Nowy zewnętrzny wrapper z:
-- `perspective: 1200px`
-- wewnętrzny "stage" z `transform-style: preserve-3d` i `transform: rotateX(25deg) rotateY(-15deg)`
-- delikatna animacja kołysania (`@keyframes gyro-tilt` — oscylacja ±5° na X/Y w 12s) dla efektu "żyjącego" hologramu.
+## 2. System audio (`src/lib/audio/`)
 
-### 2. Przejście pierścieni z SVG na warstwy DOM 3D
-SVG nie pozwala umieścić elementów na różnych głębokościach Z w tym samym viewBox. Rozwiązanie: każdy pierścień staje się osobnym `<div>` (absolute, full-size) zawierającym pojedyncze `<svg>` z jego geometrią. Każdy div ma własny `translateZ` i własną animację 3D.
+Nowy moduł oparty wyłącznie na **Web Audio API** (bez plików):
 
-Rozkład Z i osi:
-- Ring 1 (zewnętrzny dashed): `translateZ(-80px)`, anim `ring3d-a` — rotateX(45deg) + rotateZ 360°/28s
-- Ring 2 (tick marks): `translateZ(-40px)`, anim `ring3d-b` — rotateX(-30deg) rotateY(45deg) + rotateZ -360°/22s
-- Ring 3 (dotted, pionowy globus): `translateZ(0)`, anim `ring3d-c` — rotateY 360°/18s (pełny obrót osi Y)
-- Ring 4 (segmented arcs): `translateZ(20px)`, anim `ring3d-d` — rotateX(60deg) rotateZ 360°/15s
-- Ring 5 (inner notched): `translateZ(45px)`, anim `ring3d-e` — rotateY(-360°)/12s wokół osi X(70deg)
-- Ring 6 (innermost): `translateZ(70px)`, anim `ring3d-f` — rotateZ 360°/8s z rotateX(20deg)
+**`src/lib/audio/AudioEngine.ts`** — singleton:
+- `AudioContext` tworzony leniwie przy pierwszej interakcji (gesture requirement).
+- Master `GainNode` + master volume w Settings.
+- Metody: `playBoot()`, `playClick()`, `playEngage()`, `playAccessGranted()`, `playAccessDenied()`, `playShutdown()`, `startHum()`, `stopHum()`, `playBeep()`.
 
-Każda animacja ma `transform-style: preserve-3d` i utrzymuje stałe pochylenie + dokłada obrót.
+**Brzmienia (syntetyczne):**
+- **Hum reaktora** — 2 osciliatory (60 Hz sine + 120 Hz triangle) przez lowpass + lekki LFO modulujący gain → ciągły, niski pomruk podczas `dashboard_active`.
+- **Click** — krótki noise burst (200 ms) przez bandpass 2 kHz, attack 1 ms / decay 60 ms. Wywoływany przy nawigacji w sidebarze.
+- **Engage** — sweep oscylatora 80 → 800 Hz przez 1.2 s + szum białego, lowpass otwierający się równolegle.
+- **Access Granted** — dwa beepy 880 Hz → 1320 Hz, każdy 80 ms.
+- **Access Denied** — trzy szybkie beepy 220 Hz square + lekki distortion.
+- **Shutdown** — odwrotny sweep 800 → 40 Hz + zanikający szum, 2.5 s.
 
-### 3. Wireframe szklanej sfery
-Dodatkowa warstwa: 6–8 cienkich okręgów (divy z `border-radius: 50%`, cienki cyan border 0.5px, opacity 0.15) ustawionych na różnych kątach `rotateY(0/30/60/90/120/150)` aby utworzyć siatkę południków sfery. + 3 równoleżniki (rotateX 0/45/-45). Wszystkie wewnątrz wspólnego kontenera animowanego powolnym `spin Y 40s` żeby cała "kula" lekko się obracała.
+**`src/lib/audio/useMicAnalyser.ts`** — hook:
+- `getUserMedia({ audio: true })` przy `active=true`.
+- `AnalyserNode` z `fftSize: 256`, odczyt RMS w rAF.
+- Wartość zapisywana do przekazanego `ref` (nie state) → komponent ustawia `--audio` CSS var w tym samym rAF.
+- Cleanup: stop tracks + close context branch przy `active=false` lub unmount.
+- Graceful fallback: jeśli użytkownik odmówi mikrofonu → cichy log, rdzeń pulsuje base rate.
 
-### 4. Rdzeń (core glow)
-Zachować obecny core, ale umieścić go na `translateZ(0)` z większym blurem i `mix-blend-mode: screen` na kontenerze, by przecięcia pierścieni rozjaśniały punkty styku.
+## 3. Integracja z istniejącym flow
 
-### 5. Glow / blend
-- Wrapper warstwy pierścieni: `mix-blend-mode: screen`
-- Zwiększyć drop-shadow do `drop-shadow(0 0 12px amber) drop-shadow(0 0 28px amber/0.6)`
-- Audio-reactive `glowBoost` skaluje intensywność drop-shadow oraz lekko wzmacnia `translateZ` zewnętrznego pierścienia (oddychanie sfery).
+- `BootSequence` (engage) → `playBoot()` przy starcie, `playEngage()` na klik.
+- `StarkLogin` → `playClick()` na inputach, `playAccessGranted()` / `playAccessDenied()` po walidacji.
+- `BootSequence` (init) → niski sweep w tle.
+- `dashboard_active` → `startHum()`; `shutdown` → `stopHum()` + `playShutdown()`.
+- `AppSidebar` nawigacja → `playClick()`.
+- `VoiceButton` aktywacja → `playBeep()` + start `useMicAnalyser`.
 
-### 6. Zachowanie istniejących elementów
-- Crosshair axes, coordinates, particle cloud, scanline, audio-reactive halo — pozostają (rysowane na warstwie 2D nad/pod sferą bez preserve-3d, żeby tekst był czytelny i nie obracał się z bryłą).
-- `useAudioLevel`, `useCoord` hooki — bez zmian.
+## 4. UI: Settings → Audio
 
-## Walidacja
-- typecheck (`tsgo`)
-- wizualnie: Playwright screenshot strony `/` po zalogowaniu — potwierdzić widoczne pochylenie 3D, pierścienie na różnych głębokościach, efekt globusa Ring 3.
+Dodać w `src/routes/settings.tsx` panel HUD z:
+- Master volume (slider 0–100).
+- Toggle "Ambient Hum".
+- Toggle "UI Sounds".
+- Info: "Microphone access requested on first voice activation."
 
-## Nie zmieniam
-- palety, fontów, layoutu HUD, tranzycji, sidebara, innych komponentów.
+Preferencje trzymane w `localStorage` pod kluczem `jarvis.audio` i czytane przez `AudioEngine`.
+
+## 5. Co NIE zmieniam
+
+- Wygląd wizualny rdzenia, palety, animacje przejść HUD, struktura faz, dashboard layout, mock data — bez zmian.
+- Reduced motion — pomijam zgodnie z odpowiedzią.
+
+## Pliki
+- **Nowe:** `src/lib/audio/AudioEngine.ts`, `src/lib/audio/useMicAnalyser.ts`, `src/lib/audio/useAudioSettings.ts`
+- **Modyfikowane:** `ReactorCore.tsx` (canvas particles + refs + real mic), `BootSequence.tsx`, `StarkLogin.tsx`, `AppSidebar.tsx`, `VoiceButton.tsx`, `routes/__root.tsx` (hum lifecycle), `routes/settings.tsx` (panel audio), `styles.css` (drobne `will-change`/`contain`).

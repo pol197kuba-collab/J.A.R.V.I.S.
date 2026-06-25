@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useHudNavigate } from "./TransitionContext";
 import { MiniArcReactor } from "./MiniArcReactor";
+import { audio } from "@/lib/audio/AudioEngine";
 
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -63,7 +64,10 @@ export function AppSidebar() {
                     <SidebarMenuButton
                       isActive={active}
                       disabled={isTransitioning}
-                      onClick={() => go(item.url)}
+                      onClick={() => {
+                        audio.playClick();
+                        go(item.url);
+                      }}
                       className="group data-[active=true]:bg-primary/10 data-[active=true]:text-primary hover:text-primary"
                     >
                       <item.icon className="icon-neon h-4 w-4" strokeWidth={1.5} />

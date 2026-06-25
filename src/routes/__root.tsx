@@ -23,6 +23,7 @@ import {
 } from "@/components/jarvis/TransitionContext";
 import { HudRouteTransition } from "@/components/jarvis/HudRouteTransition";
 import { MiniArcReactor } from "@/components/jarvis/MiniArcReactor";
+import { audio } from "@/lib/audio/AudioEngine";
 
 function NotFoundComponent() {
   return (
@@ -138,6 +139,8 @@ function RootComponent() {
   // Auto-progress shutdown → booting after dissolve
   useEffect(() => {
     if (phase !== "shutdown") return;
+    audio.stopHum();
+    audio.playShutdown();
     const t = setTimeout(() => setPhase("booting"), 1600);
     return () => clearTimeout(t);
   }, [phase]);
@@ -147,6 +150,12 @@ function RootComponent() {
     if (phase !== "transition_to_dashboard") return;
     const t = setTimeout(() => setPhase("dashboard_active"), 1400);
     return () => clearTimeout(t);
+  }, [phase]);
+
+  // Ambient reactor hum during active dashboard
+  useEffect(() => {
+    if (phase === "dashboard_active") audio.startHum();
+    else audio.stopHum();
   }, [phase]);
 
   const showDashboardShell =
