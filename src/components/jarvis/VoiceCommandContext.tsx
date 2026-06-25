@@ -12,6 +12,7 @@ import { usePhase } from "./PhaseContext";
 import type { SubSystemId } from "@/data/subSystems";
 import { speak, speakCancel } from "@/lib/audio/speak";
 import { askJarvis, type JarvisAction } from "@/lib/ai/jarvisBrain";
+import { emitChat } from "@/lib/ai/chatBus";
 
 type Ctx = {
   enabled: boolean;
@@ -184,6 +185,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
    */
   const route = useCallback(
     async (transcript: string) => {
+      emitChat("user", transcript);
       // Try regex first for instant response on known commands.
       const local = COMMANDS.find((c) => c.re.test(transcript));
       // Ask Gemini for richer reply + open-ended chat handling.
@@ -191,6 +193,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
         prompt: `User said (via microphone): "${transcript}"`,
         fallbackKind: "generic",
       });
+      if (reply.speech) emitChat("jarvis", reply.speech);
       const mapped = ACTION_MAP[reply.action];
       if (mapped) {
         fire(mapped, reply.speech);
