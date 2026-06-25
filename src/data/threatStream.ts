@@ -13,7 +13,7 @@ const POOL: Array<Pick<ThreatEntry, "level" | "text">> = [
   { level: "WARNING", text: "UNIDENTIFIED DATAPACKET BLOCKED" },
   { level: "INTEL", text: "ORBITAL UPLINK SYNCHRONIZED // KEYHOLE-12" },
   { level: "DATA", text: "PERIMETER SENSORS REPORTING GREEN" },
-  { level: "ALERT", text: "BIO-METRIC SCAN VERIFIED // STARK_TONY" },
+  { level: "ALERT", text: "BIO-METRIC SCAN VERIFIED // JACOB_SLAWINSKY" },
   { level: "WARNING", text: "ANOMALOUS TRAFFIC // 187.43.x.x THROTTLED" },
   { level: "INTEL", text: "FRIENDLY ASSET ONLINE // J-7" },
   { level: "DATA", text: "FIREWALL POLICY UPDATED // R-3.14" },
