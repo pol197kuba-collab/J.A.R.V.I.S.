@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { ArcReactorTriangle } from "./ArcReactorTriangle";
+import { audio } from "@/lib/audio/AudioEngine";
 
 export function StarkLogin({ onGranted }: { onGranted: () => void }) {
   const [login, setLogin] = useState("");
@@ -11,9 +12,11 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (login.trim() === "Tony" && password === "Stark") {
+      audio.playAccessGranted();
       setLeaving(true);
       setTimeout(() => onGranted(), 700);
     } else {
+      audio.playAccessDenied();
       setDenied(true);
       setTimeout(() => setDenied(false), 1500);
     }
