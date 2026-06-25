@@ -1,16 +1,37 @@
 import { useEffect, useRef, useState } from "react";
 import { Send } from "lucide-react";
-import { initialMessages, jarvisReplies, type ChatMessage } from "@/data/mock";
 import { cn } from "@/lib/utils";
-import { VocalOverrideSwitch } from "./VocalOverrideSwitch";
+import { askJarvis } from "@/lib/ai/jarvisBrain";
+import { speak } from "@/lib/audio/speak";
+import { emitChat, onChat, type ChatBusMessage } from "@/lib/ai/chatBus";
 
-function nowTime() {
-  const d = new Date();
-  return d.toTimeString().slice(0, 8);
+const STORAGE_KEY = "jarvis_chat_history";
+const MAX_HISTORY = 60;
+
+function loadHistory(): ChatBusMessage[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as ChatBusMessage[];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(items: ChatBusMessage[]) {
+  try {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(items.slice(-MAX_HISTORY)),
+    );
+  } catch {
+    /* ignore */
+  }
 }
 
 export function ChatPanel() {
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [messages, setMessages] = useState<ChatBusMessage[]>(() => loadHistory());
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -19,21 +40,38 @@ export function ChatPanel() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, typing]);
 
-  function send() {
+  // Subscribe to the global chat bus (voice transcripts + AI replies coming
+  // from the VoiceCommandContext, plus our own emissions below).
+  useEffect(() => {
+    return onChat((msg) => {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === msg.id)) return prev;
+        const next = [...prev, msg].slice(-MAX_HISTORY);
+        saveHistory(next);
+        return next;
+      });
+      if (msg.role === "jarvis") setTyping(false);
+    });
+  }, []);
+
+  async function send() {
     const text = input.trim();
     if (!text) return;
-    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", text, time: nowTime() };
-    setMessages((m) => [...m, userMsg]);
     setInput("");
+    emitChat("user", text);
     setTyping(true);
-    setTimeout(() => {
-      const reply = jarvisReplies[Math.floor(Math.random() * jarvisReplies.length)];
-      setMessages((m) => [
-        ...m,
-        { id: crypto.randomUUID(), role: "jarvis", text: reply, time: nowTime() },
-      ]);
+    try {
+      const reply = await askJarvis({
+        prompt: `User typed in the chat console: "${text}"`,
+        fallbackKind: "generic",
+      });
+      if (reply.speech) {
+        emitChat("jarvis", reply.speech);
+        speak(reply.speech);
+      }
+    } finally {
       setTyping(false);
-    }, 900);
+    }
   }
 
   return (
@@ -42,11 +80,22 @@ export function ChatPanel() {
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 animate-blink rounded-full" style={{ backgroundColor: "var(--success)" }} />
           <span className="font-display text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            DUPLEX CHANNEL
+            DUPLEX CHANNEL // GEMINI CORE
           </span>
         </div>
         <div className="flex items-center gap-3">
-          <VocalOverrideSwitch />
+          {messages.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setMessages([]);
+                saveHistory([]);
+              }}
+              className="font-display text-[9px] uppercase tracking-[0.3em] text-muted-foreground transition hover:text-destructive"
+            >
+              CLEAR
+            </button>
+          )}
           <span className="font-display text-[10px] uppercase tracking-widest text-primary/70 landscape:max-md:hidden">
             SECURE // ENCRYPTED
           </span>
@@ -54,6 +103,11 @@ export function ChatPanel() {
       </div>
 
       <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4">
+        {messages.length === 0 && (
+          <p className="font-display text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+            ▸ CHANNEL CLEAR. TRANSMIT INSTRUCTION TO BEGIN.
+          </p>
+        )}
         {messages.map((m) => (
           <div
             key={m.id}

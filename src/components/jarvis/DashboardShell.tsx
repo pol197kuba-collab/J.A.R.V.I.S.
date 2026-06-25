@@ -9,6 +9,7 @@ import { MiniArcReactor } from "@/components/jarvis/MiniArcReactor";
 import { useRouteTransition } from "@/components/jarvis/TransitionContext";
 import { useSidebar } from "@/components/ui/sidebar";
 import { audio } from "@/lib/audio/AudioEngine";
+import { HeaderVoiceToggle } from "@/components/jarvis/HeaderVoiceToggle";
 import {
   isFullscreen,
   onFullscreenChange,
@@ -74,6 +75,8 @@ export function DashboardShell({
               All Systems Nominal
             </span>
             <div className="ml-3 h-4 w-px bg-primary/40" />
+            <HeaderVoiceToggle />
+            <div className="h-4 w-px bg-primary/40" />
             <FullscreenToggle />
             <div className="h-4 w-px bg-primary/40" />
             <DeactivateButton onClick={onShutdown} />
