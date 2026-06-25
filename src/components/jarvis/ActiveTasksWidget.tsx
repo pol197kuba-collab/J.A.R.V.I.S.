@@ -10,16 +10,16 @@ const statusStyle: Record<string, { dot: string; label: string }> = {
 
 export function ActiveTasksWidget() {
   return (
-    <div className="flex h-full flex-col rounded-lg border border-border/60 bg-card/50 backdrop-blur">
-      <div className="flex items-center justify-between border-b border-border/60 px-4 py-2">
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b border-primary/20 px-4 py-2">
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-primary" />
-          <span className="font-display text-xs uppercase tracking-[0.3em] text-muted-foreground">
-            Active Tasks
+          <span className="font-display text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+            BG Processes
           </span>
         </div>
-        <span className="font-display text-[10px] uppercase tracking-widest text-primary/70">
-          {activeTasks.length} running
+        <span className="font-display text-[10px] uppercase tracking-widest text-primary/80">
+          {activeTasks.length} RUNNING
         </span>
       </div>
       <div className="flex-1 space-y-3 overflow-y-auto p-3">
@@ -28,7 +28,7 @@ export function ActiveTasksWidget() {
           return (
             <div
               key={t.id}
-              className="rounded-md border border-border/60 bg-background/40 p-3 transition hover:border-primary/40"
+              className="relative border border-primary/25 bg-black/40 p-3 transition hover:border-primary/70 hover:shadow-[var(--glow-primary)]"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
