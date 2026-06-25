@@ -1,6 +1,7 @@
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
+@import "leaflet/dist/leaflet.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -273,6 +274,17 @@
   45%, 63%  { transform: rotate(-90deg); }
   90%, 100% { transform: rotate(0deg); }
 }
+
+@keyframes weather-sweep {
+  to { transform: rotate(360deg); }
+}
+
+/* Leaflet dark/cyan HUD filter for Geo-Tracking */
+.geo-map { background: #000; }
+.geo-map .leaflet-tile {
+  filter: grayscale(1) brightness(0.55) contrast(1.4) hue-rotate(170deg) saturate(2.6);
+}
+.geo-map .leaflet-container { background: #000; outline: none; }
 
 .animate-pulse-core { animation: pulse-core 3s ease-in-out infinite; }
 .animate-ring-spin { animation: ring-spin 12s linear infinite; }

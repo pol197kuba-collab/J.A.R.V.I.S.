@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SystemLogsRouteImport } from './routes/system-logs'
 import { Route as SubSystemsRouteImport } from './routes/sub-systems'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as GeoTrackingRouteImport } from './routes/geo-tracking'
 import { Route as AgentHubRouteImport } from './routes/agent-hub'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -30,6 +31,11 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GeoTrackingRoute = GeoTrackingRouteImport.update({
+  id: '/geo-tracking',
+  path: '/geo-tracking',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AgentHubRoute = AgentHubRouteImport.update({
   id: '/agent-hub',
   path: '/agent-hub',
@@ -44,6 +50,7 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
+  '/geo-tracking': typeof GeoTrackingRoute
   '/settings': typeof SettingsRoute
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
@@ -51,6 +58,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
+  '/geo-tracking': typeof GeoTrackingRoute
   '/settings': typeof SettingsRoute
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
@@ -59,19 +67,33 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
+  '/geo-tracking': typeof GeoTrackingRoute
   '/settings': typeof SettingsRoute
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/agent-hub' | '/settings' | '/sub-systems' | '/system-logs'
+  fullPaths:
+    | '/'
+    | '/agent-hub'
+    | '/geo-tracking'
+    | '/settings'
+    | '/sub-systems'
+    | '/system-logs'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/agent-hub' | '/settings' | '/sub-systems' | '/system-logs'
+  to:
+    | '/'
+    | '/agent-hub'
+    | '/geo-tracking'
+    | '/settings'
+    | '/sub-systems'
+    | '/system-logs'
   id:
     | '__root__'
     | '/'
     | '/agent-hub'
+    | '/geo-tracking'
     | '/settings'
     | '/sub-systems'
     | '/system-logs'
@@ -80,6 +102,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgentHubRoute: typeof AgentHubRoute
+  GeoTrackingRoute: typeof GeoTrackingRoute
   SettingsRoute: typeof SettingsRoute
   SubSystemsRoute: typeof SubSystemsRoute
   SystemLogsRoute: typeof SystemLogsRoute
@@ -108,6 +131,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/geo-tracking': {
+      id: '/geo-tracking'
+      path: '/geo-tracking'
+      fullPath: '/geo-tracking'
+      preLoaderRoute: typeof GeoTrackingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/agent-hub': {
       id: '/agent-hub'
       path: '/agent-hub'
@@ -128,6 +158,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgentHubRoute: AgentHubRoute,
+  GeoTrackingRoute: GeoTrackingRoute,
   SettingsRoute: SettingsRoute,
   SubSystemsRoute: SubSystemsRoute,
   SystemLogsRoute: SystemLogsRoute,
