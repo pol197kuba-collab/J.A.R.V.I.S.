@@ -27,7 +27,7 @@ const items = [
 ] as const;
 
 export function AppSidebar() {
-  const { state } = useSidebar();
+  const { state, isMobile, setOpenMobile } = useSidebar();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const { go, isTransitioning } = useHudNavigate();
@@ -68,6 +68,7 @@ export function AppSidebar() {
                       disabled={isTransitioning}
                       onClick={() => {
                         audio.playClick();
+                        if (isMobile) setOpenMobile(false);
                         go(item.url);
                       }}
                       className="group data-[active=true]:bg-primary/10 data-[active=true]:text-primary hover:text-primary"
