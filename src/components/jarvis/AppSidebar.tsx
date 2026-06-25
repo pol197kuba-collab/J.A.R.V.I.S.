@@ -1,5 +1,5 @@
 import { useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Bot, Terminal, Settings as SettingsIcon, Boxes } from "lucide-react";
+import { LayoutDashboard, Bot, Terminal, Settings as SettingsIcon, Boxes, Radar } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -21,6 +21,7 @@ const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Agent Hub", url: "/agent-hub", icon: Bot },
   { title: "Sub-Systems", url: "/sub-systems", icon: Boxes },
+  { title: "Geo-Tracking", url: "/geo-tracking", icon: Radar },
   { title: "System Logs", url: "/system-logs", icon: Terminal },
   { title: "Settings", url: "/settings", icon: SettingsIcon },
 ] as const;
