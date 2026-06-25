@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SUB_SYSTEMS, type SubSystemId } from "@/data/subSystems";
 import { SubSystemGrid } from "@/components/jarvis/subsystems/SubSystemGrid";
 import { ModuleLoader } from "@/components/jarvis/subsystems/ModuleLoader";
 import { ModuleFrame } from "@/components/jarvis/subsystems/ModuleFrame";
 import { CrtShutdown } from "@/components/jarvis/subsystems/CrtShutdown";
+import { useVoiceCommands } from "@/components/jarvis/VoiceCommandContext";
 
 export const Route = createFileRoute("/sub-systems")({
   head: () => ({
@@ -24,6 +25,17 @@ function SubSystemsPage() {
   const [state, setState] = useState<PortalState>("grid");
   const [activeId, setActiveId] = useState<SubSystemId | null>(null);
   const mod = SUB_SYSTEMS.find((m) => m.id === activeId) ?? null;
+  const { consumePendingModule } = useVoiceCommands();
+
+  // Vocal-override handoff: if a voice command requested a module
+  // before/while this route mounted, auto-initialise it.
+  useEffect(() => {
+    if (state !== "grid") return;
+    const id = consumePendingModule();
+    if (!id) return;
+    setActiveId(id);
+    setState("loading");
+  }, [state, consumePendingModule]);
 
   return (
     <div className="relative h-full min-h-[calc(100vh-3rem)]">
