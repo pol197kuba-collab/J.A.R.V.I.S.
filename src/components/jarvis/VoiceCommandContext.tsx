@@ -38,6 +38,30 @@ const VoiceCtx = createContext<Ctx>({
 
 export const useVoiceCommands = () => useContext(VoiceCtx);
 
+// --- Anti-spam guards (shared between mic + chat) ---------------------------
+const GEMINI_THROTTLE_MS = 3000;
+// Matches "jarvis", "jarvis,", "jarvis...", "dżarwis", "dzarwis" (PL phonetic
+// transcripts the browser STT often returns), case-insensitive, at the very
+// start of the utterance. Capture group 1 = the rest of the command.
+const WAKE_WORD_RE = /^\s*(?:j[ae]rvis|d[zż]arwis|dżarwis)\b[\s,.:;!?-]*(.*)$/i;
+const NOISE_RE = /^(?:e+|y+m*|u+m+|h+m+|a+h*|o+h*|m+|mhm+|hmm+)$/i;
+
+function stripWakeWord(transcript: string): string | null {
+  const m = transcript.match(WAKE_WORD_RE);
+  if (!m) return null;
+  return (m[1] ?? "").trim();
+}
+
+function isNoise(command: string): boolean {
+  const c = command.trim();
+  if (c.length < 3) return true;
+  // Strip punctuation for the noise regex check.
+  const bare = c.replace(/[^\p{L}\p{N}\s]/gu, "").trim();
+  if (!bare) return true;
+  if (NOISE_RE.test(bare)) return true;
+  return false;
+}
+
 type AnySpeechRecognition = {
   continuous: boolean;
   interimResults: boolean;
@@ -114,6 +138,8 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
   const recRef = useRef<AnySpeechRecognition | null>(null);
   // Per-action debounce so "open menu" → "close menu" can fire back-to-back.
   const lastFireMapRef = useRef<Map<string, number>>(new Map());
+  // Global throttle for outbound Gemini calls (mic + chat).
+  const lastGeminiAtRef = useRef<number>(0);
 
   const consumePendingModule = useCallback(() => {
     const v = pendingRef.current;
@@ -188,6 +214,12 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
    */
   const route = useCallback(
     async (transcript: string) => {
+      // Global 3s throttle so back-to-back voice/chat requests don't pile up.
+      const now = Date.now();
+      if (now - lastGeminiAtRef.current < GEMINI_THROTTLE_MS) {
+        return;
+      }
+      lastGeminiAtRef.current = now;
       emitChat("user", transcript);
       // Try regex first for instant response on known commands.
       const local = COMMANDS.find((c) => c.re.test(transcript));
@@ -212,6 +244,19 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
     [fire],
   );
 
+  // Microphone-only router: enforces wake word + noise filter, then delegates
+  // to the shared Gemini pipeline. Chat input bypasses this and calls
+  // `route()` directly via the exposed `routeText`.
+  const routeFromMic = useCallback(
+    async (transcript: string) => {
+      const command = stripWakeWord(transcript);
+      if (command === null) return; // No wake word → completely ignored.
+      if (isNoise(command)) return; // Too short / filler sounds → ignored.
+      await route(command);
+    },
+    [route],
+  );
+
   useEffect(() => {
     if (!enabled || !Ctor) return;
     let stopped = false;
@@ -229,7 +274,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       if (!finalText) return;
       const t = finalText.trim();
       setLastTranscript(t);
-      void route(t);
+      void routeFromMic(t);
     };
     rec.onend = () => {
       setListening(false);
@@ -262,7 +307,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       recRef.current = null;
       setListening(false);
     };
-  }, [enabled, Ctor, route]);
+  }, [enabled, Ctor, routeFromMic]);
 
   return (
     <VoiceCtx.Provider
