@@ -60,14 +60,15 @@ export function ModuleFrame({
       </div>
 
       {/* iframe container */}
-      <div className="relative w-full max-h-full flex-1 overflow-hidden">
+      <div className="relative w-full flex-1 overflow-hidden h-[calc(100vh-45px)]">
         <iframe
           title={mod.name}
           src={mod.url}
           loading="lazy"
           referrerPolicy="no-referrer"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-          className="h-full max-h-full w-full border-0 bg-white"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
+          allow="clipboard-read; clipboard-write; geolocation; microphone"
+          className="h-full w-full border-0 bg-white"
         />
         {/* subtle scanline overlay */}
         <div
