@@ -210,7 +210,7 @@ export function BootSequence({
               ▸ Engage JARVIS
             </button>
             <p className="font-mono text-[10px] text-muted-foreground">
-              biometric · voiceprint · stark-id verified
+              biometric · voiceprint · jacob-id verified // match found: slawinsky, j.
             </p>
           </div>
         </div>
