@@ -1,70 +1,87 @@
-# Plan: Wydajność 3D + Audio JARVIS
+# Moduł SUB-SYSTEMS — plan implementacji
 
-## 1. Optymalizacja wydajności rdzenia (`src/components/jarvis/ReactorCore.tsx`)
+Dodaję nową zakładkę „SUB-SYSTEMS" jako portal kontenerowy dla 3 zewnętrznych aplikacji, w pełni spójny ze stylistyką Stark HUD intra. Wszystko w jednym SPA, bez przeładowań.
 
-**Problemy obecne:**
-- 26 cząsteczek = 26 osobnych elementów DOM z własnymi animacjami
-- `useCoord` i `useAudioLevel` aktualizują state co ~50–100 ms → React re-renderuje całe drzewo rdzenia
-- `mix-blend-mode: screen` + `drop-shadow` na 6 warstwach = kosztowny composite
-- `gyro-tilt` animuje cały kontener `transform`, wymuszając repaint warstw potomnych
+## 1. Nowa trasa i nawigacja
 
-**Zmiany:**
-- Zastąpić chmurę cząsteczek **jednym `<canvas>` 2D** (rysowanym w `requestAnimationFrame`) — 1 element DOM zamiast 26.
-- Zamienić `useCoord` (setState) na **bezpośrednią mutację `ref.current.textContent`** w rAF — zero re-renderów React.
-- Audio level również propagowany przez CSS custom property (`element.style.setProperty('--audio', val)`) zamiast props/state → re-render tylko warstwy CSS, nie React.
-- Każda warstwa SVG dostaje `will-change: transform` i `contain: layout paint`.
-- Ograniczyć `drop-shadow` do 2 najjaśniejszych warstw (zewnętrznej i wewnętrznej) zamiast wszystkich 6.
-- `gyro-tilt` przeniesiony na osobny wrapper z `transform: translateZ(0)` (warstwa GPU) i animowany via CSS, nie JS.
-- Hook `useAudioLevel` (symulowany) zastąpiony realnym `AnalyserNode` (patrz sekcja Audio) — odpalany tylko gdy `active=true`.
+- `src/routes/sub-systems.tsx` — nowa trasa `/sub-systems` (TanStack file-route).
+- `src/components/jarvis/AppSidebar.tsx` — dodaję pozycję „SUB-SYSTEMS" z ikoną `Boxes` (lucide, `strokeWidth={1.5}`, neon cyan), używającą istniejącego `useHudNavigate` (re-używa systemu przejść HUD między zakładkami).
 
-## 2. System audio (`src/lib/audio/`)
+## 2. State machine portalu (lokalny w trasie)
 
-Nowy moduł oparty wyłącznie na **Web Audio API** (bez plików):
+W `sub-systems.tsx` lokalny stan: `'grid' | 'loading' | 'active' | 'terminating'` + `activeModule: ModuleId | null`. Brak ingerencji w globalny `PhaseContext`.
 
-**`src/lib/audio/AudioEngine.ts`** — singleton:
-- `AudioContext` tworzony leniwie przy pierwszej interakcji (gesture requirement).
-- Master `GainNode` + master volume w Settings.
-- Metody: `playBoot()`, `playClick()`, `playEngage()`, `playAccessGranted()`, `playAccessDenied()`, `playShutdown()`, `startHum()`, `stopHum()`, `playBeep()`.
+Flow:
+```text
+grid --[INITIALIZE]--> loading (4.5s) --> active (iframe + top bar)
+active --[TERMINATE]--> terminating (CRT off, ~700ms) --> grid
+```
 
-**Brzmienia (syntetyczne):**
-- **Hum reaktora** — 2 osciliatory (60 Hz sine + 120 Hz triangle) przez lowpass + lekki LFO modulujący gain → ciągły, niski pomruk podczas `dashboard_active`.
-- **Click** — krótki noise burst (200 ms) przez bandpass 2 kHz, attack 1 ms / decay 60 ms. Wywoływany przy nawigacji w sidebarze.
-- **Engage** — sweep oscylatora 80 → 800 Hz przez 1.2 s + szum białego, lowpass otwierający się równolegle.
-- **Access Granted** — dwa beepy 880 Hz → 1320 Hz, każdy 80 ms.
-- **Access Denied** — trzy szybkie beepy 220 Hz square + lekki distortion.
-- **Shutdown** — odwrotny sweep 800 → 40 Hz + zanikający szum, 2.5 s.
+Lista modułów (placeholder URL — user podmieni):
+- `fuel-monitor` — „FUEL MONITOR" — Fuel surcharge monitoring & logistics analytics — `https://example.com/fuel-monitor`
+- `rto-calculator` — „RTO CALCULATOR" — Return To Office financial & commute impact calculator — `https://example.com/rto-calculator`
+- `jobfit-ai` — „JOBFIT AI" — AI-powered CV optimization & job advertisement matching platform — `https://example.com/jobfit-ai`
 
-**`src/lib/audio/useMicAnalyser.ts`** — hook:
-- `getUserMedia({ audio: true })` przy `active=true`.
-- `AnalyserNode` z `fftSize: 256`, odczyt RMS w rAF.
-- Wartość zapisywana do przekazanego `ref` (nie state) → komponent ustawia `--audio` CSS var w tym samym rAF.
-- Cleanup: stop tracks + close context branch przy `active=false` lub unmount.
-- Graceful fallback: jeśli użytkownik odmówi mikrofonu → cichy log, rdzeń pulsuje base rate.
+Konfiguracja w `src/data/subSystems.ts` (id, name, description, url, sysRef, ikona) — łatwa do podmiany URL-i.
 
-## 3. Integracja z istniejącym flow
+## 3. Komponenty (nowe pliki w `src/components/jarvis/subsystems/`)
 
-- `BootSequence` (engage) → `playBoot()` przy starcie, `playEngage()` na klik.
-- `StarkLogin` → `playClick()` na inputach, `playAccessGranted()` / `playAccessDenied()` po walidacji.
-- `BootSequence` (init) → niski sweep w tle.
-- `dashboard_active` → `startHum()`; `shutdown` → `stopHum()` + `playShutdown()`.
-- `AppSidebar` nawigacja → `playClick()`.
-- `VoiceButton` aktywacja → `playBeep()` + start `useMicAnalyser`.
+- `SubSystemGrid.tsx` — siatka 3 kafelków na `HudPanel` (`grid-cols-1 md:grid-cols-3`). Każdy kafelek: nazwa (font-display), opis (mono), mikroteksty w narożnikach (`HudTag` + losowy `SYS_REF`), pulsujący przycisk „INITIALIZE MODULE" (animowana neon obwódka + audio click przy hover/click). Wejście kafelków staggered (re-używam `animate-hud-tile-in`).
+- `ModuleLoader.tsx` — pełnoekranowy overlay (4.5s):
+  - centralny obracający się radar HUD (SVG: 3 koncentryczne pierścienie z `spin-cw`/`spin-ccw`, wiązka skanująca z `conic-gradient` + maska, podpis „DECRYPTING LINK // EXTERNAL_SERVER_CONNECT").
+  - pasek postępu skokowy (steps `[8, 23, 41, 58, 72, 88, 96, 100]` w czasie 4.5s przez `setInterval`).
+  - boczny log linii kodu (auto-scroll, monospace, cyjan): „INITIATING HANDSHAKE...", „CONNECTING TO {MODULE}.SYS...", „BYPASSING FIREWALL...", „NEGOTIATING TLS 1.3...", „STARK_SECURE_TUNNEL: ACTIVE", „MOUNTING REMOTE DOM..." (dodawane stopniowo).
+  - audio: `audio.playEngage()` na start, `audio.playAccessGranted()` na 100%.
+  - zakończenie: `iris-open` (re-używam istniejącej keyframe) → callback `onReady()`.
+- `ModuleFrame.tsx` — kontener aktywnego iframe:
+  - górny pasek HUD (sticky, `h-9`, cienka ramka, neon glow): mini Arc Reactor + „MODULE HOSTED VIA STARK_OS_V3 // SECURE TERMINAL // {MODULE_NAME}" po lewej, status „LINK: STABLE" (zielona blink-dot) w środku, czerwony przycisk „TERMINATE PROCESS // EXIT" po prawej (styl z `DeactivateButton`, kolor `--destructive`).
+  - `<iframe src={url} className="w-full h-[calc(100%-2.25rem)]" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" referrerPolicy="no-referrer" />` z `title={name}`.
+  - animacja wejścia: `animate-hud-tile-in` na całym kontenerze po `iris-open`.
+- `CrtShutdown.tsx` — overlay zamykający (700ms): efekt starego CRT — skala Y → 0.02 (pozioma linia), potem skala X → 0 (punkt), potem fade-out punktu. CSS keyframe `crt-off` zdefiniowany w `styles.css`.
 
-## 4. UI: Settings → Audio
+## 4. Animacje (dodaję do `src/styles.css`)
 
-Dodać w `src/routes/settings.tsx` panel HUD z:
-- Master volume (slider 0–100).
-- Toggle "Ambient Hum".
-- Toggle "UI Sounds".
-- Info: "Microphone access requested on first voice activation."
+```text
+@keyframes crt-off { ... 0%→full, 55%→scaleY(0.02), 80%→scaleX(0.005), 100%→opacity 0 }
+@keyframes radar-sweep { conic rotate 0→360 }
+@keyframes init-pulse { box-shadow + opacity pulse dla przycisku INITIALIZE }
+@keyframes log-line-in { translateY(4px)+opacity 0→1 }
+```
+Plus mała klasa `.crt-frame` z `transform-origin:center` i `will-change:transform,opacity`.
 
-Preferencje trzymane w `localStorage` pod kluczem `jarvis.audio` i czytane przez `AudioEngine`.
+## 5. Spójność wizualna
 
-## 5. Co NIE zmieniam
+- Wszystko owinięte w `HudPanel` z istniejącymi `hud-corner` + `HudTag` (mikroteksty `SYS_REF`, `CH_`, itp. — istniejący generator).
+- Typografia mono (już globalnie), akcent `var(--primary)` (neon cyjan), destructive dla TERMINATE.
+- Ostre rogi (`rounded-none`), cienkie ramki 1px, neon drop-shadow.
 
-- Wygląd wizualny rdzenia, palety, animacje przejść HUD, struktura faz, dashboard layout, mock data — bez zmian.
-- Reduced motion — pomijam zgodnie z odpowiedzią.
+## 6. Audio (re-use `audio` engine)
 
-## Pliki
-- **Nowe:** `src/lib/audio/AudioEngine.ts`, `src/lib/audio/useMicAnalyser.ts`, `src/lib/audio/useAudioSettings.ts`
-- **Modyfikowane:** `ReactorCore.tsx` (canvas particles + refs + real mic), `BootSequence.tsx`, `StarkLogin.tsx`, `AppSidebar.tsx`, `VoiceButton.tsx`, `routes/__root.tsx` (hum lifecycle), `routes/settings.tsx` (panel audio), `styles.css` (drobne `will-change`/`contain`).
+- `audio.playClick()` — hover/click na kafelku i TERMINATE.
+- `audio.playEngage()` — start ModuleLoader.
+- `audio.playAccessGranted()` — na 100% progressu.
+- `audio.playShutdown()` — przy TERMINATE (krótki sweep — re-use).
+
+## 7. Blokady / UX
+
+- Podczas `loading` i `terminating` interakcje wyłączone (`pointer-events-none` na siatce; overlay przykrywa wszystko).
+- Iframe ma `loading="lazy"` i `referrerPolicy="no-referrer"`. Sandbox flags konserwatywne, można poszerzyć per moduł później.
+- Brak hard-coded kolorów — wszystko przez tokeny w `styles.css`.
+
+## 8. Pliki
+
+**Nowe:**
+- `src/routes/sub-systems.tsx`
+- `src/data/subSystems.ts`
+- `src/components/jarvis/subsystems/SubSystemGrid.tsx`
+- `src/components/jarvis/subsystems/ModuleLoader.tsx`
+- `src/components/jarvis/subsystems/ModuleFrame.tsx`
+- `src/components/jarvis/subsystems/CrtShutdown.tsx`
+
+**Modyfikowane:**
+- `src/components/jarvis/AppSidebar.tsx` — pozycja menu „SUB-SYSTEMS".
+- `src/styles.css` — keyframes `crt-off`, `radar-sweep`, `init-pulse`, `log-line-in`.
+
+## Co NIE zmieniam
+
+Boot/Login flow, ReactorCore, istniejące zakładki, audio engine, system przejść HUD — bez zmian. Routing istniejących tras nietknięty.
