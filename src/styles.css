@@ -290,6 +290,55 @@
 .animate-screen-fracture { animation: screen-fracture .7s ease-in forwards; }
 .animate-shutdown-flash { animation: shutdown-flash .8s ease-out forwards; }
 
+/* ====== Amber holographic Arc Core ====== */
+@keyframes spin-cw { to { transform: rotate(360deg); } }
+@keyframes spin-ccw { to { transform: rotate(-360deg); } }
+.spin-cw-8 { animation: spin-cw 8s linear infinite; transform-origin: center; }
+.spin-ccw-12 { animation: spin-ccw 12s linear infinite; transform-origin: center; }
+.spin-cw-15 { animation: spin-cw 15s linear infinite; transform-origin: center; }
+.spin-ccw-18 { animation: spin-ccw 18s linear infinite; transform-origin: center; }
+.spin-cw-22 { animation: spin-cw 22s linear infinite; transform-origin: center; }
+.spin-ccw-28 { animation: spin-ccw 28s linear infinite; transform-origin: center; }
+
+@keyframes amber-pulse {
+  0%, 100% { transform: scale(1); filter: brightness(1) drop-shadow(0 0 18px oklch(0.82 0.19 65 / 0.7)); }
+  50% { transform: scale(1.04); filter: brightness(1.25) drop-shadow(0 0 36px oklch(0.85 0.2 65 / 0.95)); }
+}
+.animate-amber-pulse { animation: amber-pulse 3.2s ease-in-out infinite; }
+
+@keyframes amber-pulse-fast {
+  0%, 100% { transform: scale(1); filter: brightness(1.1) drop-shadow(0 0 24px oklch(0.85 0.2 65 / 0.9)); }
+  50% { transform: scale(1.09); filter: brightness(1.55) drop-shadow(0 0 60px oklch(0.9 0.21 70 / 1)); }
+}
+.animate-amber-pulse-fast { animation: amber-pulse-fast 0.9s ease-in-out infinite; }
+
+@keyframes holo-glitch {
+  0%, 92%, 100% { transform: translate(0,0) scale(1); opacity: 1; }
+  93% { transform: translate(1px,-1px) scale(1.015); opacity: 0.85; }
+  95% { transform: translate(-1px,1px) scale(0.99); opacity: 1; }
+  97% { transform: translate(0,0) scale(1.02); opacity: 0.92; }
+}
+.animate-holo-glitch { animation: holo-glitch 5s ease-in-out infinite; }
+
+@keyframes particle-float {
+  0% { transform: translate(0,0) scale(0.6); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translate(var(--px,0), var(--py,-40px)) scale(1.1); opacity: 0; }
+}
+.particle-dot {
+  position: absolute;
+  width: 3px; height: 3px; border-radius: 9999px;
+  background: oklch(0.92 0.18 70);
+  box-shadow: 0 0 6px oklch(0.9 0.2 65), 0 0 14px oklch(0.85 0.2 65 / 0.7);
+  animation: particle-float 4s ease-out infinite;
+}
+
+@keyframes audio-ring-grow {
+  0%, 100% { transform: scale(1); opacity: 0.55; }
+  50% { transform: scale(var(--ring-scale, 1.12)); opacity: 1; }
+}
+.animate-audio-ring { animation: audio-ring-grow var(--ring-dur, 0.5s) ease-in-out infinite; transform-origin: center; }
+
 /* Sharp HUD panel — used across the JARVIS surface */
 .hud-panel {
   position: relative;
