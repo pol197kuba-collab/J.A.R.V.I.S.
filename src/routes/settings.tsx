@@ -1,7 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState, useEffect } from "react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { useAudioSettings } from "@/lib/audio/useAudioSettings";
 import { audio } from "@/lib/audio/AudioEngine";
+import { speak } from "@/lib/audio/speak";
+
+const GEMINI_LS_KEY = "jarvis_gemini_api_key";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -42,6 +46,39 @@ const groups = [
 
 function Settings() {
   const { settings, set } = useAudioSettings();
+  const [apiKey, setApiKey] = useState("");
+  const [linked, setLinked] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  useEffect(() => {
+    try {
+      const v = window.localStorage.getItem(GEMINI_LS_KEY) ?? "";
+      setApiKey(v);
+      setLinked(!!v);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const handleSaveKey = () => {
+    const trimmed = apiKey.trim();
+    try {
+      if (trimmed) {
+        window.localStorage.setItem(GEMINI_LS_KEY, trimmed);
+        setLinked(true);
+        speak("AI core updated, sir.");
+      } else {
+        window.localStorage.removeItem(GEMINI_LS_KEY);
+        setLinked(false);
+        speak("AI core key cleared.");
+      }
+      audio.playClick();
+      setSavedAt(Date.now());
+    } catch {
+      /* ignore */
+    }
+  };
+
   return (
     <div className="space-y-6 p-6">
       <HudPanel index={0} title="CONFIGURATION // CORE" className="p-5">
@@ -50,7 +87,51 @@ function Settings() {
           SECURE PROFILE // JACOB.SLAWINSKY @ JARVIS.LOCAL
         </p>
       </HudPanel>
-      <HudPanel index={1} title="AUDIO // SUBSYSTEM" className="p-5">
+      <HudPanel index={1} title="AI CORE CONFIGURATION" className="p-5">
+        <div className="mt-4 space-y-3">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            GOOGLE GEMINI API KEY // STORED LOCALLY ON DEVICE
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="Wklej Google Gemini API Key..."
+              className="font-mono flex-1 border border-primary/60 bg-black/40 px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+            />
+            <button
+              type="button"
+              onClick={handleSaveKey}
+              className="font-display border border-primary/60 bg-primary/10 px-4 py-2 text-[10px] uppercase tracking-widest text-primary hover:bg-primary/20"
+            >
+              SAVE &amp; CONNECT CORE
+            </button>
+          </div>
+          <div className="flex items-center justify-between border-t border-primary/20 pt-2">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              STATUS
+            </span>
+            <span
+              className="font-display text-[10px] uppercase tracking-widest"
+              style={{ color: linked ? "var(--success)" : "var(--muted-foreground)" }}
+            >
+              {linked ? "● AI CORE LINK ESTABLISHED" : "○ NO KEY // FALLBACK MODE"}
+            </span>
+          </div>
+          {savedAt && (
+            <p className="font-mono text-[10px] text-primary/70">
+              ✓ Configuration committed @ {new Date(savedAt).toLocaleTimeString()}
+            </p>
+          )}
+          <p className="font-mono text-[10px] text-muted-foreground/70">
+            ℹ Klucz jest przechowywany wyłącznie w pamięci tego urządzenia (localStorage). Puste pole + zapis = usunięcie klucza.
+          </p>
+        </div>
+      </HudPanel>
+      <HudPanel index={2} title="AUDIO // SUBSYSTEM" className="p-5">
         <div className="mt-4 space-y-4">
           <div>
             <div className="flex items-center justify-between">
@@ -112,7 +193,7 @@ function Settings() {
       </HudPanel>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {groups.map((g, i) => (
-          <HudPanel key={g.label} index={i + 2} title={g.label.toUpperCase()} className="p-5">
+          <HudPanel key={g.label} index={i + 3} title={g.label.toUpperCase()} className="p-5">
             <div className="mt-4 space-y-3">
               {g.items.map((it) => (
                 <div
