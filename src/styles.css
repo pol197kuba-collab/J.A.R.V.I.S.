@@ -324,7 +324,7 @@
   70% { opacity: 0.4; filter: blur(6px) brightness(1.2); clip-path: inset(20% 0 20% 0); }
   100% { opacity: 0; filter: blur(14px) brightness(0.5); clip-path: inset(48% 0 48% 0); transform: scale(0.98); }
 }
-.animate-hud-dematerialize { animation: hud-dematerialize 1.5s ease-in forwards; pointer-events: none; }
+.animate-hud-dematerialize { animation: hud-dematerialize 0.55s ease-in forwards; pointer-events: none; }
 
 @keyframes hud-tile-in {
   0% { opacity: 0; transform: translateY(10px); filter: blur(10px) brightness(2); clip-path: inset(45% 0 45% 0); }
@@ -332,7 +332,7 @@
   70% { opacity: 1; transform: translateY(0); filter: blur(0) brightness(1.2); clip-path: inset(0); }
   100% { opacity: 1; filter: none; clip-path: inset(0); }
 }
-.animate-hud-tile-in { animation: hud-tile-in 1.4s cubic-bezier(.2,.7,.2,1) both; }
+.animate-hud-tile-in { animation: hud-tile-in 0.8s cubic-bezier(.2,.7,.2,1) both; }
 
 @keyframes hud-laser-scan {
   0% { transform: translateY(-10%); opacity: 0; }
@@ -340,7 +340,7 @@
   85% { opacity: 1; }
   100% { transform: translateY(110vh); opacity: 0; }
 }
-.animate-hud-laser-scan { animation: hud-laser-scan 1s linear forwards; }
+.animate-hud-laser-scan { animation: hud-laser-scan 0.45s linear forwards; }
 
 @keyframes hud-vbars-sweep {
   0% { background-position: 0 0; opacity: 0; }
@@ -353,7 +353,7 @@
     transparent 0 22px,
     color-mix(in oklab, var(--primary) 35%, transparent) 22px 23px
   );
-  animation: hud-vbars-sweep 1.5s linear forwards;
+  animation: hud-vbars-sweep 0.55s linear forwards;
 }
 
 @keyframes hud-flicker-fast {
