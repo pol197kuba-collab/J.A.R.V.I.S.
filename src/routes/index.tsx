@@ -1,13 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
 import { ReactorCore } from "@/components/jarvis/ReactorCore";
-import { VoiceButton } from "@/components/jarvis/VoiceButton";
 import { ChatPanel } from "@/components/jarvis/ChatPanel";
-import { ActiveTasksWidget } from "@/components/jarvis/ActiveTasksWidget";
 import { SystemStatsStrip } from "@/components/jarvis/SystemStatsStrip";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { WeatherTelemetry } from "@/components/jarvis/WeatherTelemetry";
-import { ThreatStream } from "@/components/jarvis/ThreatStream";
+import { GlobalIntelFeed } from "@/components/jarvis/GlobalIntelFeed";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -22,7 +19,6 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
-  const [listening, setListening] = useState(false);
   return (
     <div className="relative space-y-6 p-6 landscape:max-md:max-h-full landscape:max-md:space-y-1.5 landscape:max-md:overflow-hidden landscape:max-md:p-1.5">
       <HudPanel index={0} title="COMMAND // OVERVIEW" className="p-5 landscape:max-md:p-2">
@@ -42,36 +38,37 @@ function Index() {
         </div>
       </HudPanel>
 
-      <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr] landscape:max-md:grid-cols-[1.1fr_1fr] landscape:max-md:gap-2">
-        <HudPanel
-          index={2}
-          title="ARC CORE // J-3140"
-          rightSlot={
-            <span className="font-display text-[10px] uppercase tracking-[0.3em] text-primary">
-              ● LIVE
-            </span>
-          }
-          className="flex flex-col"
-        >
-          <div className="flex flex-col items-center justify-center gap-6 p-8 landscape:max-md:gap-2 landscape:max-md:p-2">
-            <div className="w-full max-w-[420px] landscape:max-md:max-w-[140px]">
-              <ReactorCore active={listening} />
-            </div>
-            <VoiceButton active={listening} onToggle={() => setListening((v) => !v)} />
+      <HudPanel
+        index={2}
+        title="ARC CORE // J-3140 // STATUS BEACON"
+        rightSlot={
+          <span className="font-display text-[10px] uppercase tracking-[0.3em] text-primary">
+            ● LIVE
+          </span>
+        }
+        className="flex flex-col"
+      >
+        <div className="flex items-center gap-4 px-4 py-2 landscape:max-md:gap-2 landscape:max-md:px-2 landscape:max-md:py-1">
+          <div className="w-[72px] shrink-0 landscape:max-md:w-[48px]">
+            <ReactorCore active={false} />
           </div>
-        </HudPanel>
-
-        <HudPanel index={3} title="ACTIVE TASKS" className="flex flex-col">
-          <ActiveTasksWidget />
-        </HudPanel>
-      </div>
+          <div className="flex-1 space-y-1">
+            <p className="font-display text-[11px] uppercase tracking-[0.3em] text-primary/90 landscape:max-md:text-[9px]">
+              REACTOR STABLE // OUTPUT 3.14 GJ/s
+            </p>
+            <p className="font-display text-[10px] uppercase tracking-[0.25em] text-muted-foreground landscape:max-md:text-[8px]">
+              CORE TEMP NOMINAL · COOLANT LOOP A/B GREEN · NO ANOMALIES DETECTED
+            </p>
+          </div>
+        </div>
+      </HudPanel>
 
       <div className="grid gap-6 lg:grid-cols-2 landscape:max-md:grid-cols-2 landscape:max-md:gap-2">
-        <WeatherTelemetry index={4} />
-        <ThreatStream index={5} />
+        <WeatherTelemetry index={3} />
+        <GlobalIntelFeed index={4} />
       </div>
 
-      <HudPanel index={6} title="CONVERSATION STREAM" className="flex flex-col">
+      <HudPanel index={5} title="CONVERSATION STREAM" className="flex flex-col">
         <ChatPanel />
       </HudPanel>
     </div>
