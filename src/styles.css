@@ -554,3 +554,19 @@
 /* GPU layering helpers for the reactor */
 .reactor-gpu { will-change: transform; transform: translateZ(0); contain: layout paint; }
 .ring3d-a, .ring3d-b, .ring3d-c, .ring3d-d, .ring3d-e, .ring3d-f { will-change: transform; }
+
+/* Speech-reactive mode — rings spin faster, core pulses harder */
+.reactor-gpu.is-speaking .ring3d-a { animation-duration: 7s; }
+.reactor-gpu.is-speaking .ring3d-b { animation-duration: 5.5s; }
+.reactor-gpu.is-speaking .ring3d-c { animation-duration: 4.5s; }
+.reactor-gpu.is-speaking .ring3d-d { animation-duration: 3.5s; }
+.reactor-gpu.is-speaking .ring3d-e { animation-duration: 2.8s; }
+.reactor-gpu.is-speaking .ring3d-f { animation-duration: 1.6s; }
+.reactor-gpu.is-speaking .sphere-wire { animation-duration: 10s; }
+.reactor-gpu.is-speaking .reactor-stage { animation-duration: 4s; }
+
+@keyframes core-speak-pulse {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 12px oklch(0.9 0.22 70 / 0.7)); }
+  50%      { transform: scale(1.18); filter: drop-shadow(0 0 38px oklch(0.95 0.24 75 / 1)); }
+}
+.animate-core-speak { animation: core-speak-pulse 0.55s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }

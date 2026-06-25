@@ -6,6 +6,26 @@
 // on some systems).
 import { audio } from "./AudioEngine";
 
+const SPEAK_EVENT = "jarvis:speaking";
+let speakingCount = 0;
+function setSpeaking(on: boolean) {
+  if (typeof window === "undefined") return;
+  speakingCount = Math.max(0, speakingCount + (on ? 1 : -1));
+  const active = speakingCount > 0;
+  window.dispatchEvent(new CustomEvent(SPEAK_EVENT, { detail: active }));
+}
+
+export function onSpeaking(handler: (active: boolean) => void) {
+  if (typeof window === "undefined") return () => {};
+  const fn = (e: Event) => handler((e as CustomEvent<boolean>).detail);
+  window.addEventListener(SPEAK_EVENT, fn as EventListener);
+  return () => window.removeEventListener(SPEAK_EVENT, fn as EventListener);
+}
+
+export function isSpeakingNow() {
+  return speakingCount > 0;
+}
+
 // FIFO queue so back-to-back speak() calls (e.g. greeting + module-load
 // confirmation) play sequentially instead of cancelling each other.
 type QueueItem = { text: string; skipChirp?: boolean };
@@ -28,7 +48,14 @@ function pump() {
       utter.pitch = 0.85;
       utter.rate = 1.0;
       utter.volume = 1.0;
+      let started = false;
+      setSpeaking(true);
+      started = true;
       const release = () => {
+        if (started) {
+          started = false;
+          setSpeaking(false);
+        }
         pumping = false;
         // small gap between phrases
         setTimeout(pump, 60);
@@ -37,6 +64,7 @@ function pump() {
       utter.onerror = release;
       synth.speak(utter);
     } catch {
+      setSpeaking(false);
       pumping = false;
       setTimeout(pump, 60);
     }
@@ -70,6 +98,10 @@ export function speakCancel() {
   try {
     queue.length = 0;
     pumping = false;
+    if (speakingCount > 0) {
+      speakingCount = 0;
+      window.dispatchEvent(new CustomEvent(SPEAK_EVENT, { detail: false }));
+    }
     window.speechSynthesis?.cancel();
   } catch {}
 }
