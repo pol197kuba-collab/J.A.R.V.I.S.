@@ -268,6 +268,12 @@
   100% { opacity: 1; }
 }
 
+@keyframes phone-rotate {
+  0%, 18%   { transform: rotate(0deg); }
+  45%, 63%  { transform: rotate(-90deg); }
+  90%, 100% { transform: rotate(0deg); }
+}
+
 .animate-pulse-core { animation: pulse-core 3s ease-in-out infinite; }
 .animate-ring-spin { animation: ring-spin 12s linear infinite; }
 .animate-ring-spin-rev { animation: ring-spin-rev 18s linear infinite; }
