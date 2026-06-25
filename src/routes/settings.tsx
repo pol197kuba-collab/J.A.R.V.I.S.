@@ -47,7 +47,7 @@ function Settings() {
       <HudPanel index={0} title="CONFIGURATION // CORE" className="p-5">
         <h1 className="font-display mt-2 text-3xl font-bold tracking-[0.18em]">SETTINGS</h1>
         <p className="mt-1 text-xs uppercase tracking-[0.3em] text-muted-foreground">
-          STARK SECURE PROFILE // TONY @ JARVIS.LOCAL
+          SECURE PROFILE // JACOB.SLAWINSKY @ JARVIS.LOCAL
         </p>
       </HudPanel>
       <HudPanel index={1} title="AUDIO // SUBSYSTEM" className="p-5">
