@@ -66,8 +66,12 @@ export function ModuleFrame({
           src={mod.url}
           loading="lazy"
           referrerPolicy="no-referrer"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
-          allow="clipboard-read; clipboard-write; geolocation; microphone"
+          // Minimum sandbox needed: run JS, submit forms, keep same-origin
+          // session for the embedded app. No popups / modals / downloads.
+          sandbox="allow-scripts allow-same-origin allow-forms"
+          // Clipboard only — mic / geolocation are NOT delegated to embedded
+          // modules. Re-enable per-module if a future sub-system requires it.
+          allow="clipboard-read; clipboard-write"
           className="h-full w-full border-0 bg-white"
         />
         {/* subtle scanline overlay */}
