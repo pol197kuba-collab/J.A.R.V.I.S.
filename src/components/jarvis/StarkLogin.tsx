@@ -2,7 +2,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { ArcReactorTriangle } from "./ArcReactorTriangle";
 import { audio } from "@/lib/audio/AudioEngine";
-import { speak } from "@/lib/audio/speak";
+import { speakJarvis } from "@/lib/ai/jarvisBrain";
 
 // ⚠️ DEMO GATE — NOT REAL AUTH.
 // This login screen performs a plaintext, client-side credential check
@@ -23,7 +23,14 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
     e.preventDefault();
     if (login.trim() === "Jacob" && password === "Slawinsky") {
       audio.playAccessGranted();
-      speak("Welcome back, Mister Slawinsky. Systems are fully operational.");
+      // Dynamic greeting via Gemini; falls back silently to a canned line.
+      const hour = new Date().getHours();
+      const tod =
+        hour < 5 ? "late night" : hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+      void speakJarvis({
+        prompt: `Jacob Slawinsky has just authenticated into the JARVIS cockpit. Local time of day: ${tod}. Greet him personally for the very first line of the session. Action must be "none".`,
+        fallbackKind: "greeting",
+      });
       setLeaving(true);
       setTimeout(() => onGranted(), 700);
     } else {
