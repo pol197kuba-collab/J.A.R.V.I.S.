@@ -11,8 +11,24 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (login.trim() === "Tony" && password === "Stark") {
+    if (login.trim() === "Jacob" && password === "Slawinsky") {
       audio.playAccessGranted();
+      try {
+        const synth = window.speechSynthesis;
+        if (synth) {
+          synth.cancel();
+          const utter = new SpeechSynthesisUtterance(
+            "Welcome back, Mister Slawinsky. Systems are fully operational.",
+          );
+          utter.lang = "en-GB";
+          utter.pitch = 0.85;
+          utter.rate = 1.0;
+          utter.volume = 1.0;
+          synth.speak(utter);
+        }
+      } catch {
+        /* speech synthesis unsupported — non-blocking */
+      }
       setLeaving(true);
       setTimeout(() => onGranted(), 700);
     } else {
@@ -108,7 +124,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
           </button>
 
           <p className="font-mono text-center text-[10px] text-muted-foreground/70">
-            hint · operator: Tony · cipher: Stark
+          hint · operator: Jacob · cipher: Slawinsky
           </p>
         </form>
       </div>
