@@ -5,7 +5,7 @@ import { VoiceButton } from "@/components/jarvis/VoiceButton";
 import { ChatPanel } from "@/components/jarvis/ChatPanel";
 import { ActiveTasksWidget } from "@/components/jarvis/ActiveTasksWidget";
 import { SystemStatsStrip } from "@/components/jarvis/SystemStatsStrip";
-import { TileBuild } from "@/components/jarvis/TileBuild";
+import { HudPanel } from "@/components/jarvis/HudPanel";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -23,49 +23,48 @@ function Index() {
   const [listening, setListening] = useState(false);
   return (
     <div className="relative space-y-6 p-6">
-      <TileBuild delay={40}>
-      <header className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <p className="font-display text-[10px] uppercase tracking-[0.4em] text-primary">
-            Command // Overview
-          </p>
-          <h1 className="font-display mt-1 text-3xl font-bold tracking-[0.15em] text-foreground">
+      <HudPanel index={0} title="COMMAND // OVERVIEW" className="p-5">
+        <div className="flex flex-wrap items-end justify-between gap-2 pt-3">
+          <h1 className="font-display text-3xl font-bold tracking-[0.18em] text-foreground">
             GOOD EVENING, SIR.
           </h1>
+          <p className="max-w-md text-sm text-muted-foreground">
+            All subsystems are operating within acceptable parameters. Standing by for next directive.
+          </p>
         </div>
-        <p className="max-w-md text-sm text-muted-foreground">
-          All subsystems are operating within acceptable parameters. I am standing by for your next
-          directive.
-        </p>
-      </header>
-      </TileBuild>
+      </HudPanel>
 
-      <TileBuild delay={160}>
-        <SystemStatsStrip />
-      </TileBuild>
+      <HudPanel index={1} title="TELEMETRY // CORE METRICS" className="p-4">
+        <div className="pt-3">
+          <SystemStatsStrip />
+        </div>
+      </HudPanel>
 
       <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
-        <TileBuild delay={320}>
-        <section className="hud-panel relative flex flex-col items-center justify-center gap-6 p-8 backdrop-blur">
-          <div className="font-display absolute left-4 top-4 text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            Arc Core // J-3140
+        <HudPanel
+          index={2}
+          title="ARC CORE // J-3140"
+          rightSlot={
+            <span className="font-display text-[10px] uppercase tracking-[0.3em] text-primary">
+              ● LIVE
+            </span>
+          }
+          className="flex flex-col"
+        >
+          <div className="flex flex-col items-center justify-center gap-6 p-8">
+            <ReactorCore active={listening} />
+            <VoiceButton active={listening} onToggle={() => setListening((v) => !v)} />
           </div>
-          <div className="font-display absolute right-4 top-4 text-[10px] uppercase tracking-[0.3em] text-primary">
-            ● Live
-          </div>
-          <ReactorCore active={listening} />
-          <VoiceButton active={listening} onToggle={() => setListening((v) => !v)} />
-        </section>
-        </TileBuild>
+        </HudPanel>
 
-        <TileBuild delay={480}>
+        <HudPanel index={3} title="ACTIVE TASKS" className="flex flex-col">
           <ActiveTasksWidget />
-        </TileBuild>
+        </HudPanel>
       </div>
 
-      <TileBuild delay={640}>
+      <HudPanel index={4} title="CONVERSATION STREAM" className="flex flex-col">
         <ChatPanel />
-      </TileBuild>
+      </HudPanel>
     </div>
   );
 }
