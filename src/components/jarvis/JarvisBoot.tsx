@@ -46,7 +46,7 @@ export function JarvisBoot({ onEnter }: { onEnter: () => void }) {
         "fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-background text-primary",
         phase === "engaging" && "animate-fade-out",
       )}
-      aria-hidden={phase === "done"}
+      aria-hidden={phase === "engaging"}
     >
       {/* Moving grid */}
       <div
