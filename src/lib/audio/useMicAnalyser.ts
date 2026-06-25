@@ -22,7 +22,7 @@ export function useMicAnalyser(active: boolean, levelRef: RefObject<number>) {
       }
       acquired = true;
       analyser = a;
-      const data = new Uint8Array(analyser.frequencyBinCount);
+      const data = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
       const tick = () => {
         if (!analyser) return;
         analyser.getByteTimeDomainData(data);
