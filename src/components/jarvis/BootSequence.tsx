@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ArcReactorTriangle } from "./ArcReactorTriangle";
 import { bootLogs } from "@/data/mock";
+import { audio } from "@/lib/audio/AudioEngine";
 
 type Step = 1 | 2 | 3;
 
@@ -24,6 +25,7 @@ export function BootSequence({
   // Step progression for init mode: 5s step1 -> 5s step2 -> onComplete
   useEffect(() => {
     if (mode !== "init") return;
+    audio.playBoot();
     const t1 = setTimeout(() => setStep(2), 5000);
     const t2 = setTimeout(() => onComplete?.(), 10000);
     return () => {
@@ -192,7 +194,10 @@ export function BootSequence({
             </p>
             <button
               type="button"
-              onClick={onEngage}
+              onClick={() => {
+                audio.playEngage();
+                onEngage?.();
+              }}
               className="group relative font-display cursor-pointer border border-primary/70 bg-primary/10 px-12 py-4 text-sm uppercase tracking-[0.4em] text-primary transition hover:bg-primary/20 hover:text-foreground"
               style={{ boxShadow: "var(--glow-primary)" }}
             >
