@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Send } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { askJarvis } from "@/lib/ai/jarvisBrain";
-import { speak } from "@/lib/audio/speak";
-import { emitChat, onChat, type ChatBusMessage } from "@/lib/ai/chatBus";
+import { onChat, type ChatBusMessage } from "@/lib/ai/chatBus";
+import { useVoiceCommands } from "./VoiceCommandContext";
 
 const STORAGE_KEY = "jarvis_chat_history";
 const MAX_HISTORY = 60;
@@ -35,6 +34,7 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { routeText } = useVoiceCommands();
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -58,17 +58,12 @@ export function ChatPanel() {
     const text = input.trim();
     if (!text) return;
     setInput("");
-    emitChat("user", text);
     setTyping(true);
     try {
-      const reply = await askJarvis({
-        prompt: `User typed in the chat console: "${text}"`,
-        fallbackKind: "generic",
-      });
-      if (reply.speech) {
-        emitChat("jarvis", reply.speech);
-        speak(reply.speech);
-      }
+      // Route through the same Gemini → action pipeline used for voice
+      // commands. It emits both user + jarvis messages onto the chat bus
+      // AND physically fires UI actions (open_fuel, shutdown, etc.).
+      await routeText(text);
     } finally {
       setTyping(false);
     }
