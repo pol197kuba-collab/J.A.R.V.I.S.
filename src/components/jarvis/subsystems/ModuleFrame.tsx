@@ -64,7 +64,7 @@ export function ModuleFrame({
           session for the embedded app. No popups / modals / downloads.
           allow: clipboard only — mic / geolocation are NOT delegated.
           Re-enable per-module only if a future sub-system requires them. */}
-      <div className="relative w-full flex-1 overflow-hidden h-[calc(100vh-45px)]">
+      <div className="relative min-h-0 w-full flex-1 overflow-hidden">
         {mod.url ? (
           <iframe
             title={mod.name}

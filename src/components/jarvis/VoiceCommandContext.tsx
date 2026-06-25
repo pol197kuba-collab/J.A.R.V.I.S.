@@ -94,7 +94,8 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
   const [lastTranscript, setLastTranscript] = useState("");
   const pendingRef = useRef<SubSystemId | null>(null);
   const recRef = useRef<AnySpeechRecognition | null>(null);
-  const lastFireRef = useRef(0);
+  // Per-action debounce so "open menu" → "close menu" can fire back-to-back.
+  const lastFireMapRef = useRef<Map<string, number>>(new Map());
 
   const consumePendingModule = useCallback(() => {
     const v = pendingRef.current;
@@ -105,8 +106,14 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
   const fire = useCallback(
     (action: (typeof COMMANDS)[number]["action"]) => {
       const now = Date.now();
-      if (now - lastFireRef.current < 1500) return; // debounce
-      lastFireRef.current = now;
+      // Nav actions get a short window; status/shutdown stay protected.
+      const window_ms =
+        action === "shutdown" || action === "system_check" || action === "sleep"
+          ? 2000
+          : 500;
+      const last = lastFireMapRef.current.get(action) ?? 0;
+      if (now - last < window_ms) return;
+      lastFireMapRef.current.set(action, now);
       switch (action) {
         case "dashboard":
           go("/");
