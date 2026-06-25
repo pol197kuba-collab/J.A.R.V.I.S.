@@ -6,6 +6,8 @@ import { ChatPanel } from "@/components/jarvis/ChatPanel";
 import { ActiveTasksWidget } from "@/components/jarvis/ActiveTasksWidget";
 import { SystemStatsStrip } from "@/components/jarvis/SystemStatsStrip";
 import { HudPanel } from "@/components/jarvis/HudPanel";
+import { WeatherTelemetry } from "@/components/jarvis/WeatherTelemetry";
+import { ThreatStream } from "@/components/jarvis/ThreatStream";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -64,7 +66,12 @@ function Index() {
         </HudPanel>
       </div>
 
-      <HudPanel index={4} title="CONVERSATION STREAM" className="flex flex-col">
+      <div className="grid gap-6 lg:grid-cols-2 landscape:max-md:grid-cols-2 landscape:max-md:gap-2">
+        <WeatherTelemetry index={4} />
+        <ThreatStream index={5} />
+      </div>
+
+      <HudPanel index={6} title="CONVERSATION STREAM" className="flex flex-col">
         <ChatPanel />
       </HudPanel>
     </div>

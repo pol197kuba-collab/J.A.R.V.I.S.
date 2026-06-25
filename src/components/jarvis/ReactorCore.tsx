@@ -1,5 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from "react";
 import { useMicAnalyser } from "@/lib/audio/useMicAnalyser";
+import { CoreAudioSpectrum } from "./CoreAudioSpectrum";
 
 const AMBER = "oklch(0.85 0.2 65)";
 const AMBER_HI = "oklch(0.95 0.18 75)";
@@ -130,6 +131,9 @@ export function ReactorCore({ active }: { active?: boolean }) {
 
       {/* Particle cloud (canvas — single DOM element) */}
       <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
+
+      {/* Cyan radial frequency spectrum — sits outside the 3D layer */}
+      <CoreAudioSpectrum active={!!active} />
 
       {/* 3D Holographic Gyroscope */}
       <div className="reactor-perspective absolute inset-0">
