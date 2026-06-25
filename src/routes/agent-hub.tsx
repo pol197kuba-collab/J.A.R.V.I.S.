@@ -34,7 +34,7 @@ function AgentHub() {
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center border border-primary/50 bg-primary/10 text-primary">
-                  <Bot className="h-5 w-5" />
+                  <Bot strokeWidth={1.5} className="h-5 w-5" />
                 </div>
                 <div>
                   <p className="font-display text-base font-semibold tracking-widest">{a.name}</p>

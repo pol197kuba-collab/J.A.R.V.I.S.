@@ -193,11 +193,11 @@ function DashboardShell({
       <div className="relative flex min-h-screen w-full bg-background text-foreground">
         <div className="bg-grid pointer-events-none fixed inset-0 opacity-30" aria-hidden />
         <div
-          className="pointer-events-none fixed inset-0 opacity-50"
+          className="pointer-events-none fixed inset-0 opacity-60"
           aria-hidden
           style={{
             background:
-              "radial-gradient(ellipse at 50% -10%, oklch(0.5 0.2 210 / 0.25), transparent 55%), radial-gradient(ellipse at 80% 100%, oklch(0.4 0.18 210 / 0.18), transparent 60%)",
+              "radial-gradient(ellipse at 50% -10%, oklch(0.55 0.18 200 / 0.10), transparent 55%), radial-gradient(ellipse at 80% 100%, oklch(0.5 0.18 200 / 0.06), transparent 60%)",
           }}
         />
         <AppSidebar />
@@ -221,13 +221,13 @@ function DashboardShell({
           </header>
           <main
             className={
-              "relative flex-1" +
+              "relative flex-1 overflow-hidden" +
               (transition === "dematerialize" ? " animate-hud-dematerialize" : "")
             }
           >
             <Outlet />
+            <HudRouteTransition />
           </main>
-          <HudRouteTransition />
           {phase === "shutdown" && (
             <div
               className="pointer-events-none fixed inset-0 z-[90] bg-black animate-shutdown-flash"

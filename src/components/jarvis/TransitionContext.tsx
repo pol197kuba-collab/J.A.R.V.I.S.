@@ -41,13 +41,13 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
         setTimeout(() => {
           router.navigate({ to: path });
           setTransition("scan");
-        }, 1500),
+        }, 550),
       );
       timers.current.push(
-        setTimeout(() => setTransition("materialize"), 2500),
+        setTimeout(() => setTransition("materialize"), 1000),
       );
       timers.current.push(
-        setTimeout(() => setTransition("idle"), 4000),
+        setTimeout(() => setTransition("idle"), 1850),
       );
     },
     [transition, pathname, router],

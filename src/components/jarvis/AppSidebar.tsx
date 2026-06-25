@@ -64,9 +64,9 @@ export function AppSidebar() {
                       isActive={active}
                       disabled={isTransitioning}
                       onClick={() => go(item.url)}
-                      className="data-[active=true]:bg-primary/10 data-[active=true]:text-primary"
+                      className="group data-[active=true]:bg-primary/10 data-[active=true]:text-primary hover:text-primary"
                     >
-                      <item.icon className="h-4 w-4" />
+                      <item.icon className="icon-neon h-4 w-4" strokeWidth={1.5} />
                       {!collapsed && (
                         <span className="font-display text-xs uppercase tracking-[0.2em]">
                           {item.title}
