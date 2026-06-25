@@ -22,6 +22,27 @@ void AppSidebar;
 export function PhaseController() {
   const [phase, setPhase] = useState<AppPhase>("booting");
 
+  // iOS / Safari autoplay policy: unlock AudioContext on the first real
+  // user gesture. Until then, audio.* calls no-op silently (no warnings).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (audio.isUnlocked()) return;
+    const unlock = () => {
+      audio.unlock();
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+      window.removeEventListener("touchstart", unlock);
+    };
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    window.addEventListener("touchstart", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+      window.removeEventListener("touchstart", unlock);
+    };
+  }, []);
+
   // shutdown → booting after the dissolve animation
   useEffect(() => {
     if (phase !== "shutdown") return;
