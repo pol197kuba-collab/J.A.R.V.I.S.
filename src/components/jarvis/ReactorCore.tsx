@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { cn } from "@/lib/utils";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 const AMBER = "oklch(0.85 0.2 65)";
 const AMBER_HI = "oklch(0.95 0.18 75)";
@@ -69,9 +68,16 @@ export function ReactorCore({ active }: { active?: boolean }) {
     [],
   );
 
-  // Audio-reactive scale boost for outer rings
-  const ringBoost = 1 + level * 0.18;
   const glowBoost = 0.6 + level * 1.4;
+  const ringStyle: CSSProperties = {
+    color: AMBER,
+    filter: `drop-shadow(0 0 ${6 + glowBoost * 8}px ${AMBER}) drop-shadow(0 0 ${14 + glowBoost * 14}px oklch(0.85 0.2 65 / 0.5))`,
+  };
+
+  // Reusable ring SVG renderer — each ring becomes its own absolutely
+  // positioned 3D layer so it can sit at a unique translateZ.
+  const ringWrap = "absolute inset-0 flex items-center justify-center";
+  const svgFull = "h-full w-full";
 
   return (
     <div className="relative flex aspect-square w-full max-w-[420px] items-center justify-center text-[oklch(0.85_0.2_65)] animate-holo-glitch">
@@ -113,83 +119,111 @@ export function ReactorCore({ active }: { active?: boolean }) {
         ))}
       </div>
 
-      {/* Layered SVG rings */}
-      <svg
-        viewBox="0 0 200 200"
-        className="absolute inset-0 h-full w-full"
-        style={{ color: AMBER, filter: `drop-shadow(0 0 ${4 + glowBoost * 6}px ${AMBER})` }}
-      >
-        <defs>
-          <radialGradient id="amber-core" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="oklch(0.99 0.05 75)" stopOpacity="1" />
-            <stop offset="25%" stopColor={AMBER_HI} stopOpacity="0.95" />
-            <stop offset="60%" stopColor={AMBER} stopOpacity="0.55" />
-            <stop offset="100%" stopColor={AMBER_DEEP} stopOpacity="0" />
-          </radialGradient>
-        </defs>
+      {/* 3D Holographic Gyroscope */}
+      <div className="reactor-perspective absolute inset-0">
+        <div className="reactor-stage absolute inset-0 sphere-blend">
+          {/* Holographic wireframe sphere — meridians + parallels */}
+          <div className="sphere-wire absolute inset-[12%]">
+            {[0, 30, 60, 90, 120, 150].map((deg) => (
+              <div
+                key={`m${deg}`}
+                className="sphere-meridian"
+                style={{ transform: `rotateY(${deg}deg)` }}
+              />
+            ))}
+            {[-60, -30, 0, 30, 60].map((deg) => (
+              <div
+                key={`p${deg}`}
+                className="sphere-meridian"
+                style={{ transform: `rotateX(90deg) translateZ(${deg * 1.2}px) scale(${Math.cos((deg * Math.PI) / 180).toFixed(3)})` }}
+              />
+            ))}
+          </div>
 
-        {/* Ring 1 — outer dashed, slow ccw */}
-        <g
-          className={cn("spin-ccw-28", active && "spin-ccw-12")}
-          style={{ transformBox: "fill-box", transformOrigin: "center", transform: `scale(${ringBoost})` }}
-        >
-          <circle cx="100" cy="100" r="96" fill="none" stroke="currentColor" strokeWidth="0.6" strokeDasharray="2 6" opacity="0.7" />
-        </g>
+          {/* Ring 1 — outer dashed, tilted */}
+          <div className={`${ringWrap} ring3d-a`}>
+            <svg viewBox="0 0 200 200" className={svgFull} style={ringStyle}>
+              <circle cx="100" cy="100" r="96" fill="none" stroke="currentColor" strokeWidth="0.6" strokeDasharray="2 6" opacity="0.85" />
+            </svg>
+          </div>
 
-        {/* Ring 2 — tick marks, cw */}
-        <g className={cn("spin-cw-22", active && "spin-cw-8")} style={{ transformBox: "fill-box", transformOrigin: "center" }}>
-          <circle cx="100" cy="100" r="86" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.35" />
-          {Array.from({ length: 60 }).map((_, i) => {
-            const a = (i / 60) * Math.PI * 2;
-            const x1 = 100 + Math.cos(a) * 86;
-            const y1 = 100 + Math.sin(a) * 86;
-            const len = i % 5 === 0 ? 6 : 3;
-            const x2 = 100 + Math.cos(a) * (86 - len);
-            const y2 = 100 + Math.sin(a) * (86 - len);
-            return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="currentColor" strokeWidth="0.6" opacity={i % 5 === 0 ? 0.95 : 0.55} />;
-          })}
-        </g>
+          {/* Ring 2 — tick marks */}
+          <div className={`${ringWrap} ring3d-b`}>
+            <svg viewBox="0 0 200 200" className={svgFull} style={ringStyle}>
+              <circle cx="100" cy="100" r="86" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.4" />
+              {Array.from({ length: 60 }).map((_, i) => {
+                const a = (i / 60) * Math.PI * 2;
+                const x1 = 100 + Math.cos(a) * 86;
+                const y1 = 100 + Math.sin(a) * 86;
+                const len = i % 5 === 0 ? 6 : 3;
+                const x2 = 100 + Math.cos(a) * (86 - len);
+                const y2 = 100 + Math.sin(a) * (86 - len);
+                return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="currentColor" strokeWidth="0.6" opacity={i % 5 === 0 ? 0.95 : 0.55} />;
+              })}
+            </svg>
+          </div>
 
-        {/* Ring 3 — dotted ccw */}
-        <g className="spin-ccw-18" style={{ transformBox: "fill-box", transformOrigin: "center" }}>
-          <circle cx="100" cy="100" r="74" fill="none" stroke="currentColor" strokeWidth="0.5" strokeDasharray="0.4 3" strokeLinecap="round" opacity="0.85" />
-        </g>
+          {/* Ring 3 — vertical globus spin (rotateY 360) */}
+          <div className={`${ringWrap} ring3d-c`}>
+            <svg viewBox="0 0 200 200" className={svgFull} style={ringStyle}>
+              <circle cx="100" cy="100" r="74" fill="none" stroke="currentColor" strokeWidth="0.6" strokeDasharray="0.4 3" strokeLinecap="round" opacity="0.9" />
+            </svg>
+          </div>
 
-        {/* Ring 4 — segmented arcs cw */}
-        <g className={cn("spin-cw-15", active && "spin-cw-8")} style={{ transformBox: "fill-box", transformOrigin: "center" }}>
-          {[0, 90, 180, 270].map((rot) => (
-            <path
-              key={rot}
-              d="M100,38 A62,62 0 0 1 162,100"
-              transform={`rotate(${rot} 100 100)`}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.2"
-              strokeLinecap="round"
-              opacity="0.85"
-              strokeDasharray="40 14"
-            />
-          ))}
-        </g>
+          {/* Ring 4 — segmented arcs */}
+          <div className={`${ringWrap} ring3d-d`}>
+            <svg viewBox="0 0 200 200" className={svgFull} style={ringStyle}>
+              {[0, 90, 180, 270].map((rot) => (
+                <path
+                  key={rot}
+                  d="M100,38 A62,62 0 0 1 162,100"
+                  transform={`rotate(${rot} 100 100)`}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                  opacity="0.95"
+                  strokeDasharray="40 14"
+                />
+              ))}
+            </svg>
+          </div>
 
-        {/* Ring 5 — inner thin ccw with notches */}
-        <g className="spin-ccw-12" style={{ transformBox: "fill-box", transformOrigin: "center" }}>
-          <circle cx="100" cy="100" r="52" fill="none" stroke="currentColor" strokeWidth="0.6" opacity="0.6" />
-          {[0, 60, 120, 180, 240, 300].map((rot) => (
-            <rect key={rot} x="99" y="46" width="2" height="6" fill="currentColor" transform={`rotate(${rot} 100 100)`} />
-          ))}
-        </g>
+          {/* Ring 5 — inner notched */}
+          <div className={`${ringWrap} ring3d-e`}>
+            <svg viewBox="0 0 200 200" className={svgFull} style={ringStyle}>
+              <circle cx="100" cy="100" r="52" fill="none" stroke="currentColor" strokeWidth="0.6" opacity="0.7" />
+              {[0, 60, 120, 180, 240, 300].map((rot) => (
+                <rect key={rot} x="99" y="46" width="2" height="6" fill="currentColor" transform={`rotate(${rot} 100 100)`} />
+              ))}
+            </svg>
+          </div>
 
-        {/* Ring 6 — innermost fast cw */}
-        <g className="spin-cw-8" style={{ transformBox: "fill-box", transformOrigin: "center" }}>
-          <circle cx="100" cy="100" r="40" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="6 4" opacity="0.9" />
-        </g>
+          {/* Ring 6 — innermost fast */}
+          <div className={`${ringWrap} ring3d-f`}>
+            <svg viewBox="0 0 200 200" className={svgFull} style={ringStyle}>
+              <circle cx="100" cy="100" r="40" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="6 4" opacity="0.95" />
+            </svg>
+          </div>
 
-        {/* Core glow */}
-        <circle cx="100" cy="100" r="36" fill="url(#amber-core)" className={active ? "animate-amber-pulse-fast" : "animate-amber-pulse"} style={{ transformBox: "fill-box", transformOrigin: "center" }} />
-        <circle cx="100" cy="100" r="14" fill={AMBER_HI} opacity="0.9" />
-        <circle cx="100" cy="100" r="6" fill="white" />
-      </svg>
+          {/* Core glow — always front-facing at Z=0 */}
+          <div className={`${ringWrap}`} style={{ transform: "translateZ(0)" }}>
+            <svg viewBox="0 0 200 200" className={svgFull} style={ringStyle}>
+              <defs>
+                <radialGradient id="amber-core" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="oklch(0.99 0.05 75)" stopOpacity="1" />
+                  <stop offset="25%" stopColor={AMBER_HI} stopOpacity="0.95" />
+                  <stop offset="60%" stopColor={AMBER} stopOpacity="0.55" />
+                  <stop offset="100%" stopColor={AMBER_DEEP} stopOpacity="0" />
+                </radialGradient>
+              </defs>
+              <circle cx="100" cy="100" r="36" fill="url(#amber-core)" className={active ? "animate-amber-pulse-fast" : "animate-amber-pulse"} style={{ transformBox: "fill-box", transformOrigin: "center" }} />
+              <circle cx="100" cy="100" r="14" fill={AMBER_HI} opacity="0.9" />
+              <circle cx="100" cy="100" r="6" fill="white" />
+            </svg>
+          </div>
+        </div>
+      </div>
 
       {/* Audio-reactive halo */}
       {active && (
