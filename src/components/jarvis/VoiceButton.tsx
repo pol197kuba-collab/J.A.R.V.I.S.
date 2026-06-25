@@ -1,5 +1,6 @@
 import { Mic, MicOff } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { audio } from "@/lib/audio/AudioEngine";
 
 export function VoiceButton({
   active,
@@ -19,7 +20,10 @@ export function VoiceButton({
         )}
         <button
           type="button"
-          onClick={onToggle}
+          onClick={() => {
+            audio.playBeep(active ? 600 : 1200, 0.1, 0.22);
+            onToggle();
+          }}
           aria-pressed={active}
           aria-label={active ? "Stop listening" : "Activate voice"}
           className={cn(
