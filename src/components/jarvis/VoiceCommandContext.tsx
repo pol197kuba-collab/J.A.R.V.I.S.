@@ -11,6 +11,7 @@ import { useHudNavigate } from "./TransitionContext";
 import { usePhase } from "./PhaseContext";
 import type { SubSystemId } from "@/data/subSystems";
 import { speak, speakCancel } from "@/lib/audio/speak";
+import { askJarvis, type JarvisAction } from "@/lib/ai/jarvisBrain";
 
 type Ctx = {
   enabled: boolean;
@@ -55,20 +56,33 @@ function getSpeechCtor():
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-const COMMANDS: Array<{
-  re: RegExp;
-  action:
-    | "dashboard"
-    | "fuel"
-    | "rto"
-    | "jobfit"
-    | "telemetry"
-    | "menu_open"
-    | "menu_close"
-    | "system_check"
-    | "sleep"
-    | "shutdown";
-}> = [
+type LocalAction =
+  | "dashboard"
+  | "fuel"
+  | "rto"
+  | "jobfit"
+  | "telemetry"
+  | "menu_open"
+  | "menu_close"
+  | "system_check"
+  | "sleep"
+  | "shutdown";
+
+const ACTION_MAP: Record<JarvisAction, LocalAction | null> = {
+  none: null,
+  open_dashboard: "dashboard",
+  open_fuel: "fuel",
+  open_calculator: "rto",
+  open_jobfit: "jobfit",
+  open_telemetry: "telemetry",
+  open_menu: "menu_open",
+  close_menu: "menu_close",
+  system_check: "system_check",
+  sleep: "sleep",
+  shutdown: "shutdown",
+};
+
+const COMMANDS: Array<{ re: RegExp; action: LocalAction }> = [
   // Navigation
   { re: /\b(open\s+dashboard|show\s+status|show\s+core|jarvis\s+dashboard)\b/i, action: "dashboard" },
   { re: /\b(open\s+fuel|launch\s+monitor|jarvis\s+fuel)\b/i, action: "fuel" },
@@ -104,7 +118,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const fire = useCallback(
-    (action: (typeof COMMANDS)[number]["action"]) => {
+    (action: LocalAction, spokenLine?: string) => {
       const now = Date.now();
       // Nav actions get a short window; status/shutdown stay protected.
       const window_ms =
@@ -114,50 +128,82 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       const last = lastFireMapRef.current.get(action) ?? 0;
       if (now - last < window_ms) return;
       lastFireMapRef.current.set(action, now);
+      const say = (fallback: string) => speak(spokenLine && spokenLine.trim() ? spokenLine : fallback);
       switch (action) {
         case "dashboard":
           go("/");
           break;
         case "fuel":
           pendingRef.current = "fuel-monitor";
-          speak("Loading Fuel Monitor Matrix.");
+          say("Loading Fuel Monitor Matrix.");
           go("/sub-systems");
           break;
         case "rto":
           pendingRef.current = "rto-calculator";
-          speak("Accessing RTO calculation systems.");
+          say("Accessing RTO calculation systems.");
           go("/sub-systems");
           break;
         case "jobfit":
           pendingRef.current = "jobfit-ai";
-          speak("Initializing AI resume optimizer.");
+          say("Initializing AI resume optimizer.");
           go("/sub-systems");
           break;
         case "telemetry":
-          speak("Accessing satellite telemetry.");
+          say("Accessing satellite telemetry.");
           go("/geo-tracking");
           break;
         case "menu_open":
           window.dispatchEvent(new CustomEvent("jarvis:sidebar", { detail: "open" }));
+          if (spokenLine) speak(spokenLine);
           break;
         case "menu_close":
           window.dispatchEvent(new CustomEvent("jarvis:sidebar", { detail: "close" }));
+          if (spokenLine) speak(spokenLine);
           break;
         case "system_check":
-          speak("All systems operational, Mister Slawinsky. Core temperature is nominal.");
+          say("All systems operational, Mister Slawinsky. Core temperature is nominal.");
           break;
         case "sleep":
-          speak("System in standby mode.");
+          say("System in standby mode.");
           setEnabled(false);
           break;
         case "shutdown":
-          speak("Deactivating system. Goodbye, Mister Slawinsky.");
+          say("Deactivating system. Goodbye, Mister Slawinsky.");
           setTimeout(() => speakCancel(), 3200);
           setPhase("shutdown");
           break;
       }
     },
     [go, setPhase],
+  );
+
+  /**
+   * Run the transcript through Gemini for intent + spoken reply.
+   * Falls back to local regex if Gemini is unavailable or returns "none"
+   * but the text clearly matches a hardcoded command (best of both worlds).
+   */
+  const route = useCallback(
+    async (transcript: string) => {
+      // Try regex first for instant response on known commands.
+      const local = COMMANDS.find((c) => c.re.test(transcript));
+      // Ask Gemini for richer reply + open-ended chat handling.
+      const reply = await askJarvis({
+        prompt: `User said (via microphone): "${transcript}"`,
+        fallbackKind: "generic",
+      });
+      const mapped = ACTION_MAP[reply.action];
+      if (mapped) {
+        fire(mapped, reply.speech);
+        return;
+      }
+      if (local) {
+        fire(local.action, reply.speech);
+        return;
+      }
+      // Pure chit-chat — just speak.
+      if (reply.speech) speak(reply.speech);
+    },
+    [fire],
   );
 
   useEffect(() => {
@@ -177,12 +223,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       if (!finalText) return;
       const t = finalText.trim();
       setLastTranscript(t);
-      for (const c of COMMANDS) {
-        if (c.re.test(t)) {
-          fire(c.action);
-          break;
-        }
-      }
+      void route(t);
     };
     rec.onend = () => {
       setListening(false);
@@ -215,7 +256,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       recRef.current = null;
       setListening(false);
     };
-  }, [enabled, Ctor, fire]);
+  }, [enabled, Ctor, route]);
 
   return (
     <VoiceCtx.Provider
