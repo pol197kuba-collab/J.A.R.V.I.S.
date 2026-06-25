@@ -11,7 +11,7 @@ export function ModuleFrame({
   onTerminate: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black animate-hud-tile-in landscape:max-md:absolute landscape:max-md:z-30">
+    <div className="absolute inset-0 z-30 flex flex-col bg-black animate-hud-tile-in landscape:max-md:fixed landscape:max-md:z-[100]">
       {/* Top HUD bar */}
       <div
         className="relative flex h-9 items-center gap-3 border-b border-primary/40 bg-black/90 px-3 landscape:max-md:h-8 landscape:max-md:gap-1.5 landscape:max-md:px-2"
