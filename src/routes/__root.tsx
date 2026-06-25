@@ -152,10 +152,17 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <PhaseContext.Provider value={{ phase, setPhase }}>
         {phase === "booting" && (
-          <BootSequence key="boot" onEngage={() => setPhase("login_screen")} />
+          <BootSequence key="engage" mode="engage" onEngage={() => setPhase("login_screen")} />
         )}
         {phase === "login_screen" && (
-          <StarkLogin onGranted={() => setPhase("transition_to_dashboard")} />
+          <StarkLogin onGranted={() => setPhase("initializing")} />
+        )}
+        {phase === "initializing" && (
+          <BootSequence
+            key="init"
+            mode="init"
+            onComplete={() => setPhase("transition_to_dashboard")}
+          />
         )}
         {showDashboardShell && (
       <SidebarProvider>

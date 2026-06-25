@@ -7,20 +7,30 @@ type Step = 1 | 2 | 3;
 
 const JARVIS = "J.A.R.V.I.S.";
 
-export function BootSequence({ onEngage }: { onEngage: () => void }) {
-  const [step, setStep] = useState<Step>(1);
+export function BootSequence({
+  mode = "engage",
+  onEngage,
+  onComplete,
+}: {
+  mode?: "engage" | "init";
+  onEngage?: () => void;
+  onComplete?: () => void;
+}) {
+  // engage mode renders only step 3; init mode runs step 1 -> step 2 -> done
+  const [step, setStep] = useState<Step>(mode === "engage" ? 3 : 1);
   const [progress, setProgress] = useState(0);
   const [typed, setTyped] = useState(0);
 
-  // Step progression: 5s + 5s + 5s
+  // Step progression for init mode: 5s step1 -> 5s step2 -> onComplete
   useEffect(() => {
+    if (mode !== "init") return;
     const t1 = setTimeout(() => setStep(2), 5000);
-    const t2 = setTimeout(() => setStep(3), 10000);
+    const t2 = setTimeout(() => onComplete?.(), 10000);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
     };
-  }, []);
+  }, [mode, onComplete]);
 
   // Step 1 progress bar
   useEffect(() => {
