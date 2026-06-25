@@ -1,127 +1,139 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
+import { useMicAnalyser } from "@/lib/audio/useMicAnalyser";
 
 const AMBER = "oklch(0.85 0.2 65)";
 const AMBER_HI = "oklch(0.95 0.18 75)";
 const AMBER_DEEP = "oklch(0.65 0.22 50)";
 
-function useCoord(seed: number, active?: boolean) {
-  const [v, setV] = useState(() => seed);
-  useEffect(() => {
-    const i = setInterval(
-      () => setV(Math.floor(Math.random() * 9999)),
-      active ? 600 : 2200 + seed * 13,
-    );
-    return () => clearInterval(i);
-  }, [seed, active]);
-  return v.toString().padStart(4, "0");
-}
-
-function useAudioLevel(active?: boolean) {
-  // Simulated audio amplitude 0..1, updates ~20Hz when active
-  const [level, setLevel] = useState(0);
-  const raf = useRef<number | null>(null);
-  useEffect(() => {
-    if (!active) {
-      setLevel(0);
-      return;
-    }
-    let last = 0;
-    const tick = (t: number) => {
-      if (t - last > 50) {
-        // weighted noise — punchy bursts
-        const n = Math.random();
-        setLevel((prev) => prev * 0.55 + (n * n) * 0.45);
-        last = t;
-      }
-      raf.current = requestAnimationFrame(tick);
-    };
-    raf.current = requestAnimationFrame(tick);
-    return () => {
-      if (raf.current) cancelAnimationFrame(raf.current);
-    };
-  }, [active]);
-  return level;
-}
-
 export function ReactorCore({ active }: { active?: boolean }) {
-  const level = useAudioLevel(active);
-  const cx = useCoord(1, active);
-  const cy = useCoord(2, active);
-  const cz = useCoord(3, active);
-  const cw = useCoord(4, active);
+  // Audio level lives in a ref (mutated every frame) — no React re-renders.
+  const levelRef = useRef<number>(0);
+  useMicAnalyser(!!active, levelRef);
 
-  const particles = useMemo(
-    () =>
-      Array.from({ length: 26 }).map((_, i) => {
-        const angle = (i / 26) * Math.PI * 2 + Math.random();
-        const r = 40 + Math.random() * 40;
-        return {
-          left: `${50 + Math.cos(angle) * 18 + (Math.random() - 0.5) * 10}%`,
-          top: `${50 + Math.sin(angle) * 18 + (Math.random() - 0.5) * 10}%`,
-          px: `${Math.cos(angle) * r}px`,
-          py: `${Math.sin(angle) * r - 10}px`,
-          delay: `${(Math.random() * 4).toFixed(2)}s`,
-          dur: `${(3 + Math.random() * 3).toFixed(2)}s`,
-          size: 2 + Math.random() * 3,
-        };
-      }),
-    [],
-  );
+  // Coord text refs — updated via rAF (no state).
+  const nRef = useRef<HTMLSpanElement | null>(null);
+  const sRef = useRef<HTMLSpanElement | null>(null);
+  const wRef = useRef<HTMLSpanElement | null>(null);
+  const eRef = useRef<HTMLSpanElement | null>(null);
 
-  const glowBoost = 0.6 + level * 1.4;
-  const ringStyle: CSSProperties = {
+  // Canvas particle field
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // CSS var targets for glow/halo
+  const haloRef = useRef<HTMLDivElement | null>(null);
+  const ringStageRef = useRef<HTMLDivElement | null>(null);
+
+  // Static (non-reactive) ring filter — heavy drop-shadow only on outer/inner layers.
+  const ringHeavy: CSSProperties = {
     color: AMBER,
-    filter: `drop-shadow(0 0 ${6 + glowBoost * 8}px ${AMBER}) drop-shadow(0 0 ${14 + glowBoost * 14}px oklch(0.85 0.2 65 / 0.5))`,
+    filter: `drop-shadow(0 0 8px ${AMBER}) drop-shadow(0 0 18px oklch(0.85 0.2 65 / 0.55))`,
   };
+  const ringLight: CSSProperties = { color: AMBER };
 
   // Reusable ring SVG renderer — each ring becomes its own absolutely
   // positioned 3D layer so it can sit at a unique translateZ.
   const ringWrap = "absolute inset-0 flex items-center justify-center";
   const svgFull = "h-full w-full";
 
+  // Particle field on canvas (1 DOM element, single rAF loop)
+  useEffect(() => {
+    const cvs = canvasRef.current;
+    if (!cvs) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const resize = () => {
+      const rect = cvs.getBoundingClientRect();
+      cvs.width = rect.width * dpr;
+      cvs.height = rect.height * dpr;
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(cvs);
+
+    type P = { a: number; r: number; rb: number; sp: number; sz: number; ph: number };
+    const PARTS: P[] = Array.from({ length: 22 }, (_, i) => ({
+      a: (i / 22) * Math.PI * 2 + Math.random(),
+      r: 0.18 + Math.random() * 0.18,
+      rb: 0.04 + Math.random() * 0.08,
+      sp: 0.0006 + Math.random() * 0.0014,
+      sz: 1.2 + Math.random() * 2.2,
+      ph: Math.random() * Math.PI * 2,
+    }));
+
+    let raf = 0;
+    let last = performance.now();
+    let coordTick = 0;
+    const draw = (t: number) => {
+      const dt = t - last;
+      last = t;
+      const ctx = cvs.getContext("2d");
+      if (!ctx) return;
+      const w = cvs.width;
+      const h = cvs.height;
+      ctx.clearRect(0, 0, w, h);
+      const cx = w / 2;
+      const cy = h / 2;
+      const lvl = levelRef.current;
+
+      // Reactive halo via CSS vars (no React re-render)
+      if (haloRef.current) {
+        haloRef.current.style.setProperty("--lvl", lvl.toFixed(3));
+      }
+
+      for (let i = 0; i < PARTS.length; i++) {
+        const p = PARTS[i];
+        p.a += p.sp * dt * (1 + lvl * 2);
+        const wobble = Math.sin(t * 0.001 + p.ph) * p.rb;
+        const rad = (p.r + wobble + lvl * 0.06) * Math.min(w, h) * 0.5;
+        const x = cx + Math.cos(p.a) * rad;
+        const y = cy + Math.sin(p.a) * rad;
+        const sz = p.sz * dpr * (1 + lvl * 0.8);
+        ctx.beginPath();
+        ctx.fillStyle = "rgba(255, 196, 110, 0.85)";
+        ctx.shadowColor = "rgba(255, 170, 70, 0.9)";
+        ctx.shadowBlur = 10 * dpr;
+        ctx.arc(x, y, sz, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Coord refresh ~5/s when active, ~0.5/s otherwise
+      coordTick += dt;
+      const every = active ? 200 : 2000;
+      if (coordTick > every) {
+        coordTick = 0;
+        const rnd = () => Math.floor(Math.random() * 9999).toString().padStart(4, "0");
+        if (nRef.current) nRef.current.textContent = `N • ${rnd()}`;
+        if (sRef.current) sRef.current.textContent = `S • ${rnd()}`;
+        if (wRef.current) wRef.current.textContent = `W • ${rnd()}`;
+        if (eRef.current) eRef.current.textContent = `E • ${rnd()}`;
+      }
+
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, [active]);
+
   return (
-    <div className="relative flex aspect-square w-full max-w-[420px] items-center justify-center text-[oklch(0.85_0.2_65)] animate-holo-glitch">
+    <div className="reactor-gpu relative flex aspect-square w-full max-w-[420px] items-center justify-center text-[oklch(0.85_0.2_65)] animate-holo-glitch">
       {/* Crosshair axes with coordinates */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-[oklch(0.85_0.2_65/0.35)] to-transparent" />
         <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-gradient-to-r from-transparent via-[oklch(0.85_0.2_65/0.35)] to-transparent" />
-        <span className="absolute left-1/2 top-1 -translate-x-1/2 font-display text-[9px] tracking-[0.25em] text-[oklch(0.92_0.18_70)]">
-          N • {cx}
-        </span>
-        <span className="absolute bottom-1 left-1/2 -translate-x-1/2 font-display text-[9px] tracking-[0.25em] text-[oklch(0.92_0.18_70)]">
-          S • {cy}
-        </span>
-        <span className="absolute left-1 top-1/2 -translate-y-1/2 rotate-[-90deg] font-display text-[9px] tracking-[0.25em] text-[oklch(0.92_0.18_70)]">
-          W • {cz}
-        </span>
-        <span className="absolute right-1 top-1/2 -translate-y-1/2 rotate-90 font-display text-[9px] tracking-[0.25em] text-[oklch(0.92_0.18_70)]">
-          E • {cw}
-        </span>
+        <span ref={nRef} className="absolute left-1/2 top-1 -translate-x-1/2 font-display text-[9px] tracking-[0.25em] text-[oklch(0.92_0.18_70)]">N • 0001</span>
+        <span ref={sRef} className="absolute bottom-1 left-1/2 -translate-x-1/2 font-display text-[9px] tracking-[0.25em] text-[oklch(0.92_0.18_70)]">S • 0002</span>
+        <span ref={wRef} className="absolute left-1 top-1/2 -translate-y-1/2 rotate-[-90deg] font-display text-[9px] tracking-[0.25em] text-[oklch(0.92_0.18_70)]">W • 0003</span>
+        <span ref={eRef} className="absolute right-1 top-1/2 -translate-y-1/2 rotate-90 font-display text-[9px] tracking-[0.25em] text-[oklch(0.92_0.18_70)]">E • 0004</span>
       </div>
 
-      {/* Particle cloud */}
-      <div className="pointer-events-none absolute inset-0">
-        {particles.map((p, i) => (
-          <span
-            key={i}
-            className="particle-dot"
-            style={{
-              left: p.left,
-              top: p.top,
-              width: p.size,
-              height: p.size,
-              animationDelay: p.delay,
-              animationDuration: p.dur,
-              ["--px" as never]: p.px,
-              ["--py" as never]: p.py,
-            }}
-          />
-        ))}
-      </div>
+      {/* Particle cloud (canvas — single DOM element) */}
+      <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
 
       {/* 3D Holographic Gyroscope */}
       <div className="reactor-perspective absolute inset-0">
-        <div className="reactor-stage absolute inset-0 sphere-blend">
+        <div ref={ringStageRef} className="reactor-stage absolute inset-0 sphere-blend">
           {/* Holographic wireframe sphere — meridians + parallels */}
           <div className="sphere-wire absolute inset-[12%]">
             {[0, 30, 60, 90, 120, 150].map((deg) => (
@@ -142,14 +154,14 @@ export function ReactorCore({ active }: { active?: boolean }) {
 
           {/* Ring 1 — outer dashed, tilted */}
           <div className={`${ringWrap} ring3d-a`}>
-            <svg viewBox="0 0 200 200" className={svgFull} style={ringStyle}>
+            <svg viewBox="0 0 200 200" className={svgFull} style={ringHeavy}>
               <circle cx="100" cy="100" r="96" fill="none" stroke="currentColor" strokeWidth="0.6" strokeDasharray="2 6" opacity="0.85" />
             </svg>
           </div>
 
           {/* Ring 2 — tick marks */}
           <div className={`${ringWrap} ring3d-b`}>
-            <svg viewBox="0 0 200 200" className={svgFull} style={ringStyle}>
+            <svg viewBox="0 0 200 200" className={svgFull} style={ringLight}>
               <circle cx="100" cy="100" r="86" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.4" />
               {Array.from({ length: 60 }).map((_, i) => {
                 const a = (i / 60) * Math.PI * 2;
@@ -165,14 +177,14 @@ export function ReactorCore({ active }: { active?: boolean }) {
 
           {/* Ring 3 — vertical globus spin (rotateY 360) */}
           <div className={`${ringWrap} ring3d-c`}>
-            <svg viewBox="0 0 200 200" className={svgFull} style={ringStyle}>
+            <svg viewBox="0 0 200 200" className={svgFull} style={ringLight}>
               <circle cx="100" cy="100" r="74" fill="none" stroke="currentColor" strokeWidth="0.6" strokeDasharray="0.4 3" strokeLinecap="round" opacity="0.9" />
             </svg>
           </div>
 
           {/* Ring 4 — segmented arcs */}
           <div className={`${ringWrap} ring3d-d`}>
-            <svg viewBox="0 0 200 200" className={svgFull} style={ringStyle}>
+            <svg viewBox="0 0 200 200" className={svgFull} style={ringLight}>
               {[0, 90, 180, 270].map((rot) => (
                 <path
                   key={rot}
@@ -191,7 +203,7 @@ export function ReactorCore({ active }: { active?: boolean }) {
 
           {/* Ring 5 — inner notched */}
           <div className={`${ringWrap} ring3d-e`}>
-            <svg viewBox="0 0 200 200" className={svgFull} style={ringStyle}>
+            <svg viewBox="0 0 200 200" className={svgFull} style={ringLight}>
               <circle cx="100" cy="100" r="52" fill="none" stroke="currentColor" strokeWidth="0.6" opacity="0.7" />
               {[0, 60, 120, 180, 240, 300].map((rot) => (
                 <rect key={rot} x="99" y="46" width="2" height="6" fill="currentColor" transform={`rotate(${rot} 100 100)`} />
@@ -201,14 +213,14 @@ export function ReactorCore({ active }: { active?: boolean }) {
 
           {/* Ring 6 — innermost fast */}
           <div className={`${ringWrap} ring3d-f`}>
-            <svg viewBox="0 0 200 200" className={svgFull} style={ringStyle}>
+            <svg viewBox="0 0 200 200" className={svgFull} style={ringHeavy}>
               <circle cx="100" cy="100" r="40" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="6 4" opacity="0.95" />
             </svg>
           </div>
 
           {/* Core glow — always front-facing at Z=0 */}
           <div className={`${ringWrap}`} style={{ transform: "translateZ(0)" }}>
-            <svg viewBox="0 0 200 200" className={svgFull} style={ringStyle}>
+            <svg viewBox="0 0 200 200" className={svgFull} style={ringHeavy}>
               <defs>
                 <radialGradient id="amber-core" cx="50%" cy="50%" r="50%">
                   <stop offset="0%" stopColor="oklch(0.99 0.05 75)" stopOpacity="1" />
@@ -225,15 +237,17 @@ export function ReactorCore({ active }: { active?: boolean }) {
         </div>
       </div>
 
-      {/* Audio-reactive halo */}
+      {/* Audio-reactive halo (driven via CSS var --lvl, mutated by rAF) */}
       {active && (
         <div
-          className="pointer-events-none absolute inset-0 rounded-full animate-audio-ring"
+          ref={haloRef}
+          className="pointer-events-none absolute inset-0 rounded-full"
           style={{
-            ["--ring-scale" as never]: `${1 + level * 0.12}`,
-            ["--ring-dur" as never]: `${0.35 + (1 - level) * 0.4}s`,
-            boxShadow: `0 0 ${20 + level * 80}px oklch(0.9 0.22 70 / ${0.4 + level * 0.5}), inset 0 0 ${10 + level * 40}px oklch(0.85 0.2 65 / 0.35)`,
             border: "1px solid oklch(0.9 0.2 70 / 0.4)",
+            boxShadow:
+              "0 0 calc(20px + var(--lvl, 0) * 80px) oklch(0.9 0.22 70 / calc(0.4 + var(--lvl, 0) * 0.5)), inset 0 0 calc(10px + var(--lvl, 0) * 40px) oklch(0.85 0.2 65 / 0.35)",
+            transform: "scale(calc(1 + var(--lvl, 0) * 0.12))",
+            transition: "transform 80ms linear",
           }}
         />
       )}
