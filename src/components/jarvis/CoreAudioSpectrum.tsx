@@ -25,7 +25,7 @@ export function CoreAudioSpectrum({ active }: { active: boolean }) {
     let raf = 0;
     let cancelled = false;
     let analyser: AnalyserNode | null = null;
-    let bins: Uint8Array | null = null;
+    let bins: Uint8Array<ArrayBuffer> | null = null;
     let acquired = false;
 
     if (active) {
@@ -37,7 +37,7 @@ export function CoreAudioSpectrum({ active }: { active: boolean }) {
         }
         acquired = true;
         analyser = a;
-        bins = new Uint8Array(analyser.frequencyBinCount);
+        bins = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
       })();
     }
 
