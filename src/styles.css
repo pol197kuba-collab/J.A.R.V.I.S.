@@ -441,6 +441,35 @@
 }
 
 /* =========================
+   SUB-SYSTEMS portal
+   ========================= */
+@keyframes crt-off {
+  0%   { transform: scale(1, 1); opacity: 1; filter: brightness(1.2); }
+  55%  { transform: scale(1, 0.02); opacity: 1; filter: brightness(2.2); }
+  80%  { transform: scale(0.005, 0.02); opacity: 1; filter: brightness(3); }
+  100% { transform: scale(0, 0); opacity: 0; filter: brightness(0); }
+}
+.crt-frame { transform-origin: center; will-change: transform, opacity; }
+
+@keyframes radar-sweep { to { transform: rotate(360deg); } }
+
+@keyframes init-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--primary) 0%, transparent),
+                inset 0 0 6px color-mix(in oklab, var(--primary) 25%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 18px color-mix(in oklab, var(--primary) 55%, transparent),
+                inset 0 0 14px color-mix(in oklab, var(--primary) 45%, transparent);
+  }
+}
+
+@keyframes log-line-in {
+  0%   { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: none; }
+}
+
+/* =========================
    ARC CORE — 3D Gyroscope
    ========================= */
 .reactor-perspective { perspective: 1200px; perspective-origin: 50% 45%; }

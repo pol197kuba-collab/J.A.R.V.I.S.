@@ -1,5 +1,5 @@
 import { useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Bot, Terminal, Settings as SettingsIcon } from "lucide-react";
+import { LayoutDashboard, Bot, Terminal, Settings as SettingsIcon, Boxes } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -20,6 +20,7 @@ import { audio } from "@/lib/audio/AudioEngine";
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Agent Hub", url: "/agent-hub", icon: Bot },
+  { title: "Sub-Systems", url: "/sub-systems", icon: Boxes },
   { title: "System Logs", url: "/system-logs", icon: Terminal },
   { title: "Settings", url: "/settings", icon: SettingsIcon },
 ] as const;

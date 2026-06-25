@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SystemLogsRouteImport } from './routes/system-logs'
+import { Route as SubSystemsRouteImport } from './routes/sub-systems'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as AgentHubRouteImport } from './routes/agent-hub'
 import { Route as IndexRouteImport } from './routes/index'
@@ -17,6 +18,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const SystemLogsRoute = SystemLogsRouteImport.update({
   id: '/system-logs',
   path: '/system-logs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SubSystemsRoute = SubSystemsRouteImport.update({
+  id: '/sub-systems',
+  path: '/sub-systems',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -39,12 +45,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
   '/settings': typeof SettingsRoute
+  '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
   '/settings': typeof SettingsRoute
+  '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
 }
 export interface FileRoutesById {
@@ -52,20 +60,28 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
   '/settings': typeof SettingsRoute
+  '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/agent-hub' | '/settings' | '/system-logs'
+  fullPaths: '/' | '/agent-hub' | '/settings' | '/sub-systems' | '/system-logs'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/agent-hub' | '/settings' | '/system-logs'
-  id: '__root__' | '/' | '/agent-hub' | '/settings' | '/system-logs'
+  to: '/' | '/agent-hub' | '/settings' | '/sub-systems' | '/system-logs'
+  id:
+    | '__root__'
+    | '/'
+    | '/agent-hub'
+    | '/settings'
+    | '/sub-systems'
+    | '/system-logs'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgentHubRoute: typeof AgentHubRoute
   SettingsRoute: typeof SettingsRoute
+  SubSystemsRoute: typeof SubSystemsRoute
   SystemLogsRoute: typeof SystemLogsRoute
 }
 
@@ -76,6 +92,13 @@ declare module '@tanstack/react-router' {
       path: '/system-logs'
       fullPath: '/system-logs'
       preLoaderRoute: typeof SystemLogsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sub-systems': {
+      id: '/sub-systems'
+      path: '/sub-systems'
+      fullPath: '/sub-systems'
+      preLoaderRoute: typeof SubSystemsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -106,6 +129,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgentHubRoute: AgentHubRoute,
   SettingsRoute: SettingsRoute,
+  SubSystemsRoute: SubSystemsRoute,
   SystemLogsRoute: SystemLogsRoute,
 }
 export const routeTree = rootRouteImport
