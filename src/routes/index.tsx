@@ -28,10 +28,10 @@ function Index() {
       <HudPanel index={0} title="COMMAND // OVERVIEW" className="p-5 landscape:max-md:p-2">
         <div className="flex flex-wrap items-end justify-between gap-2 pt-3 landscape:max-md:gap-1 landscape:max-md:pt-1">
           <h1 className="font-display text-3xl font-bold tracking-[0.18em] text-foreground landscape:max-md:text-[11px] landscape:max-md:leading-none landscape:max-md:tracking-[0.1em]">
-            GOOD EVENING, SIR.
+            SYSTEM OPERATIONAL // WELCOME, MR. SLAWINSKY
           </h1>
           <p className="max-w-md text-sm text-muted-foreground landscape:max-md:text-[9px] landscape:max-md:leading-tight">
-            All subsystems are operating within acceptable parameters. Standing by for next directive.
+            All subsystems are operating within acceptable parameters. Standing by for next directive, Mr. Slawinsky.
           </p>
         </div>
       </HudPanel>
