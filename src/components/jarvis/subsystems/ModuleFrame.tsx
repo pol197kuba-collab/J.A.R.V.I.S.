@@ -59,18 +59,18 @@ export function ModuleFrame({
         </div>
       </div>
 
-      {/* iframe container */}
+      {/* iframe container.
+          sandbox: minimum needed — run JS, submit forms, keep same-origin
+          session for the embedded app. No popups / modals / downloads.
+          allow: clipboard only — mic / geolocation are NOT delegated.
+          Re-enable per-module only if a future sub-system requires them. */}
       <div className="relative w-full flex-1 overflow-hidden h-[calc(100vh-45px)]">
         <iframe
           title={mod.name}
           src={mod.url}
           loading="lazy"
           referrerPolicy="no-referrer"
-          // Minimum sandbox needed: run JS, submit forms, keep same-origin
-          // session for the embedded app. No popups / modals / downloads.
           sandbox="allow-scripts allow-same-origin allow-forms"
-          // Clipboard only — mic / geolocation are NOT delegated to embedded
-          // modules. Re-enable per-module if a future sub-system requires it.
           allow="clipboard-read; clipboard-write"
           className="h-full w-full border-0 bg-white"
         />
