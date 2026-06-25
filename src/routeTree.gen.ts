@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SystemLogsRouteImport } from './routes/system-logs'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as AgentHubRouteImport } from './routes/agent-hub'
 import { Route as IndexRouteImport } from './routes/index'
 
 const SystemLogsRoute = SystemLogsRouteImport.update({
   id: '/system-logs',
   path: '/system-logs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AgentHubRoute = AgentHubRouteImport.update({
@@ -32,30 +38,34 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
+  '/settings': typeof SettingsRoute
   '/system-logs': typeof SystemLogsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
+  '/settings': typeof SettingsRoute
   '/system-logs': typeof SystemLogsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
+  '/settings': typeof SettingsRoute
   '/system-logs': typeof SystemLogsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/agent-hub' | '/system-logs'
+  fullPaths: '/' | '/agent-hub' | '/settings' | '/system-logs'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/agent-hub' | '/system-logs'
-  id: '__root__' | '/' | '/agent-hub' | '/system-logs'
+  to: '/' | '/agent-hub' | '/settings' | '/system-logs'
+  id: '__root__' | '/' | '/agent-hub' | '/settings' | '/system-logs'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgentHubRoute: typeof AgentHubRoute
+  SettingsRoute: typeof SettingsRoute
   SystemLogsRoute: typeof SystemLogsRoute
 }
 
@@ -66,6 +76,13 @@ declare module '@tanstack/react-router' {
       path: '/system-logs'
       fullPath: '/system-logs'
       preLoaderRoute: typeof SystemLogsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/agent-hub': {
@@ -88,6 +105,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgentHubRoute: AgentHubRoute,
+  SettingsRoute: SettingsRoute,
   SystemLogsRoute: SystemLogsRoute,
 }
 export const routeTree = rootRouteImport
