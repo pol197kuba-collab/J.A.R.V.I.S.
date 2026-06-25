@@ -31,6 +31,20 @@ class Engine {
   private humNodes: { stop: () => void } | null = null;
   settings: Settings = loadSettings();
   private listeners = new Set<(s: Settings) => void>();
+  // iOS Safari & Chrome autoplay policy: AudioContext can only be created
+  // (without warnings) inside a user gesture. Stay silent until unlock().
+  private unlocked = false;
+
+  /** Call from a click / keydown handler to permit audio playback. */
+  unlock() {
+    this.unlocked = true;
+    // create + resume the context now that we're inside a gesture
+    this.ensure();
+  }
+
+  isUnlocked() {
+    return this.unlocked;
+  }
 
   subscribe(fn: (s: Settings) => void) {
     this.listeners.add(fn);
@@ -56,6 +70,9 @@ class Engine {
   /** Lazily create context inside a user gesture. */
   private ensure(): AudioContext | null {
     if (typeof window === "undefined") return null;
+    // Block any background audio (boot sequence, hum, beeps) until the
+    // user has interacted at least once. Prevents iOS/Safari warnings.
+    if (!this.unlocked) return null;
     if (!this.ctx) {
       const Ctx =
         (window.AudioContext as typeof AudioContext) ||
