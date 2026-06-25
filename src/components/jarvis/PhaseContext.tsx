@@ -3,6 +3,7 @@ import { createContext, useContext } from "react";
 export type AppPhase =
   | "booting"
   | "login_screen"
+  | "initializing"
   | "transition_to_dashboard"
   | "dashboard_active"
   | "shutdown";
