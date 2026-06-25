@@ -17,7 +17,7 @@ export function DeactivateButton({ onClick }: { onClick: () => void }) {
       <span className="absolute -right-px -top-px h-1.5 w-1.5 border-r border-t" style={{ borderColor: "var(--destructive)" }} />
       <span className="absolute -left-px -bottom-px h-1.5 w-1.5 border-l border-b" style={{ borderColor: "var(--destructive)" }} />
       <span className="absolute -right-px -bottom-px h-1.5 w-1.5 border-r border-b" style={{ borderColor: "var(--destructive)" }} />
-      <Power className="h-3 w-3" />
+      <Power strokeWidth={1.5} className="h-3 w-3" />
       Deactivate JARVIS
     </button>
   );

@@ -111,7 +111,7 @@ export function ChatPanel() {
           className="flex h-10 w-10 items-center justify-center border border-primary/60 bg-primary/10 text-primary transition hover:bg-primary/20 hover:shadow-[var(--glow-primary)]"
           aria-label="Send"
         >
-          <Send className="h-4 w-4" />
+          <Send strokeWidth={1.5} className="h-4 w-4" />
         </button>
       </form>
     </div>

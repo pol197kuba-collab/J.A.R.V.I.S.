@@ -13,7 +13,7 @@ export function ActiveTasksWidget() {
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-primary/20 px-4 py-2">
         <div className="flex items-center gap-2">
-          <Activity className="h-4 w-4 text-primary" />
+          <Activity strokeWidth={1.5} className="h-4 w-4 text-primary" />
           <span className="font-display text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             BG Processes
           </span>
@@ -39,7 +39,7 @@ export function ActiveTasksWidget() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   {t.status === "warning" && (
-                    <AlertTriangle className="h-3 w-3" style={{ color: "var(--warning)" }} />
+                    <AlertTriangle strokeWidth={1.5} className="h-3 w-3" style={{ color: "var(--warning)" }} />
                   )}
                   <span
                     className="h-2 w-2 animate-blink rounded-full"
@@ -65,7 +65,7 @@ export function ActiveTasksWidget() {
               <div className="mt-2 flex items-center justify-between font-display text-[10px] uppercase tracking-widest text-muted-foreground">
                 <span>{t.progress}%</span>
                 <span className="flex items-center gap-1">
-                  <Clock className="h-3 w-3" /> {t.elapsed}
+                  <Clock strokeWidth={1.5} className="h-3 w-3" /> {t.elapsed}
                 </span>
               </div>
             </div>

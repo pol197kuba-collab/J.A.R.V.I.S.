@@ -29,7 +29,7 @@ export function VoiceButton({
             active && "border-primary bg-primary/20",
           )}
         >
-          {active ? <MicOff className="h-7 w-7" /> : <Mic className="h-7 w-7" />}
+          {active ? <MicOff strokeWidth={1.5} className="h-7 w-7" /> : <Mic strokeWidth={1.5} className="h-7 w-7" />}
         </button>
       </div>
 
