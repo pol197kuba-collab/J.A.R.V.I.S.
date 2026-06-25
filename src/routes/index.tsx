@@ -5,7 +5,6 @@ import { VoiceButton } from "@/components/jarvis/VoiceButton";
 import { ChatPanel } from "@/components/jarvis/ChatPanel";
 import { ActiveTasksWidget } from "@/components/jarvis/ActiveTasksWidget";
 import { SystemStatsStrip } from "@/components/jarvis/SystemStatsStrip";
-import { JarvisBoot } from "@/components/jarvis/JarvisBoot";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -21,10 +20,8 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   const [listening, setListening] = useState(false);
-  const [booted, setBooted] = useState(false);
   return (
     <div className="relative space-y-6 p-6">
-      {!booted && <JarvisBoot onEnter={() => setBooted(true)} />}
       <header className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <p className="font-display text-[10px] uppercase tracking-[0.4em] text-primary">

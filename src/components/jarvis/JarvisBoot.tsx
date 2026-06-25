@@ -35,7 +35,7 @@ export function JarvisBoot({ onEnter }: { onEnter: () => void }) {
     setTimeout(() => {
       setPhase("done");
       onEnter();
-    }, 1100);
+    }, 1400);
   };
 
   if (phase === "done") return null;
@@ -43,11 +43,18 @@ export function JarvisBoot({ onEnter }: { onEnter: () => void }) {
   return (
     <div
       className={cn(
-        "fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-background text-primary",
+        "fixed inset-0 z-[100] flex h-screen w-full items-center justify-center overflow-hidden bg-black text-primary",
         phase === "engaging" && "animate-fade-out",
       )}
       aria-hidden={phase === "engaging"}
     >
+      {/* Expanding reactor flash on engage */}
+      {phase === "engaging" && (
+        <div
+          className="animate-iris-open pointer-events-none absolute left-1/2 top-1/2 z-[120] h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full"
+          style={{ background: "var(--gradient-core)", boxShadow: "var(--glow-primary)" }}
+        />
+      )}
       {/* Moving grid */}
       <div
         className="animate-grid-pan pointer-events-none absolute inset-0 opacity-60"
@@ -70,7 +77,7 @@ export function JarvisBoot({ onEnter }: { onEnter: () => void }) {
       <CornerTicks />
 
       {/* Central HUD scanner */}
-      <div className="relative flex aspect-square w-[min(78vmin,720px)] items-center justify-center">
+      <div className="relative z-10 flex aspect-square w-[min(70vmin,640px)] items-center justify-center">
         <svg viewBox="0 0 400 400" className="absolute inset-0 h-full w-full text-primary">
           <g fill="none" stroke="currentColor" strokeWidth="0.6" opacity="0.45">
             <circle cx="200" cy="200" r="198" />
@@ -133,12 +140,6 @@ export function JarvisBoot({ onEnter }: { onEnter: () => void }) {
             style={{ background: "var(--gradient-core)", boxShadow: "var(--glow-primary)" }}
           />
           <div className="absolute inset-[35%] rounded-full bg-foreground" />
-          {phase === "engaging" && (
-            <div
-              className="animate-iris-open absolute h-6 w-6 rounded-full"
-              style={{ background: "var(--gradient-core)", boxShadow: "var(--glow-primary)" }}
-            />
-          )}
         </div>
 
         {/* Floating title above */}
@@ -158,39 +159,42 @@ export function JarvisBoot({ onEnter }: { onEnter: () => void }) {
         </div>
 
         {/* Boot log under reactor */}
-        <div className="absolute -bottom-2 left-1/2 w-[min(560px,90vw)] -translate-x-1/2 translate-y-full space-y-1 text-center font-mono text-[11px] leading-relaxed text-primary/80">
+        <div className="absolute -bottom-4 left-1/2 w-[min(560px,90vw)] -translate-x-1/2 translate-y-full space-y-1 text-center font-mono text-[11px] leading-relaxed text-primary/80">
           {BOOT_LINES.slice(0, visibleLines).map((l, i) => (
             <p key={i} className="animate-fade-up">
               {l}
             </p>
           ))}
-          {phase === "ready" && (
-            <div className="animate-fade-up mt-6 flex flex-col items-center gap-3">
-              <p className="font-display text-[10px] uppercase tracking-[0.4em] text-[color:var(--warning)]">
-                ⚠ Authorization required
-              </p>
-              <button
-                onClick={engage}
-                className="group relative font-display cursor-pointer border border-primary/70 bg-primary/10 px-10 py-3 text-xs uppercase tracking-[0.4em] text-primary transition hover:bg-primary/20 hover:text-foreground"
-                style={{ boxShadow: "var(--glow-primary)" }}
-              >
-                <span className="absolute -left-px -top-px h-2 w-2 border-l border-t border-primary" />
-                <span className="absolute -right-px -top-px h-2 w-2 border-r border-t border-primary" />
-                <span className="absolute -left-px -bottom-px h-2 w-2 border-l border-b border-primary" />
-                <span className="absolute -right-px -bottom-px h-2 w-2 border-r border-b border-primary" />
-                ▸ Engage JARVIS
-              </button>
-              <p className="font-mono text-[10px] text-muted-foreground">
-                biometric · voiceprint · stark-id verified
-              </p>
-            </div>
-          )}
         </div>
       </div>
 
       {/* Side HUD readouts */}
       <SideReadout side="left" />
       <SideReadout side="right" />
+
+      {/* Engage button — pinned bottom-center, always above HUD */}
+      {phase === "ready" && (
+        <div className="animate-fade-up pointer-events-none absolute inset-x-0 bottom-12 z-[110] flex flex-col items-center gap-3">
+          <p className="font-display text-[10px] uppercase tracking-[0.4em] text-[color:var(--warning)]">
+            ⚠ Authorization required
+          </p>
+          <button
+            type="button"
+            onClick={engage}
+            className="pointer-events-auto group relative font-display cursor-pointer border border-primary/70 bg-primary/10 px-12 py-4 text-sm uppercase tracking-[0.4em] text-primary transition hover:bg-primary/20 hover:text-foreground"
+            style={{ boxShadow: "var(--glow-primary)" }}
+          >
+            <span className="absolute -left-px -top-px h-2 w-2 border-l border-t border-primary" />
+            <span className="absolute -right-px -top-px h-2 w-2 border-r border-t border-primary" />
+            <span className="absolute -left-px -bottom-px h-2 w-2 border-l border-b border-primary" />
+            <span className="absolute -right-px -bottom-px h-2 w-2 border-r border-b border-primary" />
+            ▸ Engage JARVIS
+          </button>
+          <p className="font-mono text-[10px] text-muted-foreground">
+            biometric · voiceprint · stark-id verified
+          </p>
+        </div>
+      )}
     </div>
   );
 }

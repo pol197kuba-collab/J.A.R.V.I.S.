@@ -7,12 +7,13 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/jarvis/AppSidebar";
+import { JarvisBoot } from "@/components/jarvis/JarvisBoot";
 
 function NotFoundComponent() {
   return (
@@ -123,6 +124,15 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const [isBooted, setIsBooted] = useState(false);
+
+  if (!isBooted) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <JarvisBoot onEnter={() => setIsBooted(true)} />
+      </QueryClientProvider>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
