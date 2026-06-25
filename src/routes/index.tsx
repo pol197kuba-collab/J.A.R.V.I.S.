@@ -48,17 +48,9 @@ function Index() {
         }
         className="flex flex-col"
       >
-        <div className="flex items-center gap-4 px-4 py-2 landscape:max-md:gap-2 landscape:max-md:px-2 landscape:max-md:py-1">
-          <div className="w-[72px] shrink-0 landscape:max-md:w-[48px]">
-            <ReactorCore active={false} />
-          </div>
-          <div className="flex-1 space-y-1">
-            <p className="font-display text-[11px] uppercase tracking-[0.3em] text-primary/90 landscape:max-md:text-[9px]">
-              REACTOR STABLE // OUTPUT 3.14 GJ/s
-            </p>
-            <p className="font-display text-[10px] uppercase tracking-[0.25em] text-muted-foreground landscape:max-md:text-[8px]">
-              CORE TEMP NOMINAL · COOLANT LOOP A/B GREEN · NO ANOMALIES DETECTED
-            </p>
+        <div className="flex w-full items-center justify-center px-4 py-6 landscape:max-md:py-3">
+          <div className="w-full max-w-[480px] landscape:max-md:max-w-[240px]">
+            <ReactorCore />
           </div>
         </div>
       </HudPanel>
