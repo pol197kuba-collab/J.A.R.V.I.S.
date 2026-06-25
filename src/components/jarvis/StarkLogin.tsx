@@ -35,29 +35,29 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
         }}
       />
 
-      <div className={cn("relative z-10 flex flex-col items-center gap-2", leaving && "animate-screen-fracture")}>
+      <div className={cn("relative z-10 flex flex-col items-center gap-2 landscape:max-md:gap-0", leaving && "animate-screen-fracture")}>
         {/* Raised reactor */}
-        <div className="-mb-12">
+        <div className="-mb-12 landscape:max-md:-mb-6">
           <ArcReactorTriangle raised />
         </div>
 
         <form
           onSubmit={submit}
           className={cn(
-            "hud-panel relative w-[min(420px,92vw)] space-y-4 p-6 animate-fade-up",
+            "hud-panel relative w-[min(420px,92vw)] space-y-4 p-6 animate-fade-up landscape:max-md:w-[min(360px,75vw)] landscape:max-md:space-y-2 landscape:max-md:p-3",
             denied && "animate-deny-pulse",
           )}
         >
           <div className="text-center">
-            <p className="font-display text-[10px] uppercase tracking-[0.5em] text-primary/80">
+            <p className="font-display text-[10px] uppercase tracking-[0.5em] text-primary/80 landscape:max-md:text-[8px] landscape:max-md:tracking-[0.3em]">
               Stark Industries // Mark VII
             </p>
-            <h2 className="font-display mt-2 text-xl tracking-[0.3em] text-foreground">
+            <h2 className="font-display mt-2 text-xl tracking-[0.3em] text-foreground landscape:max-md:mt-0.5 landscape:max-md:text-sm landscape:max-md:tracking-[0.2em]">
               SECURE LOGIN
             </h2>
           </div>
 
-          <label className="block space-y-1">
+          <label className="block space-y-1 landscape:max-md:space-y-0">
             <span className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">
               Operator ID
             </span>
@@ -66,10 +66,10 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
               value={login}
               onChange={(e) => setLogin(e.target.value)}
               placeholder="Enter operator name"
-              className="w-full border border-primary/40 bg-background/60 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+              className="w-full border border-primary/40 bg-background/60 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none landscape:max-md:px-2 landscape:max-md:py-1 landscape:max-md:text-xs"
             />
           </label>
-          <label className="block space-y-1">
+          <label className="block space-y-1 landscape:max-md:space-y-0">
             <span className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">
               Cipher Key
             </span>
@@ -78,7 +78,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full border border-primary/40 bg-background/60 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+              className="w-full border border-primary/40 bg-background/60 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none landscape:max-md:px-2 landscape:max-md:py-1 landscape:max-md:text-xs"
             />
           </label>
 
@@ -97,7 +97,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
 
           <button
             type="submit"
-            className="group relative w-full font-display cursor-pointer border border-primary/70 bg-primary/10 py-3 text-sm uppercase tracking-[0.4em] text-primary transition hover:bg-primary/20 hover:text-foreground"
+            className="group relative w-full font-display cursor-pointer border border-primary/70 bg-primary/10 py-3 text-sm uppercase tracking-[0.4em] text-primary transition hover:bg-primary/20 hover:text-foreground landscape:max-md:py-1.5 landscape:max-md:text-xs landscape:max-md:tracking-[0.3em]"
             style={{ boxShadow: "var(--glow-primary)" }}
           >
             <span className="absolute -left-px -top-px h-2 w-2 border-l border-t border-primary" />
