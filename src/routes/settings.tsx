@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { HudPanel } from "@/components/jarvis/HudPanel";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -40,23 +41,20 @@ const groups = [
 function Settings() {
   return (
     <div className="space-y-6 p-6">
-      <header>
-        <p className="font-display text-[10px] uppercase tracking-[0.4em] text-primary">
-          Configuration // Core
+      <HudPanel index={0} title="CONFIGURATION // CORE" className="p-5">
+        <h1 className="font-display mt-2 text-3xl font-bold tracking-[0.18em]">SETTINGS</h1>
+        <p className="mt-1 text-xs uppercase tracking-[0.3em] text-muted-foreground">
+          STARK SECURE PROFILE // TONY @ JARVIS.LOCAL
         </p>
-        <h1 className="font-display mt-1 text-3xl font-bold tracking-[0.15em]">SETTINGS</h1>
-      </header>
+      </HudPanel>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {groups.map((g) => (
-          <div key={g.label} className="rounded-lg border border-border/60 bg-card/50 p-5 backdrop-blur">
-            <p className="font-display text-[10px] uppercase tracking-[0.3em] text-primary">
-              {g.label}
-            </p>
+        {groups.map((g, i) => (
+          <HudPanel key={g.label} index={i + 1} title={g.label.toUpperCase()} className="p-5">
             <div className="mt-4 space-y-3">
               {g.items.map((it) => (
                 <div
                   key={it.name}
-                  className="flex items-center justify-between border-b border-border/40 pb-2 last:border-0"
+                  className="flex items-center justify-between border-b border-primary/20 pb-2 last:border-0"
                 >
                   <div>
                     <p className="text-sm text-foreground">{it.name}</p>
@@ -71,7 +69,7 @@ function Settings() {
                 </div>
               ))}
             </div>
-          </div>
+          </HudPanel>
         ))}
       </div>
     </div>
