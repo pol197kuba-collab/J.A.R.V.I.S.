@@ -2,6 +2,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { ArcReactorTriangle } from "./ArcReactorTriangle";
 import { audio } from "@/lib/audio/AudioEngine";
+import { speak } from "@/lib/audio/speak";
 
 export function StarkLogin({ onGranted }: { onGranted: () => void }) {
   const [login, setLogin] = useState("");
@@ -13,22 +14,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
     e.preventDefault();
     if (login.trim() === "Jacob" && password === "Slawinsky") {
       audio.playAccessGranted();
-      try {
-        const synth = window.speechSynthesis;
-        if (synth) {
-          synth.cancel();
-          const utter = new SpeechSynthesisUtterance(
-            "Welcome back, Mister Slawinsky. Systems are fully operational.",
-          );
-          utter.lang = "en-GB";
-          utter.pitch = 0.85;
-          utter.rate = 1.0;
-          utter.volume = 1.0;
-          synth.speak(utter);
-        }
-      } catch {
-        /* speech synthesis unsupported — non-blocking */
-      }
+      speak("Welcome back, Mister Slawinsky. Systems are fully operational.");
       setLeaving(true);
       setTimeout(() => onGranted(), 700);
     } else {
