@@ -10,7 +10,20 @@
 const ENDPOINT =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
-const KEY = (import.meta.env.VITE_GEMINI_API_KEY as string | undefined)?.trim();
+const ENV_KEY = (import.meta.env.VITE_GEMINI_API_KEY as string | undefined)?.trim();
+const LS_KEY = "jarvis_gemini_api_key";
+
+function getKey(): string | undefined {
+  if (typeof window !== "undefined") {
+    try {
+      const v = window.localStorage.getItem(LS_KEY)?.trim();
+      if (v) return v;
+    } catch {
+      /* ignore */
+    }
+  }
+  return ENV_KEY || undefined;
+}
 
 export type JarvisAction =
   | "none"
@@ -121,6 +134,7 @@ export type BrainInput = {
 
 export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
   const fb = () => fallbackFor(input.fallbackKind ?? "generic", input.fallbackHint);
+  const KEY = getKey();
   if (!KEY) return fb();
 
   try {
@@ -161,4 +175,4 @@ export async function speakJarvis(input: BrainInput): Promise<JarvisReply> {
   return reply;
 }
 
-export const hasGeminiKey = !!KEY;
+export const hasGeminiKey = () => !!getKey();
