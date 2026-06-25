@@ -30,7 +30,10 @@ export const SUB_SYSTEMS: SubSystem[] = [
     id: "jobfit-ai",
     name: "JOBFIT AI",
     description: "AI-powered CV optimization & job advertisement matching platform.",
-    url: "https://example.com/jobfit-ai",
+    // TODO: replace with the real JobFit AI deployment URL once available.
+    // Empty string keeps the tile in the grid but ModuleFrame should treat
+    // it as "not yet wired" instead of loading the placeholder domain.
+    url: "",
     sysRef: "SYS_REF: 909-Z / JF-03",
     codename: "JOBFIT_AI.SYS",
   },
