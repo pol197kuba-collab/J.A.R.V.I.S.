@@ -11,6 +11,8 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/jarvis/AppSidebar";
 
 function NotFoundComponent() {
   return (
@@ -124,8 +126,40 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <SidebarProvider>
+        <div className="relative flex min-h-screen w-full bg-background text-foreground">
+          <div className="bg-grid pointer-events-none fixed inset-0 opacity-40" aria-hidden />
+          <div
+            className="pointer-events-none fixed inset-0 opacity-60"
+            aria-hidden
+            style={{
+              background:
+                "radial-gradient(ellipse at 20% 0%, oklch(0.4 0.15 230 / 0.25), transparent 60%), radial-gradient(ellipse at 80% 100%, oklch(0.4 0.18 210 / 0.18), transparent 60%)",
+            }}
+          />
+          <AppSidebar />
+          <div className="relative flex min-h-screen flex-1 flex-col">
+            <header className="sticky top-0 z-10 flex h-12 items-center gap-3 border-b border-border/60 bg-background/70 px-4 backdrop-blur">
+              <SidebarTrigger className="text-primary hover:bg-primary/10" />
+              <div className="h-4 w-px bg-border" />
+              <span className="font-display text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                Stark Industries // Secure Terminal
+              </span>
+              <div className="ml-auto flex items-center gap-2 font-display text-[10px] uppercase tracking-widest">
+                <span
+                  className="h-1.5 w-1.5 animate-blink rounded-full"
+                  style={{ backgroundColor: "var(--success)" }}
+                />
+                <span style={{ color: "var(--success)" }}>All Systems Nominal</span>
+              </div>
+            </header>
+            <main className="relative flex-1">
+              {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+              <Outlet />
+            </main>
+          </div>
+        </div>
+      </SidebarProvider>
     </QueryClientProvider>
   );
 }
