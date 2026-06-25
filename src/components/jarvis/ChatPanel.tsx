@@ -39,7 +39,7 @@ export function ChatPanel() {
     <div className="flex h-[420px] flex-col rounded-lg border border-border/60 bg-card/50 backdrop-blur">
       <div className="flex items-center justify-between border-b border-border/60 px-4 py-2">
         <div className="flex items-center gap-2">
-          <span className="h-2 w-2 animate-blink rounded-full bg-[oklch(var(--success))]" />
+          <span className="h-2 w-2 animate-blink rounded-full" style={{ backgroundColor: "var(--success)" }} />
           <span className="font-display text-xs uppercase tracking-[0.3em] text-muted-foreground">
             Conversation Stream
           </span>
