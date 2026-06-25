@@ -1,28 +1,21 @@
-import { useEffect, useRef, type CSSProperties } from "react";
-import { useMicAnalyser } from "@/lib/audio/useMicAnalyser";
-import { CoreAudioSpectrum } from "./CoreAudioSpectrum";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { onSpeaking, isSpeakingNow } from "@/lib/audio/speak";
 
 const AMBER = "oklch(0.85 0.2 65)";
 const AMBER_HI = "oklch(0.95 0.18 75)";
 const AMBER_DEEP = "oklch(0.65 0.22 50)";
 
-export function ReactorCore({ active }: { active?: boolean }) {
-  // Audio level lives in a ref (mutated every frame) — no React re-renders.
-  const levelRef = useRef<number>(0);
-  useMicAnalyser(!!active, levelRef);
-
-  // Coord text refs — updated via rAF (no state).
-  const nRef = useRef<HTMLSpanElement | null>(null);
-  const sRef = useRef<HTMLSpanElement | null>(null);
-  const wRef = useRef<HTMLSpanElement | null>(null);
-  const eRef = useRef<HTMLSpanElement | null>(null);
-
-  // Canvas particle field
+export function ReactorCore({ active: _active }: { active?: boolean } = {}) {
+  // The core is a "living heart": speech-reactive only. We no longer wire
+  // the mic analyser here — the previous build's coords/scanline/cyan
+  // spectrum have been removed for a clean amber aesthetic.
+  void _active;
+  const [speaking, setSpeaking] = useState<boolean>(() => isSpeakingNow());
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const speakingRef = useRef(speaking);
+  speakingRef.current = speaking;
 
-  // CSS var targets for glow/halo
-  const haloRef = useRef<HTMLDivElement | null>(null);
-  const ringStageRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => onSpeaking(setSpeaking), []);
 
   // Static (non-reactive) ring filter — heavy drop-shadow only on outer/inner layers.
   const ringHeavy: CSSProperties = {
@@ -31,8 +24,6 @@ export function ReactorCore({ active }: { active?: boolean }) {
   };
   const ringLight: CSSProperties = { color: AMBER };
 
-  // Reusable ring SVG renderer — each ring becomes its own absolutely
-  // positioned 3D layer so it can sit at a unique translateZ.
   const ringWrap = "absolute inset-0 flex items-center justify-center";
   const svgFull = "h-full w-full";
 
@@ -62,7 +53,6 @@ export function ReactorCore({ active }: { active?: boolean }) {
 
     let raf = 0;
     let last = performance.now();
-    let coordTick = 0;
     const draw = (t: number) => {
       const dt = t - last;
       last = t;
@@ -73,12 +63,9 @@ export function ReactorCore({ active }: { active?: boolean }) {
       ctx.clearRect(0, 0, w, h);
       const cx = w / 2;
       const cy = h / 2;
-      const lvl = levelRef.current;
-
-      // Reactive halo via CSS vars (no React re-render)
-      if (haloRef.current) {
-        haloRef.current.style.setProperty("--lvl", lvl.toFixed(3));
-      }
+      const lvl = speakingRef.current
+        ? 0.5 + 0.5 * Math.abs(Math.sin(t * 0.012))
+        : 0.08 + 0.06 * Math.sin(t * 0.0015);
 
       for (let i = 0; i < PARTS.length; i++) {
         const p = PARTS[i];
@@ -96,18 +83,6 @@ export function ReactorCore({ active }: { active?: boolean }) {
         ctx.fill();
       }
 
-      // Coord refresh ~5/s when active, ~0.5/s otherwise
-      coordTick += dt;
-      const every = active ? 200 : 2000;
-      if (coordTick > every) {
-        coordTick = 0;
-        const rnd = () => Math.floor(Math.random() * 9999).toString().padStart(4, "0");
-        if (nRef.current) nRef.current.textContent = `N • ${rnd()}`;
-        if (sRef.current) sRef.current.textContent = `S • ${rnd()}`;
-        if (wRef.current) wRef.current.textContent = `W • ${rnd()}`;
-        if (eRef.current) eRef.current.textContent = `E • ${rnd()}`;
-      }
-
       raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
@@ -115,29 +90,18 @@ export function ReactorCore({ active }: { active?: boolean }) {
       cancelAnimationFrame(raf);
       ro.disconnect();
     };
-  }, [active]);
+  }, []);
 
   return (
-    <div className="reactor-gpu relative flex aspect-square w-full max-w-[420px] items-center justify-center text-[oklch(0.85_0.2_65)] animate-holo-glitch">
-      {/* Crosshair axes with coordinates */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-[oklch(0.85_0.2_65/0.35)] to-transparent" />
-        <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-gradient-to-r from-transparent via-[oklch(0.85_0.2_65/0.35)] to-transparent" />
-        <span ref={nRef} className="absolute left-1/2 top-1 -translate-x-1/2 font-display text-[9px] tracking-[0.25em] text-[oklch(0.92_0.18_70)]">N • 0001</span>
-        <span ref={sRef} className="absolute bottom-1 left-1/2 -translate-x-1/2 font-display text-[9px] tracking-[0.25em] text-[oklch(0.92_0.18_70)]">S • 0002</span>
-        <span ref={wRef} className="absolute left-1 top-1/2 -translate-y-1/2 rotate-[-90deg] font-display text-[9px] tracking-[0.25em] text-[oklch(0.92_0.18_70)]">W • 0003</span>
-        <span ref={eRef} className="absolute right-1 top-1/2 -translate-y-1/2 rotate-90 font-display text-[9px] tracking-[0.25em] text-[oklch(0.92_0.18_70)]">E • 0004</span>
-      </div>
-
+    <div
+      className={`reactor-gpu relative mx-auto flex aspect-square w-full max-w-[480px] items-center justify-center text-[oklch(0.85_0.2_65)]${speaking ? " is-speaking" : ""}`}
+    >
       {/* Particle cloud (canvas — single DOM element) */}
       <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
 
-      {/* Cyan radial frequency spectrum — sits outside the 3D layer */}
-      <CoreAudioSpectrum active={!!active} />
-
       {/* 3D Holographic Gyroscope */}
       <div className="reactor-perspective absolute inset-0">
-        <div ref={ringStageRef} className="reactor-stage absolute inset-0 sphere-blend">
+        <div className="reactor-stage absolute inset-0 sphere-blend">
           {/* Holographic wireframe sphere — meridians + parallels */}
           <div className="sphere-wire absolute inset-[12%]">
             {[0, 30, 60, 90, 120, 150].map((deg) => (
@@ -233,35 +197,19 @@ export function ReactorCore({ active }: { active?: boolean }) {
                   <stop offset="100%" stopColor={AMBER_DEEP} stopOpacity="0" />
                 </radialGradient>
               </defs>
-              <circle cx="100" cy="100" r="36" fill="url(#amber-core)" className={active ? "animate-amber-pulse-fast" : "animate-amber-pulse"} style={{ transformBox: "fill-box", transformOrigin: "center" }} />
+              <circle
+                cx="100"
+                cy="100"
+                r="36"
+                fill="url(#amber-core)"
+                className={speaking ? "animate-core-speak" : "animate-amber-pulse"}
+                style={{ transformBox: "fill-box", transformOrigin: "center" }}
+              />
               <circle cx="100" cy="100" r="14" fill={AMBER_HI} opacity="0.9" />
               <circle cx="100" cy="100" r="6" fill="white" />
             </svg>
           </div>
         </div>
-      </div>
-
-      {/* Audio-reactive halo (driven via CSS var --lvl, mutated by rAF) */}
-      {active && (
-        <div
-          ref={haloRef}
-          className="pointer-events-none absolute inset-0 rounded-full"
-          style={{
-            border: "1px solid oklch(0.9 0.2 70 / 0.4)",
-            boxShadow:
-              "0 0 calc(20px + var(--lvl, 0) * 80px) oklch(0.9 0.22 70 / calc(0.4 + var(--lvl, 0) * 0.5)), inset 0 0 calc(10px + var(--lvl, 0) * 40px) oklch(0.85 0.2 65 / 0.35)",
-            transform: "scale(calc(1 + var(--lvl, 0) * 0.12))",
-            transition: "transform 80ms linear",
-          }}
-        />
-      )}
-
-      {/* Scanline */}
-      <div className="pointer-events-none absolute inset-6 overflow-hidden rounded-full">
-        <div
-          className="animate-scanline h-[2px] w-full"
-          style={{ background: "linear-gradient(90deg, transparent, oklch(0.95 0.2 70 / 0.85), transparent)" }}
-        />
       </div>
     </div>
   );
