@@ -1,86 +1,28 @@
-## JARVIS — Advanced Gadgets & Modules
+## Goal
+Add mobile drawer sidebar + auto-fullscreen on Engage, without breaking the 3D core or landscape layout.
 
-Five new HUD modules integrated with the existing phase/transition system, optimized for landscape mobile and decoupled from the 3D core's render loop.
+## 1. Mobile Drawer Sidebar
+- Edit `src/components/jarvis/AppSidebar.tsx`: keep current `Sidebar` for desktop. The shadcn `Sidebar` already swaps to a `Sheet` on mobile (`useIsMobile`), so the sidebar markup itself doesn't change — but we currently rely on the header `SidebarTrigger` which is small/plain.
+- Edit `src/routes/__root.tsx` header: replace the default `SidebarTrigger` on mobile/landscape with a custom HUD button — cyan glow, sharp corners, label "MENU // SYS" + hamburger icon (lucide `Menu`). On desktop keep the current trigger. The button calls `setOpenMobile(true)` from `useSidebar()`.
+- Style the mobile `Sheet` variant of `Sidebar` (in `src/components/ui/sidebar.tsx` SheetContent for `data-mobile="true"`): override background to `bg-black/85 backdrop-blur`, add neon cyan border (`border-primary/60`), shadow glow, sharp corners. Add a visible HUD-styled close "X" button at top-right inside the sheet (shadcn Sheet ships a default close, but restyle/replace to match HUD: cyan ring, "[ X ] CLOSE").
+- Verify `SidebarMenuButton` still works inside the sheet and that `useHudNavigate` auto-closes the sheet after click (call `setOpenMobile(false)` after `go(...)`).
 
----
+## 2. Auto Fullscreen on Engage
+- New helper `src/lib/fullscreen.ts`: `requestAppFullscreen()` tries `el.requestFullscreen()`, then `webkitRequestFullscreen`, then `webkitEnterFullscreen` on a fallback `<video>` (iOS Safari has no real element fullscreen — gracefully no-op there). Wrap in try/catch; never throw.
+- `src/components/jarvis/BootSequence.tsx` (engage mode): in the Engage button click handler, call `requestAppFullscreen()` before `onEngage()`. User-gesture requirement is satisfied because it's a click handler.
+- `src/routes/__root.tsx` header: add a small HUD icon button (lucide `Maximize2`) next to `DeactivateButton` that toggles fullscreen on demand for desktop / re-entry on mobile if user exited.
+- Listen to `fullscreenchange` to update the toggle icon (`Minimize2` when active).
 
-### 1. Audio Spectrum Visualizer (around ARC CORE)
+## 3. Layout integrity in fullscreen
+- `src/routes/__root.tsx` already uses `landscape:max-md:h-screen overflow-hidden` — verify it still fills correctly when `100vh` expands after browser chrome hides. Use `100dvh` via Tailwind arbitrary (`h-[100dvh]`) for the landscape mobile shell so the layout re-flows when chrome hides.
+- `ReactorCore` is sized by its parent (`max-w-[140px]` in landscape mobile). No change needed — it scales with the container, so fullscreen just gives more breathing room.
 
-- New component `CoreAudioSpectrum.tsx` rendered as an absolutely-positioned `<canvas>` layer inside `ReactorCore.tsx`, sitting *outside* the gyroscope's `preserve-3d` subtree so it never triggers 3D relayout.
-- Uses a shared `AnalyserNode` (extend `AudioEngine.ts` with `getAnalyser()` so mic + visualizer share one node — no double `getUserMedia`).
-- Draws 64 radial bars (neon cyan) on a circular path around the amber core; bar heights from `getByteFrequencyData()`. Idle state: gentle sine pulse so it's never visually dead.
-- Single rAF loop, writes to canvas only (no React state). Auto-pauses via `IntersectionObserver` and when `prefers-reduced-motion`.
+## Files touched
+- `src/routes/__root.tsx` — custom mobile HUD menu button, fullscreen toggle icon, `100dvh` for mobile landscape shell.
+- `src/components/jarvis/AppSidebar.tsx` — auto-close mobile sheet after nav.
+- `src/components/ui/sidebar.tsx` — restyle the mobile Sheet variant (HUD frame + close button).
+- `src/components/jarvis/BootSequence.tsx` — call `requestAppFullscreen()` on Engage click.
+- `src/lib/fullscreen.ts` — new helper with vendor prefixes.
 
-### 2. Vocal Override (continuous Web Speech Recognition)
-
-- New `VoiceCommandContext.tsx` provider mounted in `__root.tsx` (only active when `phase === 'dashboard_active'`).
-- Wraps `webkitSpeechRecognition` with auto-restart on `end`/`error`, language `en-US`, `continuous: true`, `interimResults: true`.
-- Switch UI: `VocalOverrideSwitch.tsx` placed in `ChatPanel` header — label "VOCAL OVERRIDE // CONTINUOUS LISTEN" with ACTIVE/INACTIVE state, pulsing cyan dot when listening.
-- Pattern matcher (case-insensitive, regex on final transcript):
-
-  ```text
-  /jarvis dashboard|show core/   → navigate "/"
-  /jarvis fuel|open fuel/        → navigate "/sub-systems" + auto-init fuel-monitor
-  /jarvis office|open calculator/→ navigate "/sub-systems" + auto-init rto-calculator
-  /jarvis job|open jobfit/       → navigate "/sub-systems" + auto-init jobfit-ai
-  /jarvis system shutdown|disconnect/ → trigger shutdown phase
-  ```
-
-- Auto-init handoff: `sub-systems.tsx` reads a `?init=<id>` search param (or a small `pendingModule` ref in context) and jumps straight to the loader sequence.
-- Uses existing `useHudNavigate` so transitions stay coherent. Falls back gracefully if `SpeechRecognition` unsupported (switch disabled with tooltip).
-
-### 3. Weather Telemetry Grid widget
-
-- New `WeatherTelemetry.tsx` on the dashboard (compact HUD panel, sharp corners, neon border).
-- Mock data (slowly jittered every 4s via `setInterval` for liveness): `THERMAL_INDEX`, `ATMOSPHERIC_PRESSURE`, `WIND_VECTOR`, `HUMIDITY`, plus `VISIBILITY` and `UV_INDEX` for density.
-- Right side: small SVG radar — concentric rings + rotating green-cyan sweep wedge (new `@keyframes radar-sweep-weather` reuses pattern from sub-systems radar, color shifted to green).
-
-### 4. Global Threat Stream widget
-
-- New `ThreatStream.tsx` — vertical auto-scrolling list (CSS `marquee` via `transform: translateY` + `animation`, pauses on hover).
-- Mock feed of ~12 entries with severity tag color (`ALERT` orange, `DATA` cyan, `WARNING` amber-red), timestamp, payload text. Severity left-border accent.
-- New entry pushed every ~6s (shift array, cap length 20) so the feed feels live.
-
-### 5. GEO-TRACKING route
-
-- New route `src/routes/geo-tracking.tsx` + sidebar entry in `AppSidebar.tsx` (icon: `Satellite` or `Crosshair` from lucide).
-- `bun add leaflet @types/leaflet` + `@import "leaflet/dist/leaflet.css"` at the top of `src/styles.css`.
-- Dark map: use CartoDB **dark_nolabels** tiles (no key required), apply CSS filter `invert(0) hue-rotate(180deg) saturate(2) brightness(0.6)` on `.leaflet-tile` to push it toward cyan/black.
-- Centered crosshair overlay (pure CSS/SVG, not a Leaflet marker — anchored to map container center so it stays fixed during pan).
-- Uses `navigator.geolocation.getCurrentPosition` to set initial view; on denial, fallback coords (Warsaw) + label `SIGNATURE_LOST // DEFAULT GRID`.
-- Caption bar: `HOST SIGNATURE PINPOINTED // LAT: xx.xxxx LON: xx.xxxx`, plus mock telemetry rows (accuracy, altitude, heading).
-
----
-
-### Dashboard layout (landscape mobile fit)
-
-Reflow `src/routes/index.tsx` to a 3-column landscape grid so the new widgets fit without scrolling:
-
-```text
-┌──────────┬─────────────┬───────────────┐
-│ Active   │  ARC CORE   │ Weather       │
-│ Tasks    │  + spectrum │ Threat Stream │
-├──────────┴─────────────┴───────────────┤
-│ Chat (+ Vocal Override switch)         │
-└────────────────────────────────────────┘
-```
-
-Desktop keeps roomier 2-col layout. All new panels use existing `HudPanel` styling.
-
----
-
-### Performance guardrails
-
-- Single shared `AnalyserNode` for mic (visualizer + existing `useMicAnalyser` both read from it).
-- Canvas drawing for the spectrum (no SVG/DOM bars), `willReadFrequently: false`, fixed DPR cap of 1.5.
-- Speech recognition lives outside React render path; only the switch state is reactive.
-- Threat stream uses CSS animation, not JS rAF.
-- Leaflet only loaded on `/geo-tracking` (lazy via route boundary).
-
----
-
-### Files
-
-**New:** `CoreAudioSpectrum.tsx`, `VoiceCommandContext.tsx`, `VocalOverrideSwitch.tsx`, `WeatherTelemetry.tsx`, `ThreatStream.tsx`, `src/routes/geo-tracking.tsx`, `src/data/threatStream.ts`.
-
-**Edited:** `ReactorCore.tsx` (mount spectrum), `AudioEngine.ts` (shared analyser), `useMicAnalyser.ts` (consume shared analyser), `ChatPanel.tsx` (switch), `routes/index.tsx` (layout + new widgets), `routes/__root.tsx` (provider), `routes/sub-systems.tsx` (auto-init from voice), `AppSidebar.tsx` (Geo-Tracking link), `styles.css` (radar-sweep-weather, threat-marquee, leaflet dark filter), `package.json` (leaflet).
+## Out of scope
+No changes to phase state machine, audio engine, 3D core internals, or voice commands.

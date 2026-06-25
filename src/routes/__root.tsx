@@ -11,7 +11,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/jarvis/AppSidebar";
 import { BootSequence } from "@/components/jarvis/BootSequence";
 import { StarkLogin } from "@/components/jarvis/StarkLogin";
@@ -26,6 +26,13 @@ import { MiniArcReactor } from "@/components/jarvis/MiniArcReactor";
 import { OrientationGate } from "@/components/jarvis/OrientationGate";
 import { VoiceCommandProvider } from "@/components/jarvis/VoiceCommandContext";
 import { audio } from "@/lib/audio/AudioEngine";
+import { useSidebar } from "@/components/ui/sidebar";
+import { Menu, Maximize2, Minimize2 } from "lucide-react";
+import {
+  isFullscreen,
+  onFullscreenChange,
+  toggleAppFullscreen,
+} from "@/lib/fullscreen";
 
 function NotFoundComponent() {
   return (
@@ -209,7 +216,7 @@ function DashboardShell({
   const { transition } = useRouteTransition();
   return (
     <SidebarProvider>
-      <div className="relative flex min-h-screen w-full bg-background text-foreground landscape:max-md:h-screen landscape:max-md:min-h-0 landscape:max-md:overflow-hidden">
+      <div className="relative flex min-h-screen w-full bg-background text-foreground landscape:max-md:h-[100dvh] landscape:max-md:min-h-0 landscape:max-md:overflow-hidden">
         <div className="bg-grid pointer-events-none fixed inset-0 opacity-30" aria-hidden />
         <div
           className="pointer-events-none fixed inset-0 opacity-60"
@@ -222,7 +229,7 @@ function DashboardShell({
         <AppSidebar />
         <div className="relative flex min-h-screen flex-1 flex-col landscape:max-md:min-h-0">
           <header className="sticky top-0 z-10 flex h-12 items-center gap-2 border-b border-primary/30 bg-black/70 px-4 backdrop-blur landscape:max-md:h-8 landscape:max-md:gap-1.5 landscape:max-md:px-2">
-            <SidebarTrigger className="text-primary hover:bg-primary/10" />
+            <HudMenuTrigger />
             <div className="h-4 w-px bg-primary/40" />
             <MiniArcReactor size={20} />
             <span className="font-display text-[10px] uppercase tracking-[0.3em] text-primary/80 landscape:max-md:text-[8px] landscape:max-md:tracking-[0.2em]">
@@ -235,6 +242,8 @@ function DashboardShell({
               />
               <span className="landscape:max-md:hidden" style={{ color: "var(--success)" }}>All Systems Nominal</span>
               <div className="ml-3 h-4 w-px bg-primary/40" />
+              <FullscreenToggle />
+              <div className="h-4 w-px bg-primary/40" />
               <DeactivateButton onClick={onShutdown} />
             </div>
           </header>
@@ -256,5 +265,46 @@ function DashboardShell({
         </div>
       </div>
     </SidebarProvider>
+  );
+}
+
+function HudMenuTrigger() {
+  const { isMobile, setOpenMobile, toggleSidebar } = useSidebar();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        audio.playClick();
+        if (isMobile) setOpenMobile(true);
+        else toggleSidebar();
+      }}
+      aria-label="Open menu"
+      className="font-display group relative flex items-center gap-1.5 border border-primary/60 bg-primary/5 px-2 py-1 text-[10px] uppercase tracking-[0.3em] text-primary shadow-[0_0_10px_rgba(56,189,248,0.35)] transition hover:bg-primary/15 hover:text-foreground landscape:max-md:px-1.5 landscape:max-md:py-0.5 landscape:max-md:text-[8px] landscape:max-md:tracking-[0.2em]"
+    >
+      <Menu className="h-3.5 w-3.5 landscape:max-md:h-3 landscape:max-md:w-3" strokeWidth={1.5} />
+      <span>MENU // SYS</span>
+    </button>
+  );
+}
+
+function FullscreenToggle() {
+  const [active, setActive] = useState(false);
+  useEffect(() => {
+    setActive(isFullscreen());
+    return onFullscreenChange(() => setActive(isFullscreen()));
+  }, []);
+  const Icon = active ? Minimize2 : Maximize2;
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        audio.playClick();
+        void toggleAppFullscreen();
+      }}
+      aria-label={active ? "Exit fullscreen" : "Enter fullscreen"}
+      className="flex items-center justify-center border border-primary/50 bg-primary/5 p-1 text-primary transition hover:bg-primary/15 hover:text-foreground"
+    >
+      <Icon className="h-3 w-3" strokeWidth={1.75} />
+    </button>
   );
 }
