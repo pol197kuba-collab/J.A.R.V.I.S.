@@ -24,13 +24,13 @@ export const Route = createFileRoute("/")({
 function Index() {
   const [listening, setListening] = useState(false);
   return (
-    <div className="relative space-y-6 p-6 landscape:max-md:space-y-2 landscape:max-md:p-2">
+    <div className="relative space-y-6 p-6 landscape:max-md:max-h-full landscape:max-md:space-y-1.5 landscape:max-md:overflow-hidden landscape:max-md:p-1.5">
       <HudPanel index={0} title="COMMAND // OVERVIEW" className="p-5 landscape:max-md:p-2">
         <div className="flex flex-wrap items-end justify-between gap-2 pt-3 landscape:max-md:gap-1 landscape:max-md:pt-1">
-          <h1 className="font-display text-3xl font-bold tracking-[0.18em] text-foreground landscape:max-md:text-sm landscape:max-md:tracking-[0.12em]">
+          <h1 className="font-display text-3xl font-bold tracking-[0.18em] text-foreground landscape:max-md:text-[11px] landscape:max-md:leading-none landscape:max-md:tracking-[0.1em]">
             GOOD EVENING, SIR.
           </h1>
-          <p className="max-w-md text-sm text-muted-foreground landscape:max-md:text-[10px]">
+          <p className="max-w-md text-sm text-muted-foreground landscape:max-md:text-[9px] landscape:max-md:leading-tight">
             All subsystems are operating within acceptable parameters. Standing by for next directive.
           </p>
         </div>

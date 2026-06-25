@@ -38,7 +38,7 @@ function SubSystemsPage() {
   }, [state, consumePendingModule]);
 
   return (
-    <div className="relative h-full min-h-[calc(100vh-3rem)]">
+    <div className="relative h-full min-h-[calc(100vh-3rem)] landscape:max-md:min-h-0 landscape:max-md:h-[calc(100vh-2rem)] landscape:max-md:overflow-hidden">
       {(state === "grid" || state === "loading") && (
         <div
           className={
