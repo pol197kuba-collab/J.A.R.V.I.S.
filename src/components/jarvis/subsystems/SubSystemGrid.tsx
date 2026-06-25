@@ -2,7 +2,7 @@ import { Fuel, Building2, BrainCircuit, Play } from "lucide-react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { SUB_SYSTEMS, type SubSystemId } from "@/data/subSystems";
 import { audio } from "@/lib/audio/AudioEngine";
-import { speak } from "@/lib/audio/speak";
+import { speakJarvis } from "@/lib/ai/jarvisBrain";
 
 const ICONS: Record<SubSystemId, typeof Fuel> = {
   "fuel-monitor": Fuel,
@@ -10,10 +10,19 @@ const ICONS: Record<SubSystemId, typeof Fuel> = {
   "jobfit-ai": BrainCircuit,
 };
 
-const SPEECH: Record<SubSystemId, string> = {
-  "fuel-monitor": "Loading Fuel Monitor Matrix.",
-  "rto-calculator": "Accessing RTO calculation systems.",
-  "jobfit-ai": "Initializing AI resume optimizer.",
+const MODULE_PROMPT: Record<SubSystemId, { prompt: string; hint: string }> = {
+  "fuel-monitor": {
+    prompt: "The user just opened the Fuel Monitor module from the dashboard. Comment briefly and professionally. Action must be \"none\".",
+    hint: "fuel",
+  },
+  "rto-calculator": {
+    prompt: "The user just opened the RTO (Return To Office) calculator module. Comment briefly. Action must be \"none\".",
+    hint: "rto",
+  },
+  "jobfit-ai": {
+    prompt: "The user just launched the JobFit AI resume optimiser module. Comment briefly. Action must be \"none\".",
+    hint: "jobfit",
+  },
 };
 
 export function SubSystemGrid({
@@ -77,7 +86,8 @@ export function SubSystemGrid({
                   onMouseEnter={() => audio.playClick()}
                   onClick={() => {
                     audio.playClick();
-                    speak(SPEECH[mod.id]);
+                    const m = MODULE_PROMPT[mod.id];
+                    void speakJarvis({ prompt: m.prompt, fallbackKind: "module", fallbackHint: m.hint });
                     onInitialize(mod.id);
                   }}
                   className="group relative mt-2 flex items-center justify-center gap-2 border border-primary/60 bg-primary/10 px-4 py-2.5 font-display text-[11px] uppercase tracking-[0.35em] text-primary transition hover:bg-primary/20 disabled:opacity-40 landscape:max-md:mt-0 landscape:max-md:px-2 landscape:max-md:py-1 landscape:max-md:text-[8px] landscape:max-md:tracking-[0.18em]"
