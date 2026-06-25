@@ -1,98 +1,52 @@
-## Cel
-Przebudować wewnętrzny dashboard JARVIS-a (po zalogowaniu) tak, aby był idealnym przedłużeniem estetyki Stark HUD z intra: czarne tło, neonowy cyjan, monospace, ostre rogi, corner brackets, mikroteksty. Dodać 3-4 sekundowy system przejść między zakładkami z blokadą wielokrotnych kliknięć.
+## Goal
+Przekształcić obecny płaski (2D) komponent `ReactorCore` w trójwymiarowy holograficzny żyroskop z prawdziwą głębią Z, wielowymiarowymi orbitami pierścieni i efektem szklanej sfery.
 
-## 1. Globalna stylistyka (`src/styles.css`)
+## Zakres zmian
+Edycja tylko warstwy prezentacji — bez zmian w logice, danych ani routingu.
 
-- Dodać import Google Fonts `JetBrains Mono` + `Share Tech Mono` w `__root.tsx` (`<link>` w head).
-- Zmienić `--background` na czystą czerń `oklch(0 0 0)`, `--card` na ~`oklch(0.04 0 0)`, `--sidebar` analogicznie.
-- Wzmocnić `--primary` do neonowego cyjanu `oklch(0.88 0.18 200)` (≈ #00f0ff), wzmocnić `--glow-primary`.
-- `body` → `font-family: "JetBrains Mono", ui-monospace, monospace;` `.font-display` → `"Share Tech Mono"`.
-- Domyślny `--radius: 0`. Wszystkie panele HUD i shadcn cards renderują się z ostrymi rogami.
-- Rozszerzyć `.hud-panel` o 4 corner-brackety (obecnie 2) oraz wariant `.hud-panel--tag` z absolutnie pozycjonowanym mikrotekstem (`SYS_REF`).
+### Pliki do modyfikacji
+- `src/components/jarvis/ReactorCore.tsx` — restrukturyzacja warstw na rzecz 3D.
+- `src/styles.css` — nowe keyframes 3D + utility klasy.
 
-## 2. Komponenty wspólne
+## Implementacja
 
-- `MiniArcReactor.tsx` — mała, kręcąca się + pulsująca wersja trójkątnego reaktora (reuse `ArcReactorTriangle` w skali). Umieścić w `AppSidebar` (header) obok napisu `J.A.R.V.I.S.`.
-- `HudTag.tsx` — generuje losowy mikrotekst (`SYS_REF: 404-X`, `CH-${n}`, `0xAF12`) na podstawie seed (deterministyczny per-mount, by nie migotał). Wstawiany w narożniki kafelków.
-- `HudPanel.tsx` — wrapper opakowujący treść w `.hud-panel` + 1-2 `HudTag` w narożnikach + opcjonalny tytuł.
+### 1. Przestrzeń 3D (kontener)
+Nowy zewnętrzny wrapper z:
+- `perspective: 1200px`
+- wewnętrzny "stage" z `transform-style: preserve-3d` i `transform: rotateX(25deg) rotateY(-15deg)`
+- delikatna animacja kołysania (`@keyframes gyro-tilt` — oscylacja ±5° na X/Y w 12s) dla efektu "żyjącego" hologramu.
 
-## 3. Przebudowa kafelków dashboardu
+### 2. Przejście pierścieni z SVG na warstwy DOM 3D
+SVG nie pozwala umieścić elementów na różnych głębokościach Z w tym samym viewBox. Rozwiązanie: każdy pierścień staje się osobnym `<div>` (absolute, full-size) zawierającym pojedyncze `<svg>` z jego geometrią. Każdy div ma własny `translateZ` i własną animację 3D.
 
-Wszystkie sekcje (`SystemStatsStrip`, `ReactorCore` panel, `ActiveTasksWidget`, `ChatPanel`, oraz analogiczne karty w `agent-hub`, `system-logs`, `settings`) opakować w `HudPanel`:
-- Ostre rogi, cyjanowe ramki, neon glow.
-- Tabele i listy: monospace, wiersze z `border-b` w półprzezroczystym cyjanie, hover = jasna poświata.
-- Ikony Lucide w cyjanie z `drop-shadow`.
-- Wykresy/sparkline (`SystemStatsStrip`) — barki z mocniejszym cyjanowym glow.
+Rozkład Z i osi:
+- Ring 1 (zewnętrzny dashed): `translateZ(-80px)`, anim `ring3d-a` — rotateX(45deg) + rotateZ 360°/28s
+- Ring 2 (tick marks): `translateZ(-40px)`, anim `ring3d-b` — rotateX(-30deg) rotateY(45deg) + rotateZ -360°/22s
+- Ring 3 (dotted, pionowy globus): `translateZ(0)`, anim `ring3d-c` — rotateY 360°/18s (pełny obrót osi Y)
+- Ring 4 (segmented arcs): `translateZ(20px)`, anim `ring3d-d` — rotateX(60deg) rotateZ 360°/15s
+- Ring 5 (inner notched): `translateZ(45px)`, anim `ring3d-e` — rotateY(-360°)/12s wokół osi X(70deg)
+- Ring 6 (innermost): `translateZ(70px)`, anim `ring3d-f` — rotateZ 360°/8s z rotateX(20deg)
 
-## 4. System przejść HUD (kluczowe)
+Każda animacja ma `transform-style: preserve-3d` i utrzymuje stałe pochylenie + dokłada obrót.
 
-Stworzyć `src/components/jarvis/HudRouteTransition.tsx`:
+### 3. Wireframe szklanej sfery
+Dodatkowa warstwa: 6–8 cienkich okręgów (divy z `border-radius: 50%`, cienki cyan border 0.5px, opacity 0.15) ustawionych na różnych kątach `rotateY(0/30/60/90/120/150)` aby utworzyć siatkę południków sfery. + 3 równoleżniki (rotateX 0/45/-45). Wszystkie wewnątrz wspólnego kontenera animowanego powolnym `spin Y 40s` żeby cała "kula" lekko się obracała.
 
-- Stan globalny w `PhaseContext` (rozszerzenie) lub nowy `TransitionContext`:
-  ```
-  transition: 'idle' | 'dematerialize' | 'scan' | 'materialize'
-  pendingPath: string | null
-  isTransitioning: boolean
-  ```
-- Hook `useHudNavigate()` zwracający funkcję `go(path)`:
-  1. Jeśli `isTransitioning` → ignoruj (blokada multi-klik).
-  2. `setTransition('dematerialize')` + `pendingPath = path`.
-  3. Po 1500 ms → `router.navigate({ to: path })`, `setTransition('scan')`.
-  4. Po 1000 ms → `setTransition('materialize')`.
-  5. Po 1500 ms → `setTransition('idle')`.
-- `AppSidebar` używa `<button onClick={() => go(item.url)}>` zamiast `<Link>`, z `disabled={isTransitioning}` + wizualnym wyciszeniem.
+### 4. Rdzeń (core glow)
+Zachować obecny core, ale umieścić go na `translateZ(0)` z większym blurem i `mix-blend-mode: screen` na kontenerze, by przecięcia pierścieni rozjaśniały punkty styku.
 
-### Warstwy wizualne (renderowane w `__root.tsx` nad `<Outlet />`):
+### 5. Glow / blend
+- Wrapper warstwy pierścieni: `mix-blend-mode: screen`
+- Zwiększyć drop-shadow do `drop-shadow(0 0 12px amber) drop-shadow(0 0 28px amber/0.6)`
+- Audio-reactive `glowBoost` skaluje intensywność drop-shadow oraz lekko wzmacnia `translateZ` zewnętrznego pierścienia (oddychanie sfery).
 
-- **Dematerialize overlay** (1.5 s): pełnoekranowy `div` z animacją pionowych skanujących pasków (clip-path 8 kolumn animowanych z stagger), na zawartości `<main>` aplikuje się klasa `animate-hud-dematerialize` (clip-path + blur + opacity → 0).
-- **Scan overlay** (1 s): pozioma neonowa linia przechodząca góra→dół (`animate-hud-laser-scan`), pośrodku migający tekst `RECONFIGURING DATA STREAM…` / `ANALYZING HUD LAYOUT…` (`animate-hud-flicker`). Tło ciemne ze ścianką siatki.
-- **Materialize**: kafelki nowej trasy renderują się z `HudPanel`-owym efektem stagger:
-  - Każdy `HudPanel` w fazie `materialize` dostaje `animate-hud-border-draw` (SVG rect z `stroke-dasharray` rysujący ramkę) + `animate-hud-tile-in` (blur 8 → 0, opacity 0 → 1) z `animationDelay` opartym o `index * 120ms`.
-  - Wewnątrz `HudPanel` użyć `usePhase`/`useTransition` do wyzwolenia animacji wjeżdżającej.
+### 6. Zachowanie istniejących elementów
+- Crosshair axes, coordinates, particle cloud, scanline, audio-reactive halo — pozostają (rysowane na warstwie 2D nad/pod sferą bez preserve-3d, żeby tekst był czytelny i nie obracał się z bryłą).
+- `useAudioLevel`, `useCoord` hooki — bez zmian.
 
-### Nowe keyframes w `styles.css`
+## Walidacja
+- typecheck (`tsgo`)
+- wizualnie: Playwright screenshot strony `/` po zalogowaniu — potwierdzić widoczne pochylenie 3D, pierścienie na różnych głębokościach, efekt globusa Ring 3.
 
-- `hud-dematerialize` (clip-path + opacity + blur)
-- `hud-vertical-scan` (paski clip-path z stagger przez `animation-delay`)
-- `hud-laser-scan` (translateY -100% → 100%, neon line)
-- `hud-border-draw` (SVG `stroke-dashoffset`)
-- `hud-tile-in` (blur 10px → 0, opacity 0 → 1, translateY 6px → 0)
-- `hud-text-flicker-fast` (szybki migający komunikat statusu)
-
-## 5. Integracja w `__root.tsx`
-
-- Dodać `TransitionProvider`.
-- Renderować `<HudRouteTransition />` (overlaye) nad `<main>`.
-- `main` dostaje `data-transition={transition}` → CSS aplikuje `animate-hud-dematerialize` w fazie `dematerialize`.
-- `TileBuild` zostaje uproszczony do nasłuchu na fazę `materialize` (nadal działa też dla bootu).
-
-## 6. Zakładki — przegląd zawartości
-
-Każda zakładka przerobiona na siatkę `HudPanel`-i z `index`-em do staggera:
-
-- **Dashboard**: bez zmian funkcjonalnych, nowy styling + tagi narożne.
-- **Agent Hub**: tabela agentów w `HudPanel`, status pill w neonie, mini-sparkline.
-- **System Logs**: terminalowy strumień (monospace), kolumny `TS / LVL / SRC / MSG`, kolory poziomów (cyjan / pomarańcz / czerwony).
-- **Settings**: panele konfiguracji z toggle/slider w cyjanowej stylistyce.
-
-## 7. Walidacja
-
-- Typecheck.
-- Wizualny smoke test przez Playwright: boot → login (Tony/Stark) → klik między 4 zakładkami; weryfikacja, że overlay przejścia trwa ~4 s i drugie kliknięcie w trakcie jest ignorowane.
-
-## Pliki
-
-Nowe:
-- `src/components/jarvis/HudPanel.tsx`
-- `src/components/jarvis/HudTag.tsx`
-- `src/components/jarvis/MiniArcReactor.tsx`
-- `src/components/jarvis/HudRouteTransition.tsx`
-- `src/components/jarvis/TransitionContext.tsx`
-- `src/hooks/use-hud-navigate.ts`
-
-Edytowane:
-- `src/styles.css` (tokeny, fonty, nowe keyframes)
-- `src/routes/__root.tsx` (provider, overlay, font link)
-- `src/components/jarvis/AppSidebar.tsx` (mini-reactor, nawigacja przez `useHudNavigate`, disabled w trakcie)
-- `src/routes/index.tsx`, `src/routes/agent-hub.tsx`, `src/routes/system-logs.tsx`, `src/routes/settings.tsx` (HudPanel + stagger index)
-- `src/components/jarvis/SystemStatsStrip.tsx`, `ActiveTasksWidget.tsx`, `ChatPanel.tsx` (HudPanel skin)
+## Nie zmieniam
+- palety, fontów, layoutu HUD, tranzycji, sidebara, innych komponentów.
