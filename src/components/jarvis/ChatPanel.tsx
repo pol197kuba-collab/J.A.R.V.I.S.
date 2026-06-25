@@ -36,16 +36,16 @@ export function ChatPanel() {
   }
 
   return (
-    <div className="flex h-[420px] flex-col rounded-lg border border-border/60 bg-card/50 backdrop-blur">
-      <div className="flex items-center justify-between border-b border-border/60 px-4 py-2">
+    <div className="flex h-[420px] flex-col">
+      <div className="flex items-center justify-between border-b border-primary/20 px-4 py-2">
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 animate-blink rounded-full" style={{ backgroundColor: "var(--success)" }} />
-          <span className="font-display text-xs uppercase tracking-[0.3em] text-muted-foreground">
-            Conversation Stream
+          <span className="font-display text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+            DUPLEX CHANNEL
           </span>
         </div>
         <span className="font-display text-[10px] uppercase tracking-widest text-primary/70">
-          Secure // Encrypted
+          SECURE // ENCRYPTED
         </span>
       </div>
 
@@ -103,12 +103,12 @@ export function ChatPanel() {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Transmit instruction…"
-          className="flex-1 rounded-md border border-border/60 bg-background/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          placeholder="▸ TRANSMIT INSTRUCTION…"
+          className="flex-1 border border-primary/40 bg-black/60 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
         />
         <button
           type="submit"
-          className="flex h-10 w-10 items-center justify-center rounded-md border border-primary/60 bg-primary/10 text-primary transition hover:bg-primary/20"
+          className="flex h-10 w-10 items-center justify-center border border-primary/60 bg-primary/10 text-primary transition hover:bg-primary/20 hover:shadow-[var(--glow-primary)]"
           aria-label="Send"
         >
           <Send className="h-4 w-4" />
