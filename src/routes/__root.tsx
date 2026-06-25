@@ -24,6 +24,7 @@ import {
 import { HudRouteTransition } from "@/components/jarvis/HudRouteTransition";
 import { MiniArcReactor } from "@/components/jarvis/MiniArcReactor";
 import { OrientationGate } from "@/components/jarvis/OrientationGate";
+import { VoiceCommandProvider } from "@/components/jarvis/VoiceCommandContext";
 import { audio } from "@/lib/audio/AudioEngine";
 
 function NotFoundComponent() {
@@ -187,7 +188,9 @@ function RootComponent() {
         )}
         {showDashboardShell && (
           <TransitionProvider>
-            <DashboardShell phase={phase} onShutdown={() => setPhase("shutdown")} />
+            <VoiceCommandProvider>
+              <DashboardShell phase={phase} onShutdown={() => setPhase("shutdown")} />
+            </VoiceCommandProvider>
           </TransitionProvider>
         )}
       </PhaseContext.Provider>
