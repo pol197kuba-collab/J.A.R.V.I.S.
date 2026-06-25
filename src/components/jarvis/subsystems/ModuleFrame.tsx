@@ -11,7 +11,7 @@ export function ModuleFrame({
   onTerminate: () => void;
 }) {
   return (
-    <div className="absolute inset-0 z-30 flex flex-col bg-black animate-hud-tile-in landscape:max-md:fixed landscape:max-md:z-[100]">
+    <div className="absolute inset-0 z-30 flex max-h-full w-full flex-col overflow-hidden bg-black animate-hud-tile-in landscape:max-md:fixed landscape:max-md:z-[100] landscape:max-md:h-[calc(100vh-2rem)]">
       {/* Top HUD bar */}
       <div
         className="relative flex h-9 items-center gap-3 border-b border-primary/40 bg-black/90 px-3 landscape:max-md:h-8 landscape:max-md:gap-1.5 landscape:max-md:px-2"
@@ -60,14 +60,14 @@ export function ModuleFrame({
       </div>
 
       {/* iframe container */}
-      <div className="relative flex-1">
+      <div className="relative w-full max-h-full flex-1 overflow-hidden">
         <iframe
           title={mod.name}
           src={mod.url}
           loading="lazy"
           referrerPolicy="no-referrer"
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-          className="h-full w-full border-0 bg-white"
+          className="h-full max-h-full w-full border-0 bg-white"
         />
         {/* subtle scanline overlay */}
         <div
