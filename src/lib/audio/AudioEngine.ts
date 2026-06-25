@@ -39,9 +39,13 @@ class Engine {
 
   setSettings(patch: Partial<Settings>) {
     this.settings = { ...this.settings, ...patch };
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
-    } catch {}
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
+      } catch {
+        // ignore (private mode / disabled storage)
+      }
+    }
     if (this.master && this.ctx) {
       this.master.gain.setTargetAtTime(this.settings.master, this.ctx.currentTime, 0.05);
     }

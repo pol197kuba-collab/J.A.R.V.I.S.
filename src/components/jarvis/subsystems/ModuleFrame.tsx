@@ -59,17 +59,32 @@ export function ModuleFrame({
         </div>
       </div>
 
-      {/* iframe container */}
+      {/* iframe container.
+          sandbox: minimum needed — run JS, submit forms, keep same-origin
+          session for the embedded app. No popups / modals / downloads.
+          allow: clipboard only — mic / geolocation are NOT delegated.
+          Re-enable per-module only if a future sub-system requires them. */}
       <div className="relative w-full flex-1 overflow-hidden h-[calc(100vh-45px)]">
-        <iframe
-          title={mod.name}
-          src={mod.url}
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
-          allow="clipboard-read; clipboard-write; geolocation; microphone"
-          className="h-full w-full border-0 bg-white"
-        />
+        {mod.url ? (
+          <iframe
+            title={mod.name}
+            src={mod.url}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            sandbox="allow-scripts allow-same-origin allow-forms"
+            allow="clipboard-read; clipboard-write"
+            className="h-full w-full border-0 bg-white"
+          />
+        ) : (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-black text-center">
+            <p className="font-display text-xs uppercase tracking-[0.4em] text-primary">
+              MODULE NOT WIRED
+            </p>
+            <p className="font-mono text-[10px] text-muted-foreground">
+              {mod.codename} // awaiting deployment URL
+            </p>
+          </div>
+        )}
         {/* subtle scanline overlay */}
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.08]"

@@ -4,6 +4,15 @@ import { ArcReactorTriangle } from "./ArcReactorTriangle";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 
+// ⚠️ DEMO GATE — NOT REAL AUTH.
+// This login screen performs a plaintext, client-side credential check
+// (operator name + cipher key compared against string literals below).
+// The credentials ship inside the JS bundle, so any visitor can read them
+// in DevTools or bypass the gate by mutating component state. Acceptable
+// only because the dashboard exposes no privileged data.
+// TODO: Replace with Supabase / Lovable Cloud Auth (server-validated session,
+// `requireSupabaseAuth` middleware on protected server functions, and a
+// proper `_authenticated` route gate) before shipping any sensitive surface.
 export function StarkLogin({ onGranted }: { onGranted: () => void }) {
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
@@ -108,10 +117,6 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
             <span className="absolute -right-px -bottom-px h-2 w-2 border-r border-b border-primary" />
             ▸ Access Granted
           </button>
-
-          <p className="font-mono text-center text-[10px] text-muted-foreground/70">
-          hint · operator: Jacob · cipher: Slawinsky
-          </p>
         </form>
       </div>
     </div>
