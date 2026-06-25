@@ -1,93 +1,98 @@
 ## Cel
-Przebudować mechanikę uruchamiania aplikacji JARVIS w jeden płynny SPA flow oparty na maszynie stanów, bez przeładowań strony, z 4 fazami: bootowanie → logowanie → transformacja → dashboard, plus shutdown wracający do startu.
+Przebudować wewnętrzny dashboard JARVIS-a (po zalogowaniu) tak, aby był idealnym przedłużeniem estetyki Stark HUD z intra: czarne tło, neonowy cyjan, monospace, ostre rogi, corner brackets, mikroteksty. Dodać 3-4 sekundowy system przejść między zakładkami z blokadą wielokrotnych kliknięć.
 
-## Architektura stanów
+## 1. Globalna stylistyka (`src/styles.css`)
 
-Wprowadzić jeden centralny stan w `src/routes/__root.tsx`:
+- Dodać import Google Fonts `JetBrains Mono` + `Share Tech Mono` w `__root.tsx` (`<link>` w head).
+- Zmienić `--background` na czystą czerń `oklch(0 0 0)`, `--card` na ~`oklch(0.04 0 0)`, `--sidebar` analogicznie.
+- Wzmocnić `--primary` do neonowego cyjanu `oklch(0.88 0.18 200)` (≈ #00f0ff), wzmocnić `--glow-primary`.
+- `body` → `font-family: "JetBrains Mono", ui-monospace, monospace;` `.font-display` → `"Share Tech Mono"`.
+- Domyślny `--radius: 0`. Wszystkie panele HUD i shadcn cards renderują się z ostrymi rogami.
+- Rozszerzyć `.hud-panel` o 4 corner-brackety (obecnie 2) oraz wariant `.hud-panel--tag` z absolutnie pozycjonowanym mikrotekstem (`SYS_REF`).
 
-```ts
-type AppPhase =
-  | 'booting'              // 0–15s, 3 sekwencje animacji
-  | 'login_screen'         // formularz Stark Industries
-  | 'transition_to_dashboard' // rozpad loginu + budowa kafelków
-  | 'dashboard_active'     // pełny dashboard + przycisk DEACTIVATE
-  | 'shutdown';            // wygaszanie kafelków → powrót do 'booting'
-```
+## 2. Komponenty wspólne
 
-Wszystko renderowane warunkowo w jednym drzewie, z `AnimatePresence`-podobną logiką opartą na czystym CSS (klasy `data-phase`, keyframes wejścia/wyjścia). Brak `<Outlet />` dopóki `dashboard_active`.
+- `MiniArcReactor.tsx` — mała, kręcąca się + pulsująca wersja trójkątnego reaktora (reuse `ArcReactorTriangle` w skali). Umieścić w `AppSidebar` (header) obok napisu `J.A.R.V.I.S.`.
+- `HudTag.tsx` — generuje losowy mikrotekst (`SYS_REF: 404-X`, `CH-${n}`, `0xAF12`) na podstawie seed (deterministyczny per-mount, by nie migotał). Wstawiany w narożniki kafelków.
+- `HudPanel.tsx` — wrapper opakowujący treść w `.hud-panel` + 1-2 `HudTag` w narożnikach + opcjonalny tytuł.
 
-## Faza 1 — Bootowanie (≈15s, 3 podsekwencje)
+## 3. Przebudowa kafelków dashboardu
 
-Nowy komponent `src/components/jarvis/BootSequence.tsx` z lokalnym podstanem `bootStep: 1 | 2 | 3` sterowanym `setTimeout` (5s + 5s + ~5s, czyszczone w cleanupie).
+Wszystkie sekcje (`SystemStatsStrip`, `ReactorCore` panel, `ActiveTasksWidget`, `ChatPanel`, oraz analogiczne karty w `agent-hub`, `system-logs`, `settings`) opakować w `HudPanel`:
+- Ostre rogi, cyjanowe ramki, neon glow.
+- Tabele i listy: monospace, wiersze z `border-b` w półprzezroczystym cyjanie, hover = jasna poświata.
+- Ikony Lucide w cyjanie z `drop-shadow`.
+- Wykresy/sparkline (`SystemStatsStrip`) — barki z mocniejszym cyjanowym glow.
 
-- **Seq 1 (0–5s)**: czarne tło, animowane poziome neonowe linie (gradient + `line-trace` keyframe), pasek postępu z napisem `INITIATING SYSTEM 1...`, w tle przewijające się pseudo-logi (IP, protokoły) — generowane z `mock.ts` (nowe dane `bootLogs`).
-- **Seq 2 (5–10s)**: linie znikają (fade-out), pojawiają się 3 wirujące w przeciwnych kierunkach okręgi SVG (HUD), w centrum litera po literze typuje się `J.A.R.V.I.S.` (state index znaku, interval 200ms).
-- **Seq 3 (10–15s)**: okręgi przechodzą w pulsujący trójkątny reaktor łukowy (nowy SVG `ArcReactorTriangle`), pod nim z `fade-up` przycisk `ENGAGE JARVIS` (`z-50`, własny `position: relative`, niżej w layout flow, by nie kolidował z napisami HUD). Klik → `setPhase('login_screen')`.
+## 4. System przejść HUD (kluczowe)
 
-Reużycie istniejących keyframes z `styles.css` (`hud-flicker`, `line-trace`, `fade-up`, `glitch-in`, `ring-spin`), dodanie nowych: `triangle-pulse`, `tile-build`, `tile-dissolve`, `screen-fracture`.
+Stworzyć `src/components/jarvis/HudRouteTransition.tsx`:
 
-## Faza 2 — Login Stark Industries
+- Stan globalny w `PhaseContext` (rozszerzenie) lub nowy `TransitionContext`:
+  ```
+  transition: 'idle' | 'dematerialize' | 'scan' | 'materialize'
+  pendingPath: string | null
+  isTransitioning: boolean
+  ```
+- Hook `useHudNavigate()` zwracający funkcję `go(path)`:
+  1. Jeśli `isTransitioning` → ignoruj (blokada multi-klik).
+  2. `setTransition('dematerialize')` + `pendingPath = path`.
+  3. Po 1500 ms → `router.navigate({ to: path })`, `setTransition('scan')`.
+  4. Po 1000 ms → `setTransition('materialize')`.
+  5. Po 1500 ms → `setTransition('idle')`.
+- `AppSidebar` używa `<button onClick={() => go(item.url)}>` zamiast `<Link>`, z `disabled={isTransitioning}` + wizualnym wyciszeniem.
 
-Nowy komponent `src/components/jarvis/StarkLogin.tsx`. Reaktor z fazy 1 nie jest re-mountowany — przenosimy go translacją w górę (CSS transition na `translateY`), pod spodem `iris-open`/`fade-up` na panelu HUD `.hud-panel` z dwoma polami:
+### Warstwy wizualne (renderowane w `__root.tsx` nad `<Outlet />`):
 
-- `Login` (poprawne: `Tony`)
-- `Password` (poprawne: `Stark`)
-- przycisk `ACCESS GRANTED`
+- **Dematerialize overlay** (1.5 s): pełnoekranowy `div` z animacją pionowych skanujących pasków (clip-path 8 kolumn animowanych z stagger), na zawartości `<main>` aplikuje się klasa `animate-hud-dematerialize` (clip-path + blur + opacity → 0).
+- **Scan overlay** (1 s): pozioma neonowa linia przechodząca góra→dół (`animate-hud-laser-scan`), pośrodku migający tekst `RECONFIGURING DATA STREAM…` / `ANALYZING HUD LAYOUT…` (`animate-hud-flicker`). Tło ciemne ze ścianką siatki.
+- **Materialize**: kafelki nowej trasy renderują się z `HudPanel`-owym efektem stagger:
+  - Każdy `HudPanel` w fazie `materialize` dostaje `animate-hud-border-draw` (SVG rect z `stroke-dasharray` rysujący ramkę) + `animate-hud-tile-in` (blur 8 → 0, opacity 0 → 1) z `animationDelay` opartym o `index * 120ms`.
+  - Wewnątrz `HudPanel` użyć `usePhase`/`useTransition` do wyzwolenia animacji wjeżdżającej.
 
-Walidacja lokalna. Przy błędnych danych: dodanie klasy `.access-denied` → pulsujący czerwony border (nowy keyframe `deny-pulse`) + komunikat `ACCESS DENIED` przez 1.5s. Przy poprawnych → `setPhase('transition_to_dashboard')`.
+### Nowe keyframes w `styles.css`
 
-## Faza 3 — Transformacja w dashboard
+- `hud-dematerialize` (clip-path + opacity + blur)
+- `hud-vertical-scan` (paski clip-path z stagger przez `animation-delay`)
+- `hud-laser-scan` (translateY -100% → 100%, neon line)
+- `hud-border-draw` (SVG `stroke-dashoffset`)
+- `hud-tile-in` (blur 10px → 0, opacity 0 → 1, translateY 6px → 0)
+- `hud-text-flicker-fast` (szybki migający komunikat statusu)
 
-W `transition_to_dashboard`:
+## 5. Integracja w `__root.tsx`
 
-1. Panel logowania animuje się klasą `.screen-fracture` (clip-path inset rozsuwający na boki + opacity → 0, ~700ms).
-2. Reaktor zanika.
-3. Renderuje się shell dashboardu (sidebar + header + `<Outlet />`), ale komponenty dashboardu (`SystemStatsStrip`, `ReactorCore` section, `ActiveTasksWidget`, `ChatPanel`) opakowane w nowy wrapper `<TileBuild delay={n}>` który aplikuje `animate-tile-build` (glitch-in + scale-in + neon border flash) z opóźnieniem losowanym deterministycznie 80–600ms per kafelek.
-4. Po ~1.2s `setPhase('dashboard_active')` — wrapper przestaje wymuszać enter-animation.
+- Dodać `TransitionProvider`.
+- Renderować `<HudRouteTransition />` (overlaye) nad `<main>`.
+- `main` dostaje `data-transition={transition}` → CSS aplikuje `animate-hud-dematerialize` w fazie `dematerialize`.
+- `TileBuild` zostaje uproszczony do nasłuchu na fazę `materialize` (nadal działa też dla bootu).
 
-`TileBuild` to czysto prezentacyjny wrapper, modyfikuje tylko otoczkę istniejących widgetów (zgodnie z regułą „UI change = frontend only").
+## 6. Zakładki — przegląd zawartości
 
-## Faza 4 — Shutdown
+Każda zakładka przerobiona na siatkę `HudPanel`-i z `index`-em do staggera:
 
-Nowy przycisk `DeactivateButton` w `header` (`__root.tsx`), prawy górny róg, czerwono-karminowy (semantic token `--destructive` + glow), tekst `DEACTIVATE JARVIS`.
+- **Dashboard**: bez zmian funkcjonalnych, nowy styling + tagi narożne.
+- **Agent Hub**: tabela agentów w `HudPanel`, status pill w neonie, mini-sparkline.
+- **System Logs**: terminalowy strumień (monospace), kolumny `TS / LVL / SRC / MSG`, kolory poziomów (cyjan / pomarańcz / czerwony).
+- **Settings**: panele konfiguracji z toggle/slider w cyjanowej stylistyce.
 
-Klik → `setPhase('shutdown')`:
+## 7. Walidacja
 
-1. Wszystkie kafelki dostają klasę `.animate-tile-dissolve` (glitch-out + scale-down + blur) z losowym staggerem.
-2. Po ~1.2s pełnoekranowy overlay z `hud-flicker` + fade-to-black (≈800ms).
-3. `setPhase('booting')` — sekwencja startuje od nowa, ten sam komponent `BootSequence` (reset przez `key={phase}`).
+- Typecheck.
+- Wizualny smoke test przez Playwright: boot → login (Tony/Stark) → klik między 4 zakładkami; weryfikacja, że overlay przejścia trwa ~4 s i drugie kliknięcie w trakcie jest ignorowane.
 
 ## Pliki
 
-**Nowe:**
-- `src/components/jarvis/BootSequence.tsx` (3 podsekwencje + onEngage)
-- `src/components/jarvis/StarkLogin.tsx` (formularz + walidacja)
-- `src/components/jarvis/ArcReactorTriangle.tsx` (SVG trójkątnego reaktora)
-- `src/components/jarvis/TileBuild.tsx` (wrapper enter/exit dla kafelków)
-- `src/components/jarvis/DeactivateButton.tsx`
+Nowe:
+- `src/components/jarvis/HudPanel.tsx`
+- `src/components/jarvis/HudTag.tsx`
+- `src/components/jarvis/MiniArcReactor.tsx`
+- `src/components/jarvis/HudRouteTransition.tsx`
+- `src/components/jarvis/TransitionContext.tsx`
+- `src/hooks/use-hud-navigate.ts`
 
-**Edytowane:**
-- `src/routes/__root.tsx` — maszyna stanów `AppPhase`, warunkowy render, header z `DeactivateButton`. Zastępuje obecne `isBooted` + `JarvisBoot`.
-- `src/routes/index.tsx` — owinięcie sekcji w `TileBuild` (kontekstowo — wrapper czyta fazę z Context).
-- `src/styles.css` — nowe keyframes: `triangle-pulse`, `tile-build`, `tile-dissolve`, `deny-pulse`, `screen-fracture`, `type-caret`.
-- `src/data/mock.ts` — dodanie `bootLogs` (IP/protokoły).
-
-**Usunięte:**
-- `src/components/jarvis/JarvisBoot.tsx` (zastąpione przez `BootSequence` + `StarkLogin`).
-
-## Szczegóły techniczne
-
-- Maszyna stanów: prosty `useState<AppPhase>` + `useEffect` z timerami w `BootSequence`. Brak zewnętrznej biblioteki.
-- Cała koordynacja faz przez Context (`PhaseContext`) by `TileBuild` w głębi drzewa wiedział, czy grać enter, exit, czy nic.
-- Animacje wyłącznie CSS (Tailwind utility + custom keyframes w `styles.css`), bez Framer Motion — spójne z dotychczasowym stackiem.
-- Kolory wyłącznie z tokenów (`--primary`, `--destructive`, `--success`). Czerwień shutdown/access-denied = `--destructive` z dodatkowym glow w `box-shadow`.
-- `z-index`: przycisk `ENGAGE JARVIS` `z-50`, overlay shutdown `z-[100]`, header `z-10` (bez zmian).
-- Wszystkie `setTimeout` czyszczone w `useEffect` cleanup — brak wycieków przy zmianie fazy.
-- Brak zmian routingu/loaderów/backendu — czysto prezentacyjne.
-
-## Akceptacja
-1. Odświeżenie strony → 15s boot bez interakcji, potem klikalny ENGAGE JARVIS.
-2. `Tony` / `Stark` → przejście do dashboardu z efektem budowania kafelków.
-3. Złe dane → czerwony pulsujący border + ACCESS DENIED, pole zostaje.
-4. `DEACTIVATE JARVIS` w prawym górnym rogu → kafelki znikają, ekran wraca do fazy 1, cykl działa wielokrotnie.
-5. Brak przeładowania (URL pozostaje `/`).
+Edytowane:
+- `src/styles.css` (tokeny, fonty, nowe keyframes)
+- `src/routes/__root.tsx` (provider, overlay, font link)
+- `src/components/jarvis/AppSidebar.tsx` (mini-reactor, nawigacja przez `useHudNavigate`, disabled w trakcie)
+- `src/routes/index.tsx`, `src/routes/agent-hub.tsx`, `src/routes/system-logs.tsx`, `src/routes/settings.tsx` (HudPanel + stagger index)
+- `src/components/jarvis/SystemStatsStrip.tsx`, `ActiveTasksWidget.tsx`, `ChatPanel.tsx` (HudPanel skin)
