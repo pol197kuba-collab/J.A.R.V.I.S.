@@ -9,8 +9,26 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SystemLogsRouteImport } from './routes/system-logs'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as AgentHubRouteImport } from './routes/agent-hub'
 import { Route as IndexRouteImport } from './routes/index'
 
+const SystemLogsRoute = SystemLogsRouteImport.update({
+  id: '/system-logs',
+  path: '/system-logs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgentHubRoute = AgentHubRouteImport.update({
+  id: '/agent-hub',
+  path: '/agent-hub',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +37,61 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/agent-hub': typeof AgentHubRoute
+  '/settings': typeof SettingsRoute
+  '/system-logs': typeof SystemLogsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/agent-hub': typeof AgentHubRoute
+  '/settings': typeof SettingsRoute
+  '/system-logs': typeof SystemLogsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/agent-hub': typeof AgentHubRoute
+  '/settings': typeof SettingsRoute
+  '/system-logs': typeof SystemLogsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/agent-hub' | '/settings' | '/system-logs'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/agent-hub' | '/settings' | '/system-logs'
+  id: '__root__' | '/' | '/agent-hub' | '/settings' | '/system-logs'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AgentHubRoute: typeof AgentHubRoute
+  SettingsRoute: typeof SettingsRoute
+  SystemLogsRoute: typeof SystemLogsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/system-logs': {
+      id: '/system-logs'
+      path: '/system-logs'
+      fullPath: '/system-logs'
+      preLoaderRoute: typeof SystemLogsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agent-hub': {
+      id: '/agent-hub'
+      path: '/agent-hub'
+      fullPath: '/agent-hub'
+      preLoaderRoute: typeof AgentHubRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,17 +104,10 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AgentHubRoute: AgentHubRoute,
+  SettingsRoute: SettingsRoute,
+  SystemLogsRoute: SystemLogsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

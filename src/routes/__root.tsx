@@ -11,6 +11,8 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/jarvis/AppSidebar";
 
 function NotFoundComponent() {
   return (
@@ -77,11 +79,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "JARVIS // Personal AI Assistant" },
+      { name: "description", content: "Futuristic command dashboard for the JARVIS personal AI assistant." },
+      { name: "author", content: "Stark Industries" },
+      { property: "og:title", content: "JARVIS // Personal AI Assistant" },
+      { property: "og:description", content: "Futuristic command dashboard for the JARVIS personal AI assistant." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
@@ -90,6 +92,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         rel: "stylesheet",
         href: appCss,
+      },
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700&family=Inter:wght@400;500;600&display=swap",
       },
     ],
   }),
@@ -101,11 +109,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <head>
         <HeadContent />
       </head>
-      <body>
+      <body className="bg-background text-foreground">
         {children}
         <Scripts />
       </body>
@@ -118,8 +126,40 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <SidebarProvider>
+        <div className="relative flex min-h-screen w-full bg-background text-foreground">
+          <div className="bg-grid pointer-events-none fixed inset-0 opacity-40" aria-hidden />
+          <div
+            className="pointer-events-none fixed inset-0 opacity-60"
+            aria-hidden
+            style={{
+              background:
+                "radial-gradient(ellipse at 20% 0%, oklch(0.4 0.15 230 / 0.25), transparent 60%), radial-gradient(ellipse at 80% 100%, oklch(0.4 0.18 210 / 0.18), transparent 60%)",
+            }}
+          />
+          <AppSidebar />
+          <div className="relative flex min-h-screen flex-1 flex-col">
+            <header className="sticky top-0 z-10 flex h-12 items-center gap-3 border-b border-border/60 bg-background/70 px-4 backdrop-blur">
+              <SidebarTrigger className="text-primary hover:bg-primary/10" />
+              <div className="h-4 w-px bg-border" />
+              <span className="font-display text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                Stark Industries // Secure Terminal
+              </span>
+              <div className="ml-auto flex items-center gap-2 font-display text-[10px] uppercase tracking-widest">
+                <span
+                  className="h-1.5 w-1.5 animate-blink rounded-full"
+                  style={{ backgroundColor: "var(--success)" }}
+                />
+                <span style={{ color: "var(--success)" }}>All Systems Nominal</span>
+              </div>
+            </header>
+            <main className="relative flex-1">
+              {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+              <Outlet />
+            </main>
+          </div>
+        </div>
+      </SidebarProvider>
     </QueryClientProvider>
   );
 }
