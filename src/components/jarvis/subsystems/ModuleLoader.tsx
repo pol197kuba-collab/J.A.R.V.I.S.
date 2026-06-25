@@ -57,7 +57,7 @@ export function ModuleLoader({
   }, [mod, onReady]);
 
   return (
-    <div className="absolute inset-0 z-40 flex flex-col items-center justify-center overflow-hidden bg-black landscape:max-md:fixed landscape:max-md:z-[100]">
+    <div className="absolute inset-0 z-40 flex max-h-full w-full flex-col items-center justify-center overflow-hidden bg-black landscape:max-md:fixed landscape:max-md:z-[100] landscape:max-md:h-[calc(100vh-2rem)]">
       {/* grid backdrop */}
       <div className="bg-grid pointer-events-none absolute inset-0 opacity-20" aria-hidden />
       <div
@@ -70,7 +70,7 @@ export function ModuleLoader({
       />
 
       {/* central radar */}
-      <div className="relative h-72 w-72">
+      <div className="relative h-72 w-72 landscape:max-md:h-[34vh] landscape:max-md:w-[34vh]">
         <svg viewBox="0 0 200 200" className="absolute inset-0 h-full w-full">
           <g
             fill="none"
@@ -133,12 +133,12 @@ export function ModuleLoader({
       </div>
 
       {/* caption */}
-      <p className="mt-6 font-display text-xs uppercase tracking-[0.4em] text-primary animate-hud-flicker">
+      <p className="mt-6 font-display text-xs uppercase tracking-[0.4em] text-primary animate-hud-flicker landscape:max-md:mt-2 landscape:max-md:text-[9px] landscape:max-md:tracking-[0.3em]">
         Decrypting Link // External_Server_Connect
       </p>
 
       {/* progress + logs */}
-      <div className="mt-8 grid w-[min(880px,92vw)] gap-4 md:grid-cols-[1.2fr_1fr]">
+      <div className="mt-8 grid w-[min(880px,92vw)] gap-4 md:grid-cols-[1.2fr_1fr] landscape:max-md:mt-2 landscape:max-md:grid-cols-[1.2fr_1fr] landscape:max-md:gap-2">
         <div className="hud-panel p-4">
           <span className="hud-corner tl" />
           <span className="hud-corner tr" />
