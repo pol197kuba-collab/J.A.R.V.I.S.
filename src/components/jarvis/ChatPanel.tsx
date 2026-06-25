@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Send } from "lucide-react";
 import { initialMessages, jarvisReplies, type ChatMessage } from "@/data/mock";
 import { cn } from "@/lib/utils";
+import { VocalOverrideSwitch } from "./VocalOverrideSwitch";
 
 function nowTime() {
   const d = new Date();
@@ -44,9 +45,12 @@ export function ChatPanel() {
             DUPLEX CHANNEL
           </span>
         </div>
-        <span className="font-display text-[10px] uppercase tracking-widest text-primary/70">
-          SECURE // ENCRYPTED
-        </span>
+        <div className="flex items-center gap-3">
+          <VocalOverrideSwitch />
+          <span className="font-display text-[10px] uppercase tracking-widest text-primary/70 landscape:max-md:hidden">
+            SECURE // ENCRYPTED
+          </span>
+        </div>
       </div>
 
       <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4">
