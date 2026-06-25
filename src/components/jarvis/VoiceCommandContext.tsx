@@ -10,6 +10,7 @@ import {
 import { useHudNavigate } from "./TransitionContext";
 import { usePhase } from "./PhaseContext";
 import type { SubSystemId } from "@/data/subSystems";
+import { speak, speakCancel } from "@/lib/audio/speak";
 
 type Ctx = {
   enabled: boolean;
@@ -56,13 +57,31 @@ function getSpeechCtor():
 
 const COMMANDS: Array<{
   re: RegExp;
-  action: "dashboard" | "fuel" | "rto" | "jobfit" | "shutdown";
+  action:
+    | "dashboard"
+    | "fuel"
+    | "rto"
+    | "jobfit"
+    | "telemetry"
+    | "menu_open"
+    | "menu_close"
+    | "system_check"
+    | "sleep"
+    | "shutdown";
 }> = [
-  { re: /\b(jarvis\s+dashboard|show\s+core)\b/i, action: "dashboard" },
-  { re: /\b(jarvis\s+fuel|open\s+fuel)\b/i, action: "fuel" },
-  { re: /\b(jarvis\s+office|open\s+calculator)\b/i, action: "rto" },
-  { re: /\b(jarvis\s+job|open\s+jobfit)\b/i, action: "jobfit" },
-  { re: /\b(jarvis\s+system\s+shutdown|disconnect)\b/i, action: "shutdown" },
+  // Navigation
+  { re: /\b(open\s+dashboard|show\s+status|show\s+core|jarvis\s+dashboard)\b/i, action: "dashboard" },
+  { re: /\b(open\s+fuel|launch\s+monitor|jarvis\s+fuel)\b/i, action: "fuel" },
+  { re: /\b(open\s+calculator|launch\s+rto|jarvis\s+office)\b/i, action: "rto" },
+  { re: /\b(open\s+jobfit|launch\s+ai|jarvis\s+job)\b/i, action: "jobfit" },
+  { re: /\b(show\s+telemetry|open\s+map|geo[-\s]?tracking)\b/i, action: "telemetry" },
+  // Interface
+  { re: /\b(open\s+menu|show\s+sidebar)\b/i, action: "menu_open" },
+  { re: /\b(close\s+menu|hide\s+sidebar)\b/i, action: "menu_close" },
+  // Status & shutdown
+  { re: /\b(system\s+check)\b/i, action: "system_check" },
+  { re: /\b(jarvis\s+sleep|standby)\b/i, action: "sleep" },
+  { re: /\b(disconnect|shutdown|system\s+shutdown)\b/i, action: "shutdown" },
 ];
 
 export function VoiceCommandProvider({ children }: { children: ReactNode }) {
@@ -94,17 +113,39 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
           break;
         case "fuel":
           pendingRef.current = "fuel-monitor";
+          speak("Loading Fuel Monitor Matrix.");
           go("/sub-systems");
           break;
         case "rto":
           pendingRef.current = "rto-calculator";
+          speak("Accessing RTO calculation systems.");
           go("/sub-systems");
           break;
         case "jobfit":
           pendingRef.current = "jobfit-ai";
+          speak("Initializing AI resume optimizer.");
           go("/sub-systems");
           break;
+        case "telemetry":
+          speak("Accessing satellite telemetry.");
+          go("/geo-tracking");
+          break;
+        case "menu_open":
+          window.dispatchEvent(new CustomEvent("jarvis:sidebar", { detail: "open" }));
+          break;
+        case "menu_close":
+          window.dispatchEvent(new CustomEvent("jarvis:sidebar", { detail: "close" }));
+          break;
+        case "system_check":
+          speak("All systems operational, Mister Slawinsky. Core temperature is nominal.");
+          break;
+        case "sleep":
+          speak("System in standby mode.");
+          setEnabled(false);
+          break;
         case "shutdown":
+          speak("Deactivating system. Goodbye, Mister Slawinsky.");
+          setTimeout(() => speakCancel(), 3200);
           setPhase("shutdown");
           break;
       }

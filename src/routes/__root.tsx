@@ -201,9 +201,11 @@ function RootComponent() {
         )}
         {showDashboardShell && (
           <TransitionProvider>
-            <VoiceCommandProvider>
-              <DashboardShell phase={phase} onShutdown={() => setPhase("shutdown")} />
-            </VoiceCommandProvider>
+            <SidebarProvider defaultOpen={false}>
+              <VoiceCommandProvider>
+                <DashboardShell phase={phase} onShutdown={() => setPhase("shutdown")} />
+              </VoiceCommandProvider>
+            </SidebarProvider>
           </TransitionProvider>
         )}
       </PhaseContext.Provider>
@@ -220,8 +222,18 @@ function DashboardShell({
   onShutdown: () => void;
 }) {
   const { transition } = useRouteTransition();
+  const { setOpen, setOpenMobile, isMobile } = useSidebar();
+  useEffect(() => {
+    function onSidebarCmd(e: Event) {
+      const detail = (e as CustomEvent<"open" | "close">).detail;
+      if (isMobile) setOpenMobile(detail === "open");
+      else setOpen(detail === "open");
+    }
+    window.addEventListener("jarvis:sidebar", onSidebarCmd as EventListener);
+    return () =>
+      window.removeEventListener("jarvis:sidebar", onSidebarCmd as EventListener);
+  }, [isMobile, setOpen, setOpenMobile]);
   return (
-    <SidebarProvider>
       <div className="relative flex min-h-screen w-full bg-background text-foreground landscape:max-md:h-[100dvh] landscape:max-md:min-h-0 landscape:max-md:overflow-hidden">
         <div className="bg-grid pointer-events-none fixed inset-0 opacity-30" aria-hidden />
         <div
@@ -270,7 +282,6 @@ function DashboardShell({
           )}
         </div>
       </div>
-    </SidebarProvider>
   );
 }
 

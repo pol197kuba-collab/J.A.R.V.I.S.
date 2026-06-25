@@ -16,6 +16,7 @@ import {
 import { useHudNavigate } from "./TransitionContext";
 import { MiniArcReactor } from "./MiniArcReactor";
 import { audio } from "@/lib/audio/AudioEngine";
+import { speak } from "@/lib/audio/speak";
 
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -68,6 +69,9 @@ export function AppSidebar() {
                       disabled={isTransitioning}
                       onClick={() => {
                         audio.playClick();
+                        if (item.url === "/geo-tracking") {
+                          speak("Accessing satellite telemetry.");
+                        }
                         if (isMobile) setOpenMobile(false);
                         go(item.url);
                       }}

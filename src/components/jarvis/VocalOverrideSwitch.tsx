@@ -1,6 +1,7 @@
 import { Switch } from "@/components/ui/switch";
 import { useVoiceCommands } from "./VoiceCommandContext";
 import { audio } from "@/lib/audio/AudioEngine";
+import { speak } from "@/lib/audio/speak";
 
 export function VocalOverrideSwitch() {
   const { enabled, supported, listening, lastTranscript, setEnabled } =
@@ -34,6 +35,8 @@ export function VocalOverrideSwitch() {
         disabled={!supported}
         onCheckedChange={(v) => {
           audio.playClick();
+          if (v) speak("Vocal override engaged. Listening for commands.");
+          else speak("Vocal override standby.");
           setEnabled(v);
         }}
         aria-label="Vocal override"
