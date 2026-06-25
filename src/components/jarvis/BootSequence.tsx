@@ -80,6 +80,17 @@ export function BootSequence({
       />
       <CornerTicks />
 
+      {mode === "init" && (
+        <div className="pointer-events-none absolute left-1/2 top-6 z-20 -translate-x-1/2 text-center animate-fade-up">
+          <p
+            className="font-display text-[11px] uppercase tracking-[0.5em] text-primary md:text-sm"
+            style={{ textShadow: "0 0 12px oklch(0.82 0.17 215 / 0.8)" }}
+          >
+            ACCESS GRANTED. WELCOME BACK, MR. JACOB SLAWINSKY.
+          </p>
+        </div>
+      )}
+
       {/* ============== STEP 1 ============== */}
       {step === 1 && (
         <div className="absolute inset-0 animate-fade-up">
@@ -210,7 +221,7 @@ export function BootSequence({
               ▸ Engage JARVIS
             </button>
             <p className="font-mono text-[10px] text-muted-foreground">
-              biometric · voiceprint · stark-id verified
+              biometric · voiceprint · jacob-id verified // match found: slawinsky, j.
             </p>
           </div>
         </div>
