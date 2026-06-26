@@ -51,19 +51,25 @@ const SPEECH_SAFETY_MS = 1500;
 // We slice off everything up to and INCLUDING the last occurrence so
 // "ok jarvis open fuel" → "open fuel" and "jarvis, jarvis open fuel" →
 // "open fuel" too.
-const WAKE_WORD_RE = /\b(?:j[ae]rvis|d[zż]arwis|dżarwis)\b[\s,.:;!?-]*/gi;
+// Tolerant, non-global wake-word detector. STT often returns Polish phonetic
+// variants without clean word boundaries, so we drop the \b anchors and the
+// `g` flag (no stateful lastIndex across calls).
+const WAKE_WORD_RE = /(jarvis|jervis|d[zż]arwis|[zż]arwis|dziarwis|czarwis)/i;
 const NOISE_RE = /^(?:e+|y+m*|u+m+|h+m+|a+h*|o+h*|m+|mhm+|hmm+)$/i;
 
 function stripWakeWord(transcript: string): string | null {
+  // Find the LAST occurrence by scanning with a fresh global clone, so we
+  // never mutate the shared regex's lastIndex.
+  const scanner = new RegExp(WAKE_WORD_RE.source, "gi");
   let lastEnd = -1;
-  WAKE_WORD_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
-  while ((m = WAKE_WORD_RE.exec(transcript)) !== null) {
+  while ((m = scanner.exec(transcript)) !== null) {
     lastEnd = m.index + m[0].length;
-    if (m.index === WAKE_WORD_RE.lastIndex) WAKE_WORD_RE.lastIndex++;
+    if (m.index === scanner.lastIndex) scanner.lastIndex++;
   }
   if (lastEnd < 0) return null;
-  return transcript.slice(lastEnd).trim();
+  // Strip leading punctuation/whitespace left after the wake word.
+  return transcript.slice(lastEnd).replace(/^[\s,.:;!?-]+/, "").trim();
 }
 
 function isNoise(command: string): boolean {
@@ -307,7 +313,12 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    if (!enabled || !Ctor) return;
+    console.log("[voice] effect: enabled=", enabled, "ctor=", !!Ctor);
+    if (!enabled) return;
+    if (!Ctor) {
+      console.warn("[voice] SpeechRecognition not supported in this browser");
+      return;
+    }
     let stopped = false;
     const rec = new Ctor();
     recRef.current = rec;
@@ -341,6 +352,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
     };
 
     rec.onresult = (e) => {
+      console.log("RAW EVENT RECEIVED", e.results, "resultIndex=", e.resultIndex);
       const start = typeof e.resultIndex === "number" ? e.resultIndex : 0;
       let appendedFinal = false;
       let sawInterim = false;
@@ -349,6 +361,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
         const text = r[0]?.transcript ?? "";
         if (!text) continue;
         if (r.isFinal) {
+          console.log("[voice] final segment:", text);
           speechBuffer += (speechBuffer ? " " : "") + text;
           appendedFinal = true;
         } else {
@@ -365,6 +378,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       }
     };
     rec.onend = () => {
+      console.log("=== STT ENGINE ENDED ===");
       setListening(false);
       // If STT closes while we still have buffered text, flush it before restart.
       if (speechBuffer) flush();
@@ -378,13 +392,17 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
         }
       }
     };
-    rec.onerror = () => {
+    rec.onstart = (() => console.log("=== STT ENGINE STARTED ===")) as never;
+    rec.onerror = (err) => {
+      console.error("=== STT ENGINE ERROR ===", err);
       // browser may auto-stop; onend handles restart
     };
     try {
+      console.log("[voice] calling rec.start()");
       rec.start();
       setListening(true);
-    } catch {
+    } catch (e) {
+      console.error("[voice] rec.start() threw", e);
       /* already started */
     }
     return () => {
