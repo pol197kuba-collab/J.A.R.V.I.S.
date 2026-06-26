@@ -279,6 +279,15 @@
   to { transform: rotate(360deg); }
 }
 
+@keyframes geo-sweep {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes blip-fade {
+  0%, 100% { opacity: 0.2; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
 /* Leaflet dark/cyan HUD filter for Geo-Tracking */
 .geo-map { background: #000; }
 .geo-map .leaflet-tile {
