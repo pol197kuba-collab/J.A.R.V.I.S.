@@ -1,49 +1,53 @@
-## Plan
+# Plan — Pełna inteligencja konwersacyjna JARVIS-a (zatwierdzony)
 
-### 1. Voice pipeline cleanup (`src/components/jarvis/VoiceCommandContext.tsx`)
+Throttle: mikrofon **3 s** (bez zmian), czat **1.5 s** (skrócony, świadome działanie).
 
-- Replace `WAKE_WORD_RE` with the user's exact regex:
-  `const WAKE_WORD_RE = /(jarvis|jervis|dżarwis|dzarwis|żarwis|ziarwis|dziarwis|czarwis)/i;`
-- In `stripWakeWord`: build a global clone, find the LAST match, return `transcript.slice(lastEnd).replace(/^[\s,.:;!?-]+/, "").trim()`. If no match, return `null`.
-- In `flush()`: call `speechBuffer.trim()` (already done) — keep, but also `.trim()` again right before routing.
-- In `routeFromMic`: after `stripWakeWord`, run `.trim()` on the command before the noise check (defensive — already done by stripWakeWord, but make explicit).
-- In `route()`: just before `askJarvis(...)`, add:
-  `console.log("=== SENDING TO GEMINI VOICE CORE ===", transcript);`
-- No changes to throttle, debounce, lifecycle logs, or chat path.
+## 1. `src/lib/ai/jarvisBrain.ts` — głębszy system prompt + dłuższe odpowiedzi
 
-### 2. Central command directory
+- Przepisać `SYSTEM_PROMPT`:
+  - „You ARE J.A.R.V.I.S. — Tony Stark's AI". Brytyjska elegancja, dry wit, lojalność, zwroty „Mr. Slawinsky" / „Sir" (EN) i „Panie Slawinsky" (PL). Zakaz wychodzenia z roli i mówienia, że jest modelem językowym.
+  - Bilingual auto-detect (per wiadomość).
+  - Bezwzględny nakaz **pełnych, merytorycznych odpowiedzi**: przepisy (składniki + kroki), kod (zwięzły działający snippet w polu `speech`, bez code-fence), żarty (faktycznie opowiedzieć), wyjaśnienia, small-talk. Odmowa benign requestu = błąd.
+  - Format JSON `{action, speech}` zachowany. `action` używać **tylko** gdy user wprost prosi o otwarcie/zamknięcie/shutdown; w innych przypadkach `"none"` + cała treść w `speech`.
+  - Długość: small-talk 1–2 zdania; merytoryczne odpowiedzi do ~1200 znaków. Nawet przy akcji UI — krótka linijka w `speech`.
+- `maxOutputTokens` 200 → **600**.
+- `BrainInput` dostaje opcjonalne `source?: "voice" | "chat" | "system"` (przekazywane jako kontekst do user-message, nie do system prompta).
+- Po `tryParseJson` dodać `console.debug("[brain] reply", parsed)`.
 
-New file `src/data/commandDirectory.ts` exporting a typed list:
+## 2. `src/components/jarvis/VoiceCommandContext.tsx` — nie gubić `speech`
 
-```ts
-export type CommandEntry = {
-  action: JarvisAction;        // from jarvisBrain
-  label: string;               // "Open Dashboard"
-  phrases: string[];           // example voice/chat phrases
-  description: string;         // what it does in the UI
-  category: "Navigation" | "Interface" | "System";
-};
-export const COMMAND_DIRECTORY: CommandEntry[] = [ ... ];
-```
+- Wyodrębnić stałe throttle:
+  ```ts
+  const GEMINI_VOICE_THROTTLE_MS = 3000;
+  const GEMINI_CHAT_THROTTLE_MS  = 1500;
+  ```
+  `route()` dostaje 2. argument `source: "voice" | "chat"` (default `"voice"` dla kompatybilności) i wybiera próg throttle wg źródła. Queue/dedup logika bez zmian.
+- `routeFromMic` → `route(cmd, "voice")`; `routeText` (publiczne API z kontekstu) → `route(text, "chat")`.
+- Do `askJarvis` przekazywać `source` (`"voice"` / `"chat"`) i odpowiednio sformatowany prompt („User said via microphone:" vs „User typed in chat:").
+- **Klucz**: na końcu `route()` zagwarantować, że `reply.speech` zawsze trafia do TTS — nawet gdy żadna akcja nie pasuje:
+  ```
+  if (mapped)      fire(mapped, reply.speech)
+  else if (local)  fire(local.action, reply.speech)
+  else if (reply.speech) speak(reply.speech)
+  ```
+  (już prawie tak jest — potwierdzić i nie wprowadzać regresji). `emitChat("jarvis", reply.speech)` pozostaje wcześniej, więc czat zawsze widzi pełną odpowiedź.
+- W `fire()` case `"dashboard"`: też wymawiać `spokenLine` jeśli przyszedł (obecnie milczy).
 
-Covers every action: `open_dashboard, open_fuel, open_calculator, open_jobfit, open_telemetry, open_menu, close_menu, system_check, sleep, shutdown`.
+## 3. `src/components/jarvis/ChatPanel.tsx` — czytelność długich odpowiedzi
 
-### 3. Command Directory UI
+- Bańce wiadomości dodać `whitespace-pre-wrap break-words` aby przepisy/kod zachowały podziały linii i wcięcia. Bez innych zmian.
 
-Add a new section to `src/routes/settings.tsx` (rather than a new route — keeps nav tidy) titled **"JARVIS COMMAND DIRECTORY"** rendered as another `HudPanel`:
+## Poza zakresem
+- Wake-word, debounce, STT lifecycle, sub-systems, sidebar — bez zmian.
+- Lokalne regexy `COMMANDS` zostają jako safety-net dla intencji UI; nigdy nie generują tekstu (tekst zawsze z Gemini lub fallbacku).
+- Brak nowych paczek.
 
-- Cyberpunk table: monospace, neon cyan borders, scanline header row.
-- Columns: `Action` (code chip), `Label`, `Example phrases` (chip list), `Description`, `Category` tag.
-- Data sourced from `COMMAND_DIRECTORY` so future additions auto-render.
-- Add a small filter input ("FILTER COMMANDS //") that narrows by label/phrase/description (pure client state).
+## Weryfikacja
+1. Głos: „Jarvis, opowiedz mi żart" → żart w czacie + TTS, bez nawigacji.
+2. Czat: „Podaj przepis na szarlotkę" → pełna lista składników + kroki w bańce, TTS czyta.
+3. Czat: „Napisz krótki skrypt w Pythonie liczący liczby pierwsze do 50" → kod w bańce z zachowanymi wcięciami.
+4. „Jarvis open fuel" → otwiera Fuel Monitor + JARVIS mówi swoją linijkę.
+5. Dwie wiadomości czatu w odstępie 1.6 s → obie przechodzą (throttle 1.5 s).
+6. Brak klucza → fallback generyczny działa jak dotąd.
 
-No new route needed; the existing Settings page already has a HudPanel layout. If a dedicated route is preferred, this can be moved later by importing the same component.
-
-### Out of scope
-- Throttle, debounce, wake-word lifecycle architecture (working per RAW logs).
-- ChatPanel, Gemini brain, or action mapping logic.
-- No new packages.
-
-### Verification
-- Toggle mic, say "Jarvis open fuel" → console shows `=== SENDING TO GEMINI VOICE CORE === open fuel` and the Fuel Monitor opens.
-- `/settings` route shows the new Command Directory panel listing all 10 actions; filter input narrows the rows live.
+Czekam na build mode, wdrażam od razu.

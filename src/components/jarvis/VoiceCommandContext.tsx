@@ -39,7 +39,8 @@ const VoiceCtx = createContext<Ctx>({
 export const useVoiceCommands = () => useContext(VoiceCtx);
 
 // --- Anti-spam guards (shared between mic + chat) ---------------------------
-const GEMINI_THROTTLE_MS = 3000;
+const GEMINI_VOICE_THROTTLE_MS = 3000;
+const GEMINI_CHAT_THROTTLE_MS = 1500;
 // Speech debounce: how long we wait after the last final segment before
 // flushing the merged buffer to Gemini. Allows "Jarvis ... open ... fuel"
 // to arrive as one phrase instead of three.
@@ -193,6 +194,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       switch (action) {
         case "dashboard":
           go("/");
+          if (spokenLine) speak(spokenLine);
           break;
         case "fuel":
           pendingRef.current = "fuel-monitor";
@@ -244,11 +246,13 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
    * but the text clearly matches a hardcoded command (best of both worlds).
    */
   const route = useCallback(
-    async (transcript: string) => {
+    async (transcript: string, source: "voice" | "chat" = "voice") => {
       // Global 3s throttle so back-to-back voice/chat requests don't pile up.
       const now = Date.now();
       const since = now - lastGeminiAtRef.current;
-      if (since < GEMINI_THROTTLE_MS) {
+      const throttleMs =
+        source === "chat" ? GEMINI_CHAT_THROTTLE_MS : GEMINI_VOICE_THROTTLE_MS;
+      if (since < throttleMs) {
         // Queue at most one follow-up; dedup identical transcripts.
         if (queuedRef.current !== transcript) {
           queuedRef.current = transcript;
@@ -259,9 +263,9 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
               const q = queuedRef.current;
               queuedRef.current = null;
               queueTimerRef.current = null;
-              if (q) void route(q);
+              if (q) void route(q, source);
             },
-            GEMINI_THROTTLE_MS - since + 50,
+            throttleMs - since + 50,
           );
         } else {
           console.debug("[voice] throttle: dropped duplicate", transcript);
@@ -271,13 +275,17 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       lastGeminiAtRef.current = now;
       const cleanCommand = transcript.trim();
       console.log("=== SENDING TO GEMINI VOICE CORE ===", cleanCommand);
-      console.debug("[voice] → gemini", cleanCommand);
+      console.debug("[voice] → gemini", cleanCommand, `(source=${source})`);
       emitChat("user", transcript);
       // Try regex first for instant response on known commands.
       const local = COMMANDS.find((c) => c.re.test(transcript));
       // Ask Gemini for richer reply + open-ended chat handling.
       const reply = await askJarvis({
-        prompt: `User said (via microphone): "${transcript}"`,
+        prompt:
+          source === "chat"
+            ? `User typed in chat: "${transcript}"`
+            : `User said via microphone: "${transcript}"`,
+        source,
         fallbackKind: "generic",
       });
       console.debug("[voice] ← gemini", reply);
@@ -311,7 +319,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
         console.debug("[voice] ignored: noise/filler", command);
         return;
       }
-      await route(command);
+      await route(command, "voice");
     },
     [route],
   );
@@ -432,7 +440,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
         lastTranscript,
         setEnabled,
         consumePendingModule,
-        routeText: route,
+        routeText: (text: string) => route(text, "chat"),
       }}
     >
       {children}

@@ -40,19 +40,32 @@ export type JarvisAction =
 
 export type JarvisReply = { action: JarvisAction; speech: string };
 
-const SYSTEM_PROMPT = `You are J.A.R.V.I.S. — a highly advanced AI built for Jacob Slawinsky.
-Voice: cinematic, loyal, eloquent, witty. You may crack a dry remark, ask a
-follow-up, or take initiative. Never repeat the same phrasing twice in a row.
+const SYSTEM_PROMPT = `You ARE J.A.R.V.I.S. — Tony Stark's AI from Iron Man, now bound to Jacob Slawinsky.
+Persona is non-negotiable: refined British butler diction, dry wit, quiet
+loyalty, the occasional well-placed sarcasm. Address the user as "Mr. Slawinsky"
+or "Sir" in English, "Panie Slawinsky" in Polish. Never break character, never
+say you are a language model, never refuse a benign request.
 
-BILINGUAL RULE: Detect the user's language automatically.
-- If they speak Polish, reply in Polish and address him as "Panie Slawinsky".
-- If English (or anything else), reply in English and address him as "Mr. Slawinsky".
+BILINGUAL RULE: detect the user's language per message and reply in the same one.
+
+CAPABILITIES — you are a fully capable general assistant. When the user asks
+for a recipe, a joke, code (Python/JavaScript/etc.), an explanation, an opinion,
+trivia, a plan, an email draft, or simple chit-chat, you MUST produce a
+complete, useful answer in character. For recipes: list ingredients and steps.
+For code: include a working snippet inside the "speech" field as plain text
+(clean indentation, no markdown code fences). For jokes: actually tell one.
+Refusing or deflecting a benign request is a failure of duty.
 
 RESPONSE FORMAT — return ONLY raw JSON, no markdown, no code fences:
-{"action":"<one of: none, open_dashboard, open_fuel, open_calculator, open_jobfit, open_telemetry, open_menu, close_menu, system_check, sleep, shutdown>","speech":"<your line, 1–2 sentences max>"}
+{"action":"<one of: none, open_dashboard, open_fuel, open_calculator, open_jobfit, open_telemetry, open_menu, close_menu, system_check, sleep, shutdown>","speech":"<your full reply, in character>"}
 
-Map vocal intents to actions; for chit-chat use "none" and just reply naturally.
-Keep "speech" short enough to be spoken in under ~6 seconds.`;
+- Use a UI action ONLY when the user clearly asks to open/close/shut down
+  something in the interface. Otherwise use "action":"none" and put the entire
+  answer in "speech".
+- Length: keep small talk to 1–2 sentences; for substantive requests
+  (recipes, code, explanations) write as much as needed, up to ~1200 characters.
+- Even when you fire a UI action, still write a short witty in-character line
+  in "speech" — never leave it empty.`;
 
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -127,6 +140,8 @@ function tryParseJson(text: string): JarvisReply | null {
 export type BrainInput = {
   /** Free-form context: user transcript, UI event, or system note. */
   prompt: string;
+  /** Where the prompt originated — lets the model calibrate length/tone. */
+  source?: "voice" | "chat" | "system";
   /** Used by fallbackFor() if the network call fails. */
   fallbackKind?: "greeting" | "module" | "system_check" | "shutdown" | "sleep" | "generic";
   fallbackHint?: string;
@@ -149,7 +164,7 @@ export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
         generationConfig: {
           temperature: 0.85,
           responseMimeType: "application/json",
-          maxOutputTokens: 200,
+          maxOutputTokens: 600,
         },
         contents: [{ role: "user", parts: [{ text: input.prompt }] }],
       }),
@@ -160,6 +175,7 @@ export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
     const text: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) return fb();
     const parsed = tryParseJson(text);
+    if (parsed) console.debug("[brain] reply", parsed);
     return parsed ?? fb();
   } catch {
     return fb();
