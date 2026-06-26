@@ -11,6 +11,12 @@ import { useSidebar } from "@/components/ui/sidebar";
 import { audio } from "@/lib/audio/AudioEngine";
 import { HeaderVoiceToggle } from "@/components/jarvis/HeaderVoiceToggle";
 import {
+  ArkRebootProvider,
+  useArkReboot,
+} from "@/components/jarvis/ArkRebootContext";
+import { ArkRebootOverlay } from "@/components/jarvis/ArkRebootOverlay";
+import { RebootButton } from "@/components/jarvis/RebootButton";
+import {
   isFullscreen,
   onFullscreenChange,
   toggleAppFullscreen,
@@ -29,8 +35,23 @@ export function DashboardShell({
   phase: AppPhase;
   onShutdown: () => void;
 }) {
+  return (
+    <ArkRebootProvider>
+      <DashboardShellInner phase={phase} onShutdown={onShutdown} />
+    </ArkRebootProvider>
+  );
+}
+
+function DashboardShellInner({
+  phase,
+  onShutdown,
+}: {
+  phase: AppPhase;
+  onShutdown: () => void;
+}) {
   const { transition } = useRouteTransition();
   const { setOpen, setOpenMobile, isMobile } = useSidebar();
+  const { isDiagnosticRunning } = useArkReboot();
 
   // Bridge for voice commands ("open menu" / "close menu") dispatched via
   // window events. TODO: migrate this off the window event bus onto a
@@ -77,6 +98,8 @@ export function DashboardShell({
             <div className="ml-3 h-4 w-px bg-primary/40" />
             <HeaderVoiceToggle />
             <div className="h-4 w-px bg-primary/40" />
+            <RebootButton />
+            <div className="h-4 w-px bg-primary/40" />
             <FullscreenToggle />
             <div className="h-4 w-px bg-primary/40" />
             <DeactivateButton onClick={onShutdown} />
@@ -85,12 +108,14 @@ export function DashboardShell({
         <main
           className={
             "relative flex-1 overflow-hidden landscape:max-md:overflow-auto" +
-            (transition === "dematerialize" ? " animate-hud-dematerialize" : "")
+            (transition === "dematerialize" ? " animate-hud-dematerialize" : "") +
+            (isDiagnosticRunning ? " ark-dimmed" : "")
           }
         >
           <Outlet />
           <HudRouteTransition />
         </main>
+        <ArkRebootOverlay />
         {phase === "shutdown" && (
           <div
             className="pointer-events-none fixed inset-0 z-[90] bg-black animate-shutdown-flash"

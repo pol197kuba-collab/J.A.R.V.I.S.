@@ -570,3 +570,40 @@
   50%      { transform: scale(1.18); filter: drop-shadow(0 0 38px oklch(0.95 0.24 75 / 1)); }
 }
 .animate-core-speak { animation: core-speak-pulse 0.55s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
+/* ===== Protocol: Ark Reboot ===== */
+.ark-dimmed {
+  transition: opacity 400ms ease, filter 400ms ease;
+  opacity: 0.05;
+  filter: blur(2px) saturate(0.6);
+  pointer-events: none;
+}
+
+@keyframes ark-pulse {
+  0%, 100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 30px oklch(0.85 0.22 65 / 0.7))
+            drop-shadow(0 0 80px oklch(0.9 0.2 60 / 0.5));
+  }
+  50% {
+    transform: scale(1.06);
+    filter: drop-shadow(0 0 60px oklch(0.95 0.24 70 / 1))
+            drop-shadow(0 0 140px oklch(0.9 0.22 60 / 0.8));
+  }
+}
+.animate-ark-pulse { animation: ark-pulse 1s ease-in-out infinite; }
+
+@keyframes ark-flash {
+  0%   { background: oklch(1 0 0 / 0.55); opacity: 1; }
+  40%  { background: oklch(0.92 0.22 70 / 0.35); opacity: 0.7; }
+  100% { background: transparent; opacity: 0; }
+}
+.animate-ark-flash { animation: ark-flash 220ms ease-out forwards; }
+
+@keyframes log-streak {
+  0%   { transform: translateX(-30%); opacity: 0; letter-spacing: 0.15em; }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translateX(30%); opacity: 0; letter-spacing: 0.6em; }
+}
+.animate-log-streak { animation: log-streak 700ms cubic-bezier(0.2, 0.7, 0.3, 1) both; }

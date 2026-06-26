@@ -13,6 +13,7 @@ import type { SubSystemId } from "@/data/subSystems";
 import { speak, speakCancel } from "@/lib/audio/speak";
 import { askJarvis, hasGeminiKey, type JarvisAction } from "@/lib/ai/jarvisBrain";
 import { emitChat, getRecentHistory } from "@/lib/ai/chatBus";
+import { matchesReboot } from "@/lib/ai/rebootPhrases";
 
 type Ctx = {
   enabled: boolean;
@@ -122,7 +123,8 @@ type LocalAction =
   | "menu_close"
   | "system_check"
   | "sleep"
-  | "shutdown";
+  | "shutdown"
+  | "reboot";
 
 const ACTION_MAP: Record<JarvisAction, LocalAction | null> = {
   none: null,
@@ -136,6 +138,7 @@ const ACTION_MAP: Record<JarvisAction, LocalAction | null> = {
   system_check: "system_check",
   sleep: "sleep",
   shutdown: "shutdown",
+  reboot: "reboot",
 };
 
 const COMMANDS: Array<{ re: RegExp; action: LocalAction }> = [
@@ -152,6 +155,7 @@ const COMMANDS: Array<{ re: RegExp; action: LocalAction }> = [
   { re: /\b(system\s+check)\b/i, action: "system_check" },
   { re: /\b(jarvis\s+sleep|standby)\b/i, action: "sleep" },
   { re: /\b(disconnect|shutdown|system\s+shutdown)\b/i, action: "shutdown" },
+  { re: /\b(reboot|restart|reset|zrestartuj|zresetuj|ark\s+reboot)\b/i, action: "reboot" },
 ];
 
 export function VoiceCommandProvider({ children }: { children: ReactNode }) {
@@ -237,6 +241,11 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
           setTimeout(() => speakCancel(), 3200);
           setPhase("shutdown");
           break;
+        case "reboot":
+          // Bridge to ArkRebootProvider (mounted below this provider).
+          window.dispatchEvent(new CustomEvent("jarvis:reboot"));
+          if (spokenLine) speak(spokenLine);
+          break;
       }
     },
     [go, setPhase],
@@ -249,6 +258,16 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
    */
   const route = useCallback(
     async (transcript: string, source: "voice" | "chat" = "voice") => {
+      // Local safety-net: reboot phrases short-circuit Gemini entirely so
+      // the cinematic sequence fires instantly and we never hit 429.
+      if (matchesReboot(transcript)) {
+        emitChat("user", transcript);
+        const line = "Acknowledged. Engaging Protocol: Ark Reboot.";
+        emitChat("jarvis", line);
+        speak(line);
+        window.dispatchEvent(new CustomEvent("jarvis:reboot"));
+        return;
+      }
       // Global 3s throttle so back-to-back voice/chat requests don't pile up.
       const now = Date.now();
       const since = now - lastGeminiAtRef.current;

@@ -17,6 +17,7 @@ import { useHudNavigate } from "./TransitionContext";
 import { MiniArcReactor } from "./MiniArcReactor";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
+import { useArkReboot } from "./ArkRebootContext";
 
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -32,6 +33,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const { go, isTransitioning } = useHudNavigate();
+  const { isDiagnosticRunning } = useArkReboot();
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
@@ -66,7 +68,7 @@ export function AppSidebar() {
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
                       isActive={active}
-                      disabled={isTransitioning}
+                      disabled={isTransitioning || isDiagnosticRunning}
                       onClick={() => {
                         audio.playClick();
                         if (item.url === "/geo-tracking") {

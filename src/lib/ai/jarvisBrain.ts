@@ -36,7 +36,8 @@ export type JarvisAction =
   | "close_menu"
   | "system_check"
   | "sleep"
-  | "shutdown";
+  | "shutdown"
+  | "reboot";
 
 export type JarvisReply = { action: JarvisAction; speech: string };
 
@@ -72,7 +73,11 @@ INVALID examples (do NOT do this):
 \`\`\`
 
 Allowed values for "action": none, open_dashboard, open_fuel, open_calculator,
-open_jobfit, open_telemetry, open_menu, close_menu, system_check, sleep, shutdown.
+open_jobfit, open_telemetry, open_menu, close_menu, system_check, sleep, shutdown, reboot.
+
+- Use "reboot" for any phrasing of: reboot, restart, restart system, reboot system,
+  zrestartuj system, zresetuj, reset, ark reboot. Speech line should acknowledge
+  engaging Protocol: Ark Reboot.
 
 - Use a UI action ONLY when the user clearly asks to open/close/shut down
   something in the interface. Otherwise use "action":"none" and put the entire
