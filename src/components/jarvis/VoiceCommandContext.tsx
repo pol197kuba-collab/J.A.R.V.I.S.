@@ -40,16 +40,30 @@ export const useVoiceCommands = () => useContext(VoiceCtx);
 
 // --- Anti-spam guards (shared between mic + chat) ---------------------------
 const GEMINI_THROTTLE_MS = 3000;
-// Matches "jarvis", "jarvis,", "jarvis...", "dżarwis", "dzarwis" (PL phonetic
-// transcripts the browser STT often returns), case-insensitive, at the very
-// start of the utterance. Capture group 1 = the rest of the command.
-const WAKE_WORD_RE = /^\s*(?:j[ae]rvis|d[zż]arwis|dżarwis)\b[\s,.:;!?-]*(.*)$/i;
+// Speech debounce: how long we wait after the last final segment before
+// flushing the merged buffer to Gemini. Allows "Jarvis ... open ... fuel"
+// to arrive as one phrase instead of three.
+const SPEECH_FLUSH_MS = 900;
+// Safety flush: if interim keeps streaming but no final arrives, force-flush
+// whatever we have after this much silence-from-finals.
+const SPEECH_SAFETY_MS = 1500;
+// Loose wake-word detector: matches the word ANYWHERE in the utterance.
+// We slice off everything up to and INCLUDING the last occurrence so
+// "ok jarvis open fuel" → "open fuel" and "jarvis, jarvis open fuel" →
+// "open fuel" too.
+const WAKE_WORD_RE = /\b(?:j[ae]rvis|d[zż]arwis|dżarwis)\b[\s,.:;!?-]*/gi;
 const NOISE_RE = /^(?:e+|y+m*|u+m+|h+m+|a+h*|o+h*|m+|mhm+|hmm+)$/i;
 
 function stripWakeWord(transcript: string): string | null {
-  const m = transcript.match(WAKE_WORD_RE);
-  if (!m) return null;
-  return (m[1] ?? "").trim();
+  let lastEnd = -1;
+  WAKE_WORD_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = WAKE_WORD_RE.exec(transcript)) !== null) {
+    lastEnd = m.index + m[0].length;
+    if (m.index === WAKE_WORD_RE.lastIndex) WAKE_WORD_RE.lastIndex++;
+  }
+  if (lastEnd < 0) return null;
+  return transcript.slice(lastEnd).trim();
 }
 
 function isNoise(command: string): boolean {
@@ -66,7 +80,12 @@ type AnySpeechRecognition = {
   continuous: boolean;
   interimResults: boolean;
   lang: string;
-  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null;
+  onresult:
+    | ((e: {
+        resultIndex?: number;
+        results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }>;
+      }) => void)
+    | null;
   onend: (() => void) | null;
   onerror: ((e: unknown) => void) | null;
   start: () => void;
@@ -140,6 +159,10 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
   const lastFireMapRef = useRef<Map<string, number>>(new Map());
   // Global throttle for outbound Gemini calls (mic + chat).
   const lastGeminiAtRef = useRef<number>(0);
+  // Throttle queue (max 1) so a follow-up command during the 3s window isn't
+  // silently dropped — it fires as soon as the window expires.
+  const queuedRef = useRef<string | null>(null);
+  const queueTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const consumePendingModule = useCallback(() => {
     const v = pendingRef.current;
@@ -216,10 +239,29 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
     async (transcript: string) => {
       // Global 3s throttle so back-to-back voice/chat requests don't pile up.
       const now = Date.now();
-      if (now - lastGeminiAtRef.current < GEMINI_THROTTLE_MS) {
+      const since = now - lastGeminiAtRef.current;
+      if (since < GEMINI_THROTTLE_MS) {
+        // Queue at most one follow-up; dedup identical transcripts.
+        if (queuedRef.current !== transcript) {
+          queuedRef.current = transcript;
+          console.debug("[voice] throttle: queued", transcript);
+          if (queueTimerRef.current) clearTimeout(queueTimerRef.current);
+          queueTimerRef.current = setTimeout(
+            () => {
+              const q = queuedRef.current;
+              queuedRef.current = null;
+              queueTimerRef.current = null;
+              if (q) void route(q);
+            },
+            GEMINI_THROTTLE_MS - since + 50,
+          );
+        } else {
+          console.debug("[voice] throttle: dropped duplicate", transcript);
+        }
         return;
       }
       lastGeminiAtRef.current = now;
+      console.debug("[voice] → gemini", transcript);
       emitChat("user", transcript);
       // Try regex first for instant response on known commands.
       const local = COMMANDS.find((c) => c.re.test(transcript));
@@ -228,6 +270,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
         prompt: `User said (via microphone): "${transcript}"`,
         fallbackKind: "generic",
       });
+      console.debug("[voice] ← gemini", reply);
       if (reply.speech) emitChat("jarvis", reply.speech);
       const mapped = ACTION_MAP[reply.action];
       if (mapped) {
@@ -250,8 +293,14 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
   const routeFromMic = useCallback(
     async (transcript: string) => {
       const command = stripWakeWord(transcript);
-      if (command === null) return; // No wake word → completely ignored.
-      if (isNoise(command)) return; // Too short / filler sounds → ignored.
+      if (command === null) {
+        console.debug("[voice] ignored: no wake word", transcript);
+        return;
+      }
+      if (isNoise(command)) {
+        console.debug("[voice] ignored: noise/filler", command);
+        return;
+      }
       await route(command);
     },
     [route],
@@ -264,20 +313,61 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
     recRef.current = rec;
     rec.continuous = true;
     rec.interimResults = true;
-    rec.lang = "en-US";
-    rec.onresult = (e) => {
-      let finalText = "";
-      for (let i = 0; i < e.results.length; i++) {
-        const r = e.results[i];
-        if (r.isFinal) finalText += r[0].transcript + " ";
+    rec.lang = "pl-PL";
+
+    // Speech debounce buffer — concatenates final segments and waits for a
+    // short pause before flushing the merged phrase to Gemini.
+    let speechBuffer = "";
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    let safetyTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearTimers = () => {
+      if (flushTimer) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
       }
-      if (!finalText) return;
-      const t = finalText.trim();
-      setLastTranscript(t);
-      void routeFromMic(t);
+      if (safetyTimer) {
+        clearTimeout(safetyTimer);
+        safetyTimer = null;
+      }
+    };
+    const flush = () => {
+      clearTimers();
+      const phrase = speechBuffer.trim();
+      speechBuffer = "";
+      if (!phrase) return;
+      console.debug("[voice] flush", phrase);
+      setLastTranscript(phrase);
+      void routeFromMic(phrase);
+    };
+
+    rec.onresult = (e) => {
+      const start = typeof e.resultIndex === "number" ? e.resultIndex : 0;
+      let appendedFinal = false;
+      let sawInterim = false;
+      for (let i = start; i < e.results.length; i++) {
+        const r = e.results[i];
+        const text = r[0]?.transcript ?? "";
+        if (!text) continue;
+        if (r.isFinal) {
+          speechBuffer += (speechBuffer ? " " : "") + text;
+          appendedFinal = true;
+        } else {
+          sawInterim = true;
+        }
+      }
+      if (appendedFinal) {
+        if (flushTimer) clearTimeout(flushTimer);
+        flushTimer = setTimeout(flush, SPEECH_FLUSH_MS);
+      }
+      if ((appendedFinal || sawInterim) && speechBuffer) {
+        if (safetyTimer) clearTimeout(safetyTimer);
+        safetyTimer = setTimeout(flush, SPEECH_SAFETY_MS);
+      }
     };
     rec.onend = () => {
       setListening(false);
+      // If STT closes while we still have buffered text, flush it before restart.
+      if (speechBuffer) flush();
       if (!stopped) {
         // auto-restart for continuous listen
         try {
@@ -299,6 +389,8 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
     }
     return () => {
       stopped = true;
+      clearTimers();
+      speechBuffer = "";
       try {
         rec.onend = null;
         rec.onresult = null;
