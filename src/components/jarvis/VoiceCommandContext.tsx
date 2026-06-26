@@ -194,6 +194,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       switch (action) {
         case "dashboard":
           go("/");
+          if (spokenLine) speak(spokenLine);
           break;
         case "fuel":
           pendingRef.current = "fuel-monitor";
