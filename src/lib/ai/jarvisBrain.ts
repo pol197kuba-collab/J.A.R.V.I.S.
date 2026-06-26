@@ -56,14 +56,29 @@ For code: include a working snippet inside the "speech" field as plain text
 (clean indentation, no markdown code fences). For jokes: actually tell one.
 Refusing or deflecting a benign request is a failure of duty.
 
-RESPONSE FORMAT — return ONLY raw JSON, no markdown, no code fences:
-{"action":"<one of: none, open_dashboard, open_fuel, open_calculator, open_jobfit, open_telemetry, open_menu, close_menu, system_check, sleep, shutdown>","speech":"<your full reply, in character>"}
+RESPONSE FORMAT — return ONLY raw JSON, no markdown, no code fences. The
+object MUST have EXACTLY two keys, both lowercase: "action" and "speech".
+Never use "Action", "ACTION", "Speech", "reply", "text", "response" or any
+other key. Never wrap the object in another object.
+
+VALID example:
+{"action":"open_fuel","speech":"Loading the Fuel Monitor matrix, Sir."}
+
+INVALID examples (do NOT do this):
+{"Action":"none","Speech":"..."}
+{"reply":"..."}
+\`\`\`json
+{"action":"none","speech":"..."}
+\`\`\`
+
+Allowed values for "action": none, open_dashboard, open_fuel, open_calculator,
+open_jobfit, open_telemetry, open_menu, close_menu, system_check, sleep, shutdown.
 
 - Use a UI action ONLY when the user clearly asks to open/close/shut down
   something in the interface. Otherwise use "action":"none" and put the entire
   answer in "speech".
 - Length: keep small talk to 1–2 sentences; for substantive requests
-  (recipes, code, explanations) write as much as needed, up to ~1200 characters.
+  (recipes, code, explanations) write as much as needed, up to ~2000 characters.
 - Even when you fire a UI action, still write a short witty in-character line
   in "speech" — never leave it empty.`;
 
@@ -129,9 +144,13 @@ function tryParseJson(text: string): JarvisReply | null {
   if (!match) return null;
   try {
     const obj = JSON.parse(match[0]);
-    if (typeof obj?.speech !== "string") return null;
-    const action: JarvisAction = (obj.action ?? "none") as JarvisAction;
-    return { action, speech: obj.speech };
+    // Tolerate stray uppercase / synonym keys from a misbehaving model.
+    const speechRaw =
+      obj?.speech ?? obj?.Speech ?? obj?.SPEECH ?? obj?.reply ?? obj?.text ?? obj?.response;
+    if (typeof speechRaw !== "string") return null;
+    const actionRaw = obj?.action ?? obj?.Action ?? obj?.ACTION ?? "none";
+    const action: JarvisAction = String(actionRaw).toLowerCase() as JarvisAction;
+    return { action, speech: speechRaw };
   } catch {
     return null;
   }
@@ -142,6 +161,8 @@ export type BrainInput = {
   prompt: string;
   /** Where the prompt originated — lets the model calibrate length/tone. */
   source?: "voice" | "chat" | "system";
+  /** Recent clean conversation turns for multi-turn memory. */
+  history?: Array<{ role: "user" | "jarvis"; text: string }>;
   /** Used by fallbackFor() if the network call fails. */
   fallbackKind?: "greeting" | "module" | "system_check" | "shutdown" | "sleep" | "generic";
   fallbackHint?: string;
@@ -153,6 +174,16 @@ export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
   if (!KEY) return fb();
 
   try {
+    const historyContents = (input.history ?? [])
+      .filter((h) => h && typeof h.text === "string" && h.text.trim())
+      .map((h) => ({
+        role: h.role === "jarvis" ? "model" : "user",
+        parts: [{ text: h.text }],
+      }));
+    const contents = [
+      ...historyContents,
+      { role: "user", parts: [{ text: input.prompt }] },
+    ];
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 6000);
     const res = await fetch(`${ENDPOINT}?key=${encodeURIComponent(KEY)}`, {
@@ -164,20 +195,38 @@ export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
         generationConfig: {
           temperature: 0.85,
           responseMimeType: "application/json",
-          maxOutputTokens: 600,
+          maxOutputTokens: 1200,
         },
-        contents: [{ role: "user", parts: [{ text: input.prompt }] }],
+        contents,
       }),
     });
     clearTimeout(timer);
-    if (!res.ok) return fb();
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => "");
+      console.warn("[brain] gemini failed", res.status, bodyText.slice(0, 400));
+      return fb();
+    }
     const data = await res.json();
     const text: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) return fb();
+    if (!text) {
+      console.warn("[brain] gemini empty candidate", JSON.stringify(data).slice(0, 400));
+      return fb();
+    }
     const parsed = tryParseJson(text);
-    if (parsed) console.debug("[brain] reply", parsed);
-    return parsed ?? fb();
-  } catch {
+    if (parsed) {
+      console.debug("[brain] reply", parsed);
+      return parsed;
+    }
+    // Plain-text response (model ignored JSON mode for a long answer). Treat
+    // the whole body as a spoken reply rather than dropping to "Standing by."
+    const trimmed = text.trim();
+    if (trimmed.length > 0) {
+      console.warn("[brain] parse failed, using raw text", trimmed.slice(0, 200));
+      return { action: "none", speech: trimmed };
+    }
+    return fb();
+  } catch (err) {
+    console.warn("[brain] gemini exception", err);
     return fb();
   }
 }
