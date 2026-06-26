@@ -81,4 +81,11 @@ export const COMMAND_DIRECTORY: CommandEntry[] = [
     description: "Initiates the full deactivation sequence and returns to the boot screen.",
     category: "System",
   },
+  {
+    action: "reboot",
+    label: "Ark Reboot",
+    phrases: ["Reboot", "Restart system", "Zrestartuj system", "Ark reboot"],
+    description: "Triggers Protocol: Ark Reboot — a cinematic full-stack module diagnostic sweep, then returns to the dashboard.",
+    category: "System",
+  },
 ];
