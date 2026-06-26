@@ -258,6 +258,16 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
    */
   const route = useCallback(
     async (transcript: string, source: "voice" | "chat" = "voice") => {
+      // Local safety-net: reboot phrases short-circuit Gemini entirely so
+      // the cinematic sequence fires instantly and we never hit 429.
+      if (matchesReboot(transcript)) {
+        emitChat("user", transcript);
+        const line = "Acknowledged. Engaging Protocol: Ark Reboot.";
+        emitChat("jarvis", line);
+        speak(line);
+        window.dispatchEvent(new CustomEvent("jarvis:reboot"));
+        return;
+      }
       // Global 3s throttle so back-to-back voice/chat requests don't pile up.
       const now = Date.now();
       const since = now - lastGeminiAtRef.current;
