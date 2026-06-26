@@ -11,8 +11,8 @@ import { useHudNavigate } from "./TransitionContext";
 import { usePhase } from "./PhaseContext";
 import type { SubSystemId } from "@/data/subSystems";
 import { speak, speakCancel } from "@/lib/audio/speak";
-import { askJarvis, type JarvisAction } from "@/lib/ai/jarvisBrain";
-import { emitChat } from "@/lib/ai/chatBus";
+import { askJarvis, hasGeminiKey, type JarvisAction } from "@/lib/ai/jarvisBrain";
+import { emitChat, getRecentHistory } from "@/lib/ai/chatBus";
 
 type Ctx = {
   enabled: boolean;
@@ -172,6 +172,8 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
   // silently dropped — it fires as soon as the window expires.
   const queuedRef = useRef<string | null>(null);
   const queueTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Show the "no key" system warning at most once per session.
+  const offlineNoticeShownRef = useRef(false);
 
   const consumePendingModule = useCallback(() => {
     const v = pendingRef.current;
@@ -277,8 +279,18 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       console.log("=== SENDING TO GEMINI VOICE CORE ===", cleanCommand);
       console.debug("[voice] → gemini", cleanCommand, `(source=${source})`);
       emitChat("user", transcript);
+      if (!hasGeminiKey() && !offlineNoticeShownRef.current) {
+        offlineNoticeShownRef.current = true;
+        emitChat(
+          "jarvis",
+          "⚠ AI core offline — add Gemini key in Settings to enable natural conversation.",
+        );
+      }
       // Try regex first for instant response on known commands.
       const local = COMMANDS.find((c) => c.re.test(transcript));
+      // Multi-turn memory: feed the last clean turns into Gemini so JARVIS
+      // actually remembers what we just talked about.
+      const history = getRecentHistory(10);
       // Ask Gemini for richer reply + open-ended chat handling.
       const reply = await askJarvis({
         prompt:
@@ -286,6 +298,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
             ? `User typed in chat: "${transcript}"`
             : `User said via microphone: "${transcript}"`,
         source,
+        history,
         fallbackKind: "generic",
       });
       console.debug("[voice] ← gemini", reply);
