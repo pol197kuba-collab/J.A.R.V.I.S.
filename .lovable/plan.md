@@ -1,45 +1,20 @@
+## Change
 
-# Plan — naprawa naturalności rozmowy z JARVIS-em (v2, z wzmocnieniami)
+`src/lib/ai/jarvisBrain.ts` line 11 — replace the model id in the endpoint URL only:
 
-Na screenie odpowiedzi „Understood. Standing by." i „Acknowledged, Mr. Slawinsky." to **dosłowne stringi z `FALLBACK_GENERIC`** w `src/lib/ai/jarvisBrain.ts`. `askJarvis()` nie dociera do Gemini albo nie parsuje odpowiedzi — i robi to całkowicie po cichu (`catch { return fb(); }`). Drugi problem: każde zapytanie idzie **bez historii rozmowy**, więc JARVIS nie pamięta poprzednich tur.
+```
+- https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent
++ https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
+```
 
-## 1. `src/lib/ai/jarvisBrain.ts` — diagnostyka, pamięć, twardszy parser
+No other files reference `gemini-2.0-flash`. No other logic, prompts, UI, or files change.
 
-- Rozszerzyć `BrainInput` o `history?: Array<{role:"user"|"jarvis"; text:string}>`.
-- Mapować historię na `contents` Gemini: `user → role:"user"`, `jarvis → role:"model"`, każda jako `{parts:[{text}]}`. Bieżący prompt doklejany na końcu jako `role:"user"`.
-- **Widoczne błędy** zamiast cichego fallbacku:
-  - `console.warn("[brain] gemini failed", status, bodyText)` przy `!res.ok`.
-  - `console.warn("[brain] parse failed", text)` gdy `tryParseJson` zwraca null.
-- **Twardszy parser**: gdy odpowiedź jest plain-textem bez JSON-a, zwracać `{action:"none", speech:text}` zamiast fallbacku (typowa przyczyna „Acknowledged…" przy „daj przepis na ciasto").
-- `maxOutputTokens` 600 → **1200** (przepisy/kod się ucinały).
-- **System prompt — wzmocnienie #1 (rygor JSON)**: dodać twardą instrukcję, że klucze MUSZĄ być małymi literami i dokładnie `"action"` / `"speech"` — żadnych `Action`, `SPEECH`, `reply`, `text`. Dorzucić przykład poprawny + przykład niepoprawny.
-- System prompt — utrzymać zakaz markdown code-fences, długie odpowiedzi w `speech` jako plain text.
+## Answer about your API key security
 
-## 2. `src/lib/ai/chatBus.ts` — helper pamięci (wzmocnienie #2)
+**No — this app is not connected to Supabase / Lovable Cloud, and your Gemini key is NOT secured server-side.** The entire Gemini integration lives in the frontend:
 
-- Eksport `getRecentHistory(n=10)` czytający `localStorage["jarvis_chat_history"]` (ten sam klucz, którego używa `ChatPanel`).
-- **Filtr czystej historii**: pomijać puste teksty oraz wszystko, co wygląda na surowy JSON z potoku (`{` … `"action"` … `"speech"` … `}`). Do Gemini trafia wyłącznie czysty tekst użytkownika i czysty `speech` asystenta — bez śmieci protokolarnych.
-- Trzymać tylko ostatnie `n` (default 10) wpisów po filtracji.
+- `src/lib/ai/jarvisBrain.ts` calls `https://generativelanguage.googleapis.com/...?key=YOUR_KEY` directly from the browser.
+- The key is read from `localStorage["jarvis_gemini_api_key"]` (pasted in Settings) or `import.meta.env.VITE_GEMINI_API_KEY` — both end up bundled/visible in client JS and visible in DevTools → Network on every request.
+- Anyone using your published site, or inspecting network traffic, can read the key out of the request URL. On a personal device with only your own key in `localStorage`, the practical risk is limited to you, but on the published URL anyone who pastes their own key is also exposing it to themselves only — the architecture itself is client-side.
 
-## 3. `src/components/jarvis/VoiceCommandContext.tsx` — przekaż historię
-
-- Przed wywołaniem `askJarvis` w `route()` wywołać `getRecentHistory(10)` i przekazać jako `history`.
-- Nic więcej nie ruszać (throttle, wake-word, queue, fire — bez zmian).
-
-## 4. Widoczna diagnostyka braku klucza (UX)
-
-- Gdy `hasGeminiKey()` jest `false`, `route()` jednorazowo (per sesja, flag w ref) emituje na chat: „⚠ AI core offline — add Gemini key in Settings to enable natural conversation." Zamiast w nieskończoność produkować „Standing by."
-
-## Poza zakresem
-
-- Throttle (3s mic / 1.5s chat), wake-word, STT lifecycle, sidebar, sub-systems — bez zmian.
-- Migracja na Lovable AI Gateway — nie ruszamy (klucz Gemini wklejany w Settings).
-
-## Weryfikacja
-
-1. Klucz wpięty, „co u ciebie" → JARVIS odpowiada w charakterze.
-2. „daj przepis na ciasto" → pełny przepis ze składnikami i krokami (zachowane `\n` dzięki `whitespace-pre-wrap`).
-3. „a teraz coś bez jajek" → odnosi się do poprzedniego przepisu (test pamięci).
-4. W konsoli `localStorage.getItem("jarvis_chat_history")` po kilku turach — żadnych stringów `{"action":...}` w polach `text` przekazywanych do Gemini.
-5. Brak klucza → jedna systemowa linijka w czacie zamiast cichych fallbacków.
-6. Wymuszony błąd (zły klucz) → w konsoli `[brain] gemini failed 400 …`.
+If you want it actually secured, the proper fix (separate task, not part of this surgical change) is: enable Lovable Cloud, move the Gemini call into a server function / edge function that holds the key as a server secret, and have the browser call your function instead of Google directly. Want me to plan that next?
