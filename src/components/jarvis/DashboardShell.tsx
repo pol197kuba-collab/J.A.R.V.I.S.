@@ -98,6 +98,8 @@ function DashboardShellInner({
             <div className="ml-3 h-4 w-px bg-primary/40" />
             <HeaderVoiceToggle />
             <div className="h-4 w-px bg-primary/40" />
+            <RebootButton />
+            <div className="h-4 w-px bg-primary/40" />
             <FullscreenToggle />
             <div className="h-4 w-px bg-primary/40" />
             <DeactivateButton onClick={onShutdown} />
