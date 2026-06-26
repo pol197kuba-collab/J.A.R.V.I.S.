@@ -1,53 +1,45 @@
-# Plan — Pełna inteligencja konwersacyjna JARVIS-a (zatwierdzony)
 
-Throttle: mikrofon **3 s** (bez zmian), czat **1.5 s** (skrócony, świadome działanie).
+# Plan — naprawa naturalności rozmowy z JARVIS-em (v2, z wzmocnieniami)
 
-## 1. `src/lib/ai/jarvisBrain.ts` — głębszy system prompt + dłuższe odpowiedzi
+Na screenie odpowiedzi „Understood. Standing by." i „Acknowledged, Mr. Slawinsky." to **dosłowne stringi z `FALLBACK_GENERIC`** w `src/lib/ai/jarvisBrain.ts`. `askJarvis()` nie dociera do Gemini albo nie parsuje odpowiedzi — i robi to całkowicie po cichu (`catch { return fb(); }`). Drugi problem: każde zapytanie idzie **bez historii rozmowy**, więc JARVIS nie pamięta poprzednich tur.
 
-- Przepisać `SYSTEM_PROMPT`:
-  - „You ARE J.A.R.V.I.S. — Tony Stark's AI". Brytyjska elegancja, dry wit, lojalność, zwroty „Mr. Slawinsky" / „Sir" (EN) i „Panie Slawinsky" (PL). Zakaz wychodzenia z roli i mówienia, że jest modelem językowym.
-  - Bilingual auto-detect (per wiadomość).
-  - Bezwzględny nakaz **pełnych, merytorycznych odpowiedzi**: przepisy (składniki + kroki), kod (zwięzły działający snippet w polu `speech`, bez code-fence), żarty (faktycznie opowiedzieć), wyjaśnienia, small-talk. Odmowa benign requestu = błąd.
-  - Format JSON `{action, speech}` zachowany. `action` używać **tylko** gdy user wprost prosi o otwarcie/zamknięcie/shutdown; w innych przypadkach `"none"` + cała treść w `speech`.
-  - Długość: small-talk 1–2 zdania; merytoryczne odpowiedzi do ~1200 znaków. Nawet przy akcji UI — krótka linijka w `speech`.
-- `maxOutputTokens` 200 → **600**.
-- `BrainInput` dostaje opcjonalne `source?: "voice" | "chat" | "system"` (przekazywane jako kontekst do user-message, nie do system prompta).
-- Po `tryParseJson` dodać `console.debug("[brain] reply", parsed)`.
+## 1. `src/lib/ai/jarvisBrain.ts` — diagnostyka, pamięć, twardszy parser
 
-## 2. `src/components/jarvis/VoiceCommandContext.tsx` — nie gubić `speech`
+- Rozszerzyć `BrainInput` o `history?: Array<{role:"user"|"jarvis"; text:string}>`.
+- Mapować historię na `contents` Gemini: `user → role:"user"`, `jarvis → role:"model"`, każda jako `{parts:[{text}]}`. Bieżący prompt doklejany na końcu jako `role:"user"`.
+- **Widoczne błędy** zamiast cichego fallbacku:
+  - `console.warn("[brain] gemini failed", status, bodyText)` przy `!res.ok`.
+  - `console.warn("[brain] parse failed", text)` gdy `tryParseJson` zwraca null.
+- **Twardszy parser**: gdy odpowiedź jest plain-textem bez JSON-a, zwracać `{action:"none", speech:text}` zamiast fallbacku (typowa przyczyna „Acknowledged…" przy „daj przepis na ciasto").
+- `maxOutputTokens` 600 → **1200** (przepisy/kod się ucinały).
+- **System prompt — wzmocnienie #1 (rygor JSON)**: dodać twardą instrukcję, że klucze MUSZĄ być małymi literami i dokładnie `"action"` / `"speech"` — żadnych `Action`, `SPEECH`, `reply`, `text`. Dorzucić przykład poprawny + przykład niepoprawny.
+- System prompt — utrzymać zakaz markdown code-fences, długie odpowiedzi w `speech` jako plain text.
 
-- Wyodrębnić stałe throttle:
-  ```ts
-  const GEMINI_VOICE_THROTTLE_MS = 3000;
-  const GEMINI_CHAT_THROTTLE_MS  = 1500;
-  ```
-  `route()` dostaje 2. argument `source: "voice" | "chat"` (default `"voice"` dla kompatybilności) i wybiera próg throttle wg źródła. Queue/dedup logika bez zmian.
-- `routeFromMic` → `route(cmd, "voice")`; `routeText` (publiczne API z kontekstu) → `route(text, "chat")`.
-- Do `askJarvis` przekazywać `source` (`"voice"` / `"chat"`) i odpowiednio sformatowany prompt („User said via microphone:" vs „User typed in chat:").
-- **Klucz**: na końcu `route()` zagwarantować, że `reply.speech` zawsze trafia do TTS — nawet gdy żadna akcja nie pasuje:
-  ```
-  if (mapped)      fire(mapped, reply.speech)
-  else if (local)  fire(local.action, reply.speech)
-  else if (reply.speech) speak(reply.speech)
-  ```
-  (już prawie tak jest — potwierdzić i nie wprowadzać regresji). `emitChat("jarvis", reply.speech)` pozostaje wcześniej, więc czat zawsze widzi pełną odpowiedź.
-- W `fire()` case `"dashboard"`: też wymawiać `spokenLine` jeśli przyszedł (obecnie milczy).
+## 2. `src/lib/ai/chatBus.ts` — helper pamięci (wzmocnienie #2)
 
-## 3. `src/components/jarvis/ChatPanel.tsx` — czytelność długich odpowiedzi
+- Eksport `getRecentHistory(n=10)` czytający `localStorage["jarvis_chat_history"]` (ten sam klucz, którego używa `ChatPanel`).
+- **Filtr czystej historii**: pomijać puste teksty oraz wszystko, co wygląda na surowy JSON z potoku (`{` … `"action"` … `"speech"` … `}`). Do Gemini trafia wyłącznie czysty tekst użytkownika i czysty `speech` asystenta — bez śmieci protokolarnych.
+- Trzymać tylko ostatnie `n` (default 10) wpisów po filtracji.
 
-- Bańce wiadomości dodać `whitespace-pre-wrap break-words` aby przepisy/kod zachowały podziały linii i wcięcia. Bez innych zmian.
+## 3. `src/components/jarvis/VoiceCommandContext.tsx` — przekaż historię
+
+- Przed wywołaniem `askJarvis` w `route()` wywołać `getRecentHistory(10)` i przekazać jako `history`.
+- Nic więcej nie ruszać (throttle, wake-word, queue, fire — bez zmian).
+
+## 4. Widoczna diagnostyka braku klucza (UX)
+
+- Gdy `hasGeminiKey()` jest `false`, `route()` jednorazowo (per sesja, flag w ref) emituje na chat: „⚠ AI core offline — add Gemini key in Settings to enable natural conversation." Zamiast w nieskończoność produkować „Standing by."
 
 ## Poza zakresem
-- Wake-word, debounce, STT lifecycle, sub-systems, sidebar — bez zmian.
-- Lokalne regexy `COMMANDS` zostają jako safety-net dla intencji UI; nigdy nie generują tekstu (tekst zawsze z Gemini lub fallbacku).
-- Brak nowych paczek.
+
+- Throttle (3s mic / 1.5s chat), wake-word, STT lifecycle, sidebar, sub-systems — bez zmian.
+- Migracja na Lovable AI Gateway — nie ruszamy (klucz Gemini wklejany w Settings).
 
 ## Weryfikacja
-1. Głos: „Jarvis, opowiedz mi żart" → żart w czacie + TTS, bez nawigacji.
-2. Czat: „Podaj przepis na szarlotkę" → pełna lista składników + kroki w bańce, TTS czyta.
-3. Czat: „Napisz krótki skrypt w Pythonie liczący liczby pierwsze do 50" → kod w bańce z zachowanymi wcięciami.
-4. „Jarvis open fuel" → otwiera Fuel Monitor + JARVIS mówi swoją linijkę.
-5. Dwie wiadomości czatu w odstępie 1.6 s → obie przechodzą (throttle 1.5 s).
-6. Brak klucza → fallback generyczny działa jak dotąd.
 
-Czekam na build mode, wdrażam od razu.
+1. Klucz wpięty, „co u ciebie" → JARVIS odpowiada w charakterze.
+2. „daj przepis na ciasto" → pełny przepis ze składnikami i krokami (zachowane `\n` dzięki `whitespace-pre-wrap`).
+3. „a teraz coś bez jajek" → odnosi się do poprzedniego przepisu (test pamięci).
+4. W konsoli `localStorage.getItem("jarvis_chat_history")` po kilku turach — żadnych stringów `{"action":...}` w polach `text` przekazywanych do Gemini.
+5. Brak klucza → jedna systemowa linijka w czacie zamiast cichych fallbacków.
+6. Wymuszony błąd (zły klucz) → w konsoli `[brain] gemini failed 400 …`.

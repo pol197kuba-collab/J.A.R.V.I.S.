@@ -36,3 +36,43 @@ export function onChat(handler: (msg: ChatBusMessage) => void) {
   window.addEventListener(EVENT, fn as EventListener);
   return () => window.removeEventListener(EVENT, fn as EventListener);
 }
+
+// ---------------------------------------------------------------------------
+// Conversation memory helper.
+// Reads the same localStorage bucket the ChatPanel persists into and returns
+// the last `n` clean user/jarvis turns so VoiceCommandContext can feed them
+// into Gemini as multi-turn context. Filters out anything that looks like a
+// raw JSON envelope from the system pipeline ({"action":..,"speech":..}) so
+// the model never sees its own protocol leaking back as conversation.
+const HISTORY_KEY = "jarvis_chat_history";
+
+function looksLikeJsonEnvelope(text: string): boolean {
+  const t = text.trim();
+  if (!(t.startsWith("{") && t.endsWith("}"))) return false;
+  return /"action"\s*:/.test(t) && /"speech"\s*:/.test(t);
+}
+
+export function getRecentHistory(
+  n = 10,
+): Array<{ role: "user" | "jarvis"; text: string }> {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    const items = JSON.parse(raw) as ChatBusMessage[];
+    if (!Array.isArray(items)) return [];
+    const clean = items
+      .filter(
+        (m) =>
+          m &&
+          (m.role === "user" || m.role === "jarvis") &&
+          typeof m.text === "string" &&
+          m.text.trim().length > 0 &&
+          !looksLikeJsonEnvelope(m.text),
+      )
+      .map((m) => ({ role: m.role, text: m.text.trim() }));
+    return clean.slice(-n);
+  } catch {
+    return [];
+  }
+}
