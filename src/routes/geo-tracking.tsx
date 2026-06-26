@@ -38,7 +38,10 @@ function GeoTrackingPage() {
 
   useEffect(() => {
     let cancelled = false;
-    let mapInstance: { remove: () => void; setView: (c: [number, number], z: number, o?: unknown) => void } | null = null;
+    let mapInstance: import("leaflet").Map | null = null;
+    let marker: import("leaflet").CircleMarker | null = null;
+    let ro: ResizeObserver | null = null;
+    let rafId = 0;
     (async () => {
       const L = await import("leaflet");
       if (cancelled || !mapEl.current) return;
@@ -50,9 +53,33 @@ function GeoTrackingPage() {
       }).setView([FALLBACK.lat, FALLBACK.lon], 12);
       L.tileLayer(
         "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",
-        { maxZoom: 19 },
+        { maxZoom: 19, subdomains: "abcd" },
       ).addTo(m);
-      mapInstance = m as unknown as typeof mapInstance;
+      mapInstance = m;
+
+      marker = L.circleMarker([FALLBACK.lat, FALLBACK.lon], {
+        radius: 6,
+        color: "#22d3ee",
+        weight: 2,
+        fillColor: "#22d3ee",
+        fillOpacity: 0.85,
+      }).addTo(m);
+
+      // Container often has 0 size on first mount (route transition / flex parent).
+      // Force leaflet to recompute size once layout settles.
+      const kick = () => {
+        if (cancelled || !mapInstance) return;
+        mapInstance.invalidateSize();
+      };
+      rafId = requestAnimationFrame(() => {
+        kick();
+        setTimeout(kick, 60);
+        setTimeout(kick, 300);
+      });
+      if (typeof ResizeObserver !== "undefined" && mapEl.current) {
+        ro = new ResizeObserver(() => kick());
+        ro.observe(mapEl.current);
+      }
 
       if (typeof navigator !== "undefined" && navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
@@ -68,6 +95,8 @@ function GeoTrackingPage() {
             };
             setFix(f);
             m.setView([f.lat, f.lon], 14, { animate: true });
+            marker?.setLatLng([f.lat, f.lon]);
+            m.invalidateSize();
           },
           () => {},
           { enableHighAccuracy: true, timeout: 8000 },
@@ -76,6 +105,8 @@ function GeoTrackingPage() {
     })();
     return () => {
       cancelled = true;
+      if (rafId) cancelAnimationFrame(rafId);
+      ro?.disconnect();
       mapInstance?.remove();
     };
   }, []);
