@@ -4,6 +4,7 @@ import { HudPanel } from "@/components/jarvis/HudPanel";
 import { useAudioSettings } from "@/lib/audio/useAudioSettings";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
+import { CommandDirectory } from "@/components/jarvis/CommandDirectory";
 
 const GEMINI_LS_KEY = "jarvis_gemini_api_key";
 
@@ -131,6 +132,7 @@ function Settings() {
           </p>
         </div>
       </HudPanel>
+      <CommandDirectory index={2} />
       <HudPanel index={2} title="AUDIO // SUBSYSTEM" className="p-5">
         <div className="mt-4 space-y-4">
           <div>
