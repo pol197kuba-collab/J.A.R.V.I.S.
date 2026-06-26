@@ -1,8 +1,9 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { HudTag } from "./HudTag";
 import { useRouteTransition } from "./TransitionContext";
 import { usePhase } from "./PhaseContext";
+import { useArkReboot } from "./ArkRebootContext";
 
 export function HudPanel({
   children,
@@ -23,6 +24,12 @@ export function HudPanel({
 }) {
   const { transition } = useRouteTransition();
   const { phase } = usePhase();
+  const { isDiagnosticRunning } = useArkReboot();
+
+  // Latch "was a reboot active when this panel mounted?" so the cascade
+  // animation plays exactly once and never re-triggers if the reboot
+  // flag flips off mid-animation.
+  const [rebuildOnMount] = useState(() => isDiagnosticRunning);
 
   const materializing =
     transition === "materialize" || phase === "transition_to_dashboard";
@@ -30,16 +37,24 @@ export function HudPanel({
 
   const seed = tagSeed ?? index * 9173 + 31;
 
+  // ~110ms per panel index, capped so longer routes don't drag on.
+  const rebuildDelayMs = Math.min(index * 110, 1800);
+
   return (
     <div
       className={cn(
         "hud-panel relative",
         materializing && "animate-hud-tile-in",
         dematerializing && "animate-tile-dissolve",
+        rebuildOnMount && "animate-fade-in-up",
         className,
       )}
       style={{
-        animationDelay: materializing ? `${index * 110}ms` : undefined,
+        animationDelay: materializing
+          ? `${index * 110}ms`
+          : rebuildOnMount
+            ? `${rebuildDelayMs}ms`
+            : undefined,
       }}
     >
       <span className="hud-corner tl" />
