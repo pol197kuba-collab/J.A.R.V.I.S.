@@ -66,6 +66,18 @@ export function ArkRebootProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => () => clearTimers(), [clearTimers]);
 
+  // External trigger bridge — voice + chat dispatch this since the
+  // VoiceCommandProvider is mounted above us in the tree.
+  useEffect(() => {
+    function onTrigger() {
+      startRebootRef.current?.();
+    }
+    window.addEventListener("jarvis:reboot", onTrigger);
+    return () => window.removeEventListener("jarvis:reboot", onTrigger);
+  }, []);
+
+  const startRebootRef = useRef<() => void>(() => {});
+
   const startReboot = useCallback(() => {
     if (runningRef.current) return;
     runningRef.current = true;
@@ -120,6 +132,7 @@ export function ArkRebootProvider({ children }: { children: ReactNode }) {
       }, totalTourMs + STABILIZE_MS),
     );
   }, [router]);
+  startRebootRef.current = startReboot;
 
   const current = currentStep >= 0 ? REBOOT_SEQUENCE[currentStep] : null;
 
