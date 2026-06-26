@@ -54,22 +54,23 @@ const SPEECH_SAFETY_MS = 1500;
 // Tolerant, non-global wake-word detector. STT often returns Polish phonetic
 // variants without clean word boundaries, so we drop the \b anchors and the
 // `g` flag (no stateful lastIndex across calls).
-const WAKE_WORD_RE = /(jarvis|jervis|d[zż]arwis|[zż]arwis|dziarwis|czarwis)/i;
+const WAKE_WORD_RE = /(jarvis|jervis|dżarwis|dzarwis|żarwis|ziarwis|dziarwis|czarwis)/i;
 const NOISE_RE = /^(?:e+|y+m*|u+m+|h+m+|a+h*|o+h*|m+|mhm+|hmm+)$/i;
 
 function stripWakeWord(transcript: string): string | null {
+  const cleaned = transcript.trim();
   // Find the LAST occurrence by scanning with a fresh global clone, so we
   // never mutate the shared regex's lastIndex.
   const scanner = new RegExp(WAKE_WORD_RE.source, "gi");
   let lastEnd = -1;
   let m: RegExpExecArray | null;
-  while ((m = scanner.exec(transcript)) !== null) {
+  while ((m = scanner.exec(cleaned)) !== null) {
     lastEnd = m.index + m[0].length;
     if (m.index === scanner.lastIndex) scanner.lastIndex++;
   }
   if (lastEnd < 0) return null;
   // Strip leading punctuation/whitespace left after the wake word.
-  return transcript.slice(lastEnd).replace(/^[\s,.:;!?-]+/, "").trim();
+  return cleaned.slice(lastEnd).replace(/^[\s,.:;!?-]+/, "").trim();
 }
 
 function isNoise(command: string): boolean {
@@ -268,7 +269,9 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
         return;
       }
       lastGeminiAtRef.current = now;
-      console.debug("[voice] → gemini", transcript);
+      const cleanCommand = transcript.trim();
+      console.log("=== SENDING TO GEMINI VOICE CORE ===", cleanCommand);
+      console.debug("[voice] → gemini", cleanCommand);
       emitChat("user", transcript);
       // Try regex first for instant response on known commands.
       const local = COMMANDS.find((c) => c.re.test(transcript));
