@@ -94,6 +94,7 @@ type AnySpeechRecognition = {
     | null;
   onend: (() => void) | null;
   onerror: ((e: unknown) => void) | null;
+  onstart: (() => void) | null;
   start: () => void;
   stop: () => void;
 };
@@ -392,7 +393,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
         }
       }
     };
-    rec.onstart = (() => console.log("=== STT ENGINE STARTED ===")) as never;
+    rec.onstart = () => console.log("=== STT ENGINE STARTED ===");
     rec.onerror = (err) => {
       console.error("=== STT ENGINE ERROR ===", err);
       // browser may auto-stop; onend handles restart
