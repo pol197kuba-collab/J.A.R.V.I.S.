@@ -119,7 +119,7 @@ export function ChatPanel() {
               </p>
               <div
                 className={cn(
-                  "rounded-md border px-3 py-2 text-sm leading-relaxed",
+                  "whitespace-pre-wrap break-words rounded-md border px-3 py-2 text-sm leading-relaxed",
                   m.role === "jarvis"
                     ? "border-primary/30 bg-primary/5 text-foreground"
                     : "border-border/60 bg-secondary/40 text-foreground",
