@@ -1,57 +1,49 @@
-## Problem
-Console is empty — no STT logs at all. The recognition object lifecycle events (`onstart`, `onerror`, `onend`) currently have no logging, and `onresult` only logs after the debounce flushes. If the engine never starts (autostart-without-gesture, permission block, or silent throw), we have zero visibility.
+## Plan
 
-Additionally, the wake-word regex uses `\b...\b` word boundaries with global flag plus a persistent `lastIndex`, which is fragile across calls and rejects Polish phonetic variants like "dżarwis" written without the space-boundary STT produces.
+### 1. Voice pipeline cleanup (`src/components/jarvis/VoiceCommandContext.tsx`)
 
-## Fix Plan (single file: `src/components/jarvis/VoiceCommandContext.tsx`)
+- Replace `WAKE_WORD_RE` with the user's exact regex:
+  `const WAKE_WORD_RE = /(jarvis|jervis|dżarwis|dzarwis|żarwis|ziarwis|dziarwis|czarwis)/i;`
+- In `stripWakeWord`: build a global clone, find the LAST match, return `transcript.slice(lastEnd).replace(/^[\s,.:;!?-]+/, "").trim()`. If no match, return `null`.
+- In `flush()`: call `speechBuffer.trim()` (already done) — keep, but also `.trim()` again right before routing.
+- In `routeFromMic`: after `stripWakeWord`, run `.trim()` on the command before the noise check (defensive — already done by stripWakeWord, but make explicit).
+- In `route()`: just before `askJarvis(...)`, add:
+  `console.log("=== SENDING TO GEMINI VOICE CORE ===", transcript);`
+- No changes to throttle, debounce, lifecycle logs, or chat path.
 
-### 1. Lifecycle logging on `recognition`
-Add unconditional logs so we can see the engine's state in DevTools:
+### 2. Central command directory
+
+New file `src/data/commandDirectory.ts` exporting a typed list:
+
 ```ts
-rec.onstart = () => console.log("=== STT ENGINE STARTED ===");
-rec.onerror = (err) => console.error("=== STT ENGINE ERROR ===", err);
-// keep existing onend behavior but log first:
-const prevOnEnd = ...;
-rec.onend = () => { console.log("=== STT ENGINE ENDED ==="); /* existing flush + restart */ };
-```
-Also log at the call site:
-- before `rec.start()`: `console.log("[voice] calling rec.start()")`
-- inside the catch of `rec.start()`: `console.error("[voice] rec.start() threw", e)`
-- when the effect runs / cleans up: `console.log("[voice] effect: enabled=", enabled, "ctor=", !!Ctor)`
-
-### 2. Raw `onresult` visibility
-First line of `onresult`:
-```ts
-console.log("RAW EVENT RECEIVED", e.results, "resultIndex=", e.resultIndex);
-```
-Placed BEFORE the buffer/debounce logic so events are logged even if debounce later swallows them.
-
-### 3. Tolerant wake-word regex
-Replace the global, word-boundary regex with a simple case-insensitive contains-match (no `g` flag, no `lastIndex` state):
-```ts
-const WAKE_WORD_RE = /(jarvis|jervis|d[zż]arwis|[zż]arwis|dziarwis|czarwis)/i;
-```
-Rewrite `stripWakeWord` to find the LAST occurrence via a single non-global scan loop (or `.lastIndexOf` on a normalized string), returning the substring after the match. Fall back to returning the trimmed phrase if no wake word matches (kept null-return for ignore path, same as today).
-
-### 4. Start gesture safety
-Confirm `rec.start()` is invoked from the effect that runs in response to `setEnabled(true)` (which is itself triggered by the user clicking `HeaderVoiceToggle`). This preserves the user-gesture chain. Add a console log if `enabled` flips true but `Ctor` is null (browser unsupported) so the silence is explained.
-
-### 5. Don't let debounce hide events
-Keep the 900ms flush, but the `RAW EVENT RECEIVED` log fires unconditionally before any buffer manipulation. Also log each appended final segment:
-```ts
-if (r.isFinal) console.log("[voice] final segment:", text);
+export type CommandEntry = {
+  action: JarvisAction;        // from jarvisBrain
+  label: string;               // "Open Dashboard"
+  phrases: string[];           // example voice/chat phrases
+  description: string;         // what it does in the UI
+  category: "Navigation" | "Interface" | "System";
+};
+export const COMMAND_DIRECTORY: CommandEntry[] = [ ... ];
 ```
 
-## Out of scope
-- No changes to Gemini routing, throttle, ChatPanel, or UI.
-- No package installs.
+Covers every action: `open_dashboard, open_fuel, open_calculator, open_jobfit, open_telemetry, open_menu, close_menu, system_check, sleep, shutdown`.
 
-## Verification
-After the patch, opening the app and toggling the mic should produce, in order:
-1. `[voice] effect: enabled= true ctor= true`
-2. `[voice] calling rec.start()`
-3. `=== STT ENGINE STARTED ===`
-4. On any sound: `RAW EVENT RECEIVED [...]`
-5. `=== STT ENGINE ENDED ===` (then auto-restart loop)
+### 3. Command Directory UI
 
-If step 3 never appears, the browser is blocking start (permissions or non-gesture context) and we'll know exactly where to look next.
+Add a new section to `src/routes/settings.tsx` (rather than a new route — keeps nav tidy) titled **"JARVIS COMMAND DIRECTORY"** rendered as another `HudPanel`:
+
+- Cyberpunk table: monospace, neon cyan borders, scanline header row.
+- Columns: `Action` (code chip), `Label`, `Example phrases` (chip list), `Description`, `Category` tag.
+- Data sourced from `COMMAND_DIRECTORY` so future additions auto-render.
+- Add a small filter input ("FILTER COMMANDS //") that narrows by label/phrase/description (pure client state).
+
+No new route needed; the existing Settings page already has a HudPanel layout. If a dedicated route is preferred, this can be moved later by importing the same component.
+
+### Out of scope
+- Throttle, debounce, wake-word lifecycle architecture (working per RAW logs).
+- ChatPanel, Gemini brain, or action mapping logic.
+- No new packages.
+
+### Verification
+- Toggle mic, say "Jarvis open fuel" → console shows `=== SENDING TO GEMINI VOICE CORE === open fuel` and the Fuel Monitor opens.
+- `/settings` route shows the new Command Directory panel listing all 10 actions; filter input narrows the rows live.
