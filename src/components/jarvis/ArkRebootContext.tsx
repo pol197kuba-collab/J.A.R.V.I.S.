@@ -15,52 +15,15 @@ export type RebootStep = {
   path: string;
   module: string;
   log: string;
-  narration: string;
 };
 
 export const REBOOT_SEQUENCE: RebootStep[] = [
-  {
-    path: "/",
-    module: "DASHBOARD",
-    log: "[DASHBOARD: CORE REFRESHED // 100%]",
-    narration:
-      "Rebuilding Main Command Dashboard. Securing biometric telemetry.",
-  },
-  {
-    path: "/agent-hub",
-    module: "AGENT HUB",
-    log: "[AGENT_HUB: RECONNECTING NEURAL AGENTS...]",
-    narration:
-      "Activating Neural Agent Hub. Establishing AI core protocols.",
-  },
-  {
-    path: "/sub-systems",
-    module: "SUB-SYSTEMS",
-    log: "[SUB_SYSTEMS: COMPILING LOGISTICS UTILITIES...]",
-    narration:
-      "Compiling system utilities, vehicle fuel matrices, and CV optimization algorithms.",
-  },
-  {
-    path: "/geo-tracking",
-    module: "GEO-TRACKING",
-    log: "[GEO_TRACKING: CALIBRATING SATELLITE LINKS...]",
-    narration:
-      "Calibrating satellite links. Synchronizing real-time coordinate streams.",
-  },
-  {
-    path: "/system-logs",
-    module: "SYSTEM LOGS",
-    log: "[SYSTEM_LOGS: CLEARING BUFFER & STABILIZING...]",
-    narration:
-      "Flushing buffer arrays. Initiating secure encrypted datastream.",
-  },
-  {
-    path: "/settings",
-    module: "SETTINGS",
-    log: "[SETTINGS: RESTORING USER PREFERENCES...]",
-    narration:
-      "Restoring custom user directives and deep interface preferences.",
-  },
+  { path: "/", module: "DASHBOARD", log: "[DASHBOARD: CORE REFRESHED // 100%]" },
+  { path: "/agent-hub", module: "AGENT HUB", log: "[AGENT_HUB: RECONNECTING NEURAL AGENTS...]" },
+  { path: "/sub-systems", module: "SUB-SYSTEMS", log: "[SUB_SYSTEMS: COMPILING LOGISTICS UTILITIES...]" },
+  { path: "/geo-tracking", module: "GEO-TRACKING", log: "[GEO_TRACKING: CALIBRATING SATELLITE LINKS...]" },
+  { path: "/system-logs", module: "SYSTEM LOGS", log: "[SYSTEM_LOGS: CLEARING BUFFER & STABILIZING...]" },
+  { path: "/settings", module: "SETTINGS", log: "[SETTINGS: RESTORING USER PREFERENCES...]" },
 ];
 
 type Ctx = {
@@ -83,9 +46,9 @@ const ArkCtx = createContext<Ctx>({
 
 export const useArkReboot = () => useContext(ArkCtx);
 
-export const STEP_INTERVAL_MS = 2500;
-export const BLACKOUT_MS = 1500;
-export const STABILIZE_MS = 1500;
+const STEP_INTERVAL_MS = 700;
+const BLACKOUT_MS = 1500;
+const STABILIZE_MS = 1300;
 
 export function ArkRebootProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -142,17 +105,14 @@ export function ArkRebootProvider({ children }: { children: ReactNode }) {
           setLogTail((prev) => [...prev.slice(-2), step.log]);
           setFlashKey((k) => k + 1);
           playClickBeep();
-          // Jarvis describes the module as it materializes.
-          speak(step.narration);
         }, at),
       );
     });
 
-    // Phase 3 — Stabilize: pause on SETTINGS, final flash, then home.
+    // Phase 3 — Stabilize and return to dashboard.
     const totalTourMs = BLACKOUT_MS + REBOOT_SEQUENCE.length * STEP_INTERVAL_MS;
     timersRef.current.push(
       setTimeout(() => {
-        setFlashKey((k) => k + 1);
         try {
           router.navigate({ to: "/" });
         } catch {
@@ -161,7 +121,7 @@ export function ArkRebootProvider({ children }: { children: ReactNode }) {
         speak(
           "All systems fully operational, Mr. Slawinsky. Arc Core stability at 100%. We are online.",
         );
-      }, totalTourMs + STABILIZE_MS),
+      }, totalTourMs),
     );
     timersRef.current.push(
       setTimeout(() => {
@@ -169,7 +129,7 @@ export function ArkRebootProvider({ children }: { children: ReactNode }) {
         setCurrentStep(-1);
         setLogTail([]);
         runningRef.current = false;
-      }, totalTourMs + STABILIZE_MS + 900),
+      }, totalTourMs + STABILIZE_MS),
     );
   }, [router]);
   startRebootRef.current = startReboot;

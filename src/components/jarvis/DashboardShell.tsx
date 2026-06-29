@@ -108,7 +108,8 @@ function DashboardShellInner({
         <main
           className={
             "relative flex-1 overflow-hidden landscape:max-md:overflow-auto" +
-            (transition === "dematerialize" ? " animate-hud-dematerialize" : "")
+            (transition === "dematerialize" ? " animate-hud-dematerialize" : "") +
+            (isDiagnosticRunning ? " ark-dimmed" : "")
           }
         >
           <Outlet />
