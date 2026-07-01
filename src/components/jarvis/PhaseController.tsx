@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 
 import { AppSidebar } from "@/components/jarvis/AppSidebar";
 import { BootSequence } from "@/components/jarvis/BootSequence";
@@ -10,6 +11,7 @@ import { TransitionProvider } from "@/components/jarvis/TransitionContext";
 import { VoiceCommandProvider } from "@/components/jarvis/VoiceCommandContext";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { audio } from "@/lib/audio/AudioEngine";
+
 
 // Suppress unused-import warning — kept so refactors don't drop the dep.
 void AppSidebar;
