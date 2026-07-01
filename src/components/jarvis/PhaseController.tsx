@@ -85,7 +85,12 @@ export function PhaseController() {
           />
         )}
         {phase === "login_screen" && (
-          <StarkLogin onGranted={() => setPhase("initializing")} />
+          <StarkLogin
+            onGranted={() => {
+              void navigate({ to: "/" });
+              setPhase("initializing");
+            }}
+          />
         )}
         {phase === "initializing" && (
           <BootSequence
