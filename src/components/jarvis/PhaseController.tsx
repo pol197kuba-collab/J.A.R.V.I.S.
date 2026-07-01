@@ -22,7 +22,9 @@ void AppSidebar;
  * routing shell.
  */
 export function PhaseController() {
+  const navigate = useNavigate();
   const [phase, setPhase] = useState<AppPhase>("booting");
+
 
   // iOS / Safari autoplay policy: unlock AudioContext on the first real
   // user gesture. Until then, audio.* calls no-op silently (no warnings).
