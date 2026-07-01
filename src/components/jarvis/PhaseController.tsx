@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 
 import { AppSidebar } from "@/components/jarvis/AppSidebar";
 import { BootSequence } from "@/components/jarvis/BootSequence";
@@ -20,6 +21,7 @@ void AppSidebar;
  * routing shell.
  */
 export function PhaseController() {
+  const navigate = useNavigate();
   const [phase, setPhase] = useState<AppPhase>("booting");
 
   // iOS / Safari autoplay policy: unlock AudioContext on the first real
@@ -81,7 +83,12 @@ export function PhaseController() {
           />
         )}
         {phase === "login_screen" && (
-          <StarkLogin onGranted={() => setPhase("initializing")} />
+          <StarkLogin
+            onGranted={() => {
+              void navigate({ to: "/" });
+              setPhase("initializing");
+            }}
+          />
         )}
         {phase === "initializing" && (
           <BootSequence
