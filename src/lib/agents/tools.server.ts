@@ -38,14 +38,97 @@ export type Tool = {
 };
 
 // ---------------------------------------------------------------------------
-// web_search — Wikipedia OpenSearch (free, no key, permissive)
+// web_search — DuckDuckGo HTML (free, no key) with Wikipedia fallback
 // ---------------------------------------------------------------------------
+
+type SearchResult = { title: string; description: string; url: string };
+
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ");
+}
+
+async function searchDuckDuckGo(query: string): Promise<SearchResult[]> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(
+      `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
+      {
+        signal: ctrl.signal,
+        headers: {
+          "user-agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        },
+      },
+    );
+    if (!res.ok) return [];
+    const html = await res.text();
+    const results: SearchResult[] = [];
+    const linkRe =
+      /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+    const snippetRe =
+      /<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
+    const snippets: string[] = [];
+    let sm: RegExpExecArray | null;
+    while ((sm = snippetRe.exec(html)) !== null) {
+      snippets.push(decodeEntities(sm[1].replace(/<[^>]+>/g, "")).trim());
+    }
+    let m: RegExpExecArray | null;
+    while ((m = linkRe.exec(html)) !== null && results.length < 5) {
+      let url = m[1];
+      // DDG wraps URLs: //duckduckgo.com/l/?uddg=<encoded>&rut=...
+      const uddg = url.match(/[?&]uddg=([^&]+)/);
+      if (uddg) url = decodeURIComponent(uddg[1]);
+      if (url.startsWith("//")) url = "https:" + url;
+      if (!/^https?:\/\//i.test(url)) continue;
+      const title = decodeEntities(m[2].replace(/<[^>]+>/g, "")).trim();
+      if (!title) continue;
+      results.push({
+        title,
+        description: snippets[results.length] ?? "",
+        url,
+      });
+    }
+    return results;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function searchWikipedia(query: string, lang: "en" | "pl"): Promise<SearchResult[]> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    // Full-text search (srsearch) handles natural-language queries far better
+    // than opensearch title matching.
+    const url = `https://${lang}.wikipedia.org/w/api.php?action=query&list=search&srlimit=5&format=json&origin=*&srsearch=${encodeURIComponent(query)}`;
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      query?: { search?: Array<{ title: string; snippet: string }> };
+    };
+    return (data.query?.search ?? []).map((r) => ({
+      title: r.title,
+      description: decodeEntities(r.snippet.replace(/<[^>]+>/g, "")),
+      url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(r.title.replace(/ /g, "_"))}`,
+    }));
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const webSearch: Tool = {
   declaration: {
     name: "web_search",
     description:
-      "Search the web for a topic and return up to 5 relevant results (title + short description + URL). Use for factual questions, current events, quick research. Language auto-detected — pass a Polish query for Polish results.",
+      "Search the web for a topic and return up to 5 relevant results (title + short description + URL). Use for factual questions, current events, quick research. Keep the query short and keyword-focused (e.g. 'best AI agents 2026'), not a full sentence.",
     parameters: {
       type: "object",
       properties: {
@@ -59,27 +142,44 @@ const webSearch: Tool = {
     const query = String(args.query ?? "").trim();
     if (!query) return { error: "empty_query" };
     const lang = String(args.lang ?? "en").toLowerCase() === "pl" ? "pl" : "en";
-    const url = `https://${lang}.wikipedia.org/w/api.php?action=opensearch&limit=5&namespace=0&format=json&origin=*&search=${encodeURIComponent(query)}`;
     try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 8000);
-      const res = await fetch(url, { signal: ctrl.signal });
-      clearTimeout(timer);
-      if (!res.ok) return { error: `http_${res.status}` };
-      const data = (await res.json()) as [string, string[], string[], string[]];
-      const [, titles, descriptions, urls] = data;
-      const results = titles.map((t, i) => ({
-        title: t,
-        description: descriptions[i] ?? "",
-        url: urls[i] ?? "",
-      }));
-      await ctx.logEvent("info", "tool.web_search", `${query} → ${results.length} results`, {
+      let results: SearchResult[] = [];
+      let engine = "duckduckgo";
+      try {
+        results = await searchDuckDuckGo(query);
+      } catch {
+        results = [];
+      }
+      if (results.length === 0) {
+        engine = "wikipedia";
+        try {
+          results = await searchWikipedia(query, lang);
+        } catch {
+          results = [];
+        }
+      }
+      await ctx.logEvent(
+        results.length > 0 ? "info" : "warn",
+        "tool.web_search",
+        `${query} → ${results.length} results (${engine})`,
+        {
         query,
         lang,
+        engine,
         count: results.length,
       } as Json);
+      if (results.length === 0) {
+        return {
+          query,
+          results: [],
+          hint: "No results. Retry with a shorter, keyword-only query (2-4 words).",
+        };
+      }
       return { query, lang, results };
     } catch (err) {
+      await ctx.logEvent("error", "tool.web_search", err instanceof Error ? err.message : String(err), {
+        query,
+      } as Json);
       return { error: err instanceof Error ? err.message : String(err) };
     }
   },
