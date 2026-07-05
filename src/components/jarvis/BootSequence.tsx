@@ -112,8 +112,8 @@ export function BootSequence({
             ))}
           </div>
 
-          {/* Pseudo logs */}
-          <div className="absolute left-8 top-1/2 hidden w-[280px] -translate-y-1/2 space-y-1 font-mono text-[10px] leading-relaxed text-primary/70 md:block">
+          {/* Pseudo logs — only on very wide screens to avoid overlap with the center bar */}
+          <div className="pointer-events-none absolute left-4 top-1/2 hidden w-[240px] -translate-y-1/2 space-y-1 font-mono text-[10px] leading-relaxed text-primary/70 xl:block">
             {bootLogs.slice(0, Math.floor(progress / 8)).map((l, i) => (
               <p key={i} className="animate-fade-up">
                 <span className="text-muted-foreground">{l.ts}</span>{" "}
@@ -121,7 +121,7 @@ export function BootSequence({
               </p>
             ))}
           </div>
-          <div className="absolute right-8 top-1/2 hidden w-[280px] -translate-y-1/2 space-y-1 text-right font-mono text-[10px] leading-relaxed text-primary/70 md:block">
+          <div className="pointer-events-none absolute right-4 top-1/2 hidden w-[240px] -translate-y-1/2 space-y-1 text-right font-mono text-[10px] leading-relaxed text-primary/70 xl:block">
             {bootLogs.slice(6, 6 + Math.floor(progress / 8)).map((l, i) => (
               <p key={i} className="animate-fade-up">
                 <span className="text-foreground">{l.tag}</span> {l.msg}
@@ -130,11 +130,11 @@ export function BootSequence({
           </div>
 
           {/* Center progress bar */}
-          <div className="absolute left-1/2 top-1/2 w-[min(560px,80vw)] -translate-x-1/2 -translate-y-1/2 space-y-4 text-center">
-            <p className="font-display animate-hud-flicker text-[10px] uppercase tracking-[0.6em] text-primary/80">
+          <div className="absolute left-1/2 top-1/2 w-[min(560px,86vw)] -translate-x-1/2 -translate-y-1/2 space-y-3 text-center sm:space-y-4">
+            <p className="font-display animate-hud-flicker text-[8px] uppercase tracking-[0.4em] text-primary/80 sm:text-[10px] sm:tracking-[0.6em]">
               Stark Industries // Secure Boot
             </p>
-            <p className="font-display text-2xl uppercase tracking-[0.4em] text-foreground">
+            <p className="font-display text-sm uppercase tracking-[0.25em] text-foreground sm:text-2xl sm:tracking-[0.4em]">
               INITIATING SYSTEM 1<span className="animate-blink">....</span>
             </p>
             <div className="relative h-1 w-full overflow-hidden border border-primary/50 bg-primary/5">
@@ -143,8 +143,8 @@ export function BootSequence({
                 style={{ width: `${progress}%`, boxShadow: "var(--glow-primary)" }}
               />
             </div>
-            <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-              {progress.toFixed(0)}% &nbsp;//&nbsp; HANDSHAKE PROTOCOL · ARC-NET · BIOMETRIC LOCK
+            <p className="font-mono text-[8px] uppercase tracking-widest text-muted-foreground sm:text-[10px]">
+              {progress.toFixed(0)}% &nbsp;//&nbsp; <span className="hidden sm:inline">HANDSHAKE PROTOCOL · ARC-NET · BIOMETRIC LOCK</span><span className="sm:hidden">HANDSHAKE · ARC-NET</span>
             </p>
           </div>
         </div>
