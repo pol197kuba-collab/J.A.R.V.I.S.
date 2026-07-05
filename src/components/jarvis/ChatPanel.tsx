@@ -1,11 +1,25 @@
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { Send } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { onChat, type ChatBusMessage } from "@/lib/ai/chatBus";
+import { emitChat, getRecentHistory, onChat, type ChatBusMessage } from "@/lib/ai/chatBus";
 import { useVoiceCommands } from "./VoiceCommandContext";
+import { runAgent } from "@/lib/agents/runtime.functions";
+import { speak } from "@/lib/audio/speak";
 
 const STORAGE_KEY = "jarvis_chat_history";
 const MAX_HISTORY = 60;
+const SERVER_KEY_LINKED_LS_KEY = "jarvis_server_gemini_linked";
+
+function hasServerKey(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(SERVER_KEY_LINKED_LS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 function loadHistory(): ChatBusMessage[] {
   if (typeof window === "undefined") return [];
@@ -35,6 +49,9 @@ export function ChatPanel() {
   const [typing, setTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { routeText } = useVoiceCommands();
+  const qc = useQueryClient();
+  const runAgentFn = useServerFn(runAgent);
+  const noticeShownRef = useRef(false);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -60,10 +77,39 @@ export function ChatPanel() {
     setInput("");
     setTyping(true);
     try {
-      // Route through the same Gemini → action pipeline used for voice
-      // commands. It emits both user + jarvis messages onto the chat bus
-      // AND physically fires UI actions (open_fuel, shutdown, etc.).
-      await routeText(text);
+      // Prefer the server Agent Runtime when the user has linked a Gemini
+      // key on the server — that's the only path with tool-calling
+      // (web_search, fetch_url, save_note). Otherwise fall back to the
+      // voice pipeline which handles UI intents + basic chit-chat.
+      if (hasServerKey()) {
+        emitChat("user", text);
+        const history = getRecentHistory(10);
+        try {
+          const result = await runAgentFn({
+            data: { agentSlug: "orchestrator", input: text, history },
+          });
+          const reply =
+            result.status === "done" && result.output
+              ? result.output
+              : `⚠ Agent error: ${result.error ?? "unknown"}`;
+          emitChat("jarvis", reply);
+          if (result.status === "done") speak(reply);
+          // Tool-calling may have created notes → refresh widget.
+          qc.invalidateQueries({ queryKey: ["notes", "list"] });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          emitChat("jarvis", `⚠ Agent runtime failed: ${msg}`);
+        }
+      } else {
+        await routeText(text);
+        if (!noticeShownRef.current) {
+          noticeShownRef.current = true;
+          emitChat(
+            "jarvis",
+            "⚠ Tool-calling offline — save your Gemini key in Settings → Agent Runtime to unlock web_search / save_note / fetch_url.",
+          );
+        }
+      }
     } finally {
       setTyping(false);
     }
