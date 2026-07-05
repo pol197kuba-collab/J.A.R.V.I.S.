@@ -92,7 +92,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
     mode === "forgot" ? "RECOVER CIPHER" : "SECURE LOGIN";
 
   return (
-    <div className="fixed inset-0 z-[100] flex h-screen w-full items-center justify-center overflow-hidden bg-black text-primary">
+    <div className="fixed inset-0 z-[100] flex h-[100dvh] w-full items-center justify-center overflow-y-auto bg-black text-primary">
       <div
         className="animate-grid-pan pointer-events-none absolute inset-0 opacity-30"
         style={{ backgroundImage: "var(--grid-bg)", backgroundSize: "40px 40px" }}
@@ -104,24 +104,24 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
         }}
       />
 
-      <div className={cn("relative z-10 flex max-h-[100dvh] w-full flex-col items-center gap-1 px-3 sm:gap-2", leaving && "animate-screen-fracture")}>
+      <div className={cn("relative z-10 flex max-h-[100dvh] w-full flex-col items-center gap-1 px-3 sm:gap-2 short:max-h-none short:flex-row short:justify-center short:gap-6 short:py-2", leaving && "animate-screen-fracture")}>
         {/* Raised reactor */}
-        <div className="-mb-10 max-md:-mb-6 landscape:max-md:-mb-6">
+        <div className="-mb-10 max-md:-mb-6 landscape:max-md:-mb-6 short:mb-0 short:shrink-0">
           <ArcReactorTriangle raised />
         </div>
 
         <form
           onSubmit={submit}
           className={cn(
-            "hud-panel relative w-[min(420px,92vw)] space-y-3 p-4 animate-fade-up sm:space-y-4 sm:p-6 max-md:space-y-2 max-md:p-3 landscape:max-md:w-[min(360px,75vw)] landscape:max-md:space-y-1.5 landscape:max-md:p-2.5",
+            "hud-panel relative w-[min(420px,92vw)] space-y-3 p-4 animate-fade-up sm:space-y-4 sm:p-6 max-md:space-y-2 max-md:p-3 landscape:max-md:w-[min(360px,75vw)] landscape:max-md:space-y-1.5 landscape:max-md:p-2.5 short:w-[min(400px,55vw)] short:space-y-1.5 short:p-3",
             error && "animate-deny-pulse",
           )}
         >
           <div className="text-center">
-            <p className="font-display text-[10px] uppercase tracking-[0.5em] text-primary/80 max-md:text-[8px] max-md:tracking-[0.3em]">
+            <p className="font-display text-[10px] uppercase tracking-[0.5em] text-primary/80 max-md:text-[8px] max-md:tracking-[0.3em] short:text-[8px] short:tracking-[0.3em]">
               Stark Industries // Mark VII
             </p>
-            <h2 className="font-display mt-1 text-lg tracking-[0.3em] text-foreground sm:mt-2 sm:text-xl max-md:text-base max-md:tracking-[0.2em]">
+            <h2 className="font-display mt-1 text-lg tracking-[0.3em] text-foreground sm:mt-2 sm:text-xl max-md:text-base max-md:tracking-[0.2em] short:mt-0.5 short:text-sm short:tracking-[0.2em]">
               {title}
             </h2>
           </div>
@@ -138,7 +138,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="operator@stark.industries"
-              className="w-full border border-primary/40 bg-background/60 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none max-md:px-2 max-md:py-1.5 max-md:text-xs landscape:max-md:py-1"
+              className="w-full border border-primary/40 bg-background/60 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none max-md:px-2 max-md:py-1.5 max-md:text-xs landscape:max-md:py-1 short:px-2 short:py-1 short:text-xs"
             />
           </label>
 
@@ -155,7 +155,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full border border-primary/40 bg-background/60 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none max-md:px-2 max-md:py-1.5 max-md:text-xs landscape:max-md:py-1"
+                className="w-full border border-primary/40 bg-background/60 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none max-md:px-2 max-md:py-1.5 max-md:text-xs landscape:max-md:py-1 short:px-2 short:py-1 short:text-xs"
               />
             </label>
           )}
@@ -180,7 +180,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
           <button
             type="submit"
             disabled={loading}
-            className="group relative w-full font-display cursor-pointer border border-primary/70 bg-primary/10 py-2.5 text-sm uppercase tracking-[0.4em] text-primary transition hover:bg-primary/20 hover:text-foreground sm:py-3 max-md:py-2 max-md:text-xs max-md:tracking-[0.3em] landscape:max-md:py-1.5"
+            className="group relative w-full font-display cursor-pointer border border-primary/70 bg-primary/10 py-2.5 text-sm uppercase tracking-[0.4em] text-primary transition hover:bg-primary/20 hover:text-foreground sm:py-3 max-md:py-2 max-md:text-xs max-md:tracking-[0.3em] landscape:max-md:py-1.5 short:py-1.5 short:text-xs short:tracking-[0.3em]"
             style={{ boxShadow: "var(--glow-primary)" }}
           >
             <span className="absolute -left-px -top-px h-2 w-2 border-l border-t border-primary" />
@@ -205,7 +205,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
                 type="button"
                 onClick={google}
                 disabled={loading}
-                className="font-display w-full cursor-pointer border border-primary/40 bg-background/40 py-2.5 text-xs uppercase tracking-[0.3em] text-foreground transition hover:border-primary hover:bg-primary/10 max-md:py-2 max-md:text-[10px] landscape:max-md:py-1.5"
+                className="font-display w-full cursor-pointer border border-primary/40 bg-background/40 py-2.5 text-xs uppercase tracking-[0.3em] text-foreground transition hover:border-primary hover:bg-primary/10 max-md:py-2 max-md:text-[10px] landscape:max-md:py-1.5 short:py-1.5 short:text-[10px]"
               >
                 ▸ Continue with Google
               </button>
