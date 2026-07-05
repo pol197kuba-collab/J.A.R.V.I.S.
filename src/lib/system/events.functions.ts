@@ -5,13 +5,14 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
+import type { Json } from "@/integrations/supabase/types";
 
 export type SystemEvent = {
   id: string;
   level: "info" | "warn" | "error" | "debug";
   source: string;
   message: string;
-  meta: Record<string, unknown>;
+  meta: Json;
   createdAt: string;
 };
 
@@ -36,7 +37,7 @@ export const listSystemEvents = createServerFn({ method: "GET" })
       level: r.level as SystemEvent["level"],
       source: r.source,
       message: r.message,
-      meta: (r.meta ?? {}) as Record<string, unknown>,
+      meta: (r.meta ?? {}) as Json,
       createdAt: r.created_at,
     }));
   });
@@ -45,7 +46,7 @@ const EmitInput = z.object({
   level: z.enum(["info", "warn", "error", "debug"]).optional().default("info"),
   source: z.string().min(1).max(60),
   message: z.string().min(1).max(1000),
-  meta: z.record(z.string(), z.unknown()).optional(),
+  meta: z.record(z.string(), z.any()).optional(),
 });
 
 export const emitSystemEvent = createServerFn({ method: "POST" })
@@ -58,7 +59,7 @@ export const emitSystemEvent = createServerFn({ method: "POST" })
       level: data.level,
       source: data.source,
       message: data.message,
-      meta: data.meta ?? {},
+      meta: (data.meta ?? {}) as Json,
     });
     if (error) throw new Error(error.message);
     return { ok: true as const };
