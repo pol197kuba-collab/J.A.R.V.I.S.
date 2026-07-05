@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SystemLogsRouteImport } from './routes/system-logs'
 import { Route as SubSystemsRouteImport } from './routes/sub-systems'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as GeoTrackingRouteImport } from './routes/geo-tracking'
 import { Route as AgentHubRouteImport } from './routes/agent-hub'
 import { Route as IndexRouteImport } from './routes/index'
@@ -29,6 +30,11 @@ const SubSystemsRoute = SubSystemsRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GeoTrackingRoute = GeoTrackingRouteImport.update({
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
   '/geo-tracking': typeof GeoTrackingRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
   '/geo-tracking': typeof GeoTrackingRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
@@ -68,6 +76,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
   '/geo-tracking': typeof GeoTrackingRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
@@ -78,6 +87,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agent-hub'
     | '/geo-tracking'
+    | '/reset-password'
     | '/settings'
     | '/sub-systems'
     | '/system-logs'
@@ -86,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agent-hub'
     | '/geo-tracking'
+    | '/reset-password'
     | '/settings'
     | '/sub-systems'
     | '/system-logs'
@@ -94,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agent-hub'
     | '/geo-tracking'
+    | '/reset-password'
     | '/settings'
     | '/sub-systems'
     | '/system-logs'
@@ -103,6 +115,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgentHubRoute: typeof AgentHubRoute
   GeoTrackingRoute: typeof GeoTrackingRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   SettingsRoute: typeof SettingsRoute
   SubSystemsRoute: typeof SubSystemsRoute
   SystemLogsRoute: typeof SystemLogsRoute
@@ -129,6 +142,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/geo-tracking': {
@@ -159,6 +179,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgentHubRoute: AgentHubRoute,
   GeoTrackingRoute: GeoTrackingRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   SettingsRoute: SettingsRoute,
   SubSystemsRoute: SubSystemsRoute,
   SystemLogsRoute: SystemLogsRoute,
