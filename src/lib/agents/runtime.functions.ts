@@ -1,0 +1,239 @@
+// Agent Runtime — server-side functions.
+//
+// Zgodnie z CODEX.md: to jest fundament pod Orchestratora. Na tym etapie
+// obsługujemy jednego agenta ("orchestrator") i pojedynczy krok wywołania
+// LLM (bez multi-step tool loopu). Pamięć krótkoterminowa przekazywana jest
+// w polu `history`, żeby nie budować jeszcze konwersacji w DB.
+//
+// Wszystkie funkcje są chronione przez requireSupabaseAuth — klucz Gemini
+// nigdy nie opuszcza serwera.
+
+import { createServerFn } from "@tanstack/react-start";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { z } from "zod";
+
+// ---------------------------------------------------------------------------
+// Types shared with the client
+// ---------------------------------------------------------------------------
+
+export type AgentSummary = {
+  id: string;
+  slug: string;
+  name: string;
+  role: string | null;
+  description: string | null;
+  model: string | null;
+  status: string;
+  isEnabled: boolean;
+  activeRuns: number;
+  lastRunAt: string | null;
+};
+
+export type AgentRunResult = {
+  runId: string;
+  status: "done" | "error";
+  output: string;
+  error?: string;
+  tokensIn?: number;
+  tokensOut?: number;
+  latencyMs?: number;
+};
+
+// ---------------------------------------------------------------------------
+// user_secrets (Gemini API key)
+// ---------------------------------------------------------------------------
+
+export const getGeminiKeyStatus = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { data, error } = await supabase
+      .from("user_secrets")
+      .select("gemini_api_key")
+      .eq("owner_id", userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const key = data?.gemini_api_key?.trim() ?? "";
+    return {
+      linked: key.length > 0,
+      // Never return the raw value. Just a masked preview so the UI can hint.
+      preview: key ? `••••••••${key.slice(-4)}` : null,
+    };
+  });
+
+const SaveKeyInput = z.object({ key: z.string().min(1).max(512) });
+
+export const saveGeminiKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => SaveKeyInput.parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { error } = await supabase
+      .from("user_secrets")
+      .upsert(
+        { owner_id: userId, gemini_api_key: data.key.trim() },
+        { onConflict: "owner_id" },
+      );
+    if (error) throw new Error(error.message);
+    return { ok: true as const };
+  });
+
+export const deleteGeminiKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { error } = await supabase
+      .from("user_secrets")
+      .delete()
+      .eq("owner_id", userId);
+    if (error) throw new Error(error.message);
+    return { ok: true as const };
+  });
+
+// ---------------------------------------------------------------------------
+// user_settings
+// ---------------------------------------------------------------------------
+
+export type UserSettings = {
+  chatRouting: "client" | "server";
+  defaultModel: string;
+  voiceLanguage: "auto" | "en" | "pl";
+  wakeWordEnabled: boolean;
+};
+
+const DEFAULT_SETTINGS: UserSettings = {
+  chatRouting: "client",
+  defaultModel: "gemini-2.5-flash",
+  voiceLanguage: "auto",
+  wakeWordEnabled: true,
+};
+
+export const getUserSettings = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<UserSettings> => {
+    const { supabase, userId } = context;
+    const { data, error } = await supabase
+      .from("user_settings")
+      .select("chat_routing, default_model, voice_language, wake_word_enabled")
+      .eq("owner_id", userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return DEFAULT_SETTINGS;
+    return {
+      chatRouting: data.chat_routing as "client" | "server",
+      defaultModel: data.default_model,
+      voiceLanguage: data.voice_language as "auto" | "en" | "pl",
+      wakeWordEnabled: data.wake_word_enabled,
+    };
+  });
+
+const UpdateSettingsInput = z
+  .object({
+    chatRouting: z.enum(["client", "server"]).optional(),
+    defaultModel: z.enum(["gemini-2.5-flash", "gemini-2.5-pro"]).optional(),
+    voiceLanguage: z.enum(["auto", "en", "pl"]).optional(),
+    wakeWordEnabled: z.boolean().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, "at least one field required");
+
+export const updateUserSettings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => UpdateSettingsInput.parse(input))
+  .handler(async ({ data, context }): Promise<UserSettings> => {
+    const { supabase, userId } = context;
+    const patch: Record<string, unknown> = { owner_id: userId };
+    if (data.chatRouting !== undefined) patch.chat_routing = data.chatRouting;
+    if (data.defaultModel !== undefined) patch.default_model = data.defaultModel;
+    if (data.voiceLanguage !== undefined) patch.voice_language = data.voiceLanguage;
+    if (data.wakeWordEnabled !== undefined) patch.wake_word_enabled = data.wakeWordEnabled;
+    const { data: row, error } = await supabase
+      .from("user_settings")
+      .upsert(patch, { onConflict: "owner_id" })
+      .select("chat_routing, default_model, voice_language, wake_word_enabled")
+      .single();
+    if (error) throw new Error(error.message);
+    return {
+      chatRouting: row.chat_routing as "client" | "server",
+      defaultModel: row.default_model,
+      voiceLanguage: row.voice_language as "auto" | "en" | "pl",
+      wakeWordEnabled: row.wake_word_enabled,
+    };
+  });
+
+// ---------------------------------------------------------------------------
+// Agent registry
+// ---------------------------------------------------------------------------
+
+export const listAgents = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<AgentSummary[]> => {
+    const { supabase, userId } = context;
+    const { data: agents, error } = await supabase
+      .from("agents")
+      .select("id, slug, name, role, description, model, status, is_enabled")
+      .eq("owner_id", userId)
+      .order("created_at", { ascending: true });
+    if (error) throw new Error(error.message);
+    if (!agents || agents.length === 0) return [];
+
+    const { data: runs } = await supabase
+      .from("agent_runs")
+      .select("agent_id, status, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    return agents.map((a) => {
+      const agentRuns = (runs ?? []).filter((r) => r.agent_id === a.id);
+      const activeRuns = agentRuns.filter(
+        (r) => r.status === "running" || r.status === "pending",
+      ).length;
+      const last = agentRuns[0];
+      return {
+        id: a.id,
+        slug: a.slug,
+        name: a.name,
+        role: a.role,
+        description: a.description,
+        model: a.model,
+        status: a.status,
+        isEnabled: a.is_enabled,
+        activeRuns,
+        lastRunAt: last?.created_at ?? null,
+      };
+    });
+  });
+
+// ---------------------------------------------------------------------------
+// runAgent — the main entry point
+// ---------------------------------------------------------------------------
+
+const RunAgentInput = z.object({
+  agentSlug: z.string().min(1).max(64).default("orchestrator"),
+  input: z.string().min(1).max(8000),
+  history: z
+    .array(
+      z.object({
+        role: z.enum(["user", "jarvis"]),
+        text: z.string().min(1).max(8000),
+      }),
+    )
+    .max(30)
+    .optional(),
+});
+
+export const runAgent = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => RunAgentInput.parse(input))
+  .handler(async ({ data, context }): Promise<AgentRunResult> => {
+    const { supabase, userId } = context;
+
+    const { runOrchestrator } = await import("./runtime.server");
+    return runOrchestrator({
+      supabase,
+      userId,
+      agentSlug: data.agentSlug,
+      input: data.input,
+      history: data.history ?? [],
+    });
+  });
