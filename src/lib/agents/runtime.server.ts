@@ -6,13 +6,24 @@
 // types (Architect, Developer, ...) in later iterations.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/integrations/supabase/types";
+import type { Database, Json } from "@/integrations/supabase/types";
 import type { AgentRunResult } from "./runtime.functions";
+import { orchestratorTools, getToolByName } from "./tools.server";
 
 const GEMINI_ENDPOINT_BASE =
   "https://generativelanguage.googleapis.com/v1beta/models";
 
-const DEFAULT_SYSTEM_PROMPT = `You are J.A.R.V.I.S., a refined British-butler AI. Reply in the user's language. Be concise for chit-chat, thorough for substantive requests. Never break character.`;
+const DEFAULT_SYSTEM_PROMPT = `You are J.A.R.V.I.S., a refined British-butler AI bound to Jacob Slawinsky. Reply in the user's language (English or Polish). Address the user as "Sir" / "Mr. Slawinsky" (EN) or "Panie Slawinsky" (PL). Be concise for chit-chat, thorough for substantive requests. Never break character.
+
+TOOL USE:
+You have three tools: web_search, fetch_url, save_note. Use them proactively.
+- For factual / current-event questions → call web_search first.
+- To read a specific page in detail → web_search, then fetch_url on the best URL.
+- When the user asks you to remember, save, or note something (e.g. "zapisz notatkę", "save this") → call save_note. Also call save_note when you have produced a substantive summary/list/plan the user should keep — but do not save trivial chit-chat.
+- After tool calls, produce a final natural-language answer in character. Do not describe the tools you used unless asked.
+`;
+
+const MAX_TOOL_ITERATIONS = 4;
 
 export type OrchestratorInput = {
   supabase: SupabaseClient<Database>;
@@ -73,89 +84,180 @@ export async function runOrchestrator(
   if (runErr) throw new Error(`Run insert failed: ${runErr.message}`);
   const runId = runRow.id;
 
-  // 4. Call Gemini (single-step, plain text out — no tool loop yet).
+  // logEvent helper — writes to system_events so the System Logs page shows real telemetry.
+  const logEvent = async (
+    level: "info" | "warn" | "error",
+    source: string,
+    message: string,
+    meta?: Json,
+  ) => {
+    await supabase.from("system_events").insert({
+      owner_id: userId,
+      level,
+      source,
+      message,
+      meta: (meta ?? {}) as Json,
+    });
+  };
+
+  await logEvent("info", "orchestrator", `run started · model ${model}`, {
+    run_id: runId,
+    agent: agentSlug,
+    input_preview: input.slice(0, 120),
+  } as Json);
+
+  // 4. Call Gemini with function-calling loop.
   try {
-    const contents = [
+    type GeminiPart =
+      | { text: string }
+      | { functionCall: { name: string; args: Record<string, unknown> } }
+      | {
+          functionResponse: {
+            name: string;
+            response: Record<string, unknown>;
+          };
+        };
+    type GeminiContent = { role: "user" | "model" | "function"; parts: GeminiPart[] };
+
+    const contents: GeminiContent[] = [
       ...history
         .filter((h) => h.text && h.text.trim())
-        .map((h) => ({
-          role: h.role === "jarvis" ? ("model" as const) : ("user" as const),
+        .map<GeminiContent>((h) => ({
+          role: h.role === "jarvis" ? "model" : "user",
           parts: [{ text: h.text }],
         })),
-      { role: "user" as const, parts: [{ text: input }] },
+      { role: "user", parts: [{ text: input }] },
     ];
 
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 15_000);
-    const res = await fetch(
-      `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: "POST",
-        signal: ctrl.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          generationConfig: {
-            temperature: 0.85,
-            maxOutputTokens: 1600,
-          },
-          contents,
-        }),
-      },
-    );
-    clearTimeout(timer);
+    const toolDeclarations = orchestratorTools.map((t) => t.declaration);
+    let totalTokensIn = 0;
+    let totalTokensOut = 0;
+    let finalText = "";
+    const toolCallLog: Array<{ name: string; args: Record<string, unknown> }> = [];
 
-    if (!res.ok) {
-      const bodyText = await res.text().catch(() => "");
-      const msg = `Gemini HTTP ${res.status}: ${bodyText.slice(0, 300)}`;
-      await supabase
-        .from("agent_runs")
-        .update({
-          status: "error",
-          error: msg,
-          finished_at: new Date().toISOString(),
-          latency_ms: Date.now() - startedAt,
-        })
-        .eq("id", runId);
-      return { runId, status: "error", output: "", error: msg };
+    for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 20_000);
+      const res = await fetch(
+        `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: "POST",
+          signal: ctrl.signal,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            generationConfig: { temperature: 0.85, maxOutputTokens: 1600 },
+            tools: [{ functionDeclarations: toolDeclarations }],
+            contents,
+          }),
+        },
+      );
+      clearTimeout(timer);
+
+      if (!res.ok) {
+        const bodyText = await res.text().catch(() => "");
+        throw new Error(`Gemini HTTP ${res.status}: ${bodyText.slice(0, 300)}`);
+      }
+
+      const data = (await res.json()) as {
+        candidates?: Array<{ content?: { role?: string; parts?: GeminiPart[] } }>;
+        usageMetadata?: {
+          promptTokenCount?: number;
+          candidatesTokenCount?: number;
+        };
+      };
+      totalTokensIn += data.usageMetadata?.promptTokenCount ?? 0;
+      totalTokensOut += data.usageMetadata?.candidatesTokenCount ?? 0;
+
+      const parts = data.candidates?.[0]?.content?.parts ?? [];
+      const functionCalls = parts.flatMap((p) =>
+        "functionCall" in p && p.functionCall ? [p.functionCall] : [],
+      );
+      const textOut = parts
+        .flatMap((p) => ("text" in p && p.text ? [p.text] : []))
+        .join("")
+        .trim();
+
+      if (functionCalls.length === 0) {
+        finalText = textOut;
+        break;
+      }
+
+      // Append model turn (function calls) to the running contents.
+      contents.push({
+        role: "model",
+        parts: functionCalls.map((fc) => ({
+          functionCall: { name: fc.name, args: fc.args ?? {} },
+        })),
+      });
+
+      // Execute each tool and append function responses.
+      const responseParts: GeminiPart[] = [];
+      for (const call of functionCalls) {
+        toolCallLog.push({ name: call.name, args: call.args ?? {} });
+        const tool = getToolByName(call.name);
+        let response: Record<string, unknown>;
+        if (!tool) {
+          response = { error: `unknown_tool_${call.name}` };
+          await logEvent("warn", "orchestrator", `unknown tool call: ${call.name}`, {
+            run_id: runId,
+          } as Json);
+        } else {
+          try {
+            response = await tool.execute(call.args ?? {}, {
+              supabase,
+              userId,
+              runId,
+              logEvent,
+            });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            response = { error: msg };
+            await logEvent("error", `tool.${call.name}`, msg, { run_id: runId } as Json);
+          }
+        }
+        responseParts.push({
+          functionResponse: { name: call.name, response },
+        });
+      }
+      contents.push({ role: "function", parts: responseParts });
+
+      if (iter === MAX_TOOL_ITERATIONS - 1) {
+        // Force a final text reply on the next (skipped) turn by breaking here
+        // but we already broke out via loop bound. If we get here we still
+        // have unconsumed tool output; fall through to a graceful message.
+        finalText =
+          "I have completed several tool calls but ran out of orchestration cycles. Please rephrase or ask me to continue.";
+      }
     }
 
-    const data = (await res.json()) as {
-      candidates?: Array<{
-        content?: { parts?: Array<{ text?: string }> };
-      }>;
-      usageMetadata?: {
-        promptTokenCount?: number;
-        candidatesTokenCount?: number;
-      };
-    };
-    const text = data.candidates?.[0]?.content?.parts
-      ?.map((p) => p.text ?? "")
-      .join("")
-      .trim() ?? "";
-
-    const tokensIn = data.usageMetadata?.promptTokenCount;
-    const tokensOut = data.usageMetadata?.candidatesTokenCount;
     const latencyMs = Date.now() - startedAt;
 
     await supabase
       .from("agent_runs")
       .update({
         status: "done",
-        output: { text },
-        tokens_input: tokensIn ?? null,
-        tokens_output: tokensOut ?? null,
+        output: { text: finalText, tool_calls: toolCallLog } as Json,
+        tokens_input: totalTokensIn || null,
+        tokens_output: totalTokensOut || null,
         latency_ms: latencyMs,
         finished_at: new Date().toISOString(),
       })
       .eq("id", runId);
 
+    await logEvent(
+      "info",
+      "orchestrator",
+      `run done · ${toolCallLog.length} tool calls · ${latencyMs}ms`,
+      { run_id: runId, tokens_in: totalTokensIn, tokens_out: totalTokensOut } as Json,
+    );
+
     return {
       runId,
       status: "done",
-      output: text,
-      tokensIn,
-      tokensOut,
+      output: finalText,
+      tokensIn: totalTokensIn || undefined,
+      tokensOut: totalTokensOut || undefined,
       latencyMs,
     };
   } catch (err) {
@@ -169,6 +271,7 @@ export async function runOrchestrator(
         latency_ms: Date.now() - startedAt,
       })
       .eq("id", runId);
+    await logEvent("error", "orchestrator", `run failed: ${msg}`, { run_id: runId } as Json);
     return { runId, status: "error", output: "", error: msg };
   }
 }

@@ -5,6 +5,7 @@ import { SystemStatsStrip } from "@/components/jarvis/SystemStatsStrip";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { WeatherTelemetry } from "@/components/jarvis/WeatherTelemetry";
 import { GlobalIntelFeed } from "@/components/jarvis/GlobalIntelFeed";
+import { NotesWidget } from "@/components/jarvis/NotesWidget";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -60,7 +61,9 @@ function Index() {
         <GlobalIntelFeed index={4} />
       </div>
 
-      <HudPanel index={5} title="CONVERSATION STREAM" className="flex flex-col">
+      <NotesWidget index={5} />
+
+      <HudPanel index={6} title="CONVERSATION STREAM" className="flex flex-col">
         <ChatPanel />
       </HudPanel>
     </div>
