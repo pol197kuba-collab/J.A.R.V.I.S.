@@ -11,6 +11,7 @@ import { TransitionProvider } from "@/components/jarvis/TransitionContext";
 import { VoiceCommandProvider } from "@/components/jarvis/VoiceCommandContext";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { audio } from "@/lib/audio/AudioEngine";
+import { supabase } from "@/integrations/supabase/client";
 
 // Suppress unused-import warning — kept so refactors don't drop the dep.
 void AppSidebar;
@@ -23,6 +24,16 @@ void AppSidebar;
 export function PhaseController() {
   const navigate = useNavigate();
   const [phase, setPhase] = useState<AppPhase>("booting");
+
+  // Listen for auth state changes: if user signs out anywhere, drop to boot.
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        setPhase("booting");
+      }
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
 
   // iOS / Safari autoplay policy: unlock AudioContext on the first real
   // user gesture. Until then, audio.* calls no-op silently (no warnings).
@@ -50,6 +61,7 @@ export function PhaseController() {
     if (phase !== "shutdown") return;
     audio.stopHum();
     audio.playShutdown();
+    void supabase.auth.signOut();
     const t = setTimeout(() => setPhase("booting"), 1600);
     return () => clearTimeout(t);
   }, [phase]);
