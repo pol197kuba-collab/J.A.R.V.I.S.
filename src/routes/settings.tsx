@@ -1,10 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { useAudioSettings } from "@/lib/audio/useAudioSettings";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 import { CommandDirectory } from "@/components/jarvis/CommandDirectory";
+import { useServerFn } from "@tanstack/react-start";
+import {
+  deleteGeminiKey,
+  getGeminiKeyStatus,
+  getUserSettings,
+  saveGeminiKey,
+  updateUserSettings,
+  type UserSettings,
+} from "@/lib/agents/runtime.functions";
+import { setServerRuntimePreference } from "@/lib/ai/jarvisBrain";
 
 const GEMINI_LS_KEY = "jarvis_gemini_api_key";
 
@@ -18,38 +28,25 @@ export const Route = createFileRoute("/settings")({
   component: Settings,
 });
 
-const groups = [
-  {
-    label: "Voice Interface",
-    items: [
-      { name: "Wake word", value: "Hey JARVIS", on: true },
-      { name: "Response voice", value: "British male, calm", on: true },
-      { name: "Continuous listening", value: "Disabled", on: false },
-    ],
-  },
-  {
-    label: "Security",
-    items: [
-      { name: "Biometric authentication", value: "Required", on: true },
-      { name: "Encrypted comms", value: "AES-256", on: true },
-      { name: "Perimeter scan interval", value: "30 seconds", on: true },
-    ],
-  },
-  {
-    label: "Integrations",
-    items: [
-      { name: "Discord", value: "Connected", on: true },
-      { name: "Calendar", value: "Connected", on: true },
-      { name: "Lab telemetry", value: "Offline", on: false },
-    ],
-  },
-];
-
 function Settings() {
   const { settings, set } = useAudioSettings();
   const [apiKey, setApiKey] = useState("");
   const [linked, setLinked] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  const fetchKeyStatus = useServerFn(getGeminiKeyStatus);
+  const persistKey = useServerFn(saveGeminiKey);
+  const clearKey = useServerFn(deleteGeminiKey);
+  const fetchSettings = useServerFn(getUserSettings);
+  const persistSettings = useServerFn(updateUserSettings);
+
+  const [serverStatus, setServerStatus] = useState<
+    "loading" | "linked" | "empty" | "error"
+  >("loading");
+  const [serverPreview, setServerPreview] = useState<string | null>(null);
+  const [prefs, setPrefs] = useState<UserSettings | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -60,6 +57,26 @@ function Settings() {
       /* ignore */
     }
   }, []);
+
+  const refreshServerState = useCallback(async () => {
+    try {
+      const [status, s] = await Promise.all([fetchKeyStatus(), fetchSettings()]);
+      setServerStatus(status.linked ? "linked" : "empty");
+      setServerPreview(status.preview);
+      setPrefs(s);
+      setServerRuntimePreference({
+        routing: s.chatRouting,
+        keyLinked: status.linked,
+      });
+    } catch (err) {
+      console.warn("[settings] refresh failed", err);
+      setServerStatus("error");
+    }
+  }, [fetchKeyStatus, fetchSettings]);
+
+  useEffect(() => {
+    void refreshServerState();
+  }, [refreshServerState]);
 
   const handleSaveKey = () => {
     const trimmed = apiKey.trim();
@@ -77,6 +94,43 @@ function Settings() {
       setSavedAt(Date.now());
     } catch {
       /* ignore */
+    }
+  };
+
+  const handleServerSaveKey = async () => {
+    const trimmed = apiKey.trim();
+    setBusy(true);
+    setErrorMsg(null);
+    try {
+      if (trimmed) {
+        await persistKey({ data: { key: trimmed } });
+      } else {
+        await clearKey();
+      }
+      audio.playClick();
+      await refreshServerState();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Server sync failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const updatePref = async (patch: Partial<UserSettings>) => {
+    setBusy(true);
+    setErrorMsg(null);
+    try {
+      const next = await persistSettings({ data: patch });
+      setPrefs(next);
+      setServerRuntimePreference({
+        routing: next.chatRouting,
+        keyLinked: serverStatus === "linked",
+      });
+      audio.playClick();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -108,32 +162,179 @@ function Settings() {
               onClick={handleSaveKey}
               className="font-display border border-primary/60 bg-primary/10 px-4 py-2 text-[10px] uppercase tracking-widest text-primary hover:bg-primary/20"
             >
-              SAVE &amp; CONNECT CORE
+              SAVE LOCAL (BROWSER)
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={handleServerSaveKey}
+              className="font-display border border-primary/60 bg-primary/20 px-4 py-2 text-[10px] uppercase tracking-widest text-primary hover:bg-primary/30 disabled:opacity-50"
+            >
+              SYNC TO AGENT RUNTIME
             </button>
           </div>
-          <div className="flex items-center justify-between border-t border-primary/20 pt-2">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-              STATUS
-            </span>
-            <span
-              className="font-display text-[10px] uppercase tracking-widest"
-              style={{ color: linked ? "var(--success)" : "var(--muted-foreground)" }}
-            >
-              {linked ? "● AI CORE LINK ESTABLISHED" : "○ NO KEY // FALLBACK MODE"}
-            </span>
+          <div className="grid gap-2 border-t border-primary/20 pt-2 sm:grid-cols-2">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                BROWSER
+              </span>
+              <span
+                className="font-display text-[10px] uppercase tracking-widest"
+                style={{ color: linked ? "var(--success)" : "var(--muted-foreground)" }}
+              >
+                {linked ? "● LINKED" : "○ EMPTY"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                AGENT RUNTIME
+              </span>
+              <span
+                className="font-display text-[10px] uppercase tracking-widest"
+                style={{
+                  color:
+                    serverStatus === "linked"
+                      ? "var(--success)"
+                      : serverStatus === "error"
+                        ? "var(--destructive)"
+                        : "var(--muted-foreground)",
+                }}
+              >
+                {serverStatus === "linked"
+                  ? `● LINKED ${serverPreview ?? ""}`
+                  : serverStatus === "error"
+                    ? "✕ UNREACHABLE"
+                    : serverStatus === "loading"
+                      ? "… CHECKING"
+                      : "○ NOT SYNCED"}
+              </span>
+            </div>
           </div>
           {savedAt && (
             <p className="font-mono text-[10px] text-primary/70">
               ✓ Configuration committed @ {new Date(savedAt).toLocaleTimeString()}
             </p>
           )}
+          {errorMsg && (
+            <p className="font-mono text-[10px]" style={{ color: "var(--destructive)" }}>
+              ✕ {errorMsg}
+            </p>
+          )}
           <p className="font-mono text-[10px] text-muted-foreground/70">
-            ℹ Klucz jest przechowywany wyłącznie w pamięci tego urządzenia (localStorage). Puste pole + zapis = usunięcie klucza.
+            ℹ „Save local" trzyma klucz tylko w tej przeglądarce. „Sync to Agent Runtime" wysyła go zaszyfrowanym połączeniem na serwer, gdzie używa go Orchestrator — nadal Twój klucz, Twój ruch, darmowy tier Gemini. Puste pole + zapis = usunięcie klucza.
           </p>
         </div>
       </HudPanel>
+      <HudPanel index={2} title="AGENT RUNTIME // CHAT ROUTING" className="p-5">
+        <div className="mt-4 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm text-foreground">Route chat through Agent Runtime</p>
+              <p className="text-xs text-muted-foreground">
+                Wysyła wiadomości przez serwerowego Orchestratora (log w agent_runs, historia w DB). Wymaga „Sync to Agent Runtime" wyżej.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={busy || !prefs || serverStatus !== "linked"}
+              onClick={() =>
+                updatePref({
+                  chatRouting:
+                    prefs?.chatRouting === "server" ? "client" : "server",
+                })
+              }
+              className="font-display border border-primary/60 px-3 py-1 text-[10px] uppercase tracking-widest disabled:opacity-40"
+              style={{
+                color:
+                  prefs?.chatRouting === "server"
+                    ? "var(--success)"
+                    : "var(--muted-foreground)",
+              }}
+            >
+              {prefs?.chatRouting === "server" ? "● SERVER" : "○ BROWSER"}
+            </button>
+          </div>
+          <div className="flex items-start justify-between gap-4 border-t border-primary/20 pt-3">
+            <div>
+              <p className="text-sm text-foreground">Default model</p>
+              <p className="text-xs text-muted-foreground">
+                Model używany przez Orchestratora dla każdego runu.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {(["gemini-2.5-flash", "gemini-2.5-pro"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  disabled={busy || !prefs}
+                  onClick={() => updatePref({ defaultModel: m })}
+                  className="font-display border border-primary/60 px-3 py-1 text-[10px] uppercase tracking-widest disabled:opacity-40"
+                  style={{
+                    color:
+                      prefs?.defaultModel === m
+                        ? "var(--primary)"
+                        : "var(--muted-foreground)",
+                    background:
+                      prefs?.defaultModel === m ? "rgba(56,189,248,0.1)" : "transparent",
+                  }}
+                >
+                  {m.replace("gemini-2.5-", "")}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-start justify-between gap-4 border-t border-primary/20 pt-3">
+            <div>
+              <p className="text-sm text-foreground">Voice reply language</p>
+              <p className="text-xs text-muted-foreground">Auto = model dopasowuje język do wiadomości.</p>
+            </div>
+            <div className="flex gap-2">
+              {(["auto", "en", "pl"] as const).map((lang) => (
+                <button
+                  key={lang}
+                  type="button"
+                  disabled={busy || !prefs}
+                  onClick={() => updatePref({ voiceLanguage: lang })}
+                  className="font-display border border-primary/60 px-3 py-1 text-[10px] uppercase tracking-widest disabled:opacity-40"
+                  style={{
+                    color:
+                      prefs?.voiceLanguage === lang
+                        ? "var(--primary)"
+                        : "var(--muted-foreground)",
+                  }}
+                >
+                  {lang}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-start justify-between gap-4 border-t border-primary/20 pt-3">
+            <div>
+              <p className="text-sm text-foreground">Wake word „J.A.R.V.I.S."</p>
+              <p className="text-xs text-muted-foreground">
+                Wymaga wypowiedzenia „Jarvis" przed komendą głosową.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={busy || !prefs}
+              onClick={() =>
+                updatePref({ wakeWordEnabled: !(prefs?.wakeWordEnabled ?? true) })
+              }
+              className="font-display border border-primary/60 px-3 py-1 text-[10px] uppercase tracking-widest disabled:opacity-40"
+              style={{
+                color: prefs?.wakeWordEnabled
+                  ? "var(--success)"
+                  : "var(--muted-foreground)",
+              }}
+            >
+              {prefs?.wakeWordEnabled ? "● ON" : "○ OFF"}
+            </button>
+          </div>
+        </div>
+      </HudPanel>
       <CommandDirectory index={2} />
-      <HudPanel index={2} title="AUDIO // SUBSYSTEM" className="p-5">
+      <HudPanel index={3} title="AUDIO // SUBSYSTEM" className="p-5">
         <div className="mt-4 space-y-4">
           <div>
             <div className="flex items-center justify-between">
@@ -193,31 +394,17 @@ function Settings() {
           </p>
         </div>
       </HudPanel>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {groups.map((g, i) => (
-          <HudPanel key={g.label} index={i + 3} title={g.label.toUpperCase()} className="p-5">
-            <div className="mt-4 space-y-3">
-              {g.items.map((it) => (
-                <div
-                  key={it.name}
-                  className="flex items-center justify-between border-b border-primary/20 pb-2 last:border-0"
-                >
-                  <div>
-                    <p className="text-sm text-foreground">{it.name}</p>
-                    <p className="text-xs text-muted-foreground">{it.value}</p>
-                  </div>
-                  <span
-                    className="font-display text-[10px] uppercase tracking-widest"
-                    style={{ color: it.on ? "var(--success)" : "var(--muted-foreground)" }}
-                  >
-                    {it.on ? "● On" : "○ Off"}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </HudPanel>
-        ))}
-      </div>
+      <HudPanel index={4} title="PLANNED // ROADMAP" className="p-5">
+        <div className="mt-4 space-y-2 text-xs text-muted-foreground">
+          <p>Poniższe moduły są na roadmapie — pojawią się jako realne opcje wraz z kolejnymi agentami:</p>
+          <ul className="ml-4 list-disc space-y-1">
+            <li>Security / biometric auth</li>
+            <li>Discord & Calendar integrations</li>
+            <li>Lab telemetry uplink</li>
+            <li>Multi-agent orchestration (Architect, Developer, ...)</li>
+          </ul>
+        </div>
+      </HudPanel>
     </div>
   );
 }

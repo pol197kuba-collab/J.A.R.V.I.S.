@@ -513,6 +513,57 @@ export type Database = {
         }
         Relationships: []
       }
+      user_secrets: {
+        Row: {
+          created_at: string
+          gemini_api_key: string | null
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          gemini_api_key?: string | null
+          owner_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          gemini_api_key?: string | null
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_settings: {
+        Row: {
+          chat_routing: string
+          created_at: string
+          default_model: string
+          owner_id: string
+          updated_at: string
+          voice_language: string
+          wake_word_enabled: boolean
+        }
+        Insert: {
+          chat_routing?: string
+          created_at?: string
+          default_model?: string
+          owner_id: string
+          updated_at?: string
+          voice_language?: string
+          wake_word_enabled?: boolean
+        }
+        Update: {
+          chat_routing?: string
+          created_at?: string
+          default_model?: string
+          owner_id?: string
+          updated_at?: string
+          voice_language?: string
+          wake_word_enabled?: boolean
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
