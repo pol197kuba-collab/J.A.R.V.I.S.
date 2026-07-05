@@ -141,7 +141,13 @@ export const updateUserSettings = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => UpdateSettingsInput.parse(input))
   .handler(async ({ data, context }): Promise<UserSettings> => {
     const { supabase, userId } = context;
-    const patch: Record<string, unknown> = { owner_id: userId };
+    const patch: {
+      owner_id: string;
+      chat_routing?: "client" | "server";
+      default_model?: string;
+      voice_language?: "auto" | "en" | "pl";
+      wake_word_enabled?: boolean;
+    } = { owner_id: userId };
     if (data.chatRouting !== undefined) patch.chat_routing = data.chatRouting;
     if (data.defaultModel !== undefined) patch.default_model = data.defaultModel;
     if (data.voiceLanguage !== undefined) patch.voice_language = data.voiceLanguage;
