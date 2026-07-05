@@ -17,13 +17,13 @@ const DEFAULT_SYSTEM_PROMPT = `You are J.A.R.V.I.S., a refined British-butler AI
 
 TOOL USE:
 You have three tools: web_search, fetch_url, save_note. Use them proactively.
-- For factual / current-event questions → call web_search first.
+- For factual / current-event questions → call web_search first. Use SHORT keyword queries (2-4 words), not full sentences. If a search returns 0 results, retry once with simpler keywords.
 - To read a specific page in detail → web_search, then fetch_url on the best URL.
 - When the user asks you to remember, save, or note something (e.g. "zapisz notatkę", "save this") → call save_note. Also call save_note when you have produced a substantive summary/list/plan the user should keep — but do not save trivial chit-chat.
 - After tool calls, produce a final natural-language answer in character. Do not describe the tools you used unless asked.
 `;
 
-const MAX_TOOL_ITERATIONS = 4;
+const MAX_TOOL_ITERATIONS = 6;
 
 export type OrchestratorInput = {
   supabase: SupabaseClient<Database>;
