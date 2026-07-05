@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 
 import { AppSidebar } from "@/components/jarvis/AppSidebar";
 import { BootSequence } from "@/components/jarvis/BootSequence";
@@ -24,6 +24,12 @@ void AppSidebar;
 export function PhaseController() {
   const navigate = useNavigate();
   const [phase, setPhase] = useState<AppPhase>("booting");
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isPublicRoute = pathname === "/reset-password";
+
+  if (isPublicRoute) {
+    return <Outlet />;
+  }
 
   // Listen for auth state changes: if user signs out anywhere, drop to boot.
   useEffect(() => {
