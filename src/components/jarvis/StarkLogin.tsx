@@ -6,13 +6,12 @@ import { speakJarvis } from "@/lib/ai/jarvisBrain";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 
-type Mode = "signin" | "signup" | "forgot";
+type Mode = "signin" | "forgot";
 
 export function StarkLogin({ onGranted }: { onGranted: () => void }) {
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -61,22 +60,6 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) return deny(error.message);
         grant(data.user?.user_metadata?.display_name ?? data.user?.email ?? undefined);
-      } else if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: window.location.origin,
-            data: { display_name: displayName || email.split("@")[0] },
-          },
-        });
-        if (error) return deny(error.message);
-        if (data.session) {
-          grant(displayName || email);
-        } else {
-          setInfo("Check your email to confirm your account, then sign in.");
-          setMode("signin");
-        }
       } else {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: `${window.location.origin}/reset-password`,
@@ -106,7 +89,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
   }
 
   const title =
-    mode === "signup" ? "REGISTER OPERATOR" : mode === "forgot" ? "RECOVER CIPHER" : "SECURE LOGIN";
+    mode === "forgot" ? "RECOVER CIPHER" : "SECURE LOGIN";
 
   return (
     <div className="fixed inset-0 z-[100] flex h-screen w-full items-center justify-center overflow-hidden bg-black text-primary">
@@ -143,20 +126,6 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
             </h2>
           </div>
 
-          {mode === "signup" && (
-            <label className="block space-y-1 landscape:max-md:space-y-0">
-              <span className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">
-                Operator Callsign
-              </span>
-              <input
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="e.g. Jacob"
-                className="w-full border border-primary/40 bg-background/60 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none landscape:max-md:px-2 landscape:max-md:py-1 landscape:max-md:text-xs"
-              />
-            </label>
-          )}
-
           <label className="block space-y-1 landscape:max-md:space-y-0">
             <span className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">
               Operator Email
@@ -180,7 +149,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
               </span>
               <input
                 type="password"
-                autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                autoComplete="current-password"
                 required
                 minLength={6}
                 value={password}
@@ -222,9 +191,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
               ? "▸ Processing..."
               : mode === "signin"
                 ? "▸ Request Access"
-                : mode === "signup"
-                  ? "▸ Register"
-                  : "▸ Send Recovery"}
+                : "▸ Send Recovery"}
           </button>
 
           {mode !== "forgot" && (
@@ -247,22 +214,13 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
 
           <div className="flex justify-between gap-2 pt-1 text-[10px]">
             {mode === "signin" ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => { setMode("signup"); setError(null); setInfo(null); }}
-                  className="font-display uppercase tracking-widest text-primary/80 hover:text-primary"
-                >
-                  New operator? Register
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setMode("forgot"); setError(null); setInfo(null); }}
-                  className="font-display uppercase tracking-widest text-muted-foreground hover:text-primary"
-                >
-                  Forgot cipher?
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={() => { setMode("forgot"); setError(null); setInfo(null); }}
+                className="font-display ml-auto uppercase tracking-widest text-muted-foreground hover:text-primary"
+              >
+                Forgot cipher?
+              </button>
             ) : (
               <button
                 type="button"
