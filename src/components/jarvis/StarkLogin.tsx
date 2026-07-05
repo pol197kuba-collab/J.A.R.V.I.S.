@@ -104,30 +104,30 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
         }}
       />
 
-      <div className={cn("relative z-10 flex flex-col items-center gap-2 landscape:max-md:gap-0", leaving && "animate-screen-fracture")}>
+      <div className={cn("relative z-10 flex max-h-[100dvh] w-full flex-col items-center gap-1 px-3 sm:gap-2", leaving && "animate-screen-fracture")}>
         {/* Raised reactor */}
-        <div className="-mb-12 landscape:max-md:-mb-6">
+        <div className="-mb-10 max-md:-mb-6 landscape:max-md:-mb-6">
           <ArcReactorTriangle raised />
         </div>
 
         <form
           onSubmit={submit}
           className={cn(
-            "hud-panel relative w-[min(420px,92vw)] space-y-4 p-6 animate-fade-up landscape:max-md:w-[min(360px,75vw)] landscape:max-md:space-y-2 landscape:max-md:p-3",
+            "hud-panel relative w-[min(420px,92vw)] space-y-3 p-4 animate-fade-up sm:space-y-4 sm:p-6 max-md:space-y-2 max-md:p-3 landscape:max-md:w-[min(360px,75vw)] landscape:max-md:space-y-1.5 landscape:max-md:p-2.5",
             error && "animate-deny-pulse",
           )}
         >
           <div className="text-center">
-            <p className="font-display text-[10px] uppercase tracking-[0.5em] text-primary/80 landscape:max-md:text-[8px] landscape:max-md:tracking-[0.3em]">
+            <p className="font-display text-[10px] uppercase tracking-[0.5em] text-primary/80 max-md:text-[8px] max-md:tracking-[0.3em]">
               Stark Industries // Mark VII
             </p>
-            <h2 className="font-display mt-2 text-xl tracking-[0.3em] text-foreground landscape:max-md:mt-0.5 landscape:max-md:text-sm landscape:max-md:tracking-[0.2em]">
+            <h2 className="font-display mt-1 text-lg tracking-[0.3em] text-foreground sm:mt-2 sm:text-xl max-md:text-base max-md:tracking-[0.2em]">
               {title}
             </h2>
           </div>
 
-          <label className="block space-y-1 landscape:max-md:space-y-0">
-            <span className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">
+          <label className="block space-y-0.5 max-md:space-y-0">
+            <span className="font-display text-[10px] uppercase tracking-widest text-muted-foreground max-md:text-[9px]">
               Operator Email
             </span>
             <input
@@ -138,13 +138,13 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="operator@stark.industries"
-              className="w-full border border-primary/40 bg-background/60 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none landscape:max-md:px-2 landscape:max-md:py-1 landscape:max-md:text-xs"
+              className="w-full border border-primary/40 bg-background/60 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none max-md:px-2 max-md:py-1.5 max-md:text-xs landscape:max-md:py-1"
             />
           </label>
 
           {mode !== "forgot" && (
-            <label className="block space-y-1 landscape:max-md:space-y-0">
-              <span className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">
+            <label className="block space-y-0.5 max-md:space-y-0">
+              <span className="font-display text-[10px] uppercase tracking-widest text-muted-foreground max-md:text-[9px]">
                 Cipher Key
               </span>
               <input
@@ -155,7 +155,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full border border-primary/40 bg-background/60 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none landscape:max-md:px-2 landscape:max-md:py-1 landscape:max-md:text-xs"
+                className="w-full border border-primary/40 bg-background/60 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none max-md:px-2 max-md:py-1.5 max-md:text-xs landscape:max-md:py-1"
               />
             </label>
           )}
@@ -180,7 +180,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
           <button
             type="submit"
             disabled={loading}
-            className="group relative w-full font-display cursor-pointer border border-primary/70 bg-primary/10 py-3 text-sm uppercase tracking-[0.4em] text-primary transition hover:bg-primary/20 hover:text-foreground landscape:max-md:py-1.5 landscape:max-md:text-xs landscape:max-md:tracking-[0.3em]"
+            className="group relative w-full font-display cursor-pointer border border-primary/70 bg-primary/10 py-2.5 text-sm uppercase tracking-[0.4em] text-primary transition hover:bg-primary/20 hover:text-foreground sm:py-3 max-md:py-2 max-md:text-xs max-md:tracking-[0.3em] landscape:max-md:py-1.5"
             style={{ boxShadow: "var(--glow-primary)" }}
           >
             <span className="absolute -left-px -top-px h-2 w-2 border-l border-t border-primary" />
@@ -205,7 +205,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
                 type="button"
                 onClick={google}
                 disabled={loading}
-                className="font-display w-full cursor-pointer border border-primary/40 bg-background/40 py-2.5 text-xs uppercase tracking-[0.3em] text-foreground transition hover:border-primary hover:bg-primary/10 landscape:max-md:py-1.5 landscape:max-md:text-[10px]"
+                className="font-display w-full cursor-pointer border border-primary/40 bg-background/40 py-2.5 text-xs uppercase tracking-[0.3em] text-foreground transition hover:border-primary hover:bg-primary/10 max-md:py-2 max-md:text-[10px] landscape:max-md:py-1.5"
               >
                 ▸ Continue with Google
               </button>
