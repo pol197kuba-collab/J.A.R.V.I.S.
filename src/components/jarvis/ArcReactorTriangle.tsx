@@ -4,8 +4,8 @@ export function ArcReactorTriangle({ className, raised }: { className?: string; 
   return (
     <div
       className={cn(
-        "relative aspect-square w-[min(48vmin,360px)] transition-all duration-700 ease-out landscape:max-md:w-[45vh]",
-        raised && "-translate-y-16 scale-75 landscape:max-md:-translate-y-8",
+        "relative aspect-square w-[min(48vmin,360px)] max-md:w-[min(38vmin,220px)] transition-all duration-700 ease-out landscape:max-md:w-[45vh]",
+        raised && "-translate-y-16 scale-75 max-md:-translate-y-8 landscape:max-md:-translate-y-8",
         className,
       )}
     >
