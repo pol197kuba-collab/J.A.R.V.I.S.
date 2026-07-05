@@ -51,6 +51,7 @@ export function ChatPanel() {
   const { routeText } = useVoiceCommands();
   const qc = useQueryClient();
   const runAgentFn = useServerFn(runAgent);
+  const noticeShownRef = useRef(false);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -101,11 +102,13 @@ export function ChatPanel() {
         }
       } else {
         await routeText(text);
-        // Nudge the user once so they know tool-calling is off.
-        emitChat(
-          "jarvis",
-          "⚠ Tool-calling offline — save your Gemini key in Settings → Agent Runtime to unlock web_search / save_note / fetch_url.",
-        );
+        if (!noticeShownRef.current) {
+          noticeShownRef.current = true;
+          emitChat(
+            "jarvis",
+            "⚠ Tool-calling offline — save your Gemini key in Settings → Agent Runtime to unlock web_search / save_note / fetch_url.",
+          );
+        }
       }
     } finally {
       setTyping(false);
