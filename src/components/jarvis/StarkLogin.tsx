@@ -1,44 +1,112 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ArcReactorTriangle } from "./ArcReactorTriangle";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speakJarvis } from "@/lib/ai/jarvisBrain";
+import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable";
 
-// ⚠️ DEMO GATE — NOT REAL AUTH.
-// This login screen performs a plaintext, client-side credential check
-// (operator name + cipher key compared against string literals below).
-// The credentials ship inside the JS bundle, so any visitor can read them
-// in DevTools or bypass the gate by mutating component state. Acceptable
-// only because the dashboard exposes no privileged data.
-// TODO: Replace with Supabase / Lovable Cloud Auth (server-validated session,
-// `requireSupabaseAuth` middleware on protected server functions, and a
-// proper `_authenticated` route gate) before shipping any sensitive surface.
+type Mode = "signin" | "signup" | "forgot";
+
 export function StarkLogin({ onGranted }: { onGranted: () => void }) {
-  const [login, setLogin] = useState("");
+  const [mode, setMode] = useState<Mode>("signin");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [denied, setDenied] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [leaving, setLeaving] = useState(false);
 
-  function submit(e: React.FormEvent) {
+  // If a session already exists (e.g. after OAuth redirect back), skip login.
+  useEffect(() => {
+    let cancelled = false;
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!cancelled && data.session) {
+        setLeaving(true);
+        setTimeout(() => onGranted(), 400);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [onGranted]);
+
+  function grant(name?: string) {
+    audio.playAccessGranted();
+    const hour = new Date().getHours();
+    const tod =
+      hour < 5 ? "late night" : hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+    const who = name ? `${name} ` : "";
+    void speakJarvis({
+      prompt: `${who}has just authenticated into the JARVIS cockpit. Local time of day: ${tod}. Greet them personally for the very first line of the session. Action must be "none".`,
+      fallbackKind: "greeting",
+    });
+    setLeaving(true);
+    setTimeout(() => onGranted(), 700);
+  }
+
+  function deny(msg: string) {
+    audio.playAccessDenied();
+    setError(msg);
+  }
+
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (login.trim() === "Jacob" && password === "Slawinsky") {
-      audio.playAccessGranted();
-      // Dynamic greeting via Gemini; falls back silently to a canned line.
-      const hour = new Date().getHours();
-      const tod =
-        hour < 5 ? "late night" : hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
-      void speakJarvis({
-        prompt: `Jacob Slawinsky has just authenticated into the JARVIS cockpit. Local time of day: ${tod}. Greet him personally for the very first line of the session. Action must be "none".`,
-        fallbackKind: "greeting",
-      });
-      setLeaving(true);
-      setTimeout(() => onGranted(), 700);
-    } else {
-      audio.playAccessDenied();
-      setDenied(true);
-      setTimeout(() => setDenied(false), 1500);
+    setError(null);
+    setInfo(null);
+    setLoading(true);
+    try {
+      if (mode === "signin") {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) return deny(error.message);
+        grant(data.user?.user_metadata?.display_name ?? data.user?.email ?? undefined);
+      } else if (mode === "signup") {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: window.location.origin,
+            data: { display_name: displayName || email.split("@")[0] },
+          },
+        });
+        if (error) return deny(error.message);
+        if (data.session) {
+          grant(displayName || email);
+        } else {
+          setInfo("Check your email to confirm your account, then sign in.");
+          setMode("signin");
+        }
+      } else {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+        if (error) return deny(error.message);
+        setInfo("Password reset link sent. Check your inbox.");
+        setMode("signin");
+      }
+    } finally {
+      setLoading(false);
     }
   }
+
+  async function google() {
+    setError(null);
+    setLoading(true);
+    const result = await lovable.auth.signInWithOAuth("google", {
+      redirect_uri: window.location.origin,
+    });
+    if (result.error) {
+      setLoading(false);
+      deny(result.error.message ?? "Google sign-in failed.");
+      return;
+    }
+    if (result.redirected) return; // full-page redirect
+    grant();
+  }
+
+  const title =
+    mode === "signup" ? "REGISTER OPERATOR" : mode === "forgot" ? "RECOVER CIPHER" : "SECURE LOGIN";
 
   return (
     <div className="fixed inset-0 z-[100] flex h-screen w-full items-center justify-center overflow-hidden bg-black text-primary">
@@ -63,7 +131,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
           onSubmit={submit}
           className={cn(
             "hud-panel relative w-[min(420px,92vw)] space-y-4 p-6 animate-fade-up landscape:max-md:w-[min(360px,75vw)] landscape:max-md:space-y-2 landscape:max-md:p-3",
-            denied && "animate-deny-pulse",
+            error && "animate-deny-pulse",
           )}
         >
           <div className="text-center">
@@ -71,41 +139,68 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
               Stark Industries // Mark VII
             </p>
             <h2 className="font-display mt-2 text-xl tracking-[0.3em] text-foreground landscape:max-md:mt-0.5 landscape:max-md:text-sm landscape:max-md:tracking-[0.2em]">
-              SECURE LOGIN
+              {title}
             </h2>
           </div>
 
+          {mode === "signup" && (
+            <label className="block space-y-1 landscape:max-md:space-y-0">
+              <span className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">
+                Operator Callsign
+              </span>
+              <input
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="e.g. Jacob"
+                className="w-full border border-primary/40 bg-background/60 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none landscape:max-md:px-2 landscape:max-md:py-1 landscape:max-md:text-xs"
+              />
+            </label>
+          )}
+
           <label className="block space-y-1 landscape:max-md:space-y-0">
             <span className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">
-              Operator ID
+              Operator Email
             </span>
             <input
               autoFocus
-              value={login}
-              onChange={(e) => setLogin(e.target.value)}
-              placeholder="Enter operator name"
-              className="w-full border border-primary/40 bg-background/60 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none landscape:max-md:px-2 landscape:max-md:py-1 landscape:max-md:text-xs"
-            />
-          </label>
-          <label className="block space-y-1 landscape:max-md:space-y-0">
-            <span className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">
-              Cipher Key
-            </span>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
+              type="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="operator@stark.industries"
               className="w-full border border-primary/40 bg-background/60 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none landscape:max-md:px-2 landscape:max-md:py-1 landscape:max-md:text-xs"
             />
           </label>
 
-          {denied ? (
+          {mode !== "forgot" && (
+            <label className="block space-y-1 landscape:max-md:space-y-0">
+              <span className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">
+                Cipher Key
+              </span>
+              <input
+                type="password"
+                autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                required
+                minLength={6}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full border border-primary/40 bg-background/60 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none landscape:max-md:px-2 landscape:max-md:py-1 landscape:max-md:text-xs"
+              />
+            </label>
+          )}
+
+          {error ? (
             <p
               className="font-display animate-blink text-center text-xs uppercase tracking-[0.4em]"
               style={{ color: "var(--destructive)" }}
             >
-              ✕ ACCESS DENIED
+              ✕ {error}
+            </p>
+          ) : info ? (
+            <p className="font-display text-center text-[10px] uppercase tracking-widest text-primary">
+              {info}
             </p>
           ) : (
             <p className="font-display text-center text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -115,6 +210,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
 
           <button
             type="submit"
+            disabled={loading}
             className="group relative w-full font-display cursor-pointer border border-primary/70 bg-primary/10 py-3 text-sm uppercase tracking-[0.4em] text-primary transition hover:bg-primary/20 hover:text-foreground landscape:max-md:py-1.5 landscape:max-md:text-xs landscape:max-md:tracking-[0.3em]"
             style={{ boxShadow: "var(--glow-primary)" }}
           >
@@ -122,8 +218,61 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
             <span className="absolute -right-px -top-px h-2 w-2 border-r border-t border-primary" />
             <span className="absolute -left-px -bottom-px h-2 w-2 border-l border-b border-primary" />
             <span className="absolute -right-px -bottom-px h-2 w-2 border-r border-b border-primary" />
-            ▸ Access Granted
+            {loading
+              ? "▸ Processing..."
+              : mode === "signin"
+                ? "▸ Request Access"
+                : mode === "signup"
+                  ? "▸ Register"
+                  : "▸ Send Recovery"}
           </button>
+
+          {mode !== "forgot" && (
+            <>
+              <div className="flex items-center gap-2">
+                <span className="h-px flex-1 bg-primary/20" />
+                <span className="font-display text-[9px] uppercase tracking-widest text-muted-foreground">or</span>
+                <span className="h-px flex-1 bg-primary/20" />
+              </div>
+              <button
+                type="button"
+                onClick={google}
+                disabled={loading}
+                className="font-display w-full cursor-pointer border border-primary/40 bg-background/40 py-2.5 text-xs uppercase tracking-[0.3em] text-foreground transition hover:border-primary hover:bg-primary/10 landscape:max-md:py-1.5 landscape:max-md:text-[10px]"
+              >
+                ▸ Continue with Google
+              </button>
+            </>
+          )}
+
+          <div className="flex justify-between gap-2 pt-1 text-[10px]">
+            {mode === "signin" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => { setMode("signup"); setError(null); setInfo(null); }}
+                  className="font-display uppercase tracking-widest text-primary/80 hover:text-primary"
+                >
+                  New operator? Register
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMode("forgot"); setError(null); setInfo(null); }}
+                  className="font-display uppercase tracking-widest text-muted-foreground hover:text-primary"
+                >
+                  Forgot cipher?
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setMode("signin"); setError(null); setInfo(null); }}
+                className="font-display uppercase tracking-widest text-primary/80 hover:text-primary"
+              >
+                ← Back to sign in
+              </button>
+            )}
+          </div>
         </form>
       </div>
     </div>
