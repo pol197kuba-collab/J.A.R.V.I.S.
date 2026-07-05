@@ -12,6 +12,13 @@ const ENDPOINT =
 
 const ENV_KEY = (import.meta.env.VITE_GEMINI_API_KEY as string | undefined)?.trim();
 const LS_KEY = "jarvis_gemini_api_key";
+// Cached mirror of user_settings.chat_routing so we can decide sync in the
+// hot path. Kept in sync by Settings page whenever the user toggles it.
+const SERVER_ROUTING_LS_KEY = "jarvis_chat_routing_server";
+// Cached mirror of "server has Gemini key" — set by Settings page after a
+// successful saveGeminiKey call. Lets us fall back gracefully if the server
+// key was cleared.
+const SERVER_KEY_LINKED_LS_KEY = "jarvis_server_gemini_linked";
 
 function getKey(): string | undefined {
   if (typeof window !== "undefined") {
@@ -23,6 +30,18 @@ function getKey(): string | undefined {
     }
   }
   return ENV_KEY || undefined;
+}
+
+function shouldUseServerRuntime(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return (
+      window.localStorage.getItem(SERVER_ROUTING_LS_KEY) === "1" &&
+      window.localStorage.getItem(SERVER_KEY_LINKED_LS_KEY) === "1"
+    );
+  } catch {
+    return false;
+  }
 }
 
 export type JarvisAction =
@@ -175,6 +194,30 @@ export type BrainInput = {
 
 export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
   const fb = () => fallbackFor(input.fallbackKind ?? "generic", input.fallbackHint);
+
+  // Server routing (Agent Runtime). Dynamically imported so the server
+  // function's server-only helpers don't pull into every bundle unless used.
+  if (shouldUseServerRuntime()) {
+    try {
+      const { runAgent } = await import("@/lib/agents/runtime.functions");
+      const result = await runAgent({
+        data: {
+          agentSlug: "orchestrator",
+          input: input.prompt,
+          history: input.history ?? [],
+        },
+      });
+      if (result.status === "done" && result.output) {
+        return { action: "none", speech: result.output };
+      }
+      console.warn("[brain] server runtime returned error", result.error);
+      // fall through to client-side path
+    } catch (err) {
+      console.warn("[brain] server runtime exception", err);
+      // fall through to client-side path
+    }
+  }
+
   const KEY = getKey();
   if (!KEY) return fb();
 
@@ -246,3 +289,25 @@ export async function speakJarvis(input: BrainInput): Promise<JarvisReply> {
 }
 
 export const hasGeminiKey = () => !!getKey();
+
+// Exported so the Settings page can flip the cached flags after DB writes.
+export function setServerRuntimePreference(opts: {
+  routing: "client" | "server";
+  keyLinked: boolean;
+}) {
+  if (typeof window === "undefined") return;
+  try {
+    if (opts.routing === "server") {
+      window.localStorage.setItem(SERVER_ROUTING_LS_KEY, "1");
+    } else {
+      window.localStorage.removeItem(SERVER_ROUTING_LS_KEY);
+    }
+    if (opts.keyLinked) {
+      window.localStorage.setItem(SERVER_KEY_LINKED_LS_KEY, "1");
+    } else {
+      window.localStorage.removeItem(SERVER_KEY_LINKED_LS_KEY);
+    }
+  } catch {
+    /* ignore */
+  }
+}
