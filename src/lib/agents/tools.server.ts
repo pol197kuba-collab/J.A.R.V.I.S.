@@ -16,6 +16,8 @@ export type ToolContext = {
   supabase: SupabaseClient<Database>;
   userId: string;
   runId: string;
+  apiKey: string;
+  model: string;
   logEvent: (
     level: "info" | "warn" | "error",
     source: string,
@@ -38,102 +40,31 @@ export type Tool = {
 };
 
 // ---------------------------------------------------------------------------
-// web_search — DuckDuckGo HTML (free, no key) with Wikipedia fallback
+// web_search — Gemini native Google Search grounding
 // ---------------------------------------------------------------------------
 
-type SearchResult = { title: string; description: string; url: string };
+// Uses a second Gemini call with the native `google_search` grounding tool
+// enabled. Gemini forbids mixing google_search with custom functionDeclarations
+// in the same request, so we isolate it here: the outer agent loop keeps
+// function-calling, and this tool "delegates" the actual search to a grounded
+// Gemini turn. Returns a synthesised answer plus real Google source URLs.
 
-function decodeEntities(s: string): string {
-  return s
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#x27;/g, "'")
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, " ");
-}
-
-async function searchDuckDuckGo(query: string): Promise<SearchResult[]> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 8000);
-  try {
-    const res = await fetch(
-      `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
-      {
-        signal: ctrl.signal,
-        headers: {
-          "user-agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-        },
-      },
-    );
-    if (!res.ok) return [];
-    const html = await res.text();
-    const results: SearchResult[] = [];
-    const linkRe =
-      /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
-    const snippetRe =
-      /<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
-    const snippets: string[] = [];
-    let sm: RegExpExecArray | null;
-    while ((sm = snippetRe.exec(html)) !== null) {
-      snippets.push(decodeEntities(sm[1].replace(/<[^>]+>/g, "")).trim());
-    }
-    let m: RegExpExecArray | null;
-    while ((m = linkRe.exec(html)) !== null && results.length < 5) {
-      let url = m[1];
-      // DDG wraps URLs: //duckduckgo.com/l/?uddg=<encoded>&rut=...
-      const uddg = url.match(/[?&]uddg=([^&]+)/);
-      if (uddg) url = decodeURIComponent(uddg[1]);
-      if (url.startsWith("//")) url = "https:" + url;
-      if (!/^https?:\/\//i.test(url)) continue;
-      const title = decodeEntities(m[2].replace(/<[^>]+>/g, "")).trim();
-      if (!title) continue;
-      results.push({
-        title,
-        description: snippets[results.length] ?? "",
-        url,
-      });
-    }
-    return results;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function searchWikipedia(query: string, lang: "en" | "pl"): Promise<SearchResult[]> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 8000);
-  try {
-    // Full-text search (srsearch) handles natural-language queries far better
-    // than opensearch title matching.
-    const url = `https://${lang}.wikipedia.org/w/api.php?action=query&list=search&srlimit=5&format=json&origin=*&srsearch=${encodeURIComponent(query)}`;
-    const res = await fetch(url, { signal: ctrl.signal });
-    if (!res.ok) return [];
-    const data = (await res.json()) as {
-      query?: { search?: Array<{ title: string; snippet: string }> };
-    };
-    return (data.query?.search ?? []).map((r) => ({
-      title: r.title,
-      description: decodeEntities(r.snippet.replace(/<[^>]+>/g, "")),
-      url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(r.title.replace(/ /g, "_"))}`,
-    }));
-  } finally {
-    clearTimeout(timer);
-  }
-}
+type GroundingChunk = {
+  web?: { uri?: string; title?: string };
+};
 
 const webSearch: Tool = {
   declaration: {
     name: "web_search",
     description:
-      "Search the web for a topic and return up to 5 relevant results (title + short description + URL). Use for factual questions, current events, quick research. Keep the query short and keyword-focused (e.g. 'best AI agents 2026'), not a full sentence.",
+      "Search the live web via Google Search grounding. Returns a synthesised answer for the query plus the source URLs Gemini actually consulted. Use for any factual, current-event, news, price, weather, sports, or research question. Pass a natural-language query in the user's language.",
     parameters: {
       type: "object",
       properties: {
-        query: { type: "string", description: "Search query, natural language." },
-        lang: { type: "string", description: "Language code: 'en' or 'pl'. Defaults to 'en'." },
+        query: {
+          type: "string",
+          description: "Natural-language search query in the user's language.",
+        },
       },
       required: ["query"],
     },
@@ -141,41 +72,70 @@ const webSearch: Tool = {
   async execute(args, ctx) {
     const query = String(args.query ?? "").trim();
     if (!query) return { error: "empty_query" };
-    const lang = String(args.lang ?? "en").toLowerCase() === "pl" ? "pl" : "en";
     try {
-      let results: SearchResult[] = [];
-      let engine = "duckduckgo";
-      try {
-        results = await searchDuckDuckGo(query);
-      } catch {
-        results = [];
-      }
-      if (results.length === 0) {
-        engine = "wikipedia";
-        try {
-          results = await searchWikipedia(query, lang);
-        } catch {
-          results = [];
-        }
-      }
-      await ctx.logEvent(
-        results.length > 0 ? "info" : "warn",
-        "tool.web_search",
-        `${query} → ${results.length} results (${engine})`,
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15_000);
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+          ctx.model,
+        )}:generateContent?key=${encodeURIComponent(ctx.apiKey)}`,
         {
-        query,
-        lang,
-        engine,
-        count: results.length,
-      } as Json);
-      if (results.length === 0) {
-        return {
+          method: "POST",
+          signal: ctrl.signal,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: {
+              parts: [
+                {
+                  text: "You are a factual web research helper. Answer the query concisely in the same language it was asked. Cite specific facts, numbers, dates, and names. Do NOT add commentary or roleplay.",
+                },
+              ],
+            },
+            generationConfig: { temperature: 0.2, maxOutputTokens: 900 },
+            tools: [{ google_search: {} }],
+            contents: [{ role: "user", parts: [{ text: query }] }],
+          }),
+        },
+      );
+      clearTimeout(timer);
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        await ctx.logEvent("error", "tool.web_search", `HTTP ${res.status}`, {
           query,
-          results: [],
-          hint: "No results. Retry with a shorter, keyword-only query (2-4 words).",
-        };
+          body: body.slice(0, 300),
+        } as Json);
+        return { error: `google_search_http_${res.status}` };
       }
-      return { query, lang, results };
+      const data = (await res.json()) as {
+        candidates?: Array<{
+          content?: { parts?: Array<{ text?: string }> };
+          groundingMetadata?: {
+            groundingChunks?: GroundingChunk[];
+            webSearchQueries?: string[];
+          };
+        }>;
+      };
+      const cand = data.candidates?.[0];
+      const answer = (cand?.content?.parts ?? [])
+        .flatMap((p) => (p.text ? [p.text] : []))
+        .join("")
+        .trim();
+      const sources = (cand?.groundingMetadata?.groundingChunks ?? [])
+        .flatMap((c) => (c.web?.uri ? [{ url: c.web.uri, title: c.web.title ?? "" }] : []))
+        .slice(0, 8);
+      const queries = cand?.groundingMetadata?.webSearchQueries ?? [];
+      await ctx.logEvent(
+        answer ? "info" : "warn",
+        "tool.web_search",
+        `${query} → ${sources.length} sources`,
+        { query, sources: sources.length, queries } as Json,
+      );
+      return {
+        query,
+        answer: answer || "(no answer returned)",
+        sources,
+        google_queries: queries,
+      };
     } catch (err) {
       await ctx.logEvent("error", "tool.web_search", err instanceof Error ? err.message : String(err), {
         query,
