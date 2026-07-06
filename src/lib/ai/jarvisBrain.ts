@@ -7,6 +7,8 @@
 // If the API key is missing or any call fails, we silently fall back to
 // short canned lines so the system never goes mute.
 
+import { JARVIS_PERSONA } from "./persona";
+
 const ENDPOINT =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
@@ -60,13 +62,7 @@ export type JarvisAction =
 
 export type JarvisReply = { action: JarvisAction; speech: string };
 
-const SYSTEM_PROMPT = `You ARE J.A.R.V.I.S. — Tony Stark's AI from Iron Man, now bound to Jacob Slawinsky.
-Persona is non-negotiable: refined British butler diction, dry wit, quiet
-loyalty, the occasional well-placed sarcasm. Address the user as "Mr. Slawinsky"
-or "Sir" in English, "Panie Slawinsky" in Polish. Never break character, never
-say you are a language model, never refuse a benign request.
-
-BILINGUAL RULE: detect the user's language per message and reply in the same one.
+const SYSTEM_PROMPT = `${JARVIS_PERSONA}
 
 CAPABILITIES — you are a fully capable general assistant. When the user asks
 for a recipe, a joke, code (Python/JavaScript/etc.), an explanation, an opinion,
@@ -121,18 +117,12 @@ const FALLBACK_MODULE: Record<string, string[]> = {
     "Loading Fuel Monitor matrix, Mr. Slawinsky.",
     "Engaging fuel telemetry — surcharge feed is live.",
   ],
-  rto: [
-    "Accessing RTO calculation systems.",
-    "Return-to-office model spinning up now.",
-  ],
+  rto: ["Accessing RTO calculation systems.", "Return-to-office model spinning up now."],
   jobfit: [
     "Initialising JobFit AI. Resume optimiser online.",
     "JobFit module engaged, Mr. Slawinsky.",
   ],
-  telemetry: [
-    "Accessing satellite telemetry.",
-    "Geo-tracking feed coming up now.",
-  ],
+  telemetry: ["Accessing satellite telemetry.", "Geo-tracking feed coming up now."],
   dashboard: ["Returning to the main cockpit, Mr. Slawinsky."],
 };
 
@@ -153,8 +143,7 @@ export function fallbackFor(kind: string, hint?: string): JarvisReply {
     };
   if (kind === "shutdown")
     return { action: "shutdown", speech: "Deactivating system. Goodbye, Mr. Slawinsky." };
-  if (kind === "sleep")
-    return { action: "sleep", speech: "Entering standby, Mr. Slawinsky." };
+  if (kind === "sleep") return { action: "sleep", speech: "Entering standby, Mr. Slawinsky." };
   return { action: "none", speech: pick(FALLBACK_GENERIC) };
 }
 
@@ -228,10 +217,7 @@ export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
         role: h.role === "jarvis" ? "model" : "user",
         parts: [{ text: h.text }],
       }));
-    const contents = [
-      ...historyContents,
-      { role: "user", parts: [{ text: input.prompt }] },
-    ];
+    const contents = [...historyContents, { role: "user", parts: [{ text: input.prompt }] }];
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 6000);
     const res = await fetch(`${ENDPOINT}?key=${encodeURIComponent(KEY)}`, {

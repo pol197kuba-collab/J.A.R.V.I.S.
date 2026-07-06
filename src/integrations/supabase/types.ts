@@ -94,18 +94,21 @@ export type Database = {
         Row: {
           agent_id: string
           created_at: string
+          is_enabled: boolean
           permissions: Json
           tool_id: string
         }
         Insert: {
           agent_id: string
           created_at?: string
+          is_enabled?: boolean
           permissions?: Json
           tool_id: string
         }
         Update: {
           agent_id?: string
           created_at?: string
+          is_enabled?: boolean
           permissions?: Json
           tool_id?: string
         }

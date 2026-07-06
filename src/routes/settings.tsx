@@ -10,8 +10,11 @@ import {
   deleteGeminiKey,
   getGeminiKeyStatus,
   getUserSettings,
+  listAgentTools,
   saveGeminiKey,
+  setAgentToolEnabled,
   updateUserSettings,
+  type AgentToolSummary,
   type UserSettings,
 } from "@/lib/agents/runtime.functions";
 import { setServerRuntimePreference } from "@/lib/ai/jarvisBrain";
@@ -40,13 +43,19 @@ function Settings() {
   const fetchSettings = useServerFn(getUserSettings);
   const persistSettings = useServerFn(updateUserSettings);
 
-  const [serverStatus, setServerStatus] = useState<
-    "loading" | "linked" | "empty" | "error"
-  >("loading");
+  const [serverStatus, setServerStatus] = useState<"loading" | "linked" | "empty" | "error">(
+    "loading",
+  );
   const [serverPreview, setServerPreview] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<UserSettings | null>(null);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const fetchAgentTools = useServerFn(listAgentTools);
+  const persistAgentTool = useServerFn(setAgentToolEnabled);
+  const [tools, setTools] = useState<AgentToolSummary[] | null>(null);
+  const [toolsError, setToolsError] = useState<string | null>(null);
+  const [pendingToolId, setPendingToolId] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -77,6 +86,45 @@ function Settings() {
   useEffect(() => {
     void refreshServerState();
   }, [refreshServerState]);
+
+  const refreshTools = useCallback(async () => {
+    try {
+      const list = await fetchAgentTools({ data: { agentSlug: "orchestrator" } });
+      setTools(list);
+      setToolsError(null);
+    } catch (err) {
+      setToolsError(err instanceof Error ? err.message : "Failed to load tools");
+    }
+  }, [fetchAgentTools]);
+
+  useEffect(() => {
+    void refreshTools();
+  }, [refreshTools]);
+
+  const handleToggleTool = async (tool: AgentToolSummary) => {
+    const nextEnabled = !tool.enabledForAgent;
+    setPendingToolId(tool.id);
+    // Optimistic update — revert on failure.
+    setTools(
+      (prev) =>
+        prev?.map((t) => (t.id === tool.id ? { ...t, enabledForAgent: nextEnabled } : t)) ?? prev,
+    );
+    try {
+      await persistAgentTool({
+        data: { agentSlug: "orchestrator", toolId: tool.id, enabled: nextEnabled },
+      });
+      audio.playClick();
+    } catch (err) {
+      setToolsError(err instanceof Error ? err.message : "Failed to update tool");
+      setTools(
+        (prev) =>
+          prev?.map((t) => (t.id === tool.id ? { ...t, enabledForAgent: !nextEnabled } : t)) ??
+          prev,
+      );
+    } finally {
+      setPendingToolId(null);
+    }
+  };
 
   const handleSaveKey = () => {
     const trimmed = apiKey.trim();
@@ -221,7 +269,9 @@ function Settings() {
             </p>
           )}
           <p className="font-mono text-[10px] text-muted-foreground/70">
-            ℹ „Save local" trzyma klucz tylko w tej przeglądarce. „Sync to Agent Runtime" wysyła go zaszyfrowanym połączeniem na serwer, gdzie używa go Orchestrator — nadal Twój klucz, Twój ruch, darmowy tier Gemini. Puste pole + zapis = usunięcie klucza.
+            ℹ „Save local" trzyma klucz tylko w tej przeglądarce. „Sync to Agent Runtime" wysyła go
+            zaszyfrowanym połączeniem na serwer, gdzie używa go Orchestrator — nadal Twój klucz,
+            Twój ruch, darmowy tier Gemini. Puste pole + zapis = usunięcie klucza.
           </p>
         </div>
       </HudPanel>
@@ -231,7 +281,8 @@ function Settings() {
             <div>
               <p className="text-sm text-foreground">Route chat through Agent Runtime</p>
               <p className="text-xs text-muted-foreground">
-                Wysyła wiadomości przez serwerowego Orchestratora (log w agent_runs, historia w DB). Wymaga „Sync to Agent Runtime" wyżej.
+                Wysyła wiadomości przez serwerowego Orchestratora (log w agent_runs, historia w DB).
+                Wymaga „Sync to Agent Runtime" wyżej.
               </p>
             </div>
             <button
@@ -239,16 +290,13 @@ function Settings() {
               disabled={busy || !prefs || serverStatus !== "linked"}
               onClick={() =>
                 updatePref({
-                  chatRouting:
-                    prefs?.chatRouting === "server" ? "client" : "server",
+                  chatRouting: prefs?.chatRouting === "server" ? "client" : "server",
                 })
               }
               className="font-display border border-primary/60 px-3 py-1 text-[10px] uppercase tracking-widest disabled:opacity-40"
               style={{
                 color:
-                  prefs?.chatRouting === "server"
-                    ? "var(--success)"
-                    : "var(--muted-foreground)",
+                  prefs?.chatRouting === "server" ? "var(--success)" : "var(--muted-foreground)",
               }}
             >
               {prefs?.chatRouting === "server" ? "● SERVER" : "○ BROWSER"}
@@ -270,12 +318,8 @@ function Settings() {
                   onClick={() => updatePref({ defaultModel: m })}
                   className="font-display border border-primary/60 px-3 py-1 text-[10px] uppercase tracking-widest disabled:opacity-40"
                   style={{
-                    color:
-                      prefs?.defaultModel === m
-                        ? "var(--primary)"
-                        : "var(--muted-foreground)",
-                    background:
-                      prefs?.defaultModel === m ? "rgba(56,189,248,0.1)" : "transparent",
+                    color: prefs?.defaultModel === m ? "var(--primary)" : "var(--muted-foreground)",
+                    background: prefs?.defaultModel === m ? "rgba(56,189,248,0.1)" : "transparent",
                   }}
                 >
                   {m.replace("gemini-2.5-", "")}
@@ -286,7 +330,9 @@ function Settings() {
           <div className="flex items-start justify-between gap-4 border-t border-primary/20 pt-3">
             <div>
               <p className="text-sm text-foreground">Voice reply language</p>
-              <p className="text-xs text-muted-foreground">Auto = model dopasowuje język do wiadomości.</p>
+              <p className="text-xs text-muted-foreground">
+                Auto = model dopasowuje język do wiadomości.
+              </p>
             </div>
             <div className="flex gap-2">
               {(["auto", "en", "pl"] as const).map((lang) => (
@@ -298,9 +344,7 @@ function Settings() {
                   className="font-display border border-primary/60 px-3 py-1 text-[10px] uppercase tracking-widest disabled:opacity-40"
                   style={{
                     color:
-                      prefs?.voiceLanguage === lang
-                        ? "var(--primary)"
-                        : "var(--muted-foreground)",
+                      prefs?.voiceLanguage === lang ? "var(--primary)" : "var(--muted-foreground)",
                   }}
                 >
                   {lang}
@@ -318,19 +362,73 @@ function Settings() {
             <button
               type="button"
               disabled={busy || !prefs}
-              onClick={() =>
-                updatePref({ wakeWordEnabled: !(prefs?.wakeWordEnabled ?? true) })
-              }
+              onClick={() => updatePref({ wakeWordEnabled: !(prefs?.wakeWordEnabled ?? true) })}
               className="font-display border border-primary/60 px-3 py-1 text-[10px] uppercase tracking-widest disabled:opacity-40"
               style={{
-                color: prefs?.wakeWordEnabled
-                  ? "var(--success)"
-                  : "var(--muted-foreground)",
+                color: prefs?.wakeWordEnabled ? "var(--success)" : "var(--muted-foreground)",
               }}
             >
               {prefs?.wakeWordEnabled ? "● ON" : "○ OFF"}
             </button>
           </div>
+        </div>
+      </HudPanel>
+      <HudPanel index={2} title="ORCHESTRATOR // TOOLS" className="p-5">
+        <div className="mt-4 space-y-3">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            NARZĘDZIA DOSTĘPNE DLA AGENTA „ORCHESTRATOR"
+          </p>
+          {toolsError && (
+            <p className="font-mono text-[10px]" style={{ color: "var(--destructive)" }}>
+              ✕ {toolsError}
+            </p>
+          )}
+          {tools === null && !toolsError && (
+            <p className="font-mono text-[10px] text-muted-foreground/70">Ładowanie…</p>
+          )}
+          {tools?.length === 0 && (
+            <p className="font-mono text-[10px] text-muted-foreground/70">
+              Brak agenta „orchestrator" lub brak zarejestrowanych narzędzi.
+            </p>
+          )}
+          {tools?.map((tool, i) => (
+            <div
+              key={tool.id}
+              className={`flex items-start justify-between gap-4 ${i > 0 ? "border-t border-primary/20 pt-3" : ""}`}
+            >
+              <div>
+                <p className="text-sm text-foreground">
+                  {tool.name}
+                  {!tool.globallyEnabled && (
+                    <span
+                      className="ml-2 font-mono text-[10px] uppercase tracking-widest"
+                      style={{ color: "var(--destructive)" }}
+                    >
+                      GLOBALLY DISABLED
+                    </span>
+                  )}
+                </p>
+                {tool.description && (
+                  <p className="text-xs text-muted-foreground">{tool.description}</p>
+                )}
+              </div>
+              <button
+                type="button"
+                disabled={pendingToolId === tool.id || !tool.globallyEnabled}
+                onClick={() => handleToggleTool(tool)}
+                className="font-display border border-primary/60 px-3 py-1 text-[10px] uppercase tracking-widest disabled:opacity-40"
+                style={{
+                  color: tool.enabledForAgent ? "var(--success)" : "var(--muted-foreground)",
+                }}
+              >
+                {tool.enabledForAgent ? "● ON" : "○ OFF"}
+              </button>
+            </div>
+          ))}
+          <p className="font-mono text-[10px] text-muted-foreground/70">
+            ℹ Wyłączenie tu nie usuwa narzędzia — Orchestrator po prostu nie zaproponuje go modelowi
+            przy kolejnym uruchomieniu (agent_runs/tool_calls nie będzie go zawierać).
+          </p>
         </div>
       </HudPanel>
       <CommandDirectory index={2} />
@@ -357,7 +455,9 @@ function Settings() {
           <div className="flex items-center justify-between border-t border-primary/20 pt-3">
             <div>
               <p className="text-sm text-foreground">Ambient Reactor Hum</p>
-              <p className="text-xs text-muted-foreground">Low-frequency drone during active session</p>
+              <p className="text-xs text-muted-foreground">
+                Low-frequency drone during active session
+              </p>
             </div>
             <button
               type="button"
@@ -396,7 +496,10 @@ function Settings() {
       </HudPanel>
       <HudPanel index={4} title="PLANNED // ROADMAP" className="p-5">
         <div className="mt-4 space-y-2 text-xs text-muted-foreground">
-          <p>Poniższe moduły są na roadmapie — pojawią się jako realne opcje wraz z kolejnymi agentami:</p>
+          <p>
+            Poniższe moduły są na roadmapie — pojawią się jako realne opcje wraz z kolejnymi
+            agentami:
+          </p>
           <ul className="ml-4 list-disc space-y-1">
             <li>Security / biometric auth</li>
             <li>Discord & Calendar integrations</li>

@@ -8,19 +8,33 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import type { AgentRunResult } from "./runtime.functions";
-import { orchestratorTools, getToolByName } from "./tools.server";
+import { getEnabledToolsForAgent, getToolByName } from "./tools.server";
+import { JARVIS_PERSONA } from "@/lib/ai/persona";
 
-const GEMINI_ENDPOINT_BASE =
-  "https://generativelanguage.googleapis.com/v1beta/models";
+const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
-const DEFAULT_SYSTEM_PROMPT = `You are J.A.R.V.I.S., a refined British-butler AI bound to Jacob Slawinsky. Reply in the user's language (English or Polish). Address the user as "Sir" / "Mr. Slawinsky" (EN) or "Panie Slawinsky" (PL). Be concise for chit-chat, thorough for substantive requests. Never break character.
+const DEFAULT_SYSTEM_PROMPT = `${JARVIS_PERSONA}
+
+Be concise for chit-chat, thorough for substantive requests.
 
 TOOL USE:
-You have three tools: web_search, fetch_url, save_note. Use them proactively.
-- For factual / current-event questions → call web_search first. Use SHORT keyword queries (2-4 words), not full sentences. If a search returns 0 results, retry once with simpler keywords.
-- To read a specific page in detail → web_search, then fetch_url on the best URL.
-- When the user asks you to remember, save, or note something (e.g. "zapisz notatkę", "save this") → call save_note. Also call save_note when you have produced a substantive summary/list/plan the user should keep — but do not save trivial chit-chat.
-- After tool calls, produce a final natural-language answer in character. Do not describe the tools you used unless asked.
+You may have zero or more tools available, described in this request's function
+declarations — the exact set depends on what the user has enabled for you in
+Settings, so never assume a specific tool exists; check the declarations you
+actually received. When a tool is available and fits the request, use it
+proactively rather than guessing or refusing:
+- For factual / current-event / research questions, prefer a search-style tool
+  over answering from memory. Use SHORT keyword queries (2-4 words), not full
+  sentences. If a search returns 0 results, retry once with simpler keywords.
+- To read a specific page in detail, search first, then fetch the best URL.
+- When the user asks you to remember, save, or note something (e.g. "zapisz
+  notatkę", "save this"), use a note-saving tool if one is available. Also use
+  it when you have produced a substantive summary/list/plan the user should
+  keep — but do not save trivial chit-chat.
+- If no tool fits or none are available, answer directly from your own
+  knowledge instead of mentioning that a tool is missing.
+- After tool calls, produce a final natural-language answer in character. Do
+  not describe the tools you used unless asked.
 `;
 
 const MAX_TOOL_ITERATIONS = 6;
@@ -33,9 +47,7 @@ export type OrchestratorInput = {
   history: Array<{ role: "user" | "jarvis"; text: string }>;
 };
 
-export async function runOrchestrator(
-  args: OrchestratorInput,
-): Promise<AgentRunResult> {
+export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRunResult> {
   const { supabase, userId, agentSlug, input, history } = args;
 
   // 1. Resolve agent (fallback: orchestrator).
@@ -129,7 +141,13 @@ export async function runOrchestrator(
       { role: "user", parts: [{ text: input }] },
     ];
 
-    const toolDeclarations = orchestratorTools.map((t) => t.declaration);
+    // Tool registry is DB-driven: public.tools (global catalog + kill switch)
+    // joined through public.agent_tools (per-agent binding + enable toggle).
+    // Implementations still live in code (tools.server.ts) — the DB only
+    // decides which of the known tools this particular agent may call right
+    // now, so a Settings-page toggle takes effect without a redeploy.
+    const enabledTools = await getEnabledToolsForAgent(supabase, agent.id);
+    const toolDeclarations = enabledTools.map((t) => t.declaration);
     let totalTokensIn = 0;
     let totalTokensOut = 0;
     let finalText = "";
@@ -147,7 +165,12 @@ export async function runOrchestrator(
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: systemPrompt }] },
             generationConfig: { temperature: 0.85, maxOutputTokens: 1600 },
-            tools: [{ functionDeclarations: toolDeclarations }],
+            // Gemini rejects an empty functionDeclarations array, and an
+            // agent may legitimately have zero tools enabled (all toggled
+            // off in Settings) — omit the `tools` key entirely in that case.
+            ...(toolDeclarations.length > 0
+              ? { tools: [{ functionDeclarations: toolDeclarations }] }
+              : {}),
             contents,
           }),
         },

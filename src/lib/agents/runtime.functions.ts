@@ -70,10 +70,7 @@ export const saveGeminiKey = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const { error } = await supabase
       .from("user_secrets")
-      .upsert(
-        { owner_id: userId, gemini_api_key: data.key.trim() },
-        { onConflict: "owner_id" },
-      );
+      .upsert({ owner_id: userId, gemini_api_key: data.key.trim() }, { onConflict: "owner_id" });
     if (error) throw new Error(error.message);
     return { ok: true as const };
   });
@@ -82,10 +79,7 @@ export const deleteGeminiKey = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase
-      .from("user_secrets")
-      .delete()
-      .eq("owner_id", userId);
+    const { error } = await supabase.from("user_secrets").delete().eq("owner_id", userId);
     if (error) throw new Error(error.message);
     return { ok: true as const };
   });
@@ -164,6 +158,93 @@ export const updateUserSettings = createServerFn({ method: "POST" })
       voiceLanguage: row.voice_language as "auto" | "en" | "pl",
       wakeWordEnabled: row.wake_word_enabled,
     };
+  });
+
+// ---------------------------------------------------------------------------
+// Agent tools (registry visibility + per-agent enable toggle)
+// ---------------------------------------------------------------------------
+
+export type AgentToolSummary = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  globallyEnabled: boolean;
+  enabledForAgent: boolean;
+};
+
+const AgentSlugInput = z.object({
+  agentSlug: z.string().min(1).max(64).default("orchestrator"),
+});
+
+export const listAgentTools = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => AgentSlugInput.parse(input ?? {}))
+  .handler(async ({ data, context }): Promise<AgentToolSummary[]> => {
+    const { supabase, userId } = context;
+
+    const { data: agent, error: agentErr } = await supabase
+      .from("agents")
+      .select("id")
+      .eq("owner_id", userId)
+      .eq("slug", data.agentSlug)
+      .maybeSingle();
+    if (agentErr) throw new Error(agentErr.message);
+    if (!agent) return [];
+
+    const { data: tools, error: toolsErr } = await supabase
+      .from("tools")
+      .select("id, slug, name, description, is_enabled")
+      .order("name", { ascending: true });
+    if (toolsErr) throw new Error(toolsErr.message);
+
+    const { data: bindings, error: bindingsErr } = await supabase
+      .from("agent_tools")
+      .select("tool_id, is_enabled")
+      .eq("agent_id", agent.id);
+    if (bindingsErr) throw new Error(bindingsErr.message);
+
+    const bindingByTool = new Map((bindings ?? []).map((b) => [b.tool_id, b.is_enabled]));
+
+    return (tools ?? []).map((t) => ({
+      id: t.id,
+      slug: t.slug,
+      name: t.name,
+      description: t.description,
+      globallyEnabled: t.is_enabled,
+      enabledForAgent: bindingByTool.get(t.id) ?? false,
+    }));
+  });
+
+const SetAgentToolInput = z.object({
+  agentSlug: z.string().min(1).max(64).default("orchestrator"),
+  toolId: z.string().uuid(),
+  enabled: z.boolean(),
+});
+
+export const setAgentToolEnabled = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => SetAgentToolInput.parse(input))
+  .handler(async ({ data, context }): Promise<{ ok: true }> => {
+    const { supabase, userId } = context;
+
+    const { data: agent, error: agentErr } = await supabase
+      .from("agents")
+      .select("id")
+      .eq("owner_id", userId)
+      .eq("slug", data.agentSlug)
+      .maybeSingle();
+    if (agentErr) throw new Error(agentErr.message);
+    if (!agent) throw new Error(`Agent not found: ${data.agentSlug}`);
+
+    const { error } = await supabase
+      .from("agent_tools")
+      .upsert(
+        { agent_id: agent.id, tool_id: data.toolId, is_enabled: data.enabled },
+        { onConflict: "agent_id,tool_id" },
+      );
+    if (error) throw new Error(error.message);
+    return { ok: true };
   });
 
 // ---------------------------------------------------------------------------

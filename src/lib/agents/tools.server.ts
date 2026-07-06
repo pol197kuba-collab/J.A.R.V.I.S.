@@ -137,9 +137,14 @@ const webSearch: Tool = {
         google_queries: queries,
       };
     } catch (err) {
-      await ctx.logEvent("error", "tool.web_search", err instanceof Error ? err.message : String(err), {
-        query,
-      } as Json);
+      await ctx.logEvent(
+        "error",
+        "tool.web_search",
+        err instanceof Error ? err.message : String(err),
+        {
+          query,
+        } as Json,
+      );
       return { error: err instanceof Error ? err.message : String(err) };
     }
   },
@@ -219,7 +224,9 @@ const saveNote: Tool = {
     },
   },
   async execute(args, ctx) {
-    const title = String(args.title ?? "").trim().slice(0, 200);
+    const title = String(args.title ?? "")
+      .trim()
+      .slice(0, 200);
     const body = String(args.body ?? "");
     if (!title) return { error: "missing_title" };
     const tagsInput = Array.isArray(args.tags) ? args.tags : [];
@@ -248,8 +255,51 @@ const saveNote: Tool = {
   },
 };
 
-export const orchestratorTools: Tool[] = [webSearch, fetchUrl, saveNote];
+// Full catalog of tool *implementations* known to this codebase. This array
+// is the only place `execute` logic lives — it never shrinks based on DB
+// state, so a disabled tool's code stays available (just unreachable via the
+// declarations sent to the model). Slugs here MUST match `public.tools.slug`
+// rows; keep the two in sync by hand (see supabase/migrations for the seed).
+export const ALL_TOOLS: Tool[] = [webSearch, fetchUrl, saveNote];
 
 export function getToolByName(name: string): Tool | undefined {
-  return orchestratorTools.find((t) => t.declaration.name === name);
+  return ALL_TOOLS.find((t) => t.declaration.name === name);
+}
+
+// ---------------------------------------------------------------------------
+// DB-driven registry: which of the known tools is THIS agent allowed to call
+// right now? Two independent switches must both be "on":
+//   - public.tools.is_enabled       — global kill switch (admin-managed)
+//   - public.agent_tools.is_enabled — per-agent toggle (Settings page)
+// Two simple queries rather than one embedded join, to avoid depending on
+// hand-maintained embedded-relation typings drifting out of sync with the
+// actual Supabase-generated types.
+// ---------------------------------------------------------------------------
+
+export async function getEnabledToolsForAgent(
+  supabase: SupabaseClient<Database>,
+  agentId: string,
+): Promise<Tool[]> {
+  const { data: bindings, error: bindingsErr } = await supabase
+    .from("agent_tools")
+    .select("tool_id")
+    .eq("agent_id", agentId)
+    .eq("is_enabled", true);
+  if (bindingsErr) {
+    throw new Error(`Agent tool bindings lookup failed: ${bindingsErr.message}`);
+  }
+  const toolIds = (bindings ?? []).map((b) => b.tool_id);
+  if (toolIds.length === 0) return [];
+
+  const { data: toolRows, error: toolsErr } = await supabase
+    .from("tools")
+    .select("slug")
+    .in("id", toolIds)
+    .eq("is_enabled", true);
+  if (toolsErr) {
+    throw new Error(`Tool registry lookup failed: ${toolsErr.message}`);
+  }
+  const enabledSlugs = new Set((toolRows ?? []).map((t) => t.slug));
+
+  return ALL_TOOLS.filter((t) => enabledSlugs.has(t.declaration.name));
 }
