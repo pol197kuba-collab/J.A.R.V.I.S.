@@ -208,6 +208,8 @@ export async function runOrchestrator(
               supabase,
               userId,
               runId,
+              apiKey,
+              model,
               logEvent,
             });
           } catch (err) {
