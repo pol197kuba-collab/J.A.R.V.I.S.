@@ -7,10 +7,28 @@ import { emitChat, getRecentHistory, onChat, type ChatBusMessage } from "@/lib/a
 import { useVoiceCommands } from "./VoiceCommandContext";
 import { runAgent } from "@/lib/agents/runtime.functions";
 import { speak } from "@/lib/audio/speak";
+import { ACTIVE_AGENT_LS_KEY } from "@/routes/agent-hub";
 
 const STORAGE_KEY = "jarvis_chat_history";
 const MAX_HISTORY = 60;
 const SERVER_KEY_LINKED_LS_KEY = "jarvis_server_gemini_linked";
+
+// Domyślny agent gdy żaden nie jest wybrany z Agent Hub
+const DEFAULT_AGENT = { slug: "orchestrator", name: "ORCHESTRATOR" };
+
+type ActiveAgent = { slug: string; name: string };
+
+function readActiveAgent(): ActiveAgent {
+  if (typeof window === "undefined") return DEFAULT_AGENT;
+  try {
+    const raw = window.localStorage.getItem(ACTIVE_AGENT_LS_KEY);
+    if (!raw) return DEFAULT_AGENT;
+    const parsed = JSON.parse(raw) as ActiveAgent;
+    return parsed.slug && parsed.name ? parsed : DEFAULT_AGENT;
+  } catch {
+    return DEFAULT_AGENT;
+  }
+}
 
 function hasServerKey(): boolean {
   if (typeof window === "undefined") return false;
@@ -47,6 +65,10 @@ export function ChatPanel() {
   const [messages, setMessages] = useState<ChatBusMessage[]>(() => loadHistory());
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
+
+  // Aktywny agent — czytany z localStorage, aktualizowany przez event z Agent Hub
+  const [activeAgent, setActiveAgent] = useState<ActiveAgent>(() => readActiveAgent());
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const { routeText } = useVoiceCommands();
   const qc = useQueryClient();
@@ -57,8 +79,25 @@ export function ChatPanel() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, typing]);
 
-  // Subscribe to the global chat bus (voice transcripts + AI replies coming
-  // from the VoiceCommandContext, plus our own emissions below).
+  // Słuchaj na zmianę agenta z Agent Hub (przycisk LAUNCH)
+  useEffect(() => {
+    function handleAgentChanged(e: Event) {
+      const detail = (e as CustomEvent<ActiveAgent>).detail;
+      if (!detail?.slug || !detail?.name) return;
+
+      setActiveAgent(detail);
+
+      // Reset historii — nowy agent, nowy kontekst
+      setMessages([]);
+      saveHistory([]);
+      noticeShownRef.current = false;
+    }
+
+    window.addEventListener("jarvis:agent-changed", handleAgentChanged);
+    return () => window.removeEventListener("jarvis:agent-changed", handleAgentChanged);
+  }, []);
+
+  // Subscribe to the global chat bus
   useEffect(() => {
     return onChat((msg) => {
       setMessages((prev) => {
@@ -77,16 +116,13 @@ export function ChatPanel() {
     setInput("");
     setTyping(true);
     try {
-      // Prefer the server Agent Runtime when the user has linked a Gemini
-      // key on the server — that's the only path with tool-calling
-      // (web_search, fetch_url, save_note). Otherwise fall back to the
-      // voice pipeline which handles UI intents + basic chit-chat.
       if (hasServerKey()) {
         emitChat("user", text);
         const history = getRecentHistory(10);
         try {
           const result = await runAgentFn({
-            data: { agentSlug: "orchestrator", input: text, history },
+            // Używamy aktywnego agenta zamiast hardkodowanego "orchestrator"
+            data: { agentSlug: activeAgent.slug, input: text, history },
           });
           const reply =
             result.status === "done" && result.output
@@ -94,7 +130,6 @@ export function ChatPanel() {
               : `⚠ Agent error: ${result.error ?? "unknown"}`;
           emitChat("jarvis", reply);
           if (result.status === "done") speak(reply);
-          // Tool-calling may have created notes → refresh widget.
           qc.invalidateQueries({ queryKey: ["notes", "list"] });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -115,13 +150,17 @@ export function ChatPanel() {
     }
   }
 
+  // Nazwa agenta do wyświetlenia w UI — zawsze uppercase
+  const agentLabel = activeAgent.name.toUpperCase();
+
   return (
     <div className="flex h-[420px] flex-col">
       <div className="flex items-center justify-between border-b border-primary/20 px-4 py-2">
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 animate-blink rounded-full" style={{ backgroundColor: "var(--success)" }} />
+          {/* Nazwa aktywnego agenta zamiast statycznego "DUPLEX CHANNEL // GEMINI CORE" */}
           <span className="font-display text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            DUPLEX CHANNEL // GEMINI CORE
+            ACTIVE AGENT // {agentLabel}
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -161,7 +200,8 @@ export function ChatPanel() {
                   m.role === "jarvis" ? "text-primary" : "text-muted-foreground",
                 )}
               >
-                {m.role === "jarvis" ? "J.A.R.V.I.S //" : "User //"} {m.time}
+                {/* Nazwa agenta zamiast statycznego "J.A.R.V.I.S //" */}
+                {m.role === "jarvis" ? `${agentLabel} //` : "USER //"} {m.time}
               </p>
               <div
                 className={cn(
@@ -180,7 +220,7 @@ export function ChatPanel() {
           <div className="flex justify-start">
             <div className="max-w-[80%] space-y-1">
               <p className="font-display text-[10px] uppercase tracking-widest text-primary">
-                J.A.R.V.I.S //
+                {agentLabel} //
               </p>
               <div className="flex gap-1 rounded-md border border-primary/30 bg-primary/5 px-3 py-3">
                 <span className="h-1.5 w-1.5 animate-blink rounded-full bg-primary" />
