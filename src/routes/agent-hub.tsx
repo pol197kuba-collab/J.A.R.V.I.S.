@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Bot } from "lucide-react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { useServerFn } from "@tanstack/react-start";
@@ -63,7 +63,13 @@ function AgentHub() {
       )}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {agents.map((a, i) => (
-          <HudPanel key={a.id} index={i + 1} className="p-5 transition hover:shadow-[var(--glow-primary)]">
+          <Link
+            key={a.id}
+            to="/agent-hub/$slug"
+            params={{ slug: a.slug }}
+            className="group block focus:outline-none"
+          >
+          <HudPanel index={i + 1} className="p-5 transition group-hover:shadow-[var(--glow-primary)] group-focus-visible:shadow-[var(--glow-primary)]">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center border border-primary/50 bg-primary/10 text-primary">
@@ -105,7 +111,11 @@ function AgentHub() {
                 last run · {new Date(a.lastRunAt).toLocaleString()}
               </p>
             )}
+            <p className="mt-3 font-display text-[10px] uppercase tracking-[0.35em] text-primary/70 opacity-70 transition group-hover:opacity-100">
+              ▸ OPEN CONSOLE
+            </p>
           </HudPanel>
+          </Link>
         ))}
       </div>
     </div>
