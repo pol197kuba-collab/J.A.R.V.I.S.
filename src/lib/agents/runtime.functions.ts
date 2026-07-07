@@ -11,6 +11,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
+import type { Json } from "@/integrations/supabase/types";
 
 // ---------------------------------------------------------------------------
 // Types shared with the client
@@ -61,7 +62,7 @@ export type AgentRecord = {
   model: string | null;
   status: string;
   isEnabled: boolean;
-  capabilities: unknown;
+  capabilities: Json;
   behaviour: AgentBehaviourConfig;
   createdAt: string;
   updatedAt: string;
@@ -94,8 +95,8 @@ export type AgentRunRecord = {
   tokensIn: number | null;
   tokensOut: number | null;
   error: string | null;
-  input: unknown;
-  output: unknown;
+  input: Json;
+  output: Json;
 };
 
 export type AgentConversationSummary = {
@@ -110,7 +111,7 @@ export type AgentEventRecord = {
   level: string;
   source: string;
   message: string;
-  meta: unknown;
+  meta: Json;
   origin: "system_events" | "event_log";
 };
 
