@@ -70,8 +70,7 @@ function AgentConsole() {
   };
 
   const settingsMutation = useMutation({
-    mutationFn: (patch: Parameters<typeof persistSettings>[0]["data"]["patch"]) =>
-      persistSettings({ data: { slug, patch } }),
+    mutationFn: (patch: SettingsPatch) => persistSettings({ data: { slug, patch } }),
     onSuccess: () => {
       audio.playClick();
       invalidate();
@@ -532,7 +531,14 @@ function MemoryPanel({ data }: { data: AgentDetail }) {
 // Settings — identity / model / behaviour
 // ---------------------------------------------------------------------------
 
-type SettingsPatch = Parameters<typeof updateAgentSettings>[0]["data"]["patch"];
+type SettingsPatch = {
+  name?: string;
+  role?: string | null;
+  description?: string | null;
+  model?: "gemini-2.5-flash" | "gemini-2.5-pro" | null;
+  isEnabled?: boolean;
+  behaviour?: Partial<AgentBehaviourConfig>;
+};
 
 function SettingsPanel({
   data,
