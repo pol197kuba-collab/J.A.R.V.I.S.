@@ -34,6 +34,15 @@ export const Route = createFileRoute("/agent-hub/$slug")({
   component: AgentConsole,
 });
 
+type SettingsPatch = {
+  name?: string;
+  role?: string | null;
+  description?: string | null;
+  model?: "gemini-2.5-flash" | "gemini-2.5-pro" | null;
+  isEnabled?: boolean;
+  behaviour?: Partial<AgentBehaviourConfig>;
+};
+
 const statusColor: Record<string, string> = {
   active: "var(--success)",
   running: "var(--success)",
@@ -530,15 +539,6 @@ function MemoryPanel({ data }: { data: AgentDetail }) {
 // ---------------------------------------------------------------------------
 // Settings — identity / model / behaviour
 // ---------------------------------------------------------------------------
-
-type SettingsPatch = {
-  name?: string;
-  role?: string | null;
-  description?: string | null;
-  model?: "gemini-2.5-flash" | "gemini-2.5-pro" | null;
-  isEnabled?: boolean;
-  behaviour?: Partial<AgentBehaviourConfig>;
-};
 
 function SettingsPanel({
   data,
