@@ -70,16 +70,13 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     .maybeSingle();
   const apiKey = secret?.gemini_api_key?.trim();
   if (!apiKey) {
-    throw new Error(
-      "Brak klucza Gemini. Wpisz go w Settings → AI Core, aby uruchomić Agent Runtime.",
-    );
+    throw new Error("Brak klucza Gemini. Wpisz go w Settings → AI Core, aby uruchomić Agent Runtime.");
   }
 
-  const configObj = (agent.config ?? {}) as Record<string, unknown>;
-  const systemPrompt =
-    typeof configObj.system_prompt === "string" && configObj.system_prompt.trim()
-      ? (configObj.system_prompt as string)
-      : DEFAULT_SYSTEM_PROMPT;
+  const agentSpecific =
+    typeof configObj.system_prompt === "string" && configObj.system_prompt.trim() ? configObj.system_prompt : null;
+
+  const systemPrompt = agentSpecific ? `${JARVIS_PERSONA}\n\n${agentSpecific}` : DEFAULT_SYSTEM_PROMPT;
 
   // Model resolution: agent override → user default → hardcoded fallback.
   let model = agent.model?.trim() ?? "";
@@ -93,19 +90,10 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
   }
 
   const clampNum = (v: unknown, min: number, max: number, fallback: number) =>
-    typeof v === "number" && Number.isFinite(v)
-      ? Math.min(max, Math.max(min, v))
-      : fallback;
+    typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
   const temperature = clampNum(configObj.temperature, 0, 1, DEFAULT_TEMPERATURE);
-  const maxOutputTokens = clampNum(
-    configObj.max_output_tokens,
-    64,
-    8192,
-    DEFAULT_MAX_OUTPUT_TOKENS,
-  );
-  const maxToolIterations = Math.round(
-    clampNum(configObj.max_tool_iterations, 1, 12, DEFAULT_MAX_TOOL_ITERATIONS),
-  );
+  const maxOutputTokens = clampNum(configObj.max_output_tokens, 64, 8192, DEFAULT_MAX_OUTPUT_TOKENS);
+  const maxToolIterations = Math.round(clampNum(configObj.max_tool_iterations, 1, 12, DEFAULT_MAX_TOOL_ITERATIONS));
 
   // 3. Insert pending run row.
   const startedAt = Date.now();
@@ -124,12 +112,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
   const runId = runRow.id;
 
   // logEvent helper — writes to system_events so the System Logs page shows real telemetry.
-  const logEvent = async (
-    level: "info" | "warn" | "error",
-    source: string,
-    message: string,
-    meta?: Json,
-  ) => {
+  const logEvent = async (level: "info" | "warn" | "error", source: string, message: string, meta?: Json) => {
     await supabase.from("system_events").insert({
       owner_id: userId,
       level,
@@ -195,9 +178,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
             // Gemini rejects an empty functionDeclarations array, and an
             // agent may legitimately have zero tools enabled (all toggled
             // off in Settings) — omit the `tools` key entirely in that case.
-            ...(toolDeclarations.length > 0
-              ? { tools: [{ functionDeclarations: toolDeclarations }] }
-              : {}),
+            ...(toolDeclarations.length > 0 ? { tools: [{ functionDeclarations: toolDeclarations }] } : {}),
             contents,
           }),
         },
@@ -220,9 +201,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       totalTokensOut += data.usageMetadata?.candidatesTokenCount ?? 0;
 
       const parts = data.candidates?.[0]?.content?.parts ?? [];
-      const functionCalls = parts.flatMap((p) =>
-        "functionCall" in p && p.functionCall ? [p.functionCall] : [],
-      );
+      const functionCalls = parts.flatMap((p) => ("functionCall" in p && p.functionCall ? [p.functionCall] : []));
       const textOut = parts
         .flatMap((p) => ("text" in p && p.text ? [p.text] : []))
         .join("")
@@ -297,12 +276,11 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       })
       .eq("id", runId);
 
-    await logEvent(
-      "info",
-      "orchestrator",
-      `run done · ${toolCallLog.length} tool calls · ${latencyMs}ms`,
-      { run_id: runId, tokens_in: totalTokensIn, tokens_out: totalTokensOut } as Json,
-    );
+    await logEvent("info", "orchestrator", `run done · ${toolCallLog.length} tool calls · ${latencyMs}ms`, {
+      run_id: runId,
+      tokens_in: totalTokensIn,
+      tokens_out: totalTokensOut,
+    } as Json);
 
     return {
       runId,
