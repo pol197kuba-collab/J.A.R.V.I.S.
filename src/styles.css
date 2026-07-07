@@ -452,6 +452,12 @@
 }
 .animate-mini-reactor-spin { animation: mini-reactor-spin 8s linear infinite; transform-origin: center; }
 
+/* Agent sigil rotations */
+@keyframes sigil-spin { to { transform: rotate(360deg); } }
+@keyframes sigil-spin-rev { to { transform: rotate(-360deg); } }
+.animate-sigil-spin { animation: sigil-spin 32s linear infinite; transform-origin: center; }
+.animate-sigil-spin-rev { animation: sigil-spin-rev 32s linear infinite; transform-origin: center; }
+
 /* Neon glow on hover for icons / interactive elements */
 .icon-neon {
   filter: drop-shadow(0 0 1px color-mix(in oklab, var(--primary) 70%, transparent));

@@ -1,134 +1,56 @@
 
-# Krok 2 — Agent Runtime (silnik AI)
+# Agent Hub — konsola agenta z edycją ustawień
 
-Cel: dołożyć do J.A.R.V.I.S. serwerowy „Agent Runtime" — fundament pod Orchestratora i przyszłe agenty (Architect, Developer, itd.) opisane w `CODEX.md`. Równolegle: pierwsze realne opcje w `Settings` i pierwszy krok odchodzenia od mocków.
+Rozbudowa modułu `Agent Hub` tak, żeby każda karta agenta była klikalna i otwierała pełny **Agent Console** — uniwersalny widok działający dla Orchestratora oraz każdego kolejnego agenta, który pojawi się w rejestrze. Zero mocków — dane z `agents`, `agent_runs`, `agent_tools`, `tools`, `conversations`, `memories`, `event_log`. Dodatkowo: możliwość zmiany ustawień agenta z poziomu konsoli — analogicznie do tego, co dzisiaj mamy w `Settings`.
 
----
+## Propozycja danych w konsoli agenta
 
-## 0. Koszty — najważniejsze na start
+**Identity / status (nagłówek)** — nazwa, slug, rola, opis, model, `is_enabled`, `status`, duży sygil-reaktor agenta, uptime od `created_at`, `updated_at` (last config change).
 
-Chcesz maksymalnie darmowo. Trzy realistyczne opcje silnika LLM:
+**Telemetria pracy (agregaty z `agent_runs`)** — runs total / 24h / 7d, success rate, avg + p95 latency, suma tokenów in/out, ostatni run, sparkline runs/godz (24h).
 
-| Opcja | Koszt dla Ciebie | Uwagi |
-|---|---|---|
-| **A. Twój klucz Google Gemini (BYOK)** — już masz go w `localStorage` | **0 zł** (darmowy tier Gemini) | Rekomendowane na teraz. Trzeba go tylko przenieść tak, żeby dosięgnął serwera. |
-| B. Lovable AI Gateway (`LOVABLE_API_KEY`) | **Płatne z Twoich kredytów Lovable** | Wygodne, ale nie „darmowe". Wymagałoby Twojej zgody. |
-| C. Lokalny model (Ollama itp.) | 0 zł | Wymaga Twojego komputera jako backendu — nie działa z Lovable Cloud. |
+**Live activity** — lista aktualnie `running` / `pending` runs, feed 20 ostatnich runs (rozwijalne do pełnego JSON `input`/`output`).
 
-**Propozycja: A (BYOK).** Nic płatnego się nie włącza. Jeśli w przyszłości zechcesz przejść na B (np. dla streamingu / lepszych modeli / limitów), zaproponuję to osobno i **zapytam przed włączeniem**.
+**Narzędzia (`agent_tools` + `tools`)** — lista wpiętych toolów z toggle enable/disable + licznik użyć 24h/7d parsowany z `output.toolCalls`.
 
-Pytanie do potwierdzenia po planie: **czy zaczynamy od A**, czy chcesz od razu B?
+**Pamięć & kontekst** — liczba `conversations` + ostatnia aktywność, liczba `memories` per `kind`, link „otwórz w chacie".
 
----
+**Event log** — filtrowany po `agent_id`/`source = slug` z `event_log` + `system_events`.
 
-## 1. Jak to będzie działać (architektura)
+## Ustawienia agenta (NOWE — analogicznie do `/settings`)
 
-Zgodnie z `CODEX.md`: modularny monolit, agenci to komponenty, Orchestrator koordynuje, nie ma logiki biznesowej w UI.
+Osobna sekcja `Agent Settings` wewnątrz konsoli, w tej samej estetyce HUD. Wszystkie zmiany zapisywane per-agent do `agents.config` (jsonb) i kolumn `agents.model` / `agents.is_enabled` / `agents.description`, więc każdy nowy agent automatycznie dostaje ten sam edytor. Zakres:
 
-```text
-                ┌─────────────────────────────────────┐
-   UI (React)   │ ChatPanel / VoiceCommandContext     │
-                └───────────────┬─────────────────────┘
-                                │ createServerFn (RPC)
-                                ▼
-                ┌─────────────────────────────────────┐
-                │ Agent Runtime  (serwer, TanStack)   │
-                │  ├─ Orchestrator  (routing zadań)   │
-                │  ├─ Agent Registry (kim są agenci)  │
-                │  ├─ LLM Provider  (Gemini adapter)  │
-                │  ├─ Tool Registry (echo, time, ...) │
-                │  └─ Memory (Supabase: runs/messages)│
-                └───────────────┬─────────────────────┘
-                                │
-                                ▼
-                       Supabase (Lovable Cloud)
-                       agents / runs / run_messages
-```
+- **Identity & role** — edycja `name`, `role`, `description` (inline edit z zapisem on-blur, walidacja długości).
+- **Model & routing** — wybór modelu (`gemini-2.5-flash` / `gemini-2.5-pro`) — nadpisuje globalny `defaultModel` z `user_settings` per-agent. Toggle „inherit from global" (gdy on, `agents.model = null` i runtime bierze z user_settings).
+- **Behaviour (`agents.config` jsonb)** — pola przechowywane w `config`:
+  - `systemPromptOverride` (textarea, opcjonalny — nadpisuje personę tylko dla tego agenta)
+  - `temperature` (slider 0–1)
+  - `maxOutputTokens` (number)
+  - `maxToolIterations` (number, obecnie hardcoded MAX_TOOL_ITERATIONS)
+  - `voice.language` (`auto|en|pl`) i `voice.enabled` — per-agent override globalnego głosu z `user_settings`
+- **Tools** — istniejąca lista `listAgentTools` z toggle per-tool przenoszona z `/settings` do konsoli agenta (jedno źródło prawdy dla tego agenta). W `/settings` sekcja tool bindings zostaje jako skrót, ale link „Manage in Agent Console" przekierowuje do właściwej strony.
+- **Lifecycle** — toggle `is_enabled` (kill-switch), przycisk „Reset stats" (miękkie oznaczenie w event_log, bez kasowania runs), przycisk „Clear conversation history" z confirmem (usuwa `conversations` + `messages` tego agenta).
 
-Ścieżka jednego żądania:
-1. UI woła `runAgent({ agentId, input })` (server function).
-2. Orchestrator znajduje agenta w rejestrze, ładuje jego rolę + narzędzia + pamięć krótkoterminową z DB.
-3. LLM Provider (adapter Gemini) wykonuje wywołanie modelu — na razie **jeden krok, bez tool-callingu**, żeby nie budować za dużo na raz.
-4. Odpowiedź + metadane (tokens, latency, status) zapisywane w `runs` / `run_messages`.
-5. UI dostaje wynik i renderuje w istniejącym `ChatPanel` / kafelku Agent Hub.
+Wszystkie zapisy przez jeden nowy `updateAgentSettings({ slug, patch })` server function z walidacją Zod, `requireSupabaseAuth`, scope po `userId`. Zmiany invalidują `queryClient` (`["agents"]`, `["agent", slug]`).
 
-**Co dostajemy już teraz:** realne uruchamianie agenta z DB, historia rozmów w bazie, fundament do rozbudowy o tool-calling, multi-agent, planer i Orchestratora sensu stricto — bez rewrite'u.
+## Zakres implementacji
 
-**Czego świadomie NIE robimy w tym kroku** (żeby zostać w zasadzie „simple today, scalable tomorrow"):
-- multi-step tool loop / agent-as-graph,
-- streaming SSE,
-- pamięć wektorowa,
-- planer (agent Architect będzie osobnym krokiem),
-- system uprawnień per-tool.
+**Backend (dwie nowe funkcje w `src/lib/agents/runtime.functions.ts`):**
+- `getAgentDetail({ slug })` — jedno RPC zwraca: `agent`, `stats` (agregaty runs 24h/7d/all, avg/p95 latency, tokens), `recentRuns` (20 ostatnich z pełnym JSON), `activeRuns`, `tools` (reuse listAgentTools), `conversations` (count + last 3), `memories` (count per kind), `events` (30 ostatnich).
+- `updateAgentSettings({ slug, patch })` — patch dla `name/role/description/model/is_enabled/config.*` z Zod, upsert do `agents`.
+- (Pomocniczo) `resetAgentStats({ slug })` i `clearAgentConversations({ slug })` jako osobne akcje.
 
-Każde z powyższych to naturalny kolejny krok, do którego runtime jest już przygotowany.
+Zero zmian w schemacie — wszystko mieści się w istniejącej kolumnie `agents.config` (jsonb).
 
----
+**Frontend:**
+- `src/routes/agent-hub.$slug.tsx` — nowa strona konsoli. Layout: nagłówek z sygilem + status, siatka `HudPanel`-i (Telemetry, Live Runs, Tools, Memory, Event Log, **Agent Settings**). Animacja wejścia `animate-hud-tile-in` z opóźnieniami.
+- Karty w `agent-hub.tsx` opakowane w `<Link to="/agent-hub/$slug" params={{ slug }}>`, hover podkręca `--glow-primary`.
+- Nowy komponent `AgentReactorSigil` — bazuje na `ArcReactorTriangle`/`MiniArcReactor`, deterministyczna wariacja z hasha `slug` (kolor akcentu, liczba pierścieni, prędkość rotacji). Każdy nowy agent dostaje unikalny sygil „za darmo".
+- `AgentSettingsPanel` — reużywalny komponent z sekcjami Identity / Model / Behaviour / Tools / Lifecycle. Zapis on-blur (`useMutation` → `updateAgentSettings`) z inline statusem „saved ✓ / saving…". Design 1:1 z `/settings` (HudPanel, HudTag, monospace, semantyczne tokeny).
+- `RunDetailDialog` — viewer JSON dla `input`/`output` konkretnego runa (Radix Dialog w skinie `hud-panel`).
+- Pusty stan każdej sekcji w stylistyce JARVIS-a.
 
-## 2. Zmiany w bazie (Lovable Cloud)
+**Poza zakresem tej iteracji:** tworzenie nowych agentów z UI, ręczne triggerowanie runów, wykresy > sparkline, uprawnienia per-tool per-user.
 
-Nowa migracja z 3 tabelami + GRANT + RLS (wszystko scope'owane po `auth.uid()`):
-
-- `public.agents` — `id`, `owner_id`, `slug` (`orchestrator`, `architect`, `developer`…), `name`, `role`, `system_prompt`, `model` (domyślnie `gemini-2.5-flash`), `enabled`, timestamps. Seedujemy jednym rekordem: `orchestrator` z promptem „koordynujesz odpowiedzi J.A.R.V.I.S.".
-- `public.agent_runs` — `id`, `owner_id`, `agent_id`, `status` (`queued|running|done|error`), `input`, `output`, `error`, `tokens_in`, `tokens_out`, `started_at`, `finished_at`.
-- `public.agent_run_messages` — `id`, `run_id`, `role` (`system|user|assistant|tool`), `content`, `created_at` (do przyszłej pamięci konwersacyjnej).
-
-Sekret klucza Gemini: nowa tabela `public.user_secrets` (`owner_id`, `gemini_api_key`, RLS: właściciel). Klucz nadal wpisujesz w Settings, ale trafia do DB — dzięki temu server function może go użyć bez wystawiania czegokolwiek do przeglądarki.
-
-Wszystko z `GRANT ... TO authenticated` + `service_role`, RLS w formie `owner_id = auth.uid()`.
-
----
-
-## 3. Kod aplikacji
-
-Nowe pliki (serwer):
-- `src/lib/agents/registry.functions.ts` — `listAgents`, `getAgent`.
-- `src/lib/agents/runtime.functions.ts` — `runAgent({ agentId, input })` (główne API).
-- `src/lib/agents/runtime.server.ts` — logika Orchestratora + wywołanie LLM (nie eksportowana do klienta).
-- `src/lib/agents/providers/gemini.server.ts` — cienka warstwa nad REST Gemini, używa klucza z `user_secrets`.
-
-Wszystkie chronione middleware `requireSupabaseAuth`; klucz Gemini nigdy nie wraca do klienta.
-
-Frontend:
-- `Agent Hub` (`src/routes/agent-hub.tsx`) — zamiast mocków z `data/mock.ts` pokazuje agentów z DB (`useSuspenseQuery`), status z ostatnich runów.
-- `ChatPanel` / `VoiceCommandContext` — obok obecnej ścieżki „bezpośrednio do Gemini z przeglądarki" (BYOK w localStorage) dodajemy przełącznik: gdy user ma zapisany klucz w DB, chat routuje przez `runAgent` (serwer). Fallback do dzisiejszej ścieżki zostaje — nic się nie psuje.
-
-Mocki: **etap 1** — tylko `agents` z `data/mock.ts` znika (zastąpione DB). `activeTasks`, `systemStats`, `systemLogs`, `bootLogs`, `threatStream` zostają na razie — usuniemy je w kolejnych krokach, wraz z pojawianiem się realnych źródeł (np. `activeTasks` = realne `agent_runs`).
-
----
-
-## 4. Realne Settings
-
-Ekran `src/routes/settings.tsx` przestaje być listą ozdobników. Zostawiamy design (HudPanel), zmieniamy treść na to, co **faktycznie coś robi**:
-
-- **AI Core** (rozbudowa istniejącej sekcji):
-  - Klucz Gemini — zapisywany do `user_secrets` (serwer), z lokalnym cache; status „linked" pobierany z serwera.
-  - Wybór domyślnego modelu (`gemini-2.5-flash` / `gemini-2.5-pro`) — zapis do `profiles` lub `user_settings`.
-  - Toggle „Route chat through Agent Runtime" (on = serwer, off = obecna ścieżka BYOK z przeglądarki).
-- **Audio** — zostaje, już jest realne.
-- **Voice Interface** — realny toggle wake-word (steruje `VoiceCommandContext`) + wybór języka odpowiedzi (PL/EN/auto).
-- **Profile** — display name z `profiles`, edytowalne.
-- **Sekcje mockowe** (Security / Integrations / Discord itd.) — **usuwamy** z tego widoku i przenosimy do `docs/roadmap.md` jako „planned", żeby nie udawać funkcjonalności, której nie ma. Zgodnie z Twoją prośbą o odejście od mocków.
-
-Wszystkie zmiany zapisywane do nowej tabeli `public.user_settings` (`owner_id` PK, `chat_routing`, `voice_language`, `wake_word_enabled`, `default_model`) z RLS.
-
----
-
-## 5. Kolejność wykonania
-
-1. Migracja: `agents`, `agent_runs`, `agent_run_messages`, `user_secrets`, `user_settings` (+ GRANT + RLS) + seed agenta `orchestrator`.
-2. Serwerowy runtime + provider Gemini (BYOK z `user_secrets`).
-3. Refactor `Settings` na realne opcje (bez mocków).
-4. Podpięcie `ChatPanel` pod `runAgent` (za feature-flagą z Settings).
-5. `Agent Hub` czyta z DB.
-6. Ręczna weryfikacja: login → Settings (wpisanie klucza + włączenie routing) → chat → widoczny run w Agent Hub.
-
----
-
-## 6. Co wymagałoby Twojej decyzji przed dalszymi krokami
-
-- Zmiana silnika na Lovable AI Gateway (płatne z kredytów) — zapytam osobno.
-- Streaming odpowiedzi (SSE) — działa lepiej z Gateway, więc wróci przy powyższym pytaniu.
-- TTS przez chmurę zamiast wbudowanego Web Speech — płatne, poproszę o zgodę.
-
-Na tym etapie **nic płatnego się nie włącza**.
+**Stylistyka:** zgodnie z `CODEX.md` i `styles.css` — semantyczne tokeny, `font-display`, `hud-corner`, `HudTag`, glow z `--glow-primary`. Sygil jako centralny akcent wizualny każdej konsoli.
