@@ -37,7 +37,9 @@ proactively rather than guessing or refusing:
   not describe the tools you used unless asked.
 `;
 
-const MAX_TOOL_ITERATIONS = 6;
+const DEFAULT_MAX_TOOL_ITERATIONS = 6;
+const DEFAULT_TEMPERATURE = 0.85;
+const DEFAULT_MAX_OUTPUT_TOKENS = 1600;
 
 export type OrchestratorInput = {
   supabase: SupabaseClient<Database>;
@@ -78,7 +80,32 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     typeof configObj.system_prompt === "string" && configObj.system_prompt.trim()
       ? (configObj.system_prompt as string)
       : DEFAULT_SYSTEM_PROMPT;
-  const model = agent.model?.trim() || "gemini-2.5-flash";
+
+  // Model resolution: agent override → user default → hardcoded fallback.
+  let model = agent.model?.trim() ?? "";
+  if (!model) {
+    const { data: prefs } = await supabase
+      .from("user_settings")
+      .select("default_model")
+      .eq("owner_id", userId)
+      .maybeSingle();
+    model = prefs?.default_model?.trim() || "gemini-2.5-flash";
+  }
+
+  const clampNum = (v: unknown, min: number, max: number, fallback: number) =>
+    typeof v === "number" && Number.isFinite(v)
+      ? Math.min(max, Math.max(min, v))
+      : fallback;
+  const temperature = clampNum(configObj.temperature, 0, 1, DEFAULT_TEMPERATURE);
+  const maxOutputTokens = clampNum(
+    configObj.max_output_tokens,
+    64,
+    8192,
+    DEFAULT_MAX_OUTPUT_TOKENS,
+  );
+  const maxToolIterations = Math.round(
+    clampNum(configObj.max_tool_iterations, 1, 12, DEFAULT_MAX_TOOL_ITERATIONS),
+  );
 
   // 3. Insert pending run row.
   const startedAt = Date.now();
@@ -153,7 +180,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     let finalText = "";
     const toolCallLog: Array<{ name: string; args: Record<string, unknown> }> = [];
 
-    for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+    for (let iter = 0; iter < maxToolIterations; iter++) {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 20_000);
       const res = await fetch(
@@ -164,7 +191,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: systemPrompt }] },
-            generationConfig: { temperature: 0.85, maxOutputTokens: 1600 },
+            generationConfig: { temperature, maxOutputTokens },
             // Gemini rejects an empty functionDeclarations array, and an
             // agent may legitimately have zero tools enabled (all toggled
             // off in Settings) — omit the `tools` key entirely in that case.
@@ -247,7 +274,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       }
       contents.push({ role: "function", parts: responseParts });
 
-      if (iter === MAX_TOOL_ITERATIONS - 1) {
+      if (iter === maxToolIterations - 1) {
         // Force a final text reply on the next (skipped) turn by breaking here
         // but we already broke out via loop bound. If we get here we still
         // have unconsumed tool output; fall through to a graceful message.
