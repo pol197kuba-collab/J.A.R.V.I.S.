@@ -750,7 +750,10 @@ export const updateAgentSettings = createServerFn({ method: "POST" })
       patch.config = nextConfig;
     }
 
-    const { error } = await supabase.from("agents").update(patch).eq("id", agentRow.id);
+    const { error } = await supabase
+      .from("agents")
+      .update(patch as never)
+      .eq("id", agentRow.id);
     if (error) throw new Error(error.message);
 
     await supabase.from("system_events").insert({
@@ -758,7 +761,7 @@ export const updateAgentSettings = createServerFn({ method: "POST" })
       level: "info",
       source: data.slug,
       message: `agent settings updated (${Object.keys(patch).join(", ")})`,
-      meta: {} as Record<string, unknown>,
+      meta: {} as Json,
     });
 
     return { ok: true };
@@ -780,7 +783,7 @@ export const resetAgentStats = createServerFn({ method: "POST" })
       level: "warn",
       source: data.slug,
       message: "stats reset marker (historical runs preserved)",
-      meta: { reset_at: new Date().toISOString() } as Record<string, unknown>,
+      meta: { reset_at: new Date().toISOString() } as Json,
     });
     return { ok: true };
   });
@@ -815,7 +818,7 @@ export const clearAgentConversations = createServerFn({ method: "POST" })
       level: "warn",
       source: data.slug,
       message: `cleared ${ids.length} conversation(s)`,
-      meta: {} as Record<string, unknown>,
+      meta: {} as Json,
     });
     return { ok: true, deleted: ids.length };
   });
