@@ -40,6 +40,96 @@ export type AgentRunResult = {
 };
 
 // ---------------------------------------------------------------------------
+// Agent detail (agent console page)
+// ---------------------------------------------------------------------------
+
+export type AgentBehaviourConfig = {
+  systemPromptOverride: string | null;
+  temperature: number | null;
+  maxOutputTokens: number | null;
+  maxToolIterations: number | null;
+  voiceLanguage: "auto" | "en" | "pl" | null;
+  voiceEnabled: boolean | null;
+};
+
+export type AgentRecord = {
+  id: string;
+  slug: string;
+  name: string;
+  role: string | null;
+  description: string | null;
+  model: string | null;
+  status: string;
+  isEnabled: boolean;
+  capabilities: unknown;
+  behaviour: AgentBehaviourConfig;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AgentStats = {
+  runsTotal: number;
+  runs24h: number;
+  runs7d: number;
+  runsErr24h: number;
+  successRate: number | null;
+  avgLatencyMs: number | null;
+  p95LatencyMs: number | null;
+  tokensInTotal: number;
+  tokensOutTotal: number;
+  tokensIn24h: number;
+  tokensOut24h: number;
+  sparkline: number[]; // 24 buckets, runs per hour, oldest → newest
+  lastRunAt: string | null;
+  lastRunStatus: string | null;
+};
+
+export type AgentRunRecord = {
+  id: string;
+  status: string;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  latencyMs: number | null;
+  tokensIn: number | null;
+  tokensOut: number | null;
+  error: string | null;
+  input: unknown;
+  output: unknown;
+};
+
+export type AgentConversationSummary = {
+  id: string;
+  title: string | null;
+  updatedAt: string;
+};
+
+export type AgentEventRecord = {
+  id: string;
+  createdAt: string;
+  level: string;
+  source: string;
+  message: string;
+  meta: unknown;
+  origin: "system_events" | "event_log";
+};
+
+export type AgentDetail = {
+  agent: AgentRecord;
+  effectiveModel: string;
+  stats: AgentStats;
+  activeRuns: AgentRunRecord[];
+  recentRuns: AgentRunRecord[];
+  toolUsage24h: Record<string, number>;
+  toolUsage7d: Record<string, number>;
+  tools: AgentToolSummary[];
+  conversationsCount: number;
+  recentConversations: AgentConversationSummary[];
+  memoriesByKind: Record<string, number>;
+  events: AgentEventRecord[];
+};
+
+// ---------------------------------------------------------------------------
 // user_secrets (Gemini API key)
 // ---------------------------------------------------------------------------
 
