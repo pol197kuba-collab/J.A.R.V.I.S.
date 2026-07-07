@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Bot } from "lucide-react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { useServerFn } from "@tanstack/react-start";
@@ -22,8 +22,13 @@ const statusColor: Record<string, string> = {
   error: "var(--destructive)",
 };
 
+// Klucz localStorage — jedna stała żeby nie literówkować w dwóch plikach
+export const ACTIVE_AGENT_LS_KEY = "jarvis_active_agent";
+
 function AgentHub() {
   const fetchAgents = useServerFn(listAgents);
+  const navigate = useNavigate();
+
   const { data: agents = [], isLoading, error } = useQuery({
     queryKey: ["agents", "list"],
     queryFn: () => fetchAgents(),
@@ -31,6 +36,23 @@ function AgentHub() {
   });
 
   const onlineCount = agents.filter((a) => a.isEnabled).length;
+
+  function handleLaunch(e: React.MouseEvent, slug: string, name: string) {
+    // Zatrzymaj propagację żeby Link do /agent-hub/$slug nie przejął kliknięcia
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Zapisz aktywnego agenta — ChatPanel to odczyta
+    localStorage.setItem(ACTIVE_AGENT_LS_KEY, JSON.stringify({ slug, name }));
+
+    // Powiadom ChatPanel że agent się zmienił (reset historii)
+    window.dispatchEvent(
+      new CustomEvent("jarvis:agent-changed", { detail: { slug, name } }),
+    );
+
+    // Przejdź do dashboardu gdzie jest ChatPanel
+    navigate({ to: "/" });
+  }
 
   return (
     <div className="space-y-6 p-6">
@@ -69,52 +91,68 @@ function AgentHub() {
             params={{ slug: a.slug }}
             className="group block focus:outline-none"
           >
-          <HudPanel index={i + 1} className="p-5 transition group-hover:shadow-[var(--glow-primary)] group-focus-visible:shadow-[var(--glow-primary)]">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center border border-primary/50 bg-primary/10 text-primary">
-                  <Bot strokeWidth={1.5} className="h-5 w-5" />
+            <HudPanel
+              index={i + 1}
+              className="p-5 transition group-hover:shadow-[var(--glow-primary)] group-focus-visible:shadow-[var(--glow-primary)]"
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center border border-primary/50 bg-primary/10 text-primary">
+                    <Bot strokeWidth={1.5} className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="font-display text-base font-semibold tracking-widest">{a.name}</p>
+                    <p className="font-display text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                      {a.role ?? a.slug}
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className="flex items-center gap-1.5 font-display text-[10px] uppercase tracking-widest"
+                  style={{ color: statusColor[a.status] ?? "var(--muted-foreground)" }}
+                >
+                  <span
+                    className="h-1.5 w-1.5 animate-blink rounded-full"
+                    style={{ backgroundColor: statusColor[a.status] ?? "var(--muted-foreground)" }}
+                  />
+                  {a.isEnabled ? a.status : "disabled"}
+                </span>
+              </div>
+              {a.description && (
+                <p className="mt-3 text-xs text-muted-foreground/90">{a.description}</p>
+              )}
+              <div className="mt-5 grid grid-cols-2 gap-3 border-t border-primary/25 pt-3 text-xs text-muted-foreground">
+                <div>
+                  <p className="font-display tracking-[0.2em]">ACTIVE RUNS</p>
+                  <p className="font-display text-lg font-semibold text-primary">{a.activeRuns}</p>
                 </div>
                 <div>
-                  <p className="font-display text-base font-semibold tracking-widest">{a.name}</p>
-                  <p className="font-display text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                    {a.role ?? a.slug}
-                  </p>
+                  <p className="font-display tracking-[0.2em]">MODEL</p>
+                  <p className="font-mono text-[11px] text-foreground">{a.model ?? "—"}</p>
                 </div>
               </div>
-              <span
-                className="flex items-center gap-1.5 font-display text-[10px] uppercase tracking-widest"
-                style={{ color: statusColor[a.status] ?? "var(--muted-foreground)" }}
-              >
-                <span
-                  className="h-1.5 w-1.5 animate-blink rounded-full"
-                  style={{ backgroundColor: statusColor[a.status] ?? "var(--muted-foreground)" }}
-                />
-                {a.isEnabled ? a.status : "disabled"}
-              </span>
-            </div>
-            {a.description && (
-              <p className="mt-3 text-xs text-muted-foreground/90">{a.description}</p>
-            )}
-            <div className="mt-5 grid grid-cols-2 gap-3 border-t border-primary/25 pt-3 text-xs text-muted-foreground">
-              <div>
-                <p className="font-display tracking-[0.2em]">ACTIVE RUNS</p>
-                <p className="font-display text-lg font-semibold text-primary">{a.activeRuns}</p>
+              {a.lastRunAt && (
+                <p className="mt-2 font-mono text-[10px] text-muted-foreground/70">
+                  last run · {new Date(a.lastRunAt).toLocaleString()}
+                </p>
+              )}
+
+              {/* Dolny rząd: OPEN CONSOLE po lewej, LAUNCH po prawej */}
+              <div className="mt-3 flex items-center justify-between">
+                <p className="font-display text-[10px] uppercase tracking-[0.35em] text-primary/70 opacity-70 transition group-hover:opacity-100">
+                  ▸ OPEN CONSOLE
+                </p>
+                {a.isEnabled && (
+                  <button
+                    type="button"
+                    onClick={(e) => handleLaunch(e, a.slug, a.name)}
+                    className="font-display text-[10px] uppercase tracking-[0.35em] border border-primary/50 bg-primary/10 px-2 py-1 text-primary transition hover:bg-primary/25 hover:shadow-[var(--glow-primary)] focus:outline-none"
+                  >
+                    ▸ LAUNCH
+                  </button>
+                )}
               </div>
-              <div>
-                <p className="font-display tracking-[0.2em]">MODEL</p>
-                <p className="font-mono text-[11px] text-foreground">{a.model ?? "—"}</p>
-              </div>
-            </div>
-            {a.lastRunAt && (
-              <p className="mt-2 font-mono text-[10px] text-muted-foreground/70">
-                last run · {new Date(a.lastRunAt).toLocaleString()}
-              </p>
-            )}
-            <p className="mt-3 font-display text-[10px] uppercase tracking-[0.35em] text-primary/70 opacity-70 transition group-hover:opacity-100">
-              ▸ OPEN CONSOLE
-            </p>
-          </HudPanel>
+            </HudPanel>
           </Link>
         ))}
       </div>
