@@ -1,9 +1,11 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { Bot } from "lucide-react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { listAgents } from "@/lib/agents/runtime.functions";
+import { useHudNavigate } from "@/components/jarvis/TransitionContext";
+import { audio } from "@/lib/audio/AudioEngine";
 
 export const Route = createFileRoute("/agent-hub")({
   head: () => ({
@@ -27,7 +29,7 @@ export const ACTIVE_AGENT_LS_KEY = "jarvis_active_agent";
 
 function AgentHub() {
   const fetchAgents = useServerFn(listAgents);
-  const navigate = useNavigate();
+  const { go, isTransitioning } = useHudNavigate();
 
   const { data: agents = [], isLoading, error } = useQuery({
     queryKey: ["agents", "list"],
@@ -38,20 +40,20 @@ function AgentHub() {
   const onlineCount = agents.filter((a) => a.isEnabled).length;
 
   function handleLaunch(e: React.MouseEvent, slug: string, name: string) {
-    // Zatrzymaj propagację żeby Link do /agent-hub/$slug nie przejął kliknięcia
     e.preventDefault();
     e.stopPropagation();
-
-    // Zapisz aktywnego agenta — ChatPanel to odczyta
     localStorage.setItem(ACTIVE_AGENT_LS_KEY, JSON.stringify({ slug, name }));
-
-    // Powiadom ChatPanel że agent się zmienił (reset historii)
     window.dispatchEvent(
       new CustomEvent("jarvis:agent-changed", { detail: { slug, name } }),
     );
+    audio.playClick();
+    go("/");
+  }
 
-    // Przejdź do dashboardu gdzie jest ChatPanel
-    navigate({ to: "/" });
+  function openConsole(slug: string) {
+    if (isTransitioning) return;
+    audio.playClick();
+    go(`/agent-hub/${slug}`);
   }
 
   return (
@@ -85,11 +87,12 @@ function AgentHub() {
       )}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {agents.map((a, i) => (
-          <Link
+          <button
             key={a.id}
-            to="/agent-hub/$slug"
-            params={{ slug: a.slug }}
-            className="group block focus:outline-none"
+            type="button"
+            onClick={() => openConsole(a.slug)}
+            disabled={isTransitioning}
+            className="group block w-full text-left focus:outline-none disabled:opacity-70"
           >
             <HudPanel
               index={i + 1}
@@ -153,7 +156,7 @@ function AgentHub() {
                 )}
               </div>
             </HudPanel>
-          </Link>
+          </button>
         ))}
       </div>
     </div>
