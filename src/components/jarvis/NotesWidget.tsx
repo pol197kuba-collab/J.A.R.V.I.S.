@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Trash2, Plus, StickyNote } from "lucide-react";
+import { Trash2, Plus, StickyNote, Pencil, Check, X } from "lucide-react";
 
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { listNotes, createNote, deleteNote } from "@/lib/notes/notes.functions";
+import { listNotes, createNote, deleteNote, updateNote } from "@/lib/notes/notes.functions";
 import { toast } from "sonner";
 
 export function NotesWidget({ index = 0 }: { index?: number }) {
@@ -15,10 +15,14 @@ export function NotesWidget({ index = 0 }: { index?: number }) {
   const fetchNotes = useServerFn(listNotes);
   const create = useServerFn(createNote);
   const remove = useServerFn(deleteNote);
+  const update = useServerFn(updateNote);
 
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editBody, setEditBody] = useState("");
 
   const { data: notes = [], isLoading } = useQuery({
     queryKey: ["notes", "list"],
@@ -41,8 +45,29 @@ export function NotesWidget({ index = 0 }: { index?: number }) {
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => remove({ data: { id } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["notes", "list"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notes", "list"] });
+      toast.success("Note deleted");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
   });
+
+  const updateMut = useMutation({
+    mutationFn: (input: { id: string; title: string; body: string }) =>
+      update({ data: input }),
+    onSuccess: () => {
+      setEditingId(null);
+      qc.invalidateQueries({ queryKey: ["notes", "list"] });
+      toast.success("Note updated");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
+  });
+
+  function startEdit(id: string, title: string, body: string) {
+    setEditingId(id);
+    setEditTitle(title);
+    setEditBody(body ?? "");
+  }
 
   return (
     <HudPanel
@@ -109,6 +134,43 @@ export function NotesWidget({ index = 0 }: { index?: number }) {
             key={n.id}
             className="group border border-primary/20 bg-primary/[0.02] p-3 transition hover:border-primary/50"
           >
+            {editingId === n.id ? (
+              <div className="space-y-2">
+                <Input
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  maxLength={200}
+                  className="font-mono text-xs"
+                />
+                <Textarea
+                  value={editBody}
+                  onChange={(e) => setEditBody(e.target.value)}
+                  rows={3}
+                  className="font-mono text-xs"
+                />
+                <div className="flex justify-end gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setEditingId(null)}
+                    disabled={updateMut.isPending}
+                  >
+                    <X className="mr-1 h-3 w-3" /> Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={!editTitle.trim() || updateMut.isPending}
+                    onClick={() =>
+                      updateMut.mutate({ id: n.id, title: editTitle.trim(), body: editBody })
+                    }
+                  >
+                    <Check className="mr-1 h-3 w-3" />
+                    {updateMut.isPending ? "Saving…" : "Save"}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <h3 className="font-display truncate text-xs font-semibold uppercase tracking-widest text-foreground">
@@ -118,14 +180,24 @@ export function NotesWidget({ index = 0 }: { index?: number }) {
                   {new Date(n.createdAt).toLocaleString()} · {n.source}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => deleteMut.mutate(n.id)}
-                aria-label="Delete note"
-                className="opacity-0 transition group-hover:opacity-100"
-              >
-                <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" strokeWidth={1.5} />
-              </button>
+              <div className="flex shrink-0 items-center gap-2 opacity-0 transition group-hover:opacity-100">
+                <button
+                  type="button"
+                  onClick={() => startEdit(n.id, n.title, n.body)}
+                  aria-label="Edit note"
+                >
+                  <Pencil className="h-3.5 w-3.5 text-muted-foreground hover:text-primary" strokeWidth={1.5} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`Delete note "${n.title}"?`)) deleteMut.mutate(n.id);
+                  }}
+                  aria-label="Delete note"
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" strokeWidth={1.5} />
+                </button>
+              </div>
             </div>
             {n.body && (
               <p className="mt-2 whitespace-pre-wrap break-words text-xs text-foreground/90">
@@ -143,6 +215,8 @@ export function NotesWidget({ index = 0 }: { index?: number }) {
                   </span>
                 ))}
               </div>
+            )}
+              </>
             )}
           </article>
         ))}
