@@ -56,16 +56,16 @@ function Index() {
         </div>
       </HudPanel>
 
-      <div className="grid gap-6 lg:grid-cols-2 landscape:max-md:grid-cols-2 landscape:max-md:gap-2">
-        <WeatherTelemetry index={3} />
-        <GlobalIntelFeed index={4} />
-      </div>
-
-      <NotesWidget index={5} />
-
-      <HudPanel index={6} title="CONVERSATION STREAM" className="flex flex-col">
+      <HudPanel index={3} title="CONVERSATION STREAM" className="flex flex-col">
         <ChatPanel />
       </HudPanel>
+
+      <NotesWidget index={4} />
+
+      <div className="grid gap-6 lg:grid-cols-2 landscape:max-md:grid-cols-2 landscape:max-md:gap-2">
+        <WeatherTelemetry index={5} />
+        <GlobalIntelFeed index={6} />
+      </div>
     </div>
   );
 }

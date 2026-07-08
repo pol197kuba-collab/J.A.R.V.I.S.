@@ -73,6 +73,11 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     throw new Error("Brak klucza Gemini. Wpisz go w Settings → AI Core, aby uruchomić Agent Runtime.");
   }
 
+  const configObj: Record<string, unknown> =
+    agent.config && typeof agent.config === "object" && !Array.isArray(agent.config)
+      ? (agent.config as Record<string, unknown>)
+      : {};
+
   const agentSpecific =
     typeof configObj.system_prompt === "string" && configObj.system_prompt.trim() ? configObj.system_prompt : null;
 
