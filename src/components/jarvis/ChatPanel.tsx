@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { emitChat, getRecentHistory, onChat, type ChatBusMessage } from "@/lib/ai/chatBus";
 import { useVoiceCommands } from "./VoiceCommandContext";
-import { runAgent } from "@/lib/agents/runtime.functions";
+import { listAgents, runAgent } from "@/lib/agents/runtime.functions";
 import { speak } from "@/lib/audio/speak";
 import { ACTIVE_AGENT_LS_KEY } from "@/routes/agent-hub";
 
@@ -73,7 +73,27 @@ export function ChatPanel() {
   const { routeText } = useVoiceCommands();
   const qc = useQueryClient();
   const runAgentFn = useServerFn(runAgent);
+  const fetchAgents = useServerFn(listAgents);
   const noticeShownRef = useRef(false);
+
+  const { data: agents = [] } = useQuery({
+    queryKey: ["agents", "list"],
+    queryFn: () => fetchAgents(),
+    refetchInterval: 15000,
+  });
+
+  function switchAgent(slug: string) {
+    const found = agents.find((a) => a.slug === slug);
+    if (!found) return;
+    const next = { slug: found.slug, name: found.name };
+    setActiveAgent(next);
+    try {
+      window.localStorage.setItem(ACTIVE_AGENT_LS_KEY, JSON.stringify(next));
+    } catch { /* ignore */ }
+    setMessages([]);
+    saveHistory([]);
+    noticeShownRef.current = false;
+  }
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -158,10 +178,24 @@ export function ChatPanel() {
       <div className="flex items-center justify-between border-b border-primary/20 px-4 py-2">
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 animate-blink rounded-full" style={{ backgroundColor: "var(--success)" }} />
-          {/* Nazwa aktywnego agenta zamiast statycznego "DUPLEX CHANNEL // GEMINI CORE" */}
           <span className="font-display text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            ACTIVE AGENT // {agentLabel}
+            ACTIVE AGENT //
           </span>
+          <select
+            value={activeAgent.slug}
+            onChange={(e) => switchAgent(e.target.value)}
+            className="font-display border border-primary/40 bg-black/60 px-2 py-1 text-[10px] uppercase tracking-[0.25em] text-primary focus:border-primary focus:outline-none"
+            aria-label="Select active agent"
+          >
+            {(agents.length > 0
+              ? agents
+              : [{ slug: activeAgent.slug, name: activeAgent.name, isEnabled: true }]
+            ).map((a) => (
+              <option key={a.slug} value={a.slug} disabled={"isEnabled" in a ? !a.isEnabled : false}>
+                {a.name.toUpperCase()}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="flex items-center gap-3">
           {messages.length > 0 && (
