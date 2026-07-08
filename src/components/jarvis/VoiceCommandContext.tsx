@@ -313,7 +313,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       }
       // Multi-turn memory: feed the last clean turns into Gemini so JARVIS
       // actually remembers what we just talked about.
-      const history = getRecentHistory(10);
+      const history = getRecentHistory(3);
       // Ask Gemini for richer reply + open-ended chat handling.
       const reply = await askJarvis({
         prompt:
