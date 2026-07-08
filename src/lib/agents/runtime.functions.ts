@@ -188,7 +188,7 @@ export type UserSettings = {
 
 const DEFAULT_SETTINGS: UserSettings = {
   chatRouting: "client",
-  defaultModel: "gemini-2.5-flash",
+  defaultModel: "gemini-3.5-flash",
   voiceLanguage: "auto",
   wakeWordEnabled: true,
 };
@@ -215,7 +215,7 @@ export const getUserSettings = createServerFn({ method: "GET" })
 const UpdateSettingsInput = z
   .object({
     chatRouting: z.enum(["client", "server"]).optional(),
-    defaultModel: z.enum(["gemini-2.5-flash", "gemini-2.5-pro"]).optional(),
+    defaultModel: z.enum(["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-pro"]).optional(),
     voiceLanguage: z.enum(["auto", "en", "pl"]).optional(),
     wakeWordEnabled: z.boolean().optional(),
   })
@@ -479,7 +479,7 @@ export const getAgentDetail = createServerFn({ method: "GET" })
         .select("default_model")
         .eq("owner_id", userId)
         .maybeSingle();
-      effectiveModel = prefs?.default_model?.trim() || "gemini-2.5-flash";
+      effectiveModel = prefs?.default_model?.trim() || "gemini-3.5-flash";
     }
 
     // Runs — pull the last 500 for stats + slicing.
@@ -695,7 +695,7 @@ const UpdateAgentSettingsInput = z.object({
       name: z.string().min(1).max(80).optional(),
       role: z.string().max(120).nullable().optional(),
       description: z.string().max(1200).nullable().optional(),
-      model: z.enum(["gemini-2.5-flash", "gemini-2.5-pro"]).nullable().optional(),
+      model: z.enum(["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-pro"]).nullable().optional(),
       isEnabled: z.boolean().optional(),
       behaviour: z
         .object({
