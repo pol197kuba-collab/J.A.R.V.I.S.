@@ -138,7 +138,7 @@ export function ChatPanel() {
     try {
       if (hasServerKey()) {
         emitChat("user", text);
-        const history = getRecentHistory(10);
+        const history = getRecentHistory(3);
         try {
           const result = await runAgentFn({
             // Używamy aktywnego agenta zamiast hardkodowanego "orchestrator"
