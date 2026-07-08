@@ -307,6 +307,10 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       }
       // Try regex first for instant response on known commands.
       const local = COMMANDS.find((c) => c.re.test(transcript));
+            if (local) {
+        fire(local.action);
+        return;
+      }
       // Multi-turn memory: feed the last clean turns into Gemini so JARVIS
       // actually remembers what we just talked about.
       const history = getRecentHistory(10);
