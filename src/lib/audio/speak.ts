@@ -44,7 +44,7 @@ function pump() {
   const startUtter = () => {
     try {
       const utter = new SpeechSynthesisUtterance(next.text);
-      utter.lang = "en-GB";
+      utter.lang = "pl-PL";
       utter.pitch = 0.85;
       utter.rate = 1.0;
       utter.volume = 1.0;
