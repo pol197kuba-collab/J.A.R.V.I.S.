@@ -100,12 +100,12 @@ export const updateNote = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => UpdateInput.parse(input))
   .handler(async ({ data, context }): Promise<Note> => {
     const { supabase, userId } = context;
-    const patch: Record<string, unknown> = {
+    const patch = {
       title: data.title.trim(),
       body: data.body,
       updated_at: new Date().toISOString(),
+      ...(data.tags ? { tags: data.tags } : {}),
     };
-    if (data.tags) patch.tags = data.tags;
     const { data: row, error } = await supabase
       .from("notes")
       .update(patch)
