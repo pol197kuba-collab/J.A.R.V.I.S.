@@ -91,7 +91,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       .select("default_model")
       .eq("owner_id", userId)
       .maybeSingle();
-    model = prefs?.default_model?.trim() || "gemini-2.5-flash";
+    model = prefs?.default_model?.trim() || "gemini-3.5-flash";
   }
 
   const clampNum = (v: unknown, min: number, max: number, fallback: number) =>
