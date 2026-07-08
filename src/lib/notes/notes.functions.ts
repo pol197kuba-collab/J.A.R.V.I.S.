@@ -87,3 +87,40 @@ export const deleteNote = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true as const };
   });
+
+const UpdateInput = z.object({
+  id: z.string().uuid(),
+  title: z.string().min(1).max(200),
+  body: z.string().max(20_000).optional().default(""),
+  tags: z.array(z.string().min(1).max(40)).max(20).optional(),
+});
+
+export const updateNote = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => UpdateInput.parse(input))
+  .handler(async ({ data, context }): Promise<Note> => {
+    const { supabase, userId } = context;
+    const patch: Record<string, unknown> = {
+      title: data.title.trim(),
+      body: data.body,
+      updated_at: new Date().toISOString(),
+    };
+    if (data.tags) patch.tags = data.tags;
+    const { data: row, error } = await supabase
+      .from("notes")
+      .update(patch)
+      .eq("owner_id", userId)
+      .eq("id", data.id)
+      .select("id, title, body, tags, source, created_at, updated_at")
+      .single();
+    if (error) throw new Error(error.message);
+    return {
+      id: row.id,
+      title: row.title,
+      body: row.body,
+      tags: row.tags ?? [],
+      source: row.source,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  });
