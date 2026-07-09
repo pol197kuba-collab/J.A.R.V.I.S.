@@ -58,7 +58,11 @@ export type JarvisAction =
   | "system_check"
   | "sleep"
   | "shutdown"
-  | "reboot";
+  | "reboot"
+  | "open_agents"
+  | "open_settings"
+  | "open_logs"
+  | "open_subsystems";
 
 export type JarvisReply = { action: JarvisAction; speech: string };
 
@@ -88,7 +92,8 @@ INVALID examples (do NOT do this):
 \`\`\`
 
 Allowed values for "action": none, open_dashboard, open_fuel, open_calculator,
-open_jobfit, open_telemetry, open_menu, close_menu, system_check, sleep, shutdown, reboot.
+open_jobfit, open_telemetry, open_menu, close_menu, system_check, sleep, shutdown, reboot,
+open_agents, open_settings, open_logs, open_subsystems.
 
 - Use "reboot" for any phrasing of: reboot, restart, restart system, reboot system,
   zrestartuj system, zresetuj, reset, ark reboot. Speech line should acknowledge
