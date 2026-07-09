@@ -124,7 +124,11 @@ type LocalAction =
   | "system_check"
   | "sleep"
   | "shutdown"
-  | "reboot";
+  | "reboot"
+  | "agents"
+  | "settings"
+  | "logs"
+  | "subsystems";
 
 const ACTION_MAP: Record<JarvisAction, LocalAction | null> = {
   none: null,
@@ -139,23 +143,31 @@ const ACTION_MAP: Record<JarvisAction, LocalAction | null> = {
   sleep: "sleep",
   shutdown: "shutdown",
   reboot: "reboot",
+  open_agents: "agents",
+  open_settings: "settings",
+  open_logs: "logs",
+  open_subsystems: "subsystems",
 };
 
 const COMMANDS: Array<{ re: RegExp; action: LocalAction }> = [
   // Navigation
-  { re: /\b(open\s+dashboard|show\s+status|show\s+core|jarvis\s+dashboard)\b/i, action: "dashboard" },
-  { re: /\b(open\s+fuel|launch\s+monitor|jarvis\s+fuel)\b/i, action: "fuel" },
-  { re: /\b(open\s+calculator|launch\s+rto|jarvis\s+office)\b/i, action: "rto" },
-  { re: /\b(open\s+jobfit|launch\s+ai|jarvis\s+job)\b/i, action: "jobfit" },
-  { re: /\b(show\s+telemetry|open\s+map|geo[-\s]?tracking)\b/i, action: "telemetry" },
+  { re: /\b(open\s+dashboard|show\s+status|show\s+core|jarvis\s+dashboard|otwórz\s+pulpit|otworz\s+pulpit|pokaż\s+dashboard|pokaz\s+dashboard|wróć\s+do\s+dashboardu|wroc\s+do\s+dashboardu)\b/i, action: "dashboard" },
+  { re: /\b(open\s+fuel|launch\s+monitor|jarvis\s+fuel|otwórz\s+paliwo|otworz\s+paliwo|monitor\s+paliwa)\b/i, action: "fuel" },
+  { re: /\b(open\s+calculator|launch\s+rto|jarvis\s+office|otwórz\s+kalkulator|otworz\s+kalkulator|kalkulator\s+rto)\b/i, action: "rto" },
+  { re: /\b(open\s+jobfit|launch\s+ai|jarvis\s+job|otwórz\s+jobfit|otworz\s+jobfit)\b/i, action: "jobfit" },
+  { re: /\b(show\s+telemetry|open\s+map|geo[-\s]?tracking|otwórz\s+mapę|otworz\s+mape|pokaż\s+mapę|pokaz\s+mape|geolokalizacja)\b/i, action: "telemetry" },
+  { re: /\b(open\s+agents?|agent\s+hub|otwórz\s+agentów|otworz\s+agentow|pokaż\s+agentów|pokaz\s+agentow)\b/i, action: "agents" },
+  { re: /\b(open\s+settings|otwórz\s+ustawienia|otworz\s+ustawienia|pokaż\s+ustawienia|pokaz\s+ustawienia|konfiguracja)\b/i, action: "settings" },
+  { re: /\b(open\s+logs|system\s+logs|otwórz\s+logi|otworz\s+logi|pokaż\s+logi|pokaz\s+logi|dziennik\s+systemu)\b/i, action: "logs" },
+  { re: /\b(open\s+sub[-\s]?systems|otwórz\s+podsystemy|otworz\s+podsystemy|pokaż\s+podsystemy|pokaz\s+podsystemy)\b/i, action: "subsystems" },
   // Interface
-  { re: /\b(open\s+menu|show\s+sidebar)\b/i, action: "menu_open" },
-  { re: /\b(close\s+menu|hide\s+sidebar)\b/i, action: "menu_close" },
+  { re: /\b(open\s+menu|show\s+sidebar|otwórz\s+menu|otworz\s+menu|pokaż\s+menu|pokaz\s+menu)\b/i, action: "menu_open" },
+  { re: /\b(close\s+menu|hide\s+sidebar|zamknij\s+menu|schowaj\s+menu|ukryj\s+menu)\b/i, action: "menu_close" },
   // Status & shutdown
-  { re: /\b(system\s+check)\b/i, action: "system_check" },
-  { re: /\b(jarvis\s+sleep|standby)\b/i, action: "sleep" },
-  { re: /\b(disconnect|shutdown|system\s+shutdown)\b/i, action: "shutdown" },
-  { re: /\b(reboot|restart|reset|zrestartuj|zresetuj|ark\s+reboot)\b/i, action: "reboot" },
+  { re: /\b(system\s+check|sprawdź\s+system|sprawdz\s+system|status\s+systemu|raport\s+systemu)\b/i, action: "system_check" },
+  { re: /\b(jarvis\s+sleep|standby|uśpij|uspij|tryb\s+czuwania|stan\s+czuwania)\b/i, action: "sleep" },
+  { re: /\b(disconnect|shutdown|system\s+shutdown|wyłącz\s+system|wylacz\s+system|zamknij\s+system|rozłącz|rozlacz)\b/i, action: "shutdown" },
+  { re: /\b(reboot|restart|reset|zrestartuj|zresetuj|ark\s+reboot|zrestartuj\s+system|uruchom\s+ponownie)\b/i, action: "reboot" },
 ];
 
 export function VoiceCommandProvider({ children }: { children: ReactNode }) {
@@ -229,6 +241,22 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
           window.dispatchEvent(new CustomEvent("jarvis:sidebar", { detail: "close" }));
           if (spokenLine) speak(spokenLine);
           break;
+      case "agents":
+        say("Przechodzę do Agent Hub, sir.");
+        go("/agent-hub");
+        break;
+      case "settings":
+        say("Otwieram konfigurację.");
+        go("/settings");
+        break;
+      case "logs":
+        say("Otwieram dziennik systemu.");
+        go("/system-logs");
+        break;
+      case "subsystems":
+        say("Otwieram podsystemy.");
+        go("/sub-systems");
+        break;
         case "system_check":
           say("All systems operational, Mister Slawinsky. Core temperature is nominal.");
           break;
