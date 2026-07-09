@@ -90,9 +90,12 @@ export function ChatPanel() {
     try {
       window.localStorage.setItem(ACTIVE_AGENT_LS_KEY, JSON.stringify(next));
     } catch { /* ignore */ }
-    setMessages([]);
-    saveHistory([]);
-    noticeShownRef.current = false;
+    // Nie kasujemy historii — rozmowa jest ciągła, tylko zmienia się etykieta
+    // tego, kto odpowiada. Dokładamy krótką informację systemową w chacie.
+    emitChat("jarvis", `▸ Aktywny agent zmieniony na ${found.name.toUpperCase()}.`, {
+      agentSlug: found.slug,
+      agentName: found.name,
+    });
   }
 
   useEffect(() => {
@@ -104,13 +107,8 @@ export function ChatPanel() {
     function handleAgentChanged(e: Event) {
       const detail = (e as CustomEvent<ActiveAgent>).detail;
       if (!detail?.slug || !detail?.name) return;
-
       setActiveAgent(detail);
-
-      // Reset historii — nowy agent, nowy kontekst
-      setMessages([]);
-      saveHistory([]);
-      noticeShownRef.current = false;
+      // Zachowujemy historię — ciągła rozmowa z całym zespołem.
     }
 
     window.addEventListener("jarvis:agent-changed", handleAgentChanged);
@@ -148,12 +146,18 @@ export function ChatPanel() {
             result.status === "done" && result.output
               ? result.output
               : `⚠ Agent error: ${result.error ?? "unknown"}`;
-          emitChat("jarvis", reply);
+          emitChat("jarvis", reply, {
+            agentSlug: activeAgent.slug,
+            agentName: activeAgent.name,
+          });
           if (result.status === "done") speak(reply);
           qc.invalidateQueries({ queryKey: ["notes", "list"] });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          emitChat("jarvis", `⚠ Agent runtime failed: ${msg}`);
+          emitChat("jarvis", `⚠ Agent runtime failed: ${msg}`, {
+            agentSlug: activeAgent.slug,
+            agentName: activeAgent.name,
+          });
         }
       } else {
         await routeText(text);
@@ -171,7 +175,7 @@ export function ChatPanel() {
   }
 
   // Nazwa agenta do wyświetlenia w UI — zawsze uppercase
-  const agentLabel = activeAgent.name.toUpperCase();
+  const activeAgentLabel = activeAgent.name.toUpperCase();
 
   return (
     <div className="flex h-[420px] flex-col">
@@ -234,8 +238,11 @@ export function ChatPanel() {
                   m.role === "jarvis" ? "text-primary" : "text-muted-foreground",
                 )}
               >
-                {/* Nazwa agenta zamiast statycznego "J.A.R.V.I.S //" */}
-                {m.role === "jarvis" ? `${agentLabel} //` : "USER //"} {m.time}
+                {/* Etykieta pochodzi z SAMEJ wiadomości, żeby po przełączeniu
+                    agenta stare odpowiedzi zachowały swojego autora. */}
+                {m.role === "jarvis"
+                  ? `${(m.agentName ?? activeAgent.name).toUpperCase()} //`
+                  : "USER //"} {m.time}
               </p>
               <div
                 className={cn(
@@ -254,7 +261,7 @@ export function ChatPanel() {
           <div className="flex justify-start">
             <div className="max-w-[80%] space-y-1">
               <p className="font-display text-[10px] uppercase tracking-widest text-primary">
-                {agentLabel} //
+                {activeAgentLabel} //
               </p>
               <div className="flex gap-1 rounded-md border border-primary/30 bg-primary/5 px-3 py-3">
                 <span className="h-1.5 w-1.5 animate-blink rounded-full bg-primary" />
