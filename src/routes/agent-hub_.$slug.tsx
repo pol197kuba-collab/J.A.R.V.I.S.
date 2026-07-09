@@ -24,7 +24,7 @@ import {
 } from "@/lib/agents/runtime.functions";
 import { audio } from "@/lib/audio/AudioEngine";
 
-export const Route = createFileRoute("/agent-hub/$slug")({
+export const Route = createFileRoute("/agent-hub_/$slug")({
   head: ({ params }) => ({
     meta: [
       { title: `JARVIS // Agent · ${params.slug}` },

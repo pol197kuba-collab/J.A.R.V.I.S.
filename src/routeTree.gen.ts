@@ -16,7 +16,7 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as GeoTrackingRouteImport } from './routes/geo-tracking'
 import { Route as AgentHubRouteImport } from './routes/agent-hub'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AgentHubSlugRouteImport } from './routes/agent-hub.$slug'
+import { Route as AgentHubSlugRouteImport } from './routes/agent-hub_.$slug'
 
 const SystemLogsRoute = SystemLogsRouteImport.update({
   id: '/system-logs',
@@ -54,14 +54,14 @@ const IndexRoute = IndexRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const AgentHubSlugRoute = AgentHubSlugRouteImport.update({
-  id: '/$slug',
-  path: '/$slug',
-  getParentRoute: () => AgentHubRoute,
+  id: '/agent-hub_/$slug',
+  path: '/agent-hub/$slug',
+  getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/agent-hub': typeof AgentHubRouteWithChildren
+  '/agent-hub': typeof AgentHubRoute
   '/geo-tracking': typeof GeoTrackingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
@@ -71,7 +71,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/agent-hub': typeof AgentHubRouteWithChildren
+  '/agent-hub': typeof AgentHubRoute
   '/geo-tracking': typeof GeoTrackingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
@@ -82,13 +82,13 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/agent-hub': typeof AgentHubRouteWithChildren
+  '/agent-hub': typeof AgentHubRoute
   '/geo-tracking': typeof GeoTrackingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
-  '/agent-hub/$slug': typeof AgentHubSlugRoute
+  '/agent-hub_/$slug': typeof AgentHubSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -120,17 +120,18 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sub-systems'
     | '/system-logs'
-    | '/agent-hub/$slug'
+    | '/agent-hub_/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AgentHubRoute: typeof AgentHubRouteWithChildren
+  AgentHubRoute: typeof AgentHubRoute
   GeoTrackingRoute: typeof GeoTrackingRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SettingsRoute: typeof SettingsRoute
   SubSystemsRoute: typeof SubSystemsRoute
   SystemLogsRoute: typeof SystemLogsRoute
+  AgentHubSlugRoute: typeof AgentHubSlugRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -184,36 +185,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/agent-hub/$slug': {
-      id: '/agent-hub/$slug'
-      path: '/$slug'
+    '/agent-hub_/$slug': {
+      id: '/agent-hub_/$slug'
+      path: '/agent-hub/$slug'
       fullPath: '/agent-hub/$slug'
       preLoaderRoute: typeof AgentHubSlugRouteImport
-      parentRoute: typeof AgentHubRoute
+      parentRoute: typeof rootRouteImport
     }
   }
 }
 
-interface AgentHubRouteChildren {
-  AgentHubSlugRoute: typeof AgentHubSlugRoute
-}
-
-const AgentHubRouteChildren: AgentHubRouteChildren = {
-  AgentHubSlugRoute: AgentHubSlugRoute,
-}
-
-const AgentHubRouteWithChildren = AgentHubRoute._addFileChildren(
-  AgentHubRouteChildren,
-)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AgentHubRoute: AgentHubRouteWithChildren,
+  AgentHubRoute: AgentHubRoute,
   GeoTrackingRoute: GeoTrackingRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SettingsRoute: SettingsRoute,
   SubSystemsRoute: SubSystemsRoute,
   SystemLogsRoute: SystemLogsRoute,
+  AgentHubSlugRoute: AgentHubSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

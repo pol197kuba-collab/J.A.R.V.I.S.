@@ -28,9 +28,38 @@ export function isSpeakingNow() {
 
 // FIFO queue so back-to-back speak() calls (e.g. greeting + module-load
 // confirmation) play sequentially instead of cancelling each other.
-type QueueItem = { text: string; skipChirp?: boolean };
+type SpeakLang = "auto" | "en" | "pl";
+type QueueItem = { text: string; skipChirp?: boolean; lang?: SpeakLang };
 const queue: QueueItem[] = [];
 let pumping = false;
+
+// Very small heuristic — enough to distinguish Polish from English replies.
+// Looks for Polish diacritics, common Polish stopwords, or the honorific we use.
+const PL_DIACRITICS = /[ąćęłńóśźż]/i;
+const PL_STOPWORDS = /\b(jestem|jest|nie|tak|proszę|dzień|dobry|panie|slawinsky|sławinsky|dla|to|się|witam|dobrze|teraz|dobrze|właśnie|wszystko|systemy|operacyjne)\b/i;
+function detectLang(text: string): "en" | "pl" {
+  if (PL_DIACRITICS.test(text)) return "pl";
+  if (PL_STOPWORDS.test(text)) return "pl";
+  return "en";
+}
+
+function pickVoice(lang: "en" | "pl"): SpeechSynthesisVoice | null {
+  try {
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices || voices.length === 0) return null;
+    const wanted = lang === "pl" ? /^pl(-|_|$)/i : /^en(-|_|$)/i;
+    // Prefer a Google / natural voice when available, otherwise first match.
+    const matches = voices.filter((v) => wanted.test(v.lang));
+    if (matches.length === 0) return null;
+    return (
+      matches.find((v) => /google/i.test(v.name)) ??
+      matches.find((v) => /natural|neural|enhanced|premium/i.test(v.name)) ??
+      matches[0]
+    );
+  } catch {
+    return null;
+  }
+}
 
 function pump() {
   if (pumping) return;
@@ -44,7 +73,11 @@ function pump() {
   const startUtter = () => {
     try {
       const utter = new SpeechSynthesisUtterance(next.text);
-      utter.lang = "pl-PL";
+      const requested: SpeakLang = next.lang ?? "auto";
+      const lang = requested === "auto" ? detectLang(next.text) : requested;
+      utter.lang = lang === "pl" ? "pl-PL" : "en-GB";
+      const voice = pickVoice(lang);
+      if (voice) utter.voice = voice;
       utter.pitch = 0.85;
       utter.rate = 1.0;
       utter.volume = 1.0;
@@ -80,11 +113,11 @@ function pump() {
 }
 
 /** Enqueue a phrase. Plays after any in-flight speech finishes. */
-export function speak(text: string, opts?: { skipChirp?: boolean }) {
+export function speak(text: string, opts?: { skipChirp?: boolean; lang?: SpeakLang }) {
   try {
     if (typeof window === "undefined") return;
     if (!window.speechSynthesis) return;
-    queue.push({ text, skipChirp: opts?.skipChirp });
+    queue.push({ text, skipChirp: opts?.skipChirp, lang: opts?.lang });
     // If synth is already busy from a previous call, just queue and wait.
     if (window.speechSynthesis.speaking || pumping) return;
     pump();
