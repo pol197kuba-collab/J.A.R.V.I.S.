@@ -331,10 +331,6 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
         fire(mapped, reply.speech);
         return;
       }
-      if (local) {
-        fire(local.action, reply.speech);
-        return;
-      }
       // Pure chit-chat — just speak.
       if (reply.speech) speak(reply.speech);
     },
