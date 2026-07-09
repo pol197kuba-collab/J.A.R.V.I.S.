@@ -7,6 +7,9 @@ export type ChatBusMessage = {
   role: "user" | "jarvis";
   text: string;
   time: string;
+  /** Which agent produced the reply (only for role="jarvis"). */
+  agentSlug?: string;
+  agentName?: string;
 };
 
 const EVENT = "jarvis:chat";
@@ -15,7 +18,11 @@ function now() {
   return new Date().toTimeString().slice(0, 8);
 }
 
-export function emitChat(role: ChatBusMessage["role"], text: string) {
+export function emitChat(
+  role: ChatBusMessage["role"],
+  text: string,
+  meta?: { agentSlug?: string; agentName?: string },
+) {
   if (typeof window === "undefined") return;
   if (!text || !text.trim()) return;
   const msg: ChatBusMessage = {
@@ -26,6 +33,8 @@ export function emitChat(role: ChatBusMessage["role"], text: string) {
     role,
     text: text.trim(),
     time: now(),
+    agentSlug: meta?.agentSlug,
+    agentName: meta?.agentName,
   };
   window.dispatchEvent(new CustomEvent<ChatBusMessage>(EVENT, { detail: msg }));
 }
