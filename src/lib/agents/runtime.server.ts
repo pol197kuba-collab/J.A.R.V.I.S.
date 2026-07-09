@@ -47,15 +47,17 @@ export type OrchestratorInput = {
   agentSlug: string;
   input: string;
   history: Array<{ role: "user" | "jarvis"; text: string }>;
+  /** Prevents delegate_to_agent recursion loops. */
+  delegationDepth?: number;
 };
 
 export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRunResult> {
-  const { supabase, userId, agentSlug, input, history } = args;
+  const { supabase, userId, agentSlug, input, history, delegationDepth = 0 } = args;
 
   // 1. Resolve agent (fallback: orchestrator).
   const { data: agent, error: agentErr } = await supabase
     .from("agents")
-    .select("id, name, model, config")
+    .select("id, name, slug, model, config")
     .eq("owner_id", userId)
     .eq("slug", agentSlug)
     .maybeSingle();
@@ -81,7 +83,33 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
   const agentSpecific =
     typeof configObj.system_prompt === "string" && configObj.system_prompt.trim() ? configObj.system_prompt : null;
 
-  const systemPrompt = agentSpecific ? `${JARVIS_PERSONA}\n\n${agentSpecific}` : DEFAULT_SYSTEM_PROMPT;
+  // Team roster — every agent should know who else is on the payroll so the
+  // Orchestrator can delegate and any agent can name-drop a teammate instead
+  // of denying they exist.
+  const { data: roster } = await supabase
+    .from("agents")
+    .select("slug, name, role, description, is_enabled")
+    .eq("owner_id", userId)
+    .order("created_at", { ascending: true });
+  const teammates = (roster ?? []).filter((r) => r.slug !== agent.slug);
+  const rosterBlock =
+    teammates.length > 0
+      ? `\n\nTEAM ROSTER — inne agenty w systemie (nie odmawiaj ich istnienia):\n` +
+        teammates
+          .map(
+            (t) =>
+              `- ${t.name} (slug: ${t.slug})${t.role ? ` — ${t.role}` : ""}${
+                t.is_enabled ? "" : " [DISABLED]"
+              }${t.description ? `. ${t.description}` : ""}`,
+          )
+          .join("\n") +
+        (agent.slug === "orchestrator"
+          ? `\n\nJako Orchestrator MOŻESZ delegować zadanie do wybranego kolegi używając narzędzia delegate_to_agent(slug, task). Rób to, kiedy zadanie pasuje wyraźnie do specjalizacji innego agenta (np. copy / marketing → marketer). Zwracaj użytkownikowi krótkie streszczenie odpowiedzi delegowanego agenta w swoim głosie.`
+          : "")
+      : "";
+
+  const basePrompt = agentSpecific ? `${JARVIS_PERSONA}\n\n${agentSpecific}` : DEFAULT_SYSTEM_PROMPT;
+  const systemPrompt = `${basePrompt}${rosterBlock}`;
 
   // Model resolution: agent override → user default → hardcoded fallback.
   let model = agent.model?.trim() ?? "";
@@ -163,6 +191,36 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // now, so a Settings-page toggle takes effect without a redeploy.
     const enabledTools = await getEnabledToolsForAgent(supabase, agent.id);
     const toolDeclarations = enabledTools.map((t) => t.declaration);
+
+    // Orchestrator always gets an in-memory delegate tool, even without a DB
+    // row, so it can hand off to teammates without a migration. Guard against
+    // recursion depth so a chain of delegations can't loop forever.
+    const DELEGATE_TOOL_NAME = "delegate_to_agent";
+    const allowDelegate =
+      agent.slug === "orchestrator" && teammates.length > 0 && delegationDepth < 2;
+    if (allowDelegate) {
+      toolDeclarations.push({
+        name: DELEGATE_TOOL_NAME,
+        description:
+          "Deleguj zadanie do innego agenta z zespołu (np. marketer, copywriter). Zwraca jego odpowiedź jako tekst.",
+        parameters: {
+          type: "object",
+          properties: {
+            slug: {
+              type: "string",
+              description: `Slug docelowego agenta. Dozwolone: ${teammates
+                .map((t) => t.slug)
+                .join(", ")}.`,
+            },
+            task: {
+              type: "string",
+              description: "Pełne polecenie/zadanie dla delegowanego agenta w jego języku.",
+            },
+          },
+          required: ["slug", "task"],
+        },
+      });
+    }
     let totalTokensIn = 0;
     let totalTokensOut = 0;
     let finalText = "";
@@ -231,7 +289,36 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         toolCallLog.push({ name: call.name, args: call.args ?? {} });
         const tool = getToolByName(call.name);
         let response: Record<string, unknown>;
-        if (!tool) {
+        if (call.name === DELEGATE_TOOL_NAME && allowDelegate) {
+          const targetSlug = String((call.args as Record<string, unknown>)?.slug ?? "").trim();
+          const task = String((call.args as Record<string, unknown>)?.task ?? "").trim();
+          const target = teammates.find((t) => t.slug === targetSlug && t.is_enabled);
+          if (!target || !task) {
+            response = { error: `invalid_delegation`, requested: targetSlug };
+            await logEvent("warn", "orchestrator", `delegate rejected: ${targetSlug}`, {
+              run_id: runId,
+            } as Json);
+          } else {
+            await logEvent("info", "orchestrator", `delegating → ${targetSlug}`, {
+              run_id: runId,
+              task_preview: task.slice(0, 200),
+            } as Json);
+            const sub = await runOrchestrator({
+              supabase,
+              userId,
+              agentSlug: target.slug,
+              input: task,
+              history: [],
+              delegationDepth: delegationDepth + 1,
+            });
+            response = {
+              delegate: target.slug,
+              status: sub.status,
+              output: sub.output,
+              error: sub.error,
+            };
+          }
+        } else if (!tool) {
           response = { error: `unknown_tool_${call.name}` };
           await logEvent("warn", "orchestrator", `unknown tool call: ${call.name}`, {
             run_id: runId,
