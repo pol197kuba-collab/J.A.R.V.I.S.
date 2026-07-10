@@ -447,6 +447,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // out of using it. Best-effort: any failure here silently falls back to
     // the normal text-only reply the user already has.
     if (!uiAction) {
+      await logEvent("info", "orchestrator", "classifier fallback: block entered", { run_id: runId } as Json);
       try {
         const classifyRes = await fetch(
           `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
