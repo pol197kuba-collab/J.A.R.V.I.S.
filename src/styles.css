@@ -293,6 +293,21 @@
   50% { opacity: 1; transform: scale(1.05); }
 }
 
+/* Vision scanner: sweeping horizontal line + capture flash */
+@keyframes vision-scan {
+  0%   { top: 0%; opacity: 0.9; }
+  50%  { top: 100%; opacity: 0.9; }
+  100% { top: 0%; opacity: 0.9; }
+}
+.animate-vision-scan { animation: vision-scan 3.2s ease-in-out infinite; }
+
+@keyframes vision-flash {
+  0%   { opacity: 0; }
+  20%  { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+.animate-vision-flash { animation: vision-flash 0.45s ease-out forwards; }
+
 /* Leaflet dark/cyan HUD filter for Geo-Tracking */
 .geo-map { background: #000; }
 .geo-map .leaflet-tile {
