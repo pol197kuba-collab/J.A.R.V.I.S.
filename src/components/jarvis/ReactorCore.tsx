@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { onSpeaking, isSpeakingNow } from "@/lib/audio/speak";
 
 const AMBER = "oklch(0.85 0.2 65)";
@@ -16,6 +16,79 @@ export function ReactorCore({ active: _active }: { active?: boolean } = {}) {
   speakingRef.current = speaking;
 
   useEffect(() => onSpeaking(setSpeaking), []);
+
+  // --- Touch/pointer interaction: drag to rotate, pinch to zoom, dbl-tap reset ---
+  const interactRef = useRef<HTMLDivElement | null>(null);
+  const stateRef = useRef({ rx: 0, ry: 0, zoom: 1 });
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const lastSingleRef = useRef<{ x: number; y: number } | null>(null);
+  const pinchStartRef = useRef<{ dist: number; zoom: number } | null>(null);
+  const lastTapRef = useRef(0);
+
+  const applyTransform = (withTransition = false) => {
+    const el = interactRef.current;
+    if (!el) return;
+    const { rx, ry, zoom } = stateRef.current;
+    el.style.transition = withTransition ? "transform 450ms cubic-bezier(0.22, 1, 0.36, 1)" : "none";
+    el.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg) scale(${zoom})`;
+  };
+
+  const dist2 = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+    Math.hypot(a.x - b.x, a.y - b.y);
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pointersRef.current.size === 1) {
+      lastSingleRef.current = { x: e.clientX, y: e.clientY };
+      // double-tap detect
+      const now = performance.now();
+      if (now - lastTapRef.current < 300) {
+        stateRef.current = { rx: 0, ry: 0, zoom: 1 };
+        applyTransform(true);
+        lastTapRef.current = 0;
+      } else {
+        lastTapRef.current = now;
+      }
+    } else if (pointersRef.current.size === 2) {
+      const pts = Array.from(pointersRef.current.values());
+      pinchStartRef.current = { dist: dist2(pts[0], pts[1]), zoom: stateRef.current.zoom };
+      lastSingleRef.current = null;
+    }
+  };
+
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!pointersRef.current.has(e.pointerId)) return;
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pointersRef.current.size >= 2 && pinchStartRef.current) {
+      const pts = Array.from(pointersRef.current.values());
+      const d = dist2(pts[0], pts[1]);
+      const ratio = d / pinchStartRef.current.dist;
+      const z = Math.max(0.6, Math.min(1.8, pinchStartRef.current.zoom * ratio));
+      stateRef.current.zoom = z;
+      applyTransform(false);
+    } else if (pointersRef.current.size === 1 && lastSingleRef.current) {
+      const dx = e.clientX - lastSingleRef.current.x;
+      const dy = e.clientY - lastSingleRef.current.y;
+      lastSingleRef.current = { x: e.clientX, y: e.clientY };
+      stateRef.current.ry += dx * 0.4;
+      stateRef.current.rx -= dy * 0.4;
+      applyTransform(false);
+    }
+  };
+
+  const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    pointersRef.current.delete(e.pointerId);
+    if (pointersRef.current.size < 2) pinchStartRef.current = null;
+    if (pointersRef.current.size === 1) {
+      const p = Array.from(pointersRef.current.values())[0];
+      lastSingleRef.current = { x: p.x, y: p.y };
+    } else if (pointersRef.current.size === 0) {
+      lastSingleRef.current = null;
+    }
+  };
 
   // Static (non-reactive) ring filter — heavy drop-shadow only on outer/inner layers.
   const ringHeavy: CSSProperties = {
@@ -100,7 +173,19 @@ export function ReactorCore({ active: _active }: { active?: boolean } = {}) {
       <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
 
       {/* 3D Holographic Gyroscope */}
-      <div className="reactor-perspective absolute inset-0">
+      <div
+        className="reactor-perspective absolute inset-0"
+        style={{ touchAction: "none" }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
+        <div
+          ref={interactRef}
+          className="absolute inset-0"
+          style={{ transformStyle: "preserve-3d", willChange: "transform" }}
+        >
         <div className="reactor-stage absolute inset-0 sphere-blend">
           {/* Holographic wireframe sphere — meridians + parallels */}
           <div className="sphere-wire absolute inset-[12%]">
@@ -209,6 +294,7 @@ export function ReactorCore({ active: _active }: { active?: boolean } = {}) {
               <circle cx="100" cy="100" r="6" fill="white" />
             </svg>
           </div>
+        </div>
         </div>
       </div>
     </div>
