@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { HudPanel } from "./HudPanel";
 import { audio } from "@/lib/audio/AudioEngine";
-import { Camera, ShieldAlert, VideoOff, Loader2, SwitchCamera, Minus, Plus } from "lucide-react";
+import { Aperture, Camera, ShieldAlert, VideoOff, Loader2, SwitchCamera, Minus, Plus } from "lucide-react";
 
 type CamState = "loading" | "ready" | "denied" | "unavailable";
 
@@ -33,12 +33,14 @@ export function VisionScanner() {
   const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
   const [zoomCaps, setZoomCaps] = useState<{ min: number; max: number; step: number } | null>(null);
-  const [zoom, setZoom] = useState(1);
-  const [digitalZoom, setDigitalZoom] = useState(1); // fallback CSS zoom (1–3)
+  const [zoomFraction, setZoomFraction] = useState(0);
+  const [baselineFraction, setBaselineFraction] = useState(0);
   const [focusPulses, setFocusPulses] = useState<FocusPulse[]>([]);
   const [afLocked, setAfLocked] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [lastTapAt, setLastTapAt] = useState(0);
+  const [lensPopoverOpen, setLensPopoverOpen] = useState(false);
+  const lensPopoverRef = useRef<HTMLDivElement | null>(null);
 
   const stopStream = useCallback(() => {
     const s = streamRef.current;
@@ -92,16 +94,24 @@ export function VisionScanner() {
         try {
           const caps = (track?.getCapabilities?.() ?? {}) as ExtendedCapabilities;
           if (caps.zoom && caps.zoom.max > caps.zoom.min) {
+            const min = caps.zoom.min;
+            const max = caps.zoom.max;
             setZoomCaps({
-              min: caps.zoom.min,
-              max: caps.zoom.max,
+              min,
+              max,
               step: caps.zoom.step && caps.zoom.step > 0 ? caps.zoom.step : 0.1,
             });
-            setZoom(caps.zoom.min);
-            setDigitalZoom(1);
+            const rawCur = (track?.getSettings?.() as { zoom?: number } | undefined)?.zoom;
+            const cur =
+              typeof rawCur === "number" && rawCur >= min && rawCur <= max ? rawCur : min;
+            // Inverted mapping: fraction 0 → max (widest), 1 → min (tightest).
+            const frac = (max - cur) / (max - min);
+            setBaselineFraction(frac);
+            setZoomFraction(frac);
           } else {
             setZoomCaps(null);
-            setDigitalZoom(1);
+            setBaselineFraction(0);
+            setZoomFraction(0);
           }
         } catch {
           setZoomCaps(null);
@@ -151,47 +161,82 @@ export function VisionScanner() {
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [activeDeviceId, facingMode, start, stopStream]);
 
-  // Apply hardware zoom
+  // Apply hardware zoom from zoomFraction (inverted: 0 → max, 1 → min).
   useEffect(() => {
     if (!zoomCaps) return;
     const track = streamRef.current?.getVideoTracks?.()[0];
     if (!track) return;
-    const c: ExtendedConstraint = { zoom };
+    const raw = zoomCaps.max + (zoomCaps.min - zoomCaps.max) * zoomFraction;
+    const c: ExtendedConstraint = { zoom: raw };
     track.applyConstraints({ advanced: [c] } as MediaTrackConstraints).catch(() => undefined);
-  }, [zoom, zoomCaps]);
+  }, [zoomFraction, zoomCaps]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     window.setTimeout(() => setToast((t) => (t === msg ? null : t)), 1400);
   }, []);
 
-  const cycleLens = useCallback(() => {
+  const flipFacing = useCallback(() => {
     audio.playClick();
-    if (devices.length >= 2) {
-      const idx = Math.max(0, devices.findIndex((d) => d.deviceId === activeDeviceId));
-      const next = devices[(idx + 1) % devices.length];
-      void start({ deviceId: next.deviceId });
-    } else {
-      const nextFacing = facingMode === "environment" ? "user" : "environment";
-      setFacingMode(nextFacing);
-      void start({ facingMode: nextFacing });
-    }
-  }, [devices, activeDeviceId, facingMode, start]);
+    const next = facingMode === "environment" ? "user" : "environment";
+    setFacingMode(next);
+    setActiveDeviceId(null);
+    setLensPopoverOpen(false);
+    void start({ facingMode: next });
+  }, [facingMode, start]);
 
-  const clampZoom = (z: number) =>
-    zoomCaps ? Math.min(zoomCaps.max, Math.max(zoomCaps.min, z)) : Math.min(3, Math.max(1, z));
+  // Rear/front device split — case-insensitive via lowercased label.
+  const { rearDevices, rearLabels } = useMemo(() => {
+    const rear: MediaDeviceInfo[] = [];
+    for (const d of devices) {
+      const l = (d.label ?? "").toLowerCase();
+      if (!/front|user/.test(l)) rear.push(d);
+    }
+    const labels = rear.map((d, i) => {
+      const l = (d.label ?? "").toLowerCase();
+      if (/ultra/.test(l)) return "ULT";
+      if (/wide/.test(l)) return "WID";
+      if (/tele/.test(l)) return "TEL";
+      if (/macro/.test(l)) return "MAC";
+      return `L${i + 1}`;
+    });
+    return { rearDevices: rear, rearLabels: labels };
+  }, [devices]);
+
+  const showLensesButton = facingMode === "environment" && rearDevices.length > 1;
+
+  const pickLens = useCallback(
+    (deviceId: string) => {
+      audio.playClick();
+      setLensPopoverOpen(false);
+      setActiveDeviceId(deviceId);
+      void start({ deviceId });
+    },
+    [start],
+  );
+
+  // Close popover on outside click.
+  useEffect(() => {
+    if (!lensPopoverOpen) return;
+    const onDown = (e: PointerEvent) => {
+      if (!lensPopoverRef.current) return;
+      if (!lensPopoverRef.current.contains(e.target as Node)) {
+        setLensPopoverOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [lensPopoverOpen]);
+
+  const clampFrac = (f: number) => Math.min(1, Math.max(0, f));
 
   const bumpZoom = (delta: number) => {
-    if (zoomCaps) {
-      setZoom((z) => clampZoom(z + delta * (zoomCaps.step || 0.1) * 4));
-    } else {
-      setDigitalZoom((z) => clampZoom(z + delta * 0.2));
-    }
+    // delta +1 → user-side closer (fraction up), −1 → wider (fraction down)
+    setZoomFraction((f) => clampFrac(f + delta * 0.1));
   };
 
   const resetZoom = () => {
-    if (zoomCaps) setZoom(zoomCaps.min);
-    else setDigitalZoom(1);
+    setZoomFraction(baselineFraction);
   };
 
   const tryTapFocus = useCallback(
@@ -305,19 +350,26 @@ export function VisionScanner() {
     window.setTimeout(() => setFlashing(false), 450);
   };
 
-  const lensIndex = devices.findIndex((d) => d.deviceId === activeDeviceId);
-  const lensLabel =
-    devices.length >= 2
-      ? `LENS ${Math.max(0, lensIndex) + 1}/${devices.length}`
-      : `LENS ${facingMode === "environment" ? "BACK" : "FRONT"}`;
   const digital = !zoomCaps;
-  const zoomValue = zoomCaps ? zoom : digitalZoom;
-  const zoomMin = zoomCaps?.min ?? 1;
-  const zoomMax = zoomCaps?.max ?? 3;
-  const zoomStep = zoomCaps?.step ?? 0.05;
-  const zoomDisplay = digital
-    ? `${zoomValue.toFixed(1)}×`
-    : `${(zoomValue / zoomMin).toFixed(1)}×`;
+  // Fallback CSS zoom uses fraction directly (0 → 1×, 1 → 3×).
+  const digitalScale = 1 + zoomFraction * 2;
+  // HUD display (cosmetic).
+  const maxDisplay = zoomCaps
+    ? Math.max(2, Math.round(zoomCaps.max / Math.max(zoomCaps.min, 0.0001)))
+    : 3;
+  const displayX = 1 + zoomFraction * (maxDisplay - 1);
+  const zoomDisplay = `${displayX.toFixed(1)}×`;
+
+  let lensLabel: string;
+  if (facingMode === "user") {
+    lensLabel = "LENS FRONT";
+  } else if (rearDevices.length > 1) {
+    const idx = rearDevices.findIndex((d) => d.deviceId === activeDeviceId);
+    const short = idx >= 0 ? rearLabels[idx] : `${Math.max(0, idx) + 1}/${rearDevices.length}`;
+    lensLabel = `LENS ${short}`;
+  } else {
+    lensLabel = "LENS BACK";
+  }
 
   return (
     <div className="flex min-h-0 flex-col gap-3 p-3 portrait:min-h-[100dvh] landscape:max-md:gap-2 landscape:max-md:p-2">
@@ -345,7 +397,7 @@ export function VisionScanner() {
               style={{
                 filter: "contrast(1.05) saturate(1.1) hue-rotate(-4deg)",
                 opacity: state === "ready" ? 1 : 0.25,
-                transform: digital && digitalZoom > 1 ? `scale(${digitalZoom})` : undefined,
+                transform: digital && digitalScale > 1 ? `scale(${digitalScale})` : undefined,
                 transformOrigin: "center center",
                 transition: "transform 120ms linear",
               }}
@@ -453,14 +505,15 @@ export function VisionScanner() {
                 </button>
                 <input
                   type="range"
-                  min={zoomMin}
-                  max={zoomMax}
-                  step={zoomStep}
-                  value={zoomValue}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={1 - zoomFraction}
                   onChange={(e) => {
+                    // Slider top = closer (fraction 1), bottom = wider (fraction 0).
+                    // vertical-lr places min at top, so invert.
                     const v = Number(e.target.value);
-                    if (zoomCaps) setZoom(v);
-                    else setDigitalZoom(v);
+                    setZoomFraction(1 - v);
                   }}
                   aria-label="Zoom"
                   className="vision-zoom-slider h-28 w-6"
@@ -507,9 +560,9 @@ export function VisionScanner() {
         <div className="mt-auto flex shrink-0 items-center justify-center gap-3 border-t border-primary/25 p-3 landscape:max-md:p-2">
           <button
             type="button"
-            onClick={cycleLens}
+            onClick={flipFacing}
             disabled={state !== "ready"}
-            aria-label="Switch lens"
+            aria-label="Flip camera"
             className="font-display flex items-center gap-2 border px-3 py-2 text-[10px] uppercase tracking-[0.3em] text-primary transition disabled:cursor-not-allowed disabled:opacity-40"
             style={{
               borderColor: "color-mix(in oklab, var(--primary) 55%, transparent)",
@@ -517,8 +570,70 @@ export function VisionScanner() {
             }}
           >
             <SwitchCamera className="h-4 w-4" strokeWidth={1.5} />
-            LENS
+            FLIP
           </button>
+          {showLensesButton && (
+            <div ref={lensPopoverRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setLensPopoverOpen((v) => !v)}
+                disabled={state !== "ready"}
+                aria-label="Rear lenses"
+                aria-expanded={lensPopoverOpen}
+                className="font-display flex items-center gap-2 border px-3 py-2 text-[10px] uppercase tracking-[0.3em] text-primary transition disabled:cursor-not-allowed disabled:opacity-40"
+                style={{
+                  borderColor: "color-mix(in oklab, var(--primary) 55%, transparent)",
+                  backgroundColor: "color-mix(in oklab, var(--primary) 6%, transparent)",
+                }}
+              >
+                <Aperture className="h-4 w-4" strokeWidth={1.5} />
+                LENSES
+              </button>
+              {lensPopoverOpen && (
+                <div
+                  className="pointer-events-none absolute left-1/2 z-40"
+                  style={{ bottom: "calc(100% + 8px)", transform: "translateX(-50%)" }}
+                >
+                  <div className="relative" style={{ width: 176, height: 96 }}>
+                    {rearDevices.map((d, i) => {
+                      const n = rearDevices.length;
+                      // Half-circle opening downward: angles from 200° to 340°.
+                      const startDeg = 200;
+                      const endDeg = 340;
+                      const t = n === 1 ? 0.5 : i / (n - 1);
+                      const deg = startDeg + (endDeg - startDeg) * t;
+                      const rad = (deg * Math.PI) / 180;
+                      const r = 72;
+                      const x = Math.cos(rad) * r;
+                      const y = Math.sin(rad) * r;
+                      const active = d.deviceId === activeDeviceId;
+                      return (
+                        <button
+                          key={d.deviceId || i}
+                          type="button"
+                          onClick={() => pickLens(d.deviceId)}
+                          aria-label={`Lens ${rearLabels[i]}`}
+                          className="pointer-events-auto absolute grid h-11 w-11 place-items-center rounded-full border font-display text-[9px] uppercase tracking-[0.2em] text-primary"
+                          style={{
+                            left: "50%",
+                            bottom: 0,
+                            transform: `translate(calc(-50% + ${x}px), ${y}px)`,
+                            borderColor: active
+                              ? "var(--primary)"
+                              : "color-mix(in oklab, var(--primary) 45%, transparent)",
+                            backgroundColor: "color-mix(in oklab, var(--primary) 10%, black)",
+                            boxShadow: active ? "var(--glow-primary)" : undefined,
+                          }}
+                        >
+                          {rearLabels[i]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           <button
             type="button"
             onClick={handleScan}
