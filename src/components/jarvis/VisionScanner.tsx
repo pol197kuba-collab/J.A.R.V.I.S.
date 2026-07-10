@@ -374,7 +374,7 @@ export function VisionScanner() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden p-3 landscape:max-md:gap-2 landscape:max-md:p-2">
       <HudPanel index={0} title="OPTICAL FEED // LIVE" className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="relative mx-auto w-full">
+        <div className="relative mx-auto w-full min-w-0 portrait:flex portrait:min-h-0 portrait:flex-1">
           <div
             onPointerDown={handlePointerDown}
             onPointerUp={handlePointerUp}
@@ -384,7 +384,7 @@ export function VisionScanner() {
               pressStart.current = null;
             }}
             className={
-              "relative mx-auto w-full touch-none overflow-hidden bg-black portrait:flex-1 portrait:min-h-0 " +
+              "relative mx-auto w-full max-w-full touch-none overflow-hidden bg-black portrait:h-full portrait:min-h-0 portrait:flex-1 " +
               "md:aspect-video md:max-h-[68vh] short:max-h-[52vh] landscape:max-md:aspect-video landscape:max-md:max-h-[62vh]"
             }
           >
