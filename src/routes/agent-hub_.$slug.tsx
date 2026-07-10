@@ -23,6 +23,7 @@ import {
   type AgentToolSummary,
 } from "@/lib/agents/runtime.functions";
 import { audio } from "@/lib/audio/AudioEngine";
+import { GEMINI_MODELS, DEFAULT_GEMINI_MODEL } from "@/lib/agents/models";
 
 export const Route = createFileRoute("/agent-hub_/$slug")({
   head: ({ params }) => ({
@@ -38,7 +39,7 @@ type SettingsPatch = {
   name?: string;
   role?: string | null;
   description?: string | null;
-  model?: "gemini-2.5-flash" | "gemini-2.5-pro" | null;
+  model?: string | null;
   isEnabled?: boolean;
   behaviour?: Partial<AgentBehaviourConfig>;
 };
@@ -144,7 +145,7 @@ function AgentConsole() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-4 overflow-x-hidden p-4">
       <Header data={data} onBack={() => navigate({ to: "/agent-hub" })} />
       <TelemetryPanel data={data} />
       <LiveRunsPanel data={data} onOpenRun={setRunDetail} />
@@ -217,7 +218,7 @@ function Header({ data, onBack }: { data: AgentDetail; onBack: () => void }) {
     Math.floor((Date.now() - new Date(a.createdAt).getTime()) / 86_400_000),
   );
   return (
-    <HudPanel index={0} className="p-6">
+    <HudPanel index={0} className="p-4">
       <button
         type="button"
         onClick={onBack}
@@ -225,22 +226,22 @@ function Header({ data, onBack }: { data: AgentDetail; onBack: () => void }) {
       >
         <ArrowLeft className="h-3 w-3" /> BACK
       </button>
-      <div className="flex flex-col items-center gap-6 md:flex-row md:items-center md:gap-8">
-        <AgentReactorSigil slug={a.slug} size={180} active={a.isEnabled} />
-        <div className="flex-1 space-y-2 text-center md:text-left">
+      <div className="flex flex-col items-center gap-4 md:flex-row md:items-center md:gap-6">
+        <AgentReactorSigil slug={a.slug} size={110} active={a.isEnabled} />
+        <div className="flex-1 min-w-0 space-y-1 text-center md:text-left">
           <p className="font-display text-[10px] uppercase tracking-[0.4em] text-primary/80">
             SUBSYSTEM // AGENT CONSOLE
           </p>
-          <h1 className="font-display text-4xl font-bold tracking-[0.18em]">{a.name}</h1>
+          <h1 className="font-display text-2xl font-bold tracking-[0.18em] md:text-3xl">{a.name}</h1>
           <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
             {a.role ?? "unassigned"} · slug {a.slug}
           </p>
           {a.description && (
-            <p className="mx-auto max-w-xl text-xs text-muted-foreground/90 md:mx-0">
+            <p className="mx-auto max-w-xl text-xs text-muted-foreground/90 md:mx-0 break-words">
               {a.description}
             </p>
           )}
-          <div className="flex flex-wrap justify-center gap-4 pt-2 md:justify-start">
+          <div className="flex flex-wrap justify-center gap-2 pt-2 md:justify-start">
             <StatusPill
               label={a.isEnabled ? status : "disabled"}
               color={a.isEnabled ? statusColor[status] ?? "var(--primary)" : "var(--muted-foreground)"}
@@ -368,7 +369,7 @@ function LiveRunsPanel({
               key={r.id}
               type="button"
               onClick={() => onOpenRun(r)}
-              className="flex w-full items-center justify-between gap-3 py-2 text-left hover:bg-primary/5"
+              className="flex w-full min-w-0 items-center justify-between gap-3 py-2 text-left hover:bg-primary/5"
             >
               <span
                 className="font-display shrink-0 text-[10px] uppercase tracking-widest"
@@ -376,10 +377,10 @@ function LiveRunsPanel({
               >
                 ● {r.status}
               </span>
-              <span className="font-mono flex-1 truncate text-[11px] text-foreground">
+              <span className="font-mono min-w-0 flex-1 truncate text-[11px] text-foreground">
                 {inputPreview(r.input)}
               </span>
-              <span className="font-mono text-[10px] text-muted-foreground">
+              <span className="font-mono shrink-0 text-[10px] text-muted-foreground">
                 {r.latencyMs ? `${r.latencyMs}ms` : "—"} · {new Date(r.createdAt).toLocaleTimeString()}
               </span>
             </button>
@@ -400,7 +401,7 @@ function ActiveRow({ run }: { run: AgentRunRecord }) {
   const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
   return (
     <div className="flex items-center justify-between gap-3 border border-primary/25 bg-primary/5 px-3 py-2">
-      <span className="font-mono text-[11px] text-foreground truncate">{inputPreview(run.input)}</span>
+      <span className="font-mono min-w-0 flex-1 text-[11px] text-foreground truncate">{inputPreview(run.input)}</span>
       <span className="font-mono shrink-0 text-[10px] text-primary">▸ {elapsed}s</span>
     </div>
   );
@@ -624,7 +625,7 @@ function SettingsPanel({
             <button
               type="button"
               onClick={() =>
-                savePartial({ model: modelInherit ? "gemini-2.5-flash" : null })
+                savePartial({ model: modelInherit ? DEFAULT_GEMINI_MODEL : null })
               }
               className="font-display border border-primary/60 px-3 py-1 text-[10px] uppercase tracking-widest"
               style={{ color: modelInherit ? "var(--success)" : "var(--muted-foreground)" }}
@@ -633,22 +634,20 @@ function SettingsPanel({
             </button>
           </div>
           {!modelInherit && (
-            <div className="flex gap-2">
-              {(["gemini-2.5-flash", "gemini-2.5-pro"] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => savePartial({ model: m })}
-                  className="font-display border border-primary/60 px-3 py-1 text-[10px] uppercase tracking-widest"
-                  style={{
-                    color: currentModel === m ? "var(--primary)" : "var(--muted-foreground)",
-                    background: currentModel === m ? "rgba(56,189,248,0.1)" : "transparent",
-                  }}
-                >
-                  {m.replace("gemini-2.5-", "")}
-                </button>
+            <select
+              value={currentModel}
+              onChange={(e) => savePartial({ model: e.target.value })}
+              className="font-mono w-full max-w-md border border-primary/60 bg-black/60 px-3 py-1.5 text-xs text-primary outline-none focus:border-primary"
+            >
+              {!GEMINI_MODELS.some((m) => m.id === currentModel) && (
+                <option value={currentModel}>{currentModel} (custom)</option>
+              )}
+              {GEMINI_MODELS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label} — {m.id}
+                </option>
               ))}
-            </div>
+            </select>
           )}
         </div>
 
@@ -825,7 +824,7 @@ function EventLogPanel({ data }: { data: AgentDetail }) {
           {data.events.map((e) => (
             <div
               key={`${e.origin}-${e.id}`}
-              className="font-mono border-l-2 pl-2 text-[11px]"
+              className="font-mono border-l-2 pl-2 text-[11px] break-words"
               style={{ borderColor: levelColor(e.level) }}
             >
               <span className="text-muted-foreground/70">

@@ -10,6 +10,7 @@ import type { Database, Json } from "@/integrations/supabase/types";
 import type { AgentRunResult } from "./runtime.functions";
 import { getEnabledToolsForAgent, getToolByName } from "./tools.server";
 import { JARVIS_PERSONA } from "@/lib/ai/persona";
+import { DEFAULT_GEMINI_MODEL } from "./models";
 
 const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -119,7 +120,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       .select("default_model")
       .eq("owner_id", userId)
       .maybeSingle();
-    model = prefs?.default_model?.trim() || "gemini-3.5-flash";
+    model = prefs?.default_model?.trim() || DEFAULT_GEMINI_MODEL;
   }
 
   const clampNum = (v: unknown, min: number, max: number, fallback: number) =>
@@ -228,7 +229,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
 
     for (let iter = 0; iter < maxToolIterations; iter++) {
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 20_000);
+      const timer = setTimeout(() => ctrl.abort(), 45_000);
       const res = await fetch(
         `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
         {
