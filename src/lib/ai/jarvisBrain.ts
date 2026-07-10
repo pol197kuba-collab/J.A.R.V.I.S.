@@ -51,6 +51,39 @@ function shouldUseServerRuntime(): boolean {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Conversation continuity for the server-routed path.
+//
+// Voice and the manual chat input both end up here calling the same
+// "orchestrator" agent. Without threading a conversationId through, every
+// voice utterance would spawn its own conversation row server-side, and
+// ChatPanel (which always shows the most-recently-updated conversation for
+// the active agent) would keep flipping to whatever channel spoke last —
+// fragmenting history instead of unifying it across devices. We cache the
+// id for the lifetime of this browser tab, and on first use fetch whatever
+// conversation already exists so we join it instead of forking a new one.
+// ---------------------------------------------------------------------------
+let cachedConversationId: string | null = null;
+let conversationLookupPromise: Promise<string | null> | null = null;
+
+async function resolveConversationId(): Promise<string | null> {
+  if (cachedConversationId) return cachedConversationId;
+  if (!conversationLookupPromise) {
+    conversationLookupPromise = (async () => {
+      try {
+        const { getActiveConversation } = await import("@/lib/agents/runtime.functions");
+        const res = await getActiveConversation({ data: { agentSlug: "orchestrator" } });
+        return res.conversationId ?? null;
+      } catch {
+        return null;
+      }
+    })();
+  }
+  const id = await conversationLookupPromise;
+  if (id) cachedConversationId = id;
+  return id;
+}
+
 export type JarvisAction =
   | "none"
   | "open_dashboard"
@@ -198,15 +231,18 @@ export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
   if (shouldUseServerRuntime()) {
     try {
       const { runAgent } = await import("@/lib/agents/runtime.functions");
+      const conversationId = await resolveConversationId();
       const result = await runAgent({
         data: {
           agentSlug: "orchestrator",
           input: input.prompt,
           history: input.history ?? [],
+          conversationId: conversationId ?? undefined,
         },
       });
+      if (result.conversationId) cachedConversationId = result.conversationId;
       if (result.status === "done" && result.output) {
-        return { action: "none", speech: result.output };
+        return { action: (result.action ?? "none") as JarvisAction, speech: result.output };
       }
       console.warn("[brain] server runtime returned error", result.error);
       // fall through to client-side path
