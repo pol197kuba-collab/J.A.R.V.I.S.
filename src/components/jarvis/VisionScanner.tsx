@@ -1,40 +1,113 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { HudPanel } from "./HudPanel";
 import { audio } from "@/lib/audio/AudioEngine";
-import { Camera, ShieldAlert, VideoOff, Loader2 } from "lucide-react";
+import { Camera, ShieldAlert, VideoOff, Loader2, SwitchCamera, Minus, Plus } from "lucide-react";
 
 type CamState = "loading" | "ready" | "denied" | "unavailable";
+
+type ExtendedCapabilities = MediaTrackCapabilities & {
+  zoom?: { min: number; max: number; step?: number };
+  focusMode?: string[];
+  pointsOfInterest?: unknown;
+};
+
+type ExtendedConstraint = MediaTrackConstraintSet & {
+  zoom?: number;
+  focusMode?: string;
+  pointsOfInterest?: Array<{ x: number; y: number }>;
+};
+
+type FocusPulse = { id: number; x: number; y: number };
 
 export function VisionScanner() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const startingRef = useRef(false);
+  const longPressTimer = useRef<number | null>(null);
+  const pressStart = useRef<{ x: number; y: number; t: number } | null>(null);
   const [state, setState] = useState<CamState>("loading");
   const [flashing, setFlashing] = useState(false);
   const [lastCapture, setLastCapture] = useState<string | null>(null);
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
+  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
+  const [zoomCaps, setZoomCaps] = useState<{ min: number; max: number; step: number } | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [digitalZoom, setDigitalZoom] = useState(1); // fallback CSS zoom (1–3)
+  const [focusPulses, setFocusPulses] = useState<FocusPulse[]>([]);
+  const [afLocked, setAfLocked] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [lastTapAt, setLastTapAt] = useState(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    let stream: MediaStream | null = null;
+  const stopStream = useCallback(() => {
+    const s = streamRef.current;
+    if (s) s.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    const v = videoRef.current;
+    if (v) v.srcObject = null;
+  }, []);
 
-    async function start() {
+  const start = useCallback(
+    async (opts?: { deviceId?: string | null; facingMode?: "environment" | "user" }) => {
       if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
         setState("unavailable");
         return;
       }
+      if (startingRef.current) return;
+      startingRef.current = true;
+      setState("loading");
+      stopStream();
+
+      const constraints: MediaStreamConstraints = {
+        audio: false,
+        video: opts?.deviceId
+          ? { deviceId: { exact: opts.deviceId } }
+          : { facingMode: { ideal: opts?.facingMode ?? "environment" } },
+      };
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false,
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        streamRef.current = stream;
         const video = videoRef.current;
         if (video) {
           video.srcObject = stream;
           await video.play().catch(() => undefined);
         }
+
+        // Enumerate lenses (labels only populate after grant).
+        try {
+          const all = await navigator.mediaDevices.enumerateDevices();
+          const vids = all.filter((d) => d.kind === "videoinput");
+          setDevices(vids);
+        } catch {
+          // ignore
+        }
+
+        // Track the active device id from the running track.
+        const track = stream.getVideoTracks()[0];
+        const settings = track?.getSettings?.() ?? {};
+        if (settings.deviceId) setActiveDeviceId(settings.deviceId);
+
+        // Zoom capabilities
+        try {
+          const caps = (track?.getCapabilities?.() ?? {}) as ExtendedCapabilities;
+          if (caps.zoom && caps.zoom.max > caps.zoom.min) {
+            setZoomCaps({
+              min: caps.zoom.min,
+              max: caps.zoom.max,
+              step: caps.zoom.step && caps.zoom.step > 0 ? caps.zoom.step : 0.1,
+            });
+            setZoom(caps.zoom.min);
+            setDigitalZoom(1);
+          } else {
+            setZoomCaps(null);
+            setDigitalZoom(1);
+          }
+        } catch {
+          setZoomCaps(null);
+        }
+
+        setAfLocked(false);
         setState("ready");
       } catch (err: unknown) {
         const name = (err as { name?: string })?.name ?? "";
@@ -45,17 +118,170 @@ export function VisionScanner() {
         } else {
           setState("unavailable");
         }
+      } finally {
+        startingRef.current = false;
       }
-    }
-    void start();
+    },
+    [stopStream],
+  );
 
+  // Initial mount
+  useEffect(() => {
+    void start({ facingMode: "environment" });
     return () => {
-      cancelled = true;
-      if (stream) stream.getTracks().forEach((t) => t.stop());
-      const v = videoRef.current;
-      if (v) v.srcObject = null;
+      stopStream();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Pause on hidden / restart on visible (iOS)
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "hidden") {
+        stopStream();
+      } else if (document.visibilityState === "visible" && !streamRef.current) {
+        void start(
+          activeDeviceId
+            ? { deviceId: activeDeviceId }
+            : { facingMode },
+        );
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [activeDeviceId, facingMode, start, stopStream]);
+
+  // Apply hardware zoom
+  useEffect(() => {
+    if (!zoomCaps) return;
+    const track = streamRef.current?.getVideoTracks?.()[0];
+    if (!track) return;
+    const c: ExtendedConstraint = { zoom };
+    track.applyConstraints({ advanced: [c] } as MediaTrackConstraints).catch(() => undefined);
+  }, [zoom, zoomCaps]);
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    window.setTimeout(() => setToast((t) => (t === msg ? null : t)), 1400);
+  }, []);
+
+  const cycleLens = useCallback(() => {
+    audio.playClick();
+    if (devices.length >= 2) {
+      const idx = Math.max(0, devices.findIndex((d) => d.deviceId === activeDeviceId));
+      const next = devices[(idx + 1) % devices.length];
+      void start({ deviceId: next.deviceId });
+    } else {
+      const nextFacing = facingMode === "environment" ? "user" : "environment";
+      setFacingMode(nextFacing);
+      void start({ facingMode: nextFacing });
+    }
+  }, [devices, activeDeviceId, facingMode, start]);
+
+  const clampZoom = (z: number) =>
+    zoomCaps ? Math.min(zoomCaps.max, Math.max(zoomCaps.min, z)) : Math.min(3, Math.max(1, z));
+
+  const bumpZoom = (delta: number) => {
+    if (zoomCaps) {
+      setZoom((z) => clampZoom(z + delta * (zoomCaps.step || 0.1) * 4));
+    } else {
+      setDigitalZoom((z) => clampZoom(z + delta * 0.2));
+    }
+  };
+
+  const resetZoom = () => {
+    if (zoomCaps) setZoom(zoomCaps.min);
+    else setDigitalZoom(1);
+  };
+
+  const tryTapFocus = useCallback(
+    async (nx: number, ny: number) => {
+      const track = streamRef.current?.getVideoTracks?.()[0];
+      if (!track) return;
+      try {
+        const caps = (track.getCapabilities?.() ?? {}) as ExtendedCapabilities;
+        const modes = caps.focusMode ?? [];
+        const wantsMode = modes.includes("single-shot")
+          ? "single-shot"
+          : modes.includes("manual")
+            ? "manual"
+            : null;
+        if (wantsMode && caps.pointsOfInterest !== undefined) {
+          const c: ExtendedConstraint = {
+            focusMode: wantsMode,
+            pointsOfInterest: [{ x: nx, y: ny }],
+          };
+          await track.applyConstraints({ advanced: [c] } as MediaTrackConstraints);
+        }
+      } catch {
+        // ignore — visual pulse still shown
+      }
+    },
+    [],
+  );
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (state !== "ready") return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    pressStart.current = { x, y, t: Date.now() };
+    if (longPressTimer.current) window.clearTimeout(longPressTimer.current);
+    longPressTimer.current = window.setTimeout(async () => {
+      const track = streamRef.current?.getVideoTracks?.()[0];
+      const caps = (track?.getCapabilities?.() ?? {}) as ExtendedCapabilities;
+      const modes = caps.focusMode ?? [];
+      if (track && modes.includes("manual")) {
+        try {
+          const c: ExtendedConstraint = { focusMode: "manual" };
+          await track.applyConstraints({ advanced: [c] } as MediaTrackConstraints);
+          setAfLocked(true);
+          showToast("AF LOCKED");
+        } catch {
+          showToast("AF LOCK N/A");
+        }
+      } else {
+        showToast("AF LOCK N/A");
+      }
+      pressStart.current = null;
+    }, 600);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (longPressTimer.current) {
+      window.clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    const start = pressStart.current;
+    pressStart.current = null;
+    if (!start || state !== "ready") return;
+    const dt = Date.now() - start.t;
+    if (dt > 550) return; // long-press handled
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const dx = Math.abs(x - start.x);
+    const dy = Math.abs(y - start.y);
+    if (dx > 12 || dy > 12) return;
+
+    // Double-tap → reset zoom
+    const now = Date.now();
+    if (now - lastTapAt < 320) {
+      resetZoom();
+      setLastTapAt(0);
+      return;
+    }
+    setLastTapAt(now);
+
+    // Focus pulse
+    const id = now;
+    setFocusPulses((p) => [...p, { id, x, y }]);
+    window.setTimeout(() => setFocusPulses((p) => p.filter((f) => f.id !== id)), 700);
+
+    const nx = Math.min(1, Math.max(0, x / rect.width));
+    const ny = Math.min(1, Math.max(0, y / rect.height));
+    void tryTapFocus(nx, ny);
+  };
 
   const handleScan = () => {
     if (state !== "ready") return;
@@ -79,13 +305,34 @@ export function VisionScanner() {
     window.setTimeout(() => setFlashing(false), 450);
   };
 
+  const lensIndex = devices.findIndex((d) => d.deviceId === activeDeviceId);
+  const lensLabel =
+    devices.length >= 2
+      ? `LENS ${Math.max(0, lensIndex) + 1}/${devices.length}`
+      : `LENS ${facingMode === "environment" ? "BACK" : "FRONT"}`;
+  const digital = !zoomCaps;
+  const zoomValue = zoomCaps ? zoom : digitalZoom;
+  const zoomMin = zoomCaps?.min ?? 1;
+  const zoomMax = zoomCaps?.max ?? 3;
+  const zoomStep = zoomCaps?.step ?? 0.05;
+  const zoomDisplay = digital
+    ? `${zoomValue.toFixed(1)}×`
+    : `${(zoomValue / zoomMin).toFixed(1)}×`;
+
   return (
-    <div className="space-y-3 p-3 landscape:max-md:space-y-2 landscape:max-md:p-2">
-      <HudPanel index={0} title="OPTICAL FEED // LIVE" className="flex flex-col">
+    <div className="flex min-h-0 flex-col gap-3 p-3 portrait:min-h-[100dvh] landscape:max-md:gap-2 landscape:max-md:p-2">
+      <HudPanel index={0} title="OPTICAL FEED // LIVE" className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="relative mx-auto w-full">
           <div
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={() => {
+              if (longPressTimer.current) window.clearTimeout(longPressTimer.current);
+              longPressTimer.current = null;
+              pressStart.current = null;
+            }}
             className={
-              "relative mx-auto aspect-[3/4] w-full overflow-hidden bg-black md:aspect-video " +
+              "relative mx-auto aspect-[3/4] w-full touch-none overflow-hidden bg-black md:aspect-video " +
               "max-h-[68vh] short:max-h-[52vh] landscape:max-md:aspect-video landscape:max-md:max-h-[62vh]"
             }
           >
@@ -98,6 +345,9 @@ export function VisionScanner() {
               style={{
                 filter: "contrast(1.05) saturate(1.1) hue-rotate(-4deg)",
                 opacity: state === "ready" ? 1 : 0.25,
+                transform: digital && digitalZoom > 1 ? `scale(${digitalZoom})` : undefined,
+                transformOrigin: "center center",
+                transition: "transform 120ms linear",
               }}
             />
 
@@ -153,14 +403,79 @@ export function VisionScanner() {
               </span>
             </div>
             <div className="pointer-events-none absolute right-2 top-2 font-display text-[9px] uppercase tracking-[0.3em] text-primary/60">
-              CH-VIS-01
+              {lensLabel}
             </div>
             <div className="pointer-events-none absolute left-2 bottom-2 font-display text-[9px] uppercase tracking-[0.3em] text-primary/60">
-              MODE: SCAN
+              {afLocked ? "AF: LOCK" : "MODE: SCAN"}
             </div>
             <div className="pointer-events-none absolute right-2 bottom-2 font-display text-[9px] uppercase tracking-[0.3em] text-primary/60">
-              FPS: 30
+              ZOOM {zoomDisplay}
+              {digital ? " · DIG" : ""}
             </div>
+
+            {/* Focus pulses */}
+            {focusPulses.map((f) => (
+              <div
+                key={f.id}
+                className="pointer-events-none absolute animate-ping"
+                style={{
+                  left: f.x - 22,
+                  top: f.y - 22,
+                  width: 44,
+                  height: 44,
+                  border: "1.5px solid var(--primary)",
+                  boxShadow: "0 0 10px var(--primary)",
+                  borderRadius: 2,
+                }}
+              />
+            ))}
+
+            {/* Toast */}
+            {toast && (
+              <div
+                className="pointer-events-none absolute left-1/2 top-2 z-30 -translate-x-1/2 border border-primary/60 bg-black/70 px-3 py-1 font-display text-[9px] uppercase tracking-[0.35em] text-primary"
+                style={{ boxShadow: "var(--glow-primary)" }}
+              >
+                {toast}
+              </div>
+            )}
+
+            {/* Zoom slider — right rail */}
+            {state === "ready" && (
+              <div className="pointer-events-auto absolute right-2 top-1/2 z-20 flex -translate-y-1/2 flex-col items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => bumpZoom(+1)}
+                  aria-label="Zoom in"
+                  className="grid h-6 w-6 place-items-center border border-primary/60 bg-black/60 text-primary"
+                >
+                  <Plus className="h-3 w-3" strokeWidth={2} />
+                </button>
+                <input
+                  type="range"
+                  min={zoomMin}
+                  max={zoomMax}
+                  step={zoomStep}
+                  value={zoomValue}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (zoomCaps) setZoom(v);
+                    else setDigitalZoom(v);
+                  }}
+                  aria-label="Zoom"
+                  className="vision-zoom-slider h-28 w-6"
+                  style={{ writingMode: "vertical-lr" as unknown as string }}
+                />
+                <button
+                  type="button"
+                  onClick={() => bumpZoom(-1)}
+                  aria-label="Zoom out"
+                  className="grid h-6 w-6 place-items-center border border-primary/60 bg-black/60 text-primary"
+                >
+                  <Minus className="h-3 w-3" strokeWidth={2} />
+                </button>
+              </div>
+            )}
 
             {/* Capture flash */}
             {flashing && (
@@ -188,8 +503,22 @@ export function VisionScanner() {
           <canvas ref={canvasRef} className="hidden" />
         </div>
 
-        {/* SCAN button */}
-        <div className="flex items-center justify-center border-t border-primary/25 p-3 landscape:max-md:p-2">
+        {/* Control bar */}
+        <div className="mt-auto flex shrink-0 items-center justify-center gap-3 border-t border-primary/25 p-3 landscape:max-md:p-2">
+          <button
+            type="button"
+            onClick={cycleLens}
+            disabled={state !== "ready"}
+            aria-label="Switch lens"
+            className="font-display flex items-center gap-2 border px-3 py-2 text-[10px] uppercase tracking-[0.3em] text-primary transition disabled:cursor-not-allowed disabled:opacity-40"
+            style={{
+              borderColor: "color-mix(in oklab, var(--primary) 55%, transparent)",
+              backgroundColor: "color-mix(in oklab, var(--primary) 6%, transparent)",
+            }}
+          >
+            <SwitchCamera className="h-4 w-4" strokeWidth={1.5} />
+            LENS
+          </button>
           <button
             type="button"
             onClick={handleScan}
