@@ -602,6 +602,7 @@ export type Database = {
       }
       user_settings: {
         Row: {
+          active_agent_slug: string
           chat_routing: string
           created_at: string
           default_model: string
@@ -611,6 +612,7 @@ export type Database = {
           wake_word_enabled: boolean
         }
         Insert: {
+          active_agent_slug?: string
           chat_routing?: string
           created_at?: string
           default_model?: string
@@ -620,6 +622,7 @@ export type Database = {
           wake_word_enabled?: boolean
         }
         Update: {
+          active_agent_slug?: string
           chat_routing?: string
           created_at?: string
           default_model?: string
