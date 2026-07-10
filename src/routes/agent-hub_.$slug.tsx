@@ -369,7 +369,7 @@ function LiveRunsPanel({
               key={r.id}
               type="button"
               onClick={() => onOpenRun(r)}
-              className="flex w-full items-center justify-between gap-3 py-2 text-left hover:bg-primary/5"
+              className="flex w-full min-w-0 items-center justify-between gap-3 py-2 text-left hover:bg-primary/5"
             >
               <span
                 className="font-display shrink-0 text-[10px] uppercase tracking-widest"
@@ -377,10 +377,10 @@ function LiveRunsPanel({
               >
                 ● {r.status}
               </span>
-              <span className="font-mono flex-1 truncate text-[11px] text-foreground">
+              <span className="font-mono min-w-0 flex-1 truncate text-[11px] text-foreground">
                 {inputPreview(r.input)}
               </span>
-              <span className="font-mono text-[10px] text-muted-foreground">
+              <span className="font-mono shrink-0 text-[10px] text-muted-foreground">
                 {r.latencyMs ? `${r.latencyMs}ms` : "—"} · {new Date(r.createdAt).toLocaleTimeString()}
               </span>
             </button>
@@ -401,7 +401,7 @@ function ActiveRow({ run }: { run: AgentRunRecord }) {
   const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
   return (
     <div className="flex items-center justify-between gap-3 border border-primary/25 bg-primary/5 px-3 py-2">
-      <span className="font-mono text-[11px] text-foreground truncate">{inputPreview(run.input)}</span>
+      <span className="font-mono min-w-0 flex-1 text-[11px] text-foreground truncate">{inputPreview(run.input)}</span>
       <span className="font-mono shrink-0 text-[10px] text-primary">▸ {elapsed}s</span>
     </div>
   );
@@ -824,7 +824,7 @@ function EventLogPanel({ data }: { data: AgentDetail }) {
           {data.events.map((e) => (
             <div
               key={`${e.origin}-${e.id}`}
-              className="font-mono border-l-2 pl-2 text-[11px]"
+              className="font-mono border-l-2 pl-2 text-[11px] break-words"
               style={{ borderColor: levelColor(e.level) }}
             >
               <span className="text-muted-foreground/70">
