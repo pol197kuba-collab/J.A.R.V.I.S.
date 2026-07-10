@@ -444,9 +444,19 @@ HUD shell already exists to plug into.
 
 ## Immediate next steps (in order)
 
-1. Verify `delegate_to_agent` actually routes Orchestrator → Marketer in a
-   live conversation (cheap test, catches routing bugs before Phase 2 adds
-   more complexity).
+`delegate_to_agent` verified end-to-end on 2026-07-10: orchestrator run
+`eb968ad8` correctly invoked `delegate_to_agent(slug: "marketer", ...)`,
+marketer run `115fb1fc` executed ~2s later and returned the content the
+orchestrator then relayed to the user. **Delegation mechanism confirmed
+working.** Known gap: `agent_runs.parent_run_id` is not being populated on
+the child run despite the column existing for this exact purpose — fix
+before adding multi-level delegation (Phase 3), or tracing will become
+unreadable with more agents.
+
+Unrelated observation from the same telemetry pull: a separate automated
+flow (likely the HUD news/intel widget) showed 2 error-status runs out of 3
+attempts on the same prompt, no output captured on failure. Not yet
+investigated — flag for a future debugging pass, not blocking Phase 2.
 2. Decide and document the Analityk tooling approach (TS-first, per above)
    before writing any Phase 2 code.
 3. Resolve or remove the dead `user_settings.default_model` field.
