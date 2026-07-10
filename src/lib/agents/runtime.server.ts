@@ -132,7 +132,15 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       : "";
 
   const basePrompt = agentSpecific ? `${JARVIS_PERSONA}\n\n${agentSpecific}` : DEFAULT_SYSTEM_PROMPT;
-  const systemPrompt = `${basePrompt}${rosterBlock}`;
+
+  // Always appended, regardless of whether the agent has a custom
+  // system_prompt override — otherwise agents like Marketer never learn
+  // they have this capability at all. Explicitly forbids the "I don't have
+  // UI access" refusal pattern, which is a strong default behaviour in base
+  // model training and tends to override a merely-declared tool otherwise.
+  const uiActionInstructions = `\n\nDOSTĘP DO INTERFEJSU: Masz REALNĄ możliwość sterowania interfejsem JARVIS HUD poprzez narzędzie ${UI_ACTION_TOOL_NAME}. Gdy użytkownik prosi o otwarcie, zamknięcie, przełączenie widoku, restart, uśpienie lub wyłączenie systemu — NIGDY nie odmawiaj i NIE twierdź, że nie masz dostępu do interfejsu. Zawsze wywołaj ${UI_ACTION_TOOL_NAME} z właściwą wartością "action", nawet jeśli polecenie jest sformułowane luźno lub pośrednio (np. "przełącz mnie na X", "pokaż mi Y", "zamknij to", "wróć do głównego ekranu"). Dopiero gdy żadna z dostępnych akcji faktycznie nie pasuje do prośby, wyjaśnij czego brakuje — nigdy nie zgaduj, że nie masz takiej mocy.`;
+
+  const systemPrompt = `${basePrompt}${rosterBlock}${uiActionInstructions}`;
 
   // Model resolution: agent override → user default → hardcoded fallback.
   let model = agent.model?.trim() ?? "";
