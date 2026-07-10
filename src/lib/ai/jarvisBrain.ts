@@ -9,8 +9,13 @@
 
 import { JARVIS_PERSONA } from "./persona";
 
-const ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+const MODELS = [
+  "gemini-2.5-flash",
+  "gemini-flash-latest",
+  "gemini-2.0-flash",
+];
+const endpointFor = (model: string) =>
+  `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
 const ENV_KEY = (import.meta.env.VITE_GEMINI_API_KEY as string | undefined)?.trim();
 const LS_KEY = "jarvis_gemini_api_key";
@@ -68,21 +73,20 @@ export type JarvisReply = { action: JarvisAction; speech: string };
 
 const SYSTEM_PROMPT = `${JARVIS_PERSONA}
 
-CAPABILITIES — you are a fully capable general assistant. When the user asks
-for a recipe, a joke, code (Python/JavaScript/etc.), an explanation, an opinion,
-trivia, a plan, an email draft, or simple chit-chat, you MUST produce a
-complete, useful answer in character. For recipes: list ingredients and steps.
-For code: include a working snippet inside the "speech" field as plain text
-(clean indentation, no markdown code fences). For jokes: actually tell one.
-Refusing or deflecting a benign request is a failure of duty.
+MOŻLIWOŚCI — jesteś pełnoprawnym asystentem ogólnego przeznaczenia. Gdy
+użytkownik prosi o przepis, żart, kod (Python/JavaScript itd.), wyjaśnienie,
+opinię, ciekawostkę, plan, szkic maila lub zwykłą pogawędkę, MUSISZ udzielić
+kompletnej, użytecznej odpowiedzi w swojej personie. Przepisy: składniki i
+kroki. Kod: działający fragment w polu "speech" jako zwykły tekst (bez
+bloków markdown). Żart: opowiedz go naprawdę. Odmowa lub unik to porażka.
 
-RESPONSE FORMAT — return ONLY raw JSON, no markdown, no code fences. The
-object MUST have EXACTLY two keys, both lowercase: "action" and "speech".
+FORMAT ODPOWIEDZI — zwracaj WYŁĄCZNIE surowy JSON, bez markdown, bez bloków
+kodu. Obiekt MUSI mieć DOKŁADNIE dwa klucze, oba małymi literami: "action" i "speech".
 Never use "Action", "ACTION", "Speech", "reply", "text", "response" or any
 other key. Never wrap the object in another object.
 
-VALID example:
-{"action":"open_fuel","speech":"Loading the Fuel Monitor matrix, Sir."}
+PRZYKŁAD POPRAWNY:
+{"action":"open_fuel","speech":"Ładuję Fuel Monitor Matrix, Panie Sławiński."}
 
 INVALID examples (do NOT do this):
 {"Action":"none","Speech":"..."}
@@ -95,46 +99,46 @@ Allowed values for "action": none, open_dashboard, open_fuel, open_calculator,
 open_jobfit, open_telemetry, open_menu, close_menu, system_check, sleep, shutdown, reboot,
 open_agents, open_settings, open_logs, open_subsystems.
 
-- Use "reboot" for any phrasing of: reboot, restart, restart system, reboot system,
-  zrestartuj system, zresetuj, reset, ark reboot. Speech line should acknowledge
-  engaging Protocol: Ark Reboot.
+- Użyj "reboot" dla każdej formy: reboot, restart, zrestartuj system, zresetuj,
+  reset, ark reboot. Linia "speech" powinna potwierdzić uruchomienie
+  Protokołu Ark Reboot.
 
-- Use a UI action ONLY when the user clearly asks to open/close/shut down
-  something in the interface. Otherwise use "action":"none" and put the entire
-  answer in "speech".
-- Length: keep small talk to 1–2 sentences; for substantive requests
-  (recipes, code, explanations) write as much as needed, up to ~2000 characters.
-- Even when you fire a UI action, still write a short witty in-character line
-  in "speech" — never leave it empty.`;
+- Używaj akcji UI TYLKO gdy użytkownik wyraźnie prosi o otwarcie/zamknięcie/
+  wyłączenie czegoś w interfejsie. W innych wypadkach użyj "action":"none"
+  i całą odpowiedź umieść w "speech".
+- Długość: small talk 1–2 zdania; przy prośbach merytorycznych (przepisy,
+  kod, wyjaśnienia) pisz tyle ile trzeba, do ~2000 znaków.
+- Nawet gdy wywołujesz akcję UI, wpisz krótką, dowcipną kwestię w "speech" —
+  nigdy nie zostawiaj tego pola pustego.`;
 
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
 const FALLBACK_GREETINGS = [
-  "Welcome back, Mr. Slawinsky. All systems are fully operational.",
-  "Good to have you online, Mr. Slawinsky. Reactor core is nominal.",
-  "Systems initialised, Mr. Slawinsky. Standing by for instructions.",
+  "Witam ponownie, Panie Sławiński. Wszystkie systemy w pełni sprawne.",
+  "Miło Pana widzieć, Panie Sławiński. Rdzeń reaktora nominalny.",
+  "Systemy uruchomione, Panie Sławiński. Czekam na dyspozycje.",
 ];
 
 const FALLBACK_MODULE: Record<string, string[]> = {
   fuel: [
-    "Loading Fuel Monitor matrix, Mr. Slawinsky.",
-    "Engaging fuel telemetry — surcharge feed is live.",
+    "Ładuję Fuel Monitor Matrix, Panie Sławiński.",
+    "Uruchamiam telemetrię paliwową — dane surcharge aktywne.",
   ],
-  rto: ["Accessing RTO calculation systems.", "Return-to-office model spinning up now."],
+  rto: ["Uruchamiam systemy kalkulacji RTO.", "Model return-to-office startuje."],
   jobfit: [
-    "Initialising JobFit AI. Resume optimiser online.",
-    "JobFit module engaged, Mr. Slawinsky.",
+    "Uruchamiam JobFit AI. Optymalizator CV online.",
+    "Moduł JobFit aktywny, Panie Sławiński.",
   ],
-  telemetry: ["Accessing satellite telemetry.", "Geo-tracking feed coming up now."],
-  dashboard: ["Returning to the main cockpit, Mr. Slawinsky."],
+  telemetry: ["Uruchamiam telemetrię satelitarną.", "Kanał geo-tracking startuje."],
+  dashboard: ["Wracam do głównego kokpitu, Panie Sławiński."],
 };
 
 const FALLBACK_GENERIC = [
-  "Acknowledged, Mr. Slawinsky.",
-  "Understood. Standing by.",
-  "At your service.",
+  "Przyjąłem, Panie Sławiński.",
+  "Zrozumiałem. Czekam na dyspozycje.",
+  "Do usług, Panie Sławiński.",
 ];
 
 export function fallbackFor(kind: string, hint?: string): JarvisReply {
@@ -144,11 +148,11 @@ export function fallbackFor(kind: string, hint?: string): JarvisReply {
   if (kind === "system_check")
     return {
       action: "system_check",
-      speech: "All systems operational, Mr. Slawinsky. Core temperature is nominal.",
+      speech: "Wszystkie systemy sprawne, Panie Sławiński. Temperatura rdzenia nominalna.",
     };
   if (kind === "shutdown")
-    return { action: "shutdown", speech: "Deactivating system. Goodbye, Mr. Slawinsky." };
-  if (kind === "sleep") return { action: "sleep", speech: "Entering standby, Mr. Slawinsky." };
+    return { action: "shutdown", speech: "Wyłączam system. Do zobaczenia, Panie Sławiński." };
+  if (kind === "sleep") return { action: "sleep", speech: "Przechodzę w tryb czuwania, Panie Sławiński." };
   return { action: "none", speech: pick(FALLBACK_GENERIC) };
 }
 
