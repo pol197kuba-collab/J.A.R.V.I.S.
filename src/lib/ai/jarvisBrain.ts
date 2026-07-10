@@ -8,6 +8,7 @@
 // short canned lines so the system never goes mute.
 
 import { JARVIS_PERSONA } from "./persona";
+import { setAgentBusy, reportOutcome } from "./agentActivity";
 
 const MODELS = [
   "gemini-2.5-flash",
@@ -232,14 +233,21 @@ export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
     try {
       const { runAgent } = await import("@/lib/agents/runtime.functions");
       const conversationId = await resolveConversationId();
-      const result = await runAgent({
-        data: {
-          agentSlug: "orchestrator",
-          input: input.prompt,
-          history: input.history ?? [],
-          conversationId: conversationId ?? undefined,
-        },
-      });
+      setAgentBusy(true);
+      let result;
+      try {
+        result = await runAgent({
+          data: {
+            agentSlug: "orchestrator",
+            input: input.prompt,
+            history: input.history ?? [],
+            conversationId: conversationId ?? undefined,
+          },
+        });
+      } finally {
+        setAgentBusy(false);
+      }
+      reportOutcome(result.status === "done" ? "done" : "error");
       if (result.conversationId) cachedConversationId = result.conversationId;
       if (result.status === "done" && result.output) {
         return { action: (result.action ?? "none") as JarvisAction, speech: result.output };
@@ -247,6 +255,7 @@ export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
       console.warn("[brain] server runtime returned error", result.error);
       // fall through to client-side path
     } catch (err) {
+      reportOutcome("error");
       console.warn("[brain] server runtime exception", err);
       // fall through to client-side path
     }
