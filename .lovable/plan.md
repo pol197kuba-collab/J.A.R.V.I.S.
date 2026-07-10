@@ -1,39 +1,64 @@
-## JARVIS Vision — Etap 1: warstwa wizualna
+## Vision — pełna obsługa pionu + kontrolki kamery
 
-Nowy moduł `/vision` z podglądem kamery w stylu HUD. Bez AI, bez backendu, bez nowych zależności.
+Cel: strona `/vision` działa i w pionie, i w poziomie na telefonie. Reszta aplikacji pozostaje bez zmian (dalej tylko poziomo).
 
-### Nowe pliki
+### 1) `src/components/jarvis/OrientationGate.tsx`
 
-**`src/routes/vision.tsx`**
-- `createFileRoute("/vision")` z pełnym `head()` (title, description, og:*).
-- Renderuje `<VisionScanner />` w spójnym wrapperze (wzorem `geo-tracking.tsx`).
+- Dodaje prop `exemptPaths?: string[]` (domyślnie `[]`).
+- Śledzi aktualny pathname reaktywnie przez `useRouterState({ select: s => s.location.pathname })` z `@tanstack/react-router` (natywny, wspierany sposób; brak monkey‑patchowania `history`).
+- Efektywne blokowanie: `blocked && !exemptPaths.some(p => pathname === p || pathname.startsWith(p + "/"))`.
+- Gdy ścieżka jest wyjęta — renderuje `children` bez overlayów, nawet w portrait. Przy nawigacji poza `/vision` w portrait gate aktywuje się z powrotem (bo pathname się zmieni).
+- Zero zmian w istniejącym UI komunikatu portrait.
 
-**`src/components/jarvis/VisionScanner.tsx`**
-- `getUserMedia({ video: { facingMode: { ideal: "environment" } } })` — tylna kamera na mobile, fallback na dowolną na desktopie.
-- Cleanup: zatrzymanie wszystkich tracków przy unmount.
-- Stany: `loading | ready | denied | unavailable` — komunikaty HUD (`font-display`, uppercase, tracking-wide, kolory `--primary`/`--warning`/`--destructive`, mrugająca kropka).
-- Owinięcie w `HudPanel` z `title="OPTICAL FEED // LIVE"` + `HudTag`.
-- Overlay skanera: cztery narożne bracket-y (celownik) w primary + glow, animowana pozioma linia skanująca (translateY 0→100%→0, ~3s infinite), subtelny inner glow.
-- Przycisk **SCAN** pod ramką (styl spójny z `RebootButton`/`DeactivateButton`, font-display uppercase, border+glow primary), disabled gdy nie `ready`.
-- onClick: `audio.playClick()`, `canvas.drawImage(video)` → `toDataURL("image/jpeg", 0.85)` → `setLastCapture(...)`, animacja flash ~450ms (biały overlay fade + pulse ramki). Thumbnail ostatniej klatki w rogu.
-- `lastCapture` trzymany w state — gotowy pod etap 2.
+### 2) `src/components/jarvis/PhaseController.tsx`
 
-### Edycje
+- Jedyna zmiana: `<OrientationGate exemptPaths={["/vision"]}>`.
 
-**`src/components/jarvis/AppSidebar.tsx`**
-- Nowa pozycja: `{ title: "Vision", url: "/vision", icon: Eye }` (Eye z `lucide-react`), między "Geo-Tracking" a "System Logs". Ten sam styl i handler co reszta.
+### 3) `src/routes/vision.tsx`
 
-**`src/styles.css`**
-- Keyframes + utility: `vision-scan` (linia skanująca) i `vision-flash` (capture flash).
+- Bez zmian funkcjonalnych; upewniam się, że `VisionPage` zajmuje pełną wysokość viewportu (`min-h-[100dvh]`) i nie ma outer paddingu, żeby portrait się mieścił.
 
-### Responsywność
-- Kontener kamery `aspect-[3/4]` na mobile portrait, `aspect-video` od `md`, `max-h-[70vh]`. Button SCAN sticky w obrębie panelu — cały widok mieści się na telefonie (uwzględniam projektową regułę `short:`).
+### 4) `src/components/jarvis/VisionScanner.tsx` — nowe funkcje
 
-### Nie dotykam
-- `runtime.server.ts`, `runtime.functions.ts`, `persona.ts`, `jarvisBrain.ts`, `models.ts`, migracji, secretów.
-- `geo-tracking.tsx` zostaje.
-- Bez nowych npm packages.
-- Zero integracji AI od Lovable (żadnego AI Gateway) — nigdzie w projekcie.
+**Responsywność (portrait + landscape):**
+- Kontener zewnętrzny: `flex flex-col min-h-0` w portrait; landscape zostaje jak dziś (`landscape:` warianty nietknięte, tylko dokładam różnice dla portrait).
+- Ramka kamery: portrait → `aspect-[3/4] max-h-[70dvh]`; landscape → obecne `landscape:max-md:aspect-video landscape:max-md:max-h-[62vh]`.
+- HUD panel + SCAN w portrait: `flex-col` z `overflow-hidden`, przycisk w sticky pasku na dole panelu, `shrink-0`.
+- Sidebar: nic nie zmieniam w `AppSidebar.tsx` — `SidebarProvider` już zwija do hamburgera na `isMobile`, więc portrait telefonu obsłuży się sam.
 
-### Etap 2 (poza tym planem)
-Ręczna integracja z Gemini bezpośrednio w `runtime.server.ts` (własne wywołanie API), wysyłka `lastCapture` i render odpowiedzi w HUD.
+**Przełącznik kamer (multi‑lens):**
+- Po pierwszym streamie: `navigator.mediaDevices.enumerateDevices()` → filtr `kind === "videoinput"`.
+- Stan `devices: MediaDeviceInfo[]` + `activeDeviceId`.
+- Rebuild streamu: `getUserMedia({ video: { deviceId: { exact: id } } })` — stopuję poprzednie tracki, podpinam nowy stream. Guard przeciw równoległym startom.
+- UI: przycisk „LENS” (`SwitchCamera`) obok SCAN, cyklicznie przełącza obiektywy. Aktywny obiektyw pokazany w HUD (`LENS N/M`), z fallbackiem nazw gdy `label` puste.
+- Fallback dla iOS gdy `enumerateDevices` zwraca 1 wpis: toggle przez `facingMode: "user" | "environment"`.
+
+**Zoom (płynny):**
+- Po starcie: `track.getCapabilities()`. Jeśli `capabilities.zoom` (`min/max/step`) — pionowy suwak HUD z prawej strony ramki; `applyConstraints({ advanced: [{ zoom }] })`.
+- Fallback: CSS `transform: scale(z)` na `<video>` (1×–3×) z oznaczeniem „DIGITAL”. Suwak zawsze widoczny dla spójnego UX.
+- Podwójny tap = reset do 1×.
+
+**Tap‑to‑focus:**
+- Tap na ramce → znormalizowane `x,y`.
+- Jeśli `capabilities.focusMode` wspiera `manual`/`single-shot` i `pointsOfInterest` istnieje: `applyConstraints({ advanced: [{ pointsOfInterest: [{ x, y }], focusMode: "single-shot" }] })`.
+- Zawsze rysuję animowany „focus reticle” (~600 ms) w miejscu tapu — feedback wizualny nawet bez API.
+- Long‑press (~600 ms) = AE/AF lock: `focusMode: "manual"` jeśli wspierane; inaczej HUD‑toast „AF LOCK N/A”.
+
+**Cleanup / edge cases:**
+- Przy zmianie obiektywu/unmount stopuję tracki, zeruję `srcObject`.
+- `visibilitychange → hidden` = pauza; powrót = restart (iOS).
+- SCAN/LENS/zoom `disabled` gdy `state !== "ready"`.
+- Zero nowych zależności npm.
+
+### 5) Czego NIE zmieniam
+
+- `BootSequence.tsx`, `PhaseContext.tsx`, żaden inny route poza `vision.tsx`.
+- `AppSidebar.tsx`, `HudPanel.tsx` — bez zmian.
+- Globalne style w `styles.css` — ewentualnie dorzucam mały keyframe focus reticle jeśli `animate-ping` nie wystarczy.
+- `runtime.server.ts`, `runtime.functions.ts`, `persona.ts`, `jarvisBrain.ts`.
+
+### Ryzyka
+
+- iOS Safari: `zoom`/`pointsOfInterest` bywają nieobsługiwane — pokryte fallbackami.
+- `enumerateDevices` na iOS często raportuje 1 kamerę na stronę mimo multi‑lens — pokryte `facingMode` toggle.
+- Wszystko scope’owane do `/vision`; reszta appki nadal wymusza landscape przez `OrientationGate`.
