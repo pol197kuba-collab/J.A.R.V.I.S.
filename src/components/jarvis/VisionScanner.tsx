@@ -385,7 +385,7 @@ export function VisionScanner() {
             }}
             className={
               "relative mx-auto w-full touch-none overflow-hidden bg-black portrait:flex-1 portrait:min-h-0 " +
-              "md:aspect-video max-h-[68vh] short:max-h-[52vh] landscape:max-md:aspect-video landscape:max-md:max-h-[62vh]"
+              "md:aspect-video md:max-h-[68vh] short:max-h-[52vh] landscape:max-md:aspect-video landscape:max-md:max-h-[62vh]"
             }
           >
             <video
