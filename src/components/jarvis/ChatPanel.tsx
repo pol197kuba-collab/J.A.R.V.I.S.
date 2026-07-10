@@ -14,6 +14,7 @@ import {
   getActiveAgentSlug,
 } from "@/lib/agents/runtime.functions";
 import { speak } from "@/lib/audio/speak";
+import { setAgentBusy, reportOutcome } from "@/lib/ai/agentActivity";
 import { ACTIVE_AGENT_LS_KEY } from "@/routes/agent-hub";
 
 const STORAGE_KEY = "jarvis_chat_history";
@@ -205,6 +206,7 @@ export function ChatPanel() {
       if (hasServerKey()) {
         emitChat("user", text);
         const history = getRecentHistory(3);
+        setAgentBusy(true);
         try {
           const result = await runAgentFn({
             // Używamy aktywnego agenta zamiast hardkodowanego "orchestrator"
@@ -215,6 +217,7 @@ export function ChatPanel() {
               conversationId: conversationId ?? undefined,
             },
           });
+          reportOutcome(result.status === "done" ? "done" : "error");
           if (result.conversationId) setConversationId(result.conversationId);
           const reply =
             result.status === "done" && result.output
@@ -238,10 +241,13 @@ export function ChatPanel() {
           qc.invalidateQueries({ queryKey: ["notes", "list"] });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
+          reportOutcome("error");
           emitChat("jarvis", `⚠ Agent runtime failed: ${msg}`, {
             agentSlug: activeAgent.slug,
             agentName: activeAgent.name,
           });
+        } finally {
+          setAgentBusy(false);
         }
       } else {
         await routeText(text);
