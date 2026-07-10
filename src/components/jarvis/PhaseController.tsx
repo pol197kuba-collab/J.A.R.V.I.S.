@@ -91,7 +91,7 @@ export function PhaseController() {
     phase === "shutdown";
 
   return (
-    <OrientationGate>
+    <OrientationGate exemptPaths={["/vision"]}>
       <PhaseContext.Provider value={{ phase, setPhase }}>
         {phase === "booting" && (
           <BootSequence
