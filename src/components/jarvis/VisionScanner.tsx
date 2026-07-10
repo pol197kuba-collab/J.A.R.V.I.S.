@@ -505,14 +505,15 @@ export function VisionScanner() {
                 </button>
                 <input
                   type="range"
-                  min={zoomMin}
-                  max={zoomMax}
-                  step={zoomStep}
-                  value={zoomValue}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={1 - zoomFraction}
                   onChange={(e) => {
+                    // Slider top = closer (fraction 1), bottom = wider (fraction 0).
+                    // vertical-lr places min at top, so invert.
                     const v = Number(e.target.value);
-                    if (zoomCaps) setZoom(v);
-                    else setDigitalZoom(v);
+                    setZoomFraction(1 - v);
                   }}
                   aria-label="Zoom"
                   className="vision-zoom-slider h-28 w-6"
@@ -559,9 +560,9 @@ export function VisionScanner() {
         <div className="mt-auto flex shrink-0 items-center justify-center gap-3 border-t border-primary/25 p-3 landscape:max-md:p-2">
           <button
             type="button"
-            onClick={cycleLens}
+            onClick={flipFacing}
             disabled={state !== "ready"}
-            aria-label="Switch lens"
+            aria-label="Flip camera"
             className="font-display flex items-center gap-2 border px-3 py-2 text-[10px] uppercase tracking-[0.3em] text-primary transition disabled:cursor-not-allowed disabled:opacity-40"
             style={{
               borderColor: "color-mix(in oklab, var(--primary) 55%, transparent)",
@@ -569,8 +570,70 @@ export function VisionScanner() {
             }}
           >
             <SwitchCamera className="h-4 w-4" strokeWidth={1.5} />
-            LENS
+            FLIP
           </button>
+          {showLensesButton && (
+            <div ref={lensPopoverRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setLensPopoverOpen((v) => !v)}
+                disabled={state !== "ready"}
+                aria-label="Rear lenses"
+                aria-expanded={lensPopoverOpen}
+                className="font-display flex items-center gap-2 border px-3 py-2 text-[10px] uppercase tracking-[0.3em] text-primary transition disabled:cursor-not-allowed disabled:opacity-40"
+                style={{
+                  borderColor: "color-mix(in oklab, var(--primary) 55%, transparent)",
+                  backgroundColor: "color-mix(in oklab, var(--primary) 6%, transparent)",
+                }}
+              >
+                <Aperture className="h-4 w-4" strokeWidth={1.5} />
+                LENSES
+              </button>
+              {lensPopoverOpen && (
+                <div
+                  className="pointer-events-none absolute left-1/2 z-40"
+                  style={{ bottom: "calc(100% + 8px)", transform: "translateX(-50%)" }}
+                >
+                  <div className="relative" style={{ width: 176, height: 96 }}>
+                    {rearDevices.map((d, i) => {
+                      const n = rearDevices.length;
+                      // Half-circle opening downward: angles from 200° to 340°.
+                      const startDeg = 200;
+                      const endDeg = 340;
+                      const t = n === 1 ? 0.5 : i / (n - 1);
+                      const deg = startDeg + (endDeg - startDeg) * t;
+                      const rad = (deg * Math.PI) / 180;
+                      const r = 72;
+                      const x = Math.cos(rad) * r;
+                      const y = Math.sin(rad) * r;
+                      const active = d.deviceId === activeDeviceId;
+                      return (
+                        <button
+                          key={d.deviceId || i}
+                          type="button"
+                          onClick={() => pickLens(d.deviceId)}
+                          aria-label={`Lens ${rearLabels[i]}`}
+                          className="pointer-events-auto absolute grid h-11 w-11 place-items-center rounded-full border font-display text-[9px] uppercase tracking-[0.2em] text-primary"
+                          style={{
+                            left: "50%",
+                            bottom: 0,
+                            transform: `translate(calc(-50% + ${x}px), ${y}px)`,
+                            borderColor: active
+                              ? "var(--primary)"
+                              : "color-mix(in oklab, var(--primary) 45%, transparent)",
+                            backgroundColor: "color-mix(in oklab, var(--primary) 10%, black)",
+                            boxShadow: active ? "var(--glow-primary)" : undefined,
+                          }}
+                        >
+                          {rearLabels[i]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           <button
             type="button"
             onClick={handleScan}
