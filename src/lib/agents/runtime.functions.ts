@@ -12,6 +12,16 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import type { Json } from "@/integrations/supabase/types";
+import { DEFAULT_GEMINI_MODEL } from "./models";
+
+// Accept any Gemini model id — the enum used to be a small whitelist which
+// made every new Gemini release require a code change. The Google API itself
+// is the source of truth; if the id is wrong the call fails and we surface it.
+const GeminiModelId = z
+  .string()
+  .min(1)
+  .max(80)
+  .regex(/^gemini[-a-z0-9.]*$/i, "invalid gemini model id");
 
 // ---------------------------------------------------------------------------
 // Types shared with the client
@@ -188,7 +198,7 @@ export type UserSettings = {
 
 const DEFAULT_SETTINGS: UserSettings = {
   chatRouting: "client",
-  defaultModel: "gemini-3.5-flash",
+  defaultModel: DEFAULT_GEMINI_MODEL,
   voiceLanguage: "auto",
   wakeWordEnabled: true,
 };
@@ -215,7 +225,7 @@ export const getUserSettings = createServerFn({ method: "GET" })
 const UpdateSettingsInput = z
   .object({
     chatRouting: z.enum(["client", "server"]).optional(),
-    defaultModel: z.enum(["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-pro"]).optional(),
+    defaultModel: GeminiModelId.optional(),
     voiceLanguage: z.enum(["auto", "en", "pl"]).optional(),
     wakeWordEnabled: z.boolean().optional(),
   })
