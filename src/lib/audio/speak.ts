@@ -36,11 +36,16 @@ let pumping = false;
 // Very small heuristic — enough to distinguish Polish from English replies.
 // Looks for Polish diacritics, common Polish stopwords, or the honorific we use.
 const PL_DIACRITICS = /[ąćęłńóśźż]/i;
-const PL_STOPWORDS = /\b(jestem|jest|nie|tak|proszę|dzień|dobry|panie|slawinsky|sławinsky|dla|to|się|witam|dobrze|teraz|dobrze|właśnie|wszystko|systemy|operacyjne)\b/i;
+const PL_STOPWORDS = /\b(jestem|jest|nie|tak|proszę|dzień|dobry|panie|slawinsky|sławinsky|dla|to|się|witam|dobrze|teraz|właśnie|wszystko|systemy|operacyjne|panu|pana|panią|ładuję|uruchamiam|otwieram|przyjąłem|wyłączam|zamykam|rdzeń|ustawienia|dziennik|podsystemy|agent|hub|jarvis|panie|sir)\b/i;
+// Heuristic bias: default to Polish (the app's primary language) unless the
+// text looks clearly English (ASCII-only + no Polish stopwords + at least one
+// obvious English function word).
+const EN_MARKERS = /\b(the|and|you|are|is|of|to|for|with|please|welcome|sir|mister|system|status)\b/i;
 function detectLang(text: string): "en" | "pl" {
   if (PL_DIACRITICS.test(text)) return "pl";
   if (PL_STOPWORDS.test(text)) return "pl";
-  return "en";
+  if (EN_MARKERS.test(text)) return "en";
+  return "pl";
 }
 
 function pickVoice(lang: "en" | "pl"): SpeechSynthesisVoice | null {
