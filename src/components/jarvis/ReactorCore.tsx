@@ -232,20 +232,26 @@ export function ReactorCore({ active: _active }: { active?: boolean } = {}) {
         <div className="reactor-stage absolute inset-0 sphere-blend">
           {/* Holographic wireframe sphere — meridians + parallels */}
           <div className="sphere-wire absolute inset-[12%]">
-            {[0, 30, 60, 90, 120, 150].map((deg) => (
+            {Array.from({ length: 16 }, (_, i) => i * 22.5).map((deg) => (
               <div
                 key={`m${deg}`}
                 className="sphere-meridian"
                 style={{ transform: `rotateY(${deg}deg)` }}
               />
             ))}
-            {[-60, -30, 0, 30, 60].map((deg) => (
-              <div
-                key={`p${deg}`}
-                className="sphere-meridian"
-                style={{ transform: `rotateX(90deg) translateZ(${deg * 1.2}px) scale(${Math.cos((deg * Math.PI) / 180).toFixed(3)})` }}
-              />
-            ))}
+            {[-80, -64, -48, -32, -16, 0, 16, 32, 48, 64, 80].map((phi) => {
+              const rad = (phi * Math.PI) / 180;
+              const R = 130; // sphere radius in px — matches meridian great-circle radius
+              const s = Math.cos(rad);
+              const z = R * Math.sin(rad);
+              return (
+                <div
+                  key={`p${phi}`}
+                  className="sphere-meridian"
+                  style={{ transform: `rotateX(90deg) translateZ(${z.toFixed(2)}px) scale(${s.toFixed(4)})` }}
+                />
+              );
+            })}
           </div>
 
           {/* Ring 1 — outer dashed, tilted */}
