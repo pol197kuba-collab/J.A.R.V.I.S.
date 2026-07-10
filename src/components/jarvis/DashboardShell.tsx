@@ -161,7 +161,7 @@ function FullscreenToggle() {
         void toggleAppFullscreen();
       }}
       aria-label={active ? "Exit fullscreen" : "Enter fullscreen"}
-      className="flex items-center justify-center border border-primary/50 bg-primary/5 p-1 text-primary transition hover:bg-primary/15 hover:text-foreground"
+      className="flex items-center justify-center border border-primary/50 bg-primary/5 p-1 text-primary transition hover:bg-primary/15 hover:text-foreground portrait:hidden"
     >
       <Icon className="h-3 w-3" strokeWidth={1.75} />
     </button>
