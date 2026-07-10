@@ -44,6 +44,8 @@ export type AgentRunResult = {
   runId: string;
   status: "done" | "error";
   output: string;
+  action?: string;
+  conversationId?: string | null;
   error?: string;
   tokensIn?: number;
   tokensOut?: number;
@@ -408,6 +410,7 @@ const RunAgentInput = z.object({
     )
     .max(30)
     .optional(),
+  conversationId: z.string().uuid().optional(),
 });
 
 export const runAgent = createServerFn({ method: "POST" })
@@ -423,7 +426,103 @@ export const runAgent = createServerFn({ method: "POST" })
       agentSlug: data.agentSlug,
       input: data.input,
       history: data.history ?? [],
+      conversationId: data.conversationId ?? null,
     });
+  });
+
+// ---------------------------------------------------------------------------
+// getActiveConversation — hydratacja historii czatu z serwera zamiast
+// localStorage, żeby ten sam wątek był widoczny na każdym urządzeniu
+// zalogowanym na to samo konto.
+// ---------------------------------------------------------------------------
+
+const GetConversationInput = z.object({ agentSlug: z.string().min(1).max(64) });
+
+export type ConversationMessage = {
+  id: string;
+  role: "user" | "jarvis";
+  text: string;
+  time: string;
+};
+
+export const getActiveConversation = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => GetConversationInput.parse(input))
+  .handler(async ({ data, context }): Promise<{ conversationId: string | null; messages: ConversationMessage[] }> => {
+    const { supabase, userId } = context;
+
+    const { data: agent } = await supabase
+      .from("agents")
+      .select("id")
+      .eq("owner_id", userId)
+      .eq("slug", data.agentSlug)
+      .maybeSingle();
+    if (!agent) return { conversationId: null, messages: [] };
+
+    const { data: conv } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("agent_id", agent.id)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!conv) return { conversationId: null, messages: [] };
+
+    const { data: msgs } = await supabase
+      .from("messages")
+      .select("id, role, content, created_at")
+      .eq("conversation_id", conv.id)
+      .order("created_at", { ascending: true })
+      .limit(60);
+
+    return {
+      conversationId: conv.id,
+      messages: (msgs ?? []).map((m) => ({
+        id: m.id,
+        role: m.role as "user" | "jarvis",
+        text: m.content,
+        time: new Date(m.created_at).toTimeString().slice(0, 8),
+      })),
+    };
+  });
+
+// ---------------------------------------------------------------------------
+// setActiveAgent — zapamiętuje wybranego agenta na koncie (user_settings),
+// nie w localStorage przeglądarki, żeby przełączenie urządzenia zachowywało
+// ten sam wybór.
+// ---------------------------------------------------------------------------
+
+const SetActiveAgentInput = z.object({ agentSlug: z.string().min(1).max(64) });
+
+export const setActiveAgent = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => SetActiveAgentInput.parse(input))
+  .handler(async ({ data, context }): Promise<{ ok: true }> => {
+    const { supabase, userId } = context;
+    const { error } = await supabase
+      .from("user_settings")
+      .upsert({ owner_id: userId, active_agent_slug: data.agentSlug }, { onConflict: "owner_id" });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+// ---------------------------------------------------------------------------
+// getActiveAgentSlug — reads the account-level agent selection so a fresh
+// device/browser opens on whatever was last picked elsewhere, instead of
+// always defaulting to "orchestrator".
+// ---------------------------------------------------------------------------
+
+export const getActiveAgentSlug = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<{ agentSlug: string }> => {
+    const { supabase, userId } = context;
+    const { data } = await supabase
+      .from("user_settings")
+      .select("active_agent_slug")
+      .eq("owner_id", userId)
+      .maybeSingle();
+    return { agentSlug: data?.active_agent_slug?.trim() || "orchestrator" };
   });
 
 // ---------------------------------------------------------------------------
