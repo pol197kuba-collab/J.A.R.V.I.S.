@@ -56,7 +56,7 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          {!collapsed && (
+          {(!collapsed || isMobile) && (
             <SidebarGroupLabel className="font-display text-[10px] uppercase tracking-[0.3em]">
               Modules
             </SidebarGroupLabel>
@@ -81,7 +81,7 @@ export function AppSidebar() {
                       className="group data-[active=true]:bg-primary/10 data-[active=true]:text-primary hover:text-primary"
                     >
                       <item.icon className="icon-neon h-4 w-4" strokeWidth={1.5} />
-                      {!collapsed && (
+                      {(!collapsed || isMobile) && (
                         <span className="font-display text-xs uppercase tracking-[0.2em]">
                           {item.title}
                         </span>
@@ -98,7 +98,7 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      {!collapsed && (
+      {(!collapsed || isMobile) && (
         <SidebarFooter className="border-t border-sidebar-border">
           <div className="space-y-1 px-2 py-2">
             <div className="flex items-center justify-between text-[10px] font-display uppercase tracking-widest">
