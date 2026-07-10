@@ -41,7 +41,7 @@ export function AppSidebar() {
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-3 px-2 py-2">
           <MiniArcReactor size={36} />
-          {!collapsed && (
+          {(!collapsed || isMobile) && (
             <div className="leading-tight">
               <p className="font-display text-sm font-bold tracking-[0.25em] text-foreground">
                 J.A.R.V.I.S.
