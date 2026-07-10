@@ -23,6 +23,10 @@ const UI_ACTIONS = [
 ] as const;
 type UiAction = (typeof UI_ACTIONS)[number];
 const UI_ACTION_TOOL_NAME = "perform_ui_action";
+// Same vocabulary plus an explicit escape hatch — used only by the forced
+// classifier fallback below, where the model MUST pick something and needs
+// a legitimate way to say "this message isn't a UI action at all".
+const UI_ACTIONS_WITH_NONE = [...UI_ACTIONS, "none"] as const;
 
 const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -430,6 +434,84 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         // have unconsumed tool output; fall through to a graceful message.
         finalText =
           "I have completed several tool calls but ran out of orchestration cycles. Please rephrase or ask me to continue.";
+      }
+    }
+
+    // Fallback classifier pass. Base models tend to have a strong learned
+    // habit of claiming "I can't control the UI" even when a real tool is
+    // declared and instructed — this shows up especially on loosely phrased
+    // requests. If the main AUTO-mode turn above never called
+    // perform_ui_action, force one more narrow decision: restrict the model
+    // to ONLY that tool (tool_config mode "ANY"), so it must name a concrete
+    // action or explicitly say "none" — it can no longer just talk its way
+    // out of using it. Best-effort: any failure here silently falls back to
+    // the normal text-only reply the user already has.
+    if (!uiAction) {
+      try {
+        const classifyRes = await fetch(
+          `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              systemInstruction: {
+                parts: [
+                  {
+                    text: "Jesteś klasyfikatorem intencji dla interfejsu JARVIS HUD. Oceń wiadomość użytkownika i zdecyduj, czy odpowiada ona DOKŁADNIE jednej z dostępnych akcji UI. Zawsze wywołaj narzędzie perform_ui_action z jedną wartością — jeśli żadna akcja nie pasuje (np. zwykła pogawędka, pytanie merytoryczne, prośba o treść), wybierz \"none\". Nie odpowiadaj tekstem, nie tłumacz się.",
+                  },
+                ],
+              },
+              tools: [
+                {
+                  functionDeclarations: [
+                    {
+                      name: UI_ACTION_TOOL_NAME,
+                      description: "Klasyfikacja: która akcja UI (jeśli którakolwiek) pasuje do wiadomości użytkownika.",
+                      parameters: {
+                        type: "object",
+                        properties: {
+                          action: {
+                            type: "string",
+                            enum: UI_ACTIONS_WITH_NONE as unknown as string[],
+                            description: 'Dokładnie jedna wartość — konkretna akcja albo "none".',
+                          },
+                        },
+                        required: ["action"],
+                      },
+                    },
+                  ],
+                },
+              ],
+              toolConfig: {
+                functionCallingConfig: { mode: "ANY", allowedFunctionNames: [UI_ACTION_TOOL_NAME] },
+              },
+              generationConfig: { temperature: 0.1, maxOutputTokens: 50 },
+              contents: [{ role: "user", parts: [{ text: input }] }],
+            }),
+          },
+        );
+        if (classifyRes.ok) {
+          const classifyData = (await classifyRes.json()) as {
+            candidates?: Array<{ content?: { parts?: GeminiPart[] } }>;
+            usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+          };
+          totalTokensIn += classifyData.usageMetadata?.promptTokenCount ?? 0;
+          totalTokensOut += classifyData.usageMetadata?.candidatesTokenCount ?? 0;
+          const classifyParts = classifyData.candidates?.[0]?.content?.parts ?? [];
+          const classifyCall = classifyParts.flatMap((p) =>
+            "functionCall" in p && p.functionCall ? [p.functionCall] : [],
+          )[0];
+          const requested = String((classifyCall?.args as Record<string, unknown> | undefined)?.action ?? "none");
+          if (requested !== "none" && (UI_ACTIONS as readonly string[]).includes(requested)) {
+            uiAction = requested as UiAction;
+            toolCallLog.push({ name: UI_ACTION_TOOL_NAME, args: { action: requested, via: "classifier_fallback" } });
+            await logEvent("info", "orchestrator", `ui action via classifier fallback: ${requested}`, {
+              run_id: runId,
+            } as Json);
+          }
+        }
+      } catch {
+        // Silent — the user still gets their normal text reply either way.
       }
     }
 
