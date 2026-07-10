@@ -227,28 +227,47 @@ export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
         parts: [{ text: h.text }],
       }));
     const contents = [...historyContents, { role: "user", parts: [{ text: input.prompt }] }];
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 6000);
-    const res = await fetch(`${ENDPOINT}?key=${encodeURIComponent(KEY)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: ctrl.signal,
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        generationConfig: {
-          temperature: 0.85,
-          responseMimeType: "application/json",
-          maxOutputTokens: 1200,
-        },
-        contents,
-      }),
+    const body = JSON.stringify({
+      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      generationConfig: {
+        temperature: 0.85,
+        responseMimeType: "application/json",
+        maxOutputTokens: 1200,
+      },
+      contents,
     });
-    clearTimeout(timer);
-    if (!res.ok) {
+    let res: Response | null = null;
+    for (const model of MODELS) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+      try {
+        res = await fetch(`${endpointFor(model)}?key=${encodeURIComponent(KEY)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: ctrl.signal,
+          body,
+        });
+      } catch (err) {
+        clearTimeout(timer);
+        console.warn("[brain] gemini network error on", model, err);
+        res = null;
+        continue;
+      }
+      clearTimeout(timer);
+      if (res.ok) break;
+      // Retry on overload / rate-limit / server errors with a different model.
+      if (res.status === 503 || res.status === 429 || res.status >= 500) {
+        const bodyText = await res.text().catch(() => "");
+        console.warn("[brain] gemini", model, "failed", res.status, bodyText.slice(0, 200));
+        res = null;
+        continue;
+      }
+      // 4xx (bad key, invalid request) — no point retrying.
       const bodyText = await res.text().catch(() => "");
       console.warn("[brain] gemini failed", res.status, bodyText.slice(0, 400));
       return fb();
     }
+    if (!res) return fb();
     const data = await res.json();
     const text: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) {
