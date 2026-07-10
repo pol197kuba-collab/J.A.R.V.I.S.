@@ -600,11 +600,53 @@
 .reactor-gpu.is-speaking .sphere-wire { animation-duration: 10s; }
 .reactor-gpu.is-speaking .reactor-stage { animation-duration: 4s; }
 
+/* Listening — attentive but calm; cooler, bluer amber */
+.reactor-gpu.is-listening { color: oklch(0.82 0.14 90); }
+.reactor-gpu.is-listening .ring3d-a { animation-duration: 14s; }
+.reactor-gpu.is-listening .ring3d-b { animation-duration: 11s; }
+.reactor-gpu.is-listening .ring3d-c { animation-duration: 9s; }
+.reactor-gpu.is-listening .ring3d-d { animation-duration: 7s; }
+.reactor-gpu.is-listening .ring3d-e { animation-duration: 5s; }
+.reactor-gpu.is-listening .ring3d-f { animation-duration: 3s; }
+.reactor-gpu.is-listening .sphere-meridian {
+  border-color: color-mix(in oklab, oklch(0.82 0.14 220) 45%, transparent);
+  box-shadow: inset 0 0 14px color-mix(in oklab, oklch(0.82 0.14 220) 25%, transparent);
+}
+
+/* Working — steady, busy cadence, cyan HUD tint */
+.reactor-gpu.is-working { color: var(--primary); }
+.reactor-gpu.is-working .ring3d-a { animation-duration: 4s; }
+.reactor-gpu.is-working .ring3d-b { animation-duration: 3.6s; }
+.reactor-gpu.is-working .ring3d-c { animation-duration: 3.2s; }
+.reactor-gpu.is-working .ring3d-d { animation-duration: 2.8s; }
+.reactor-gpu.is-working .ring3d-e { animation-duration: 2.4s; }
+.reactor-gpu.is-working .ring3d-f { animation-duration: 2s; }
+.reactor-gpu.is-working .sphere-wire { animation-duration: 12s; }
+.reactor-gpu.is-working .sphere-meridian {
+  border-color: color-mix(in oklab, var(--primary) 55%, transparent);
+  box-shadow: inset 0 0 14px color-mix(in oklab, var(--primary) 30%, transparent);
+}
+
 @keyframes core-speak-pulse {
   0%, 100% { transform: scale(1); filter: drop-shadow(0 0 12px oklch(0.9 0.22 70 / 0.7)); }
   50%      { transform: scale(1.18); filter: drop-shadow(0 0 38px oklch(0.95 0.24 75 / 1)); }
 }
 .animate-core-speak { animation: core-speak-pulse 0.55s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
+/* One-shot outcome pulses (~1.2s) */
+@keyframes reactor-success-flash {
+  0%   { filter: drop-shadow(0 0 0px oklch(0.98 0.18 80 / 0)) brightness(1); }
+  20%  { filter: drop-shadow(0 0 42px oklch(0.98 0.2 80 / 0.95)) brightness(1.35); }
+  100% { filter: drop-shadow(0 0 0px oklch(0.98 0.18 80 / 0)) brightness(1); }
+}
+.reactor-gpu.pulse-success { animation: reactor-success-flash 1.2s ease-out both; }
+
+@keyframes reactor-alert-flash {
+  0%, 100% { box-shadow: none; }
+  15%, 55% { box-shadow: 0 0 32px oklch(0.7 0.24 25 / 0.9), inset 0 0 22px oklch(0.7 0.24 25 / 0.55); }
+  30%, 70% { box-shadow: none; }
+}
+.reactor-gpu.pulse-alert { animation: reactor-alert-flash 1.2s steps(6, end) both; border-radius: 9999px; }
 
 /* ===== Protocol: Ark Reboot ===== */
 .ark-dimmed {
