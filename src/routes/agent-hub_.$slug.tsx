@@ -625,7 +625,7 @@ function SettingsPanel({
             <button
               type="button"
               onClick={() =>
-                savePartial({ model: modelInherit ? "gemini-2.5-flash" : null })
+                savePartial({ model: modelInherit ? DEFAULT_GEMINI_MODEL : null })
               }
               className="font-display border border-primary/60 px-3 py-1 text-[10px] uppercase tracking-widest"
               style={{ color: modelInherit ? "var(--success)" : "var(--muted-foreground)" }}
@@ -634,22 +634,20 @@ function SettingsPanel({
             </button>
           </div>
           {!modelInherit && (
-            <div className="flex gap-2">
-              {(["gemini-2.5-flash", "gemini-2.5-pro"] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => savePartial({ model: m })}
-                  className="font-display border border-primary/60 px-3 py-1 text-[10px] uppercase tracking-widest"
-                  style={{
-                    color: currentModel === m ? "var(--primary)" : "var(--muted-foreground)",
-                    background: currentModel === m ? "rgba(56,189,248,0.1)" : "transparent",
-                  }}
-                >
-                  {m.replace("gemini-2.5-", "")}
-                </button>
+            <select
+              value={currentModel}
+              onChange={(e) => savePartial({ model: e.target.value })}
+              className="font-mono w-full max-w-md border border-primary/60 bg-black/60 px-3 py-1.5 text-xs text-primary outline-none focus:border-primary"
+            >
+              {!GEMINI_MODELS.some((m) => m.id === currentModel) && (
+                <option value={currentModel}>{currentModel} (custom)</option>
+              )}
+              {GEMINI_MODELS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label} — {m.id}
+                </option>
               ))}
-            </div>
+            </select>
           )}
         </div>
 
