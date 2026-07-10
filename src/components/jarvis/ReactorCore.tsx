@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { onSpeaking, isSpeakingNow } from "@/lib/audio/speak";
+import { onAgentBusy, isAgentBusyNow, onOutcome } from "@/lib/ai/agentActivity";
+import { useVoiceCommands } from "./VoiceCommandContext";
 
 const AMBER = "oklch(0.85 0.2 65)";
 const AMBER_HI = "oklch(0.95 0.18 75)";
@@ -11,11 +13,40 @@ export function ReactorCore({ active: _active }: { active?: boolean } = {}) {
   // spectrum have been removed for a clean amber aesthetic.
   void _active;
   const [speaking, setSpeaking] = useState<boolean>(() => isSpeakingNow());
+  const [working, setWorking] = useState<boolean>(() => isAgentBusyNow());
+  const { listening } = useVoiceCommands();
+  const [pulse, setPulse] = useState<null | "success" | "alert">(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const speakingRef = useRef(speaking);
   speakingRef.current = speaking;
+  const modeRef = useRef<"speaking" | "working" | "listening" | "idle">("idle");
+  const outcomeRef = useRef<{ kind: "success" | "alert"; until: number } | null>(null);
+
+  const mode: "speaking" | "working" | "listening" | "idle" = speaking
+    ? "speaking"
+    : working
+      ? "working"
+      : listening
+        ? "listening"
+        : "idle";
+  modeRef.current = mode;
 
   useEffect(() => onSpeaking(setSpeaking), []);
+  useEffect(() => onAgentBusy(setWorking), []);
+  useEffect(
+    () =>
+      onOutcome((status) => {
+        const kind = status === "done" ? "success" : "alert";
+        setPulse(kind);
+        outcomeRef.current = { kind, until: performance.now() + 1200 };
+        const t = setTimeout(() => {
+          setPulse(null);
+          outcomeRef.current = null;
+        }, 1200);
+        return () => clearTimeout(t);
+      }),
+    [],
+  );
 
   // --- Touch/pointer interaction: drag to rotate, pinch to zoom, dbl-tap reset ---
   const interactRef = useRef<HTMLDivElement | null>(null);
@@ -139,19 +170,24 @@ export function ReactorCore({ active: _active }: { active?: boolean } = {}) {
       const lvl = speakingRef.current
         ? 0.5 + 0.5 * Math.abs(Math.sin(t * 0.012))
         : 0.08 + 0.06 * Math.sin(t * 0.0015);
+      // Momentary particle boost on success outcome.
+      const outcome = outcomeRef.current;
+      const boost = outcome && outcome.kind === "success" && t < outcome.until
+        ? 0.6 + 0.4 * ((outcome.until - t) / 1200)
+        : 0;
 
       for (let i = 0; i < PARTS.length; i++) {
         const p = PARTS[i];
-        p.a += p.sp * dt * (1 + lvl * 2);
+        p.a += p.sp * dt * (1 + lvl * 2 + boost * 2);
         const wobble = Math.sin(t * 0.001 + p.ph) * p.rb;
-        const rad = (p.r + wobble + lvl * 0.06) * Math.min(w, h) * 0.5;
+        const rad = (p.r + wobble + lvl * 0.06 + boost * 0.04) * Math.min(w, h) * 0.5;
         const x = cx + Math.cos(p.a) * rad;
         const y = cy + Math.sin(p.a) * rad;
-        const sz = p.sz * dpr * (1 + lvl * 0.8);
+        const sz = p.sz * dpr * (1 + lvl * 0.8 + boost * 1.2);
         ctx.beginPath();
-        ctx.fillStyle = "rgba(255, 196, 110, 0.85)";
-        ctx.shadowColor = "rgba(255, 170, 70, 0.9)";
-        ctx.shadowBlur = 10 * dpr;
+        ctx.fillStyle = boost > 0 ? "rgba(255, 230, 170, 1)" : "rgba(255, 196, 110, 0.85)";
+        ctx.shadowColor = boost > 0 ? "rgba(255, 220, 140, 1)" : "rgba(255, 170, 70, 0.9)";
+        ctx.shadowBlur = (10 + boost * 12) * dpr;
         ctx.arc(x, y, sz, 0, Math.PI * 2);
         ctx.fill();
       }
@@ -167,7 +203,14 @@ export function ReactorCore({ active: _active }: { active?: boolean } = {}) {
 
   return (
     <div
-      className={`reactor-gpu relative mx-auto flex aspect-square w-full max-w-[480px] items-center justify-center text-[oklch(0.85_0.2_65)]${speaking ? " is-speaking" : ""}`}
+      className={
+        "reactor-gpu relative mx-auto flex aspect-square w-full max-w-[480px] items-center justify-center text-[oklch(0.85_0.2_65)]" +
+        (mode === "speaking" ? " is-speaking" : "") +
+        (mode === "working" ? " is-working" : "") +
+        (mode === "listening" ? " is-listening" : "") +
+        (pulse === "success" ? " pulse-success" : "") +
+        (pulse === "alert" ? " pulse-alert" : "")
+      }
     >
       {/* Particle cloud (canvas — single DOM element) */}
       <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
