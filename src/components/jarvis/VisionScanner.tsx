@@ -372,7 +372,7 @@ export function VisionScanner() {
   }
 
   return (
-    <div className="flex min-h-0 flex-col gap-3 p-3 portrait:min-h-[100dvh] landscape:max-md:gap-2 landscape:max-md:p-2">
+    <div className="flex min-h-0 flex-col gap-3 p-3 portrait:h-[100dvh] portrait:overflow-hidden landscape:max-md:gap-2 landscape:max-md:p-2">
       <HudPanel index={0} title="OPTICAL FEED // LIVE" className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="relative mx-auto w-full">
           <div
@@ -384,8 +384,8 @@ export function VisionScanner() {
               pressStart.current = null;
             }}
             className={
-              "relative mx-auto aspect-[3/4] w-full touch-none overflow-hidden bg-black md:aspect-video " +
-              "max-h-[68vh] short:max-h-[52vh] landscape:max-md:aspect-video landscape:max-md:max-h-[62vh]"
+              "relative mx-auto w-full touch-none overflow-hidden bg-black portrait:flex-1 portrait:min-h-0 " +
+              "md:aspect-video max-h-[68vh] short:max-h-[52vh] landscape:max-md:aspect-video landscape:max-md:max-h-[62vh]"
             }
           >
             <video
@@ -557,7 +557,7 @@ export function VisionScanner() {
         </div>
 
         {/* Control bar */}
-        <div className="mt-auto flex shrink-0 items-center justify-center gap-3 border-t border-primary/25 p-3 landscape:max-md:p-2">
+        <div className="mt-auto flex shrink-0 items-center justify-center gap-3 border-t border-primary/25 p-3 portrait:p-2 landscape:max-md:p-2">
           <button
             type="button"
             onClick={flipFacing}
