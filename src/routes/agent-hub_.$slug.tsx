@@ -145,7 +145,7 @@ function AgentConsole() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-4 overflow-x-hidden p-4">
       <Header data={data} onBack={() => navigate({ to: "/agent-hub" })} />
       <TelemetryPanel data={data} />
       <LiveRunsPanel data={data} onOpenRun={setRunDetail} />
@@ -218,7 +218,7 @@ function Header({ data, onBack }: { data: AgentDetail; onBack: () => void }) {
     Math.floor((Date.now() - new Date(a.createdAt).getTime()) / 86_400_000),
   );
   return (
-    <HudPanel index={0} className="p-6">
+    <HudPanel index={0} className="p-4">
       <button
         type="button"
         onClick={onBack}
@@ -226,22 +226,22 @@ function Header({ data, onBack }: { data: AgentDetail; onBack: () => void }) {
       >
         <ArrowLeft className="h-3 w-3" /> BACK
       </button>
-      <div className="flex flex-col items-center gap-6 md:flex-row md:items-center md:gap-8">
-        <AgentReactorSigil slug={a.slug} size={180} active={a.isEnabled} />
-        <div className="flex-1 space-y-2 text-center md:text-left">
+      <div className="flex flex-col items-center gap-4 md:flex-row md:items-center md:gap-6">
+        <AgentReactorSigil slug={a.slug} size={110} active={a.isEnabled} />
+        <div className="flex-1 min-w-0 space-y-1 text-center md:text-left">
           <p className="font-display text-[10px] uppercase tracking-[0.4em] text-primary/80">
             SUBSYSTEM // AGENT CONSOLE
           </p>
-          <h1 className="font-display text-4xl font-bold tracking-[0.18em]">{a.name}</h1>
+          <h1 className="font-display text-2xl font-bold tracking-[0.18em] md:text-3xl">{a.name}</h1>
           <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
             {a.role ?? "unassigned"} · slug {a.slug}
           </p>
           {a.description && (
-            <p className="mx-auto max-w-xl text-xs text-muted-foreground/90 md:mx-0">
+            <p className="mx-auto max-w-xl text-xs text-muted-foreground/90 md:mx-0 break-words">
               {a.description}
             </p>
           )}
-          <div className="flex flex-wrap justify-center gap-4 pt-2 md:justify-start">
+          <div className="flex flex-wrap justify-center gap-2 pt-2 md:justify-start">
             <StatusPill
               label={a.isEnabled ? status : "disabled"}
               color={a.isEnabled ? statusColor[status] ?? "var(--primary)" : "var(--muted-foreground)"}
