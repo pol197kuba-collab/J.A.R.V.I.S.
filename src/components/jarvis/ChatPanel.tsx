@@ -5,7 +5,13 @@ import { Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { emitChat, getRecentHistory, onChat, type ChatBusMessage } from "@/lib/ai/chatBus";
 import { useVoiceCommands } from "./VoiceCommandContext";
-import { listAgents, runAgent } from "@/lib/agents/runtime.functions";
+import {
+  listAgents,
+  runAgent,
+  getActiveConversation,
+  setActiveAgent as setActiveAgentFn,
+  getActiveAgentSlug,
+} from "@/lib/agents/runtime.functions";
 import { speak } from "@/lib/audio/speak";
 import { ACTIVE_AGENT_LS_KEY } from "@/routes/agent-hub";
 
@@ -62,11 +68,17 @@ function saveHistory(items: ChatBusMessage[]) {
 }
 
 export function ChatPanel() {
+  // localStorage daje natychmiastowy render (brak pustego ekranu przy
+  // starcie); serwer jest źródłem prawdy i nadpisuje to zaraz po hydratacji
+  // — patrz efekty poniżej.
   const [messages, setMessages] = useState<ChatBusMessage[]>(() => loadHistory());
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
 
-  // Aktywny agent — czytany z localStorage, aktualizowany przez event z Agent Hub
+  // Aktywny agent — startowo z localStorage (instant paint), zaraz
+  // potwierdzany/nadpisywany wartością z konta (user_settings.active_agent_slug)
+  // w efekcie poniżej, żeby nowe urządzenie otwierało się na tym samym agencie.
   const [activeAgent, setActiveAgent] = useState<ActiveAgent>(() => readActiveAgent());
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -74,6 +86,9 @@ export function ChatPanel() {
   const qc = useQueryClient();
   const runAgentFn = useServerFn(runAgent);
   const fetchAgents = useServerFn(listAgents);
+  const fetchConversation = useServerFn(getActiveConversation);
+  const persistActiveAgent = useServerFn(setActiveAgentFn);
+  const fetchActiveAgentSlug = useServerFn(getActiveAgentSlug);
   const noticeShownRef = useRef(false);
 
   const { data: agents = [] } = useQuery({
@@ -87,9 +102,13 @@ export function ChatPanel() {
     if (!found) return;
     const next = { slug: found.slug, name: found.name };
     setActiveAgent(next);
+    setConversationId(null); // nowy agent → efekt niżej wczyta jego własny wątek
     try {
       window.localStorage.setItem(ACTIVE_AGENT_LS_KEY, JSON.stringify(next));
     } catch { /* ignore */ }
+    persistActiveAgent({ data: { agentSlug: found.slug } }).catch(() => {
+      /* najwyżej nie zsynchronizuje się na inne urządzenie — nie blokujemy UI */
+    });
     // Nie kasujemy historii — rozmowa jest ciągła, tylko zmienia się etykieta
     // tego, kto odpowiada. Dokładamy krótką informację systemową w chacie.
     emitChat("jarvis", `▸ Aktywny agent zmieniony na ${found.name.toUpperCase()}.`, {
@@ -102,17 +121,65 @@ export function ChatPanel() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, typing]);
 
+  // Jednorazowo przy montowaniu: zapytaj konto, jaki agent był ostatnio
+  // wybrany na DOWOLNYM urządzeniu, i przełącz się na niego jeśli różni się
+  // od tego, co mamy lokalnie w tej przeglądarce.
+  useEffect(() => {
+    let cancelled = false;
+    fetchActiveAgentSlug()
+      .then((res) => {
+        if (cancelled || !res.agentSlug) return;
+        setActiveAgent((prev) => (prev.slug === res.agentSlug ? prev : { slug: res.agentSlug, name: res.agentSlug }));
+      })
+      .catch(() => { /* zostań przy lokalnym wyborze */ });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Gdy `agents` się załaduje, dociągnij pełną nazwę aktywnego agenta (na
+  // wypadek gdyby powyższy efekt ustawił tylko slug jako placeholder name).
+  useEffect(() => {
+    if (agents.length === 0) return;
+    const found = agents.find((a) => a.slug === activeAgent.slug);
+    if (found && found.name !== activeAgent.name) {
+      setActiveAgent({ slug: found.slug, name: found.name });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agents]);
+
+  // Za każdym razem, gdy zmienia się aktywny agent, wczytaj JEGO wątek z
+  // serwera — to jest właściwa synchronizacja historii między urządzeniami.
+  useEffect(() => {
+    let cancelled = false;
+    fetchConversation({ data: { agentSlug: activeAgent.slug } })
+      .then((res) => {
+        if (cancelled) return;
+        setConversationId(res.conversationId);
+        if (res.messages.length > 0) {
+          setMessages(res.messages);
+          saveHistory(res.messages);
+        }
+      })
+      .catch(() => {
+        /* offline / błąd sieci — zostań przy lokalnym cache, nic nie psuj */
+      });
+    return () => { cancelled = true; };
+  }, [activeAgent.slug]);
+
   // Słuchaj na zmianę agenta z Agent Hub (przycisk LAUNCH)
   useEffect(() => {
     function handleAgentChanged(e: Event) {
       const detail = (e as CustomEvent<ActiveAgent>).detail;
       if (!detail?.slug || !detail?.name) return;
       setActiveAgent(detail);
+      setConversationId(null);
+      persistActiveAgent({ data: { agentSlug: detail.slug } }).catch(() => {});
       // Zachowujemy historię — ciągła rozmowa z całym zespołem.
     }
 
     window.addEventListener("jarvis:agent-changed", handleAgentChanged);
     return () => window.removeEventListener("jarvis:agent-changed", handleAgentChanged);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Subscribe to the global chat bus
@@ -140,8 +207,14 @@ export function ChatPanel() {
         try {
           const result = await runAgentFn({
             // Używamy aktywnego agenta zamiast hardkodowanego "orchestrator"
-            data: { agentSlug: activeAgent.slug, input: text, history },
+            data: {
+              agentSlug: activeAgent.slug,
+              input: text,
+              history,
+              conversationId: conversationId ?? undefined,
+            },
           });
+          if (result.conversationId) setConversationId(result.conversationId);
           const reply =
             result.status === "done" && result.output
               ? result.output
