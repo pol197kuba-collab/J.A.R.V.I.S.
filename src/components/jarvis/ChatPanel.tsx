@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { emitChat, getRecentHistory, onChat, type ChatBusMessage } from "@/lib/ai/chatBus";
+import type { JarvisAction } from "@/lib/ai/jarvisBrain";
 import { useVoiceCommands } from "./VoiceCommandContext";
 import {
   listAgents,
@@ -82,7 +83,7 @@ export function ChatPanel() {
   const [activeAgent, setActiveAgent] = useState<ActiveAgent>(() => readActiveAgent());
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { routeText } = useVoiceCommands();
+  const { routeText, performAction } = useVoiceCommands();
   const qc = useQueryClient();
   const runAgentFn = useServerFn(runAgent);
   const fetchAgents = useServerFn(listAgents);
@@ -223,7 +224,17 @@ export function ChatPanel() {
             agentSlug: activeAgent.slug,
             agentName: activeAgent.name,
           });
-          if (result.status === "done") speak(reply);
+          if (result.status === "done") {
+            const action = (result.action ?? "none") as JarvisAction;
+            if (action !== "none") {
+              // performAction() speaks `reply` itself via fire()'s spokenLine
+              // param — don't ALSO call speak(reply) below, or JARVIS would
+              // narrate the same line twice.
+              performAction(action, reply);
+            } else {
+              speak(reply);
+            }
+          }
           qc.invalidateQueries({ queryKey: ["notes", "list"] });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
