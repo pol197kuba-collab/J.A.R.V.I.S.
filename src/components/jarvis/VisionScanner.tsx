@@ -372,7 +372,7 @@ export function VisionScanner() {
   }
 
   return (
-    <div className="flex min-h-0 flex-col gap-3 p-3 portrait:h-[100dvh] portrait:overflow-hidden landscape:max-md:gap-2 landscape:max-md:p-2">
+    <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden p-3 landscape:max-md:gap-2 landscape:max-md:p-2">
       <HudPanel index={0} title="OPTICAL FEED // LIVE" className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="relative mx-auto w-full">
           <div
