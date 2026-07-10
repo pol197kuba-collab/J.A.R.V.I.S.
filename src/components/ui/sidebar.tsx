@@ -192,10 +192,12 @@ const Sidebar = React.forwardRef<
           <SheetContent
             data-sidebar="sidebar"
             data-mobile="true"
-            className="w-(--sidebar-width) border-r-2 border-primary/60 bg-black/85 p-0 text-sidebar-foreground shadow-[0_0_40px_rgba(56,189,248,0.35)] backdrop-blur-xl [&>button]:hidden"
+            className="w-(--sidebar-width) border-r-2 border-primary/60 p-0 text-sidebar-foreground shadow-[0_0_40px_rgba(56,189,248,0.35)] backdrop-blur-xl [&>button]:hidden"
             style={
               {
                 "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
+                background:
+                  "radial-gradient(ellipse at 50% -10%, oklch(0.55 0.18 200 / 0.18), transparent 55%), radial-gradient(ellipse at 20% 100%, oklch(0.5 0.18 200 / 0.12), transparent 60%), linear-gradient(180deg, oklch(0.06 0.03 230 / 0.92), oklch(0.02 0.02 230 / 0.95))",
               } as React.CSSProperties
             }
             side={side}
