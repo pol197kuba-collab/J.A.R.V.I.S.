@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { HudPanel } from "./HudPanel";
 import { audio } from "@/lib/audio/AudioEngine";
 import { Camera, ShieldAlert, VideoOff, Loader2, SwitchCamera, Minus, Plus } from "lucide-react";
@@ -464,7 +464,7 @@ export function VisionScanner() {
                   }}
                   aria-label="Zoom"
                   className="vision-zoom-slider h-28 w-6"
-                  style={{ writingMode: "vertical-lr" } as React.CSSProperties}
+                  style={{ writingMode: "vertical-lr" } as CSSProperties}
                 />
                 <button
                   type="button"
