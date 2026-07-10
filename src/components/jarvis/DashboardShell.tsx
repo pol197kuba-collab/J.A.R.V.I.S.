@@ -68,7 +68,7 @@ function DashboardShellInner({
   }, [isMobile, setOpen, setOpenMobile]);
 
   return (
-    <div className="relative flex min-h-screen w-full bg-background text-foreground landscape:max-md:h-[100dvh] landscape:max-md:min-h-0 landscape:max-md:overflow-hidden">
+    <div className="relative flex min-h-screen w-full bg-background text-foreground portrait:h-[100dvh] portrait:min-h-0 portrait:overflow-hidden landscape:max-md:h-[100dvh] landscape:max-md:min-h-0 landscape:max-md:overflow-hidden">
       <div className="bg-grid pointer-events-none fixed inset-0 opacity-30" aria-hidden />
       <div
         className="pointer-events-none fixed inset-0 opacity-60"
@@ -79,27 +79,27 @@ function DashboardShellInner({
         }}
       />
       <AppSidebar />
-      <div className="relative flex min-h-screen flex-1 flex-col landscape:max-md:min-h-0">
-        <header className="sticky top-0 z-10 flex h-12 items-center gap-2 border-b border-primary/30 bg-black/70 px-4 backdrop-blur landscape:max-md:h-8 landscape:max-md:gap-1.5 landscape:max-md:px-2">
+      <div className="relative flex min-h-screen flex-1 flex-col portrait:min-h-0 landscape:max-md:min-h-0">
+        <header className="sticky top-0 z-10 flex h-12 items-center gap-2 border-b border-primary/30 bg-black/70 px-4 backdrop-blur portrait:h-10 landscape:max-md:h-8 landscape:max-md:gap-1.5 landscape:max-md:px-2">
           <HudMenuTrigger />
           <div className="h-4 w-px bg-primary/40" />
           <MiniArcReactor size={20} />
-          <span className="font-display text-[10px] uppercase tracking-[0.3em] text-primary/80 landscape:max-md:text-[8px] landscape:max-md:tracking-[0.2em]">
+          <span className="font-display text-[10px] uppercase tracking-[0.3em] text-primary/80 portrait:hidden landscape:max-md:text-[8px] landscape:max-md:tracking-[0.2em]">
             J.A.R.V.I.S. // STARK SECURE TERMINAL
           </span>
-          <div className="ml-auto flex items-center gap-2 font-display text-[10px] uppercase tracking-widest landscape:max-md:text-[8px] landscape:max-md:gap-1.5">
+          <div className="ml-auto flex items-center gap-2 font-display text-[10px] uppercase tracking-widest portrait:gap-1.5 landscape:max-md:text-[8px] landscape:max-md:gap-1.5">
             <span
               className="h-1.5 w-1.5 animate-blink rounded-full"
               style={{ backgroundColor: "var(--success)" }}
             />
-            <span className="landscape:max-md:hidden" style={{ color: "var(--success)" }}>
+            <span className="portrait:hidden landscape:max-md:hidden" style={{ color: "var(--success)" }}>
               All Systems Nominal
             </span>
             <div className="ml-3 h-4 w-px bg-primary/40" />
             <HeaderVoiceToggle />
             <div className="h-4 w-px bg-primary/40" />
             <RebootButton />
-            <div className="h-4 w-px bg-primary/40" />
+            <div className="h-4 w-px bg-primary/40 portrait:hidden" />
             <FullscreenToggle />
             <div className="h-4 w-px bg-primary/40" />
             <DeactivateButton onClick={onShutdown} />
