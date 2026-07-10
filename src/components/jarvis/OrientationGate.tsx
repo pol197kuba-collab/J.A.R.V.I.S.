@@ -1,13 +1,21 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AlertTriangle, Smartphone, RotateCw } from "lucide-react";
+import { useRouterState } from "@tanstack/react-router";
 
 /**
  * Blocks the app on touch devices held in portrait orientation.
  * Only engages on coarse-pointer (touch) devices — desktop/laptop
  * users are never gated regardless of window proportions.
  */
-export function OrientationGate({ children }: { children: ReactNode }) {
+export function OrientationGate({
+  children,
+  exemptPaths = [],
+}: {
+  children: ReactNode;
+  exemptPaths?: string[];
+}) {
   const [blocked, setBlocked] = useState(false);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   useEffect(() => {
     const portrait = window.matchMedia("(orientation: portrait)");
@@ -24,7 +32,11 @@ export function OrientationGate({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  if (blocked) return <PortraitBlock />;
+  const exempt = exemptPaths.some(
+    (p) => pathname === p || pathname.startsWith(p + "/"),
+  );
+
+  if (blocked && !exempt) return <PortraitBlock />;
   return <>{children}</>;
 }
 
