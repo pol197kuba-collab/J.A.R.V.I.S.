@@ -25,6 +25,13 @@ type Ctx = {
   consumePendingModule: () => SubSystemId | null;
   /** Route arbitrary text (chat input) through the same Gemini→action pipeline. */
   routeText: (text: string) => Promise<void>;
+  /**
+   * Execute a JarvisAction directly, without going through Gemini again.
+   * Used by ChatPanel when the server-routed orchestrator already resolved
+   * an action server-side — avoids a second, redundant classification pass
+   * and reuses the exact same navigation logic voice commands use.
+   */
+  performAction: (action: JarvisAction, spokenLine?: string) => void;
 };
 
 const VoiceCtx = createContext<Ctx>({
@@ -35,6 +42,7 @@ const VoiceCtx = createContext<Ctx>({
   setEnabled: () => {},
   consumePendingModule: () => null,
   routeText: async () => {},
+  performAction: () => {},
 });
 
 export const useVoiceCommands = () => useContext(VoiceCtx);
@@ -501,6 +509,10 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
         setEnabled,
         consumePendingModule,
         routeText: (text: string) => route(text, "chat"),
+        performAction: (action: JarvisAction, spokenLine?: string) => {
+          const mapped = ACTION_MAP[action];
+          if (mapped) fire(mapped, spokenLine);
+        },
       }}
     >
       {children}
