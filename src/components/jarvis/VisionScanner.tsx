@@ -464,7 +464,7 @@ export function VisionScanner() {
                   }}
                   aria-label="Zoom"
                   className="vision-zoom-slider h-28 w-6"
-                  style={{ writingMode: "vertical-lr" as unknown as string }}
+                  style={{ writingMode: "vertical-lr" } as React.CSSProperties}
                 />
                 <button
                   type="button"
