@@ -290,7 +290,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       // the cinematic sequence fires instantly and we never hit 429.
       if (matchesReboot(transcript)) {
         emitChat("user", transcript);
-        const line = "Acknowledged. Engaging Protocol: Ark Reboot.";
+        const line = "Przyjąłem. Uruchamiam Protokół Ark Reboot.";
         emitChat("jarvis", line);
         speak(line);
         window.dispatchEvent(new CustomEvent("jarvis:reboot"));
@@ -330,7 +330,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
         offlineNoticeShownRef.current = true;
         emitChat(
           "jarvis",
-          "⚠ AI core offline — add Gemini key in Settings to enable natural conversation.",
+          "⚠ Rdzeń AI offline — dodaj klucz Gemini w Ustawieniach, aby włączyć rozmowę.",
         );
       }
       // Try regex first for instant response on known commands.
