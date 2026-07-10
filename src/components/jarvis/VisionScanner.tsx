@@ -75,10 +75,16 @@ export function VisionScanner() {
         ? {
             deviceId: { exact: opts.deviceId },
             aspectRatio: { ideal: getCameraAspectRatio() },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 },
           }
         : {
             facingMode: { ideal: opts?.facingMode ?? "environment" },
             aspectRatio: { ideal: getCameraAspectRatio() },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 },
           };
 
       const constraints: MediaStreamConstraints = {
@@ -447,7 +453,6 @@ export function VisionScanner() {
               autoPlay
               className="absolute inset-0 h-full w-full object-cover"
               style={{
-                filter: "contrast(1.05) saturate(1.1) hue-rotate(-4deg)",
                 opacity: state === "ready" ? 1 : 0.25,
                 transform: digital && digitalScale > 1 ? `scale(${digitalScale})` : undefined,
                 transformOrigin: "center center",
@@ -455,20 +460,12 @@ export function VisionScanner() {
               }}
             />
 
-            {/* Cyan tint & vignette */}
+            {/* Vignette */}
             <div
               className="pointer-events-none absolute inset-0"
               style={{
                 background:
-                  "radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,0.55) 85%, rgba(0,0,0,0.95) 100%)",
-                mixBlendMode: "multiply",
-              }}
-            />
-            <div
-              className="pointer-events-none absolute inset-0 opacity-25 mix-blend-overlay"
-              style={{
-                backgroundImage:
-                  "repeating-linear-gradient(0deg, rgba(34,211,238,0.22) 0 1px, transparent 1px 4px)",
+                  "radial-gradient(ellipse at center, transparent 70%, rgba(0,0,0,0.45) 100%)",
               }}
             />
 
