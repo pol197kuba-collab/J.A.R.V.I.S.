@@ -19,11 +19,21 @@ type ExtendedConstraint = MediaTrackConstraintSet & {
 
 type FocusPulse = { id: number; x: number; y: number };
 
+function getViewportOrientation() {
+  if (typeof window === "undefined") return "landscape";
+  return window.matchMedia("(orientation: portrait)").matches ? "portrait" : "landscape";
+}
+
+function getCameraAspectRatio() {
+  return getViewportOrientation() === "portrait" ? 9 / 16 : 16 / 9;
+}
+
 export function VisionScanner() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const startingRef = useRef(false);
+  const orientationRef = useRef<"portrait" | "landscape">(getViewportOrientation());
   const longPressTimer = useRef<number | null>(null);
   const pressStart = useRef<{ x: number; y: number; t: number } | null>(null);
   const [state, setState] = useState<CamState>("loading");
@@ -61,11 +71,19 @@ export function VisionScanner() {
       setState("loading");
       stopStream();
 
+      const videoConstraints: MediaTrackConstraints = opts?.deviceId
+        ? {
+            deviceId: { exact: opts.deviceId },
+            aspectRatio: { ideal: getCameraAspectRatio() },
+          }
+        : {
+            facingMode: { ideal: opts?.facingMode ?? "environment" },
+            aspectRatio: { ideal: getCameraAspectRatio() },
+          };
+
       const constraints: MediaStreamConstraints = {
         audio: false,
-        video: opts?.deviceId
-          ? { deviceId: { exact: opts.deviceId } }
-          : { facingMode: { ideal: opts?.facingMode ?? "environment" } },
+        video: videoConstraints,
       };
       try {
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -160,6 +178,40 @@ export function VisionScanner() {
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [activeDeviceId, facingMode, start, stopStream]);
+
+  // Mobile Chrome can keep the old landscape camera track after rotation.
+  // Restart only when the actual viewport orientation flips, so portrait uses
+  // a portrait capture surface like the native camera app.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    orientationRef.current = getViewportOrientation();
+    let restartTimer: number | null = null;
+
+    const restartForOrientation = () => {
+      const next = getViewportOrientation();
+      if (next === orientationRef.current) return;
+      orientationRef.current = next;
+      if (document.visibilityState === "hidden") return;
+      if (!streamRef.current || startingRef.current) return;
+
+      if (restartTimer) window.clearTimeout(restartTimer);
+      restartTimer = window.setTimeout(() => {
+        void start(activeDeviceId ? { deviceId: activeDeviceId } : { facingMode });
+      }, 220);
+    };
+
+    const media = window.matchMedia("(orientation: portrait)");
+    window.addEventListener("orientationchange", restartForOrientation);
+    window.addEventListener("resize", restartForOrientation);
+    media.addEventListener?.("change", restartForOrientation);
+
+    return () => {
+      if (restartTimer) window.clearTimeout(restartTimer);
+      window.removeEventListener("orientationchange", restartForOrientation);
+      window.removeEventListener("resize", restartForOrientation);
+      media.removeEventListener?.("change", restartForOrientation);
+    };
+  }, [activeDeviceId, facingMode, start]);
 
   // Apply hardware zoom from zoomFraction (inverted: 0 → max, 1 → min).
   useEffect(() => {
@@ -372,9 +424,9 @@ export function VisionScanner() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden p-3 landscape:max-md:gap-2 landscape:max-md:p-2">
+    <div className="flex h-full min-h-0 w-full max-w-full flex-col gap-3 overflow-hidden p-3 landscape:max-md:gap-2 landscape:max-md:p-2">
       <HudPanel index={0} title="OPTICAL FEED // LIVE" className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="relative mx-auto w-full">
+        <div className="relative mx-auto w-full min-w-0 portrait:flex portrait:min-h-0 portrait:flex-1">
           <div
             onPointerDown={handlePointerDown}
             onPointerUp={handlePointerUp}
@@ -384,7 +436,7 @@ export function VisionScanner() {
               pressStart.current = null;
             }}
             className={
-              "relative mx-auto w-full touch-none overflow-hidden bg-black portrait:flex-1 portrait:min-h-0 " +
+              "relative mx-auto w-full max-w-full touch-none overflow-hidden bg-black portrait:h-full portrait:min-h-0 portrait:flex-1 " +
               "md:aspect-video md:max-h-[68vh] short:max-h-[52vh] landscape:max-md:aspect-video landscape:max-md:max-h-[62vh]"
             }
           >
@@ -557,13 +609,13 @@ export function VisionScanner() {
         </div>
 
         {/* Control bar */}
-        <div className="mt-auto flex shrink-0 items-center justify-center gap-3 border-t border-primary/25 p-3 portrait:p-2 landscape:max-md:p-2">
+        <div className="mt-auto flex w-full min-w-0 shrink-0 items-center justify-center gap-3 border-t border-primary/25 p-3 portrait:gap-2 portrait:p-2 landscape:max-md:p-2">
           <button
             type="button"
             onClick={flipFacing}
             disabled={state !== "ready"}
             aria-label="Flip camera"
-            className="font-display flex items-center gap-2 border px-3 py-2 text-[10px] uppercase tracking-[0.3em] text-primary transition disabled:cursor-not-allowed disabled:opacity-40"
+            className="font-display flex min-w-0 items-center justify-center gap-2 border px-3 py-2 text-[10px] uppercase tracking-[0.3em] text-primary transition disabled:cursor-not-allowed disabled:opacity-40 portrait:flex-1 portrait:px-2 portrait:tracking-[0.24em]"
             style={{
               borderColor: "color-mix(in oklab, var(--primary) 55%, transparent)",
               backgroundColor: "color-mix(in oklab, var(--primary) 6%, transparent)",
@@ -573,14 +625,14 @@ export function VisionScanner() {
             FLIP
           </button>
           {showLensesButton && (
-            <div ref={lensPopoverRef} className="relative">
+            <div ref={lensPopoverRef} className="relative portrait:flex-1">
               <button
                 type="button"
                 onClick={() => setLensPopoverOpen((v) => !v)}
                 disabled={state !== "ready"}
                 aria-label="Rear lenses"
                 aria-expanded={lensPopoverOpen}
-                className="font-display flex items-center gap-2 border px-3 py-2 text-[10px] uppercase tracking-[0.3em] text-primary transition disabled:cursor-not-allowed disabled:opacity-40"
+                className="font-display flex w-full min-w-0 items-center justify-center gap-2 border px-3 py-2 text-[10px] uppercase tracking-[0.3em] text-primary transition disabled:cursor-not-allowed disabled:opacity-40 portrait:px-2 portrait:tracking-[0.24em]"
                 style={{
                   borderColor: "color-mix(in oklab, var(--primary) 55%, transparent)",
                   backgroundColor: "color-mix(in oklab, var(--primary) 6%, transparent)",
@@ -639,7 +691,7 @@ export function VisionScanner() {
             onClick={handleScan}
             disabled={state !== "ready"}
             aria-label="Scan"
-            className="font-display group relative flex items-center gap-2 border px-6 py-2 text-[11px] uppercase tracking-[0.35em] text-primary transition disabled:cursor-not-allowed disabled:opacity-40"
+            className="font-display group relative flex min-w-0 items-center justify-center gap-2 border px-6 py-2 text-[11px] uppercase tracking-[0.35em] text-primary transition disabled:cursor-not-allowed disabled:opacity-40 portrait:flex-1 portrait:px-2 portrait:text-[10px] portrait:tracking-[0.24em]"
             style={{
               borderColor: "color-mix(in oklab, var(--primary) 60%, transparent)",
               backgroundColor: "color-mix(in oklab, var(--primary) 8%, transparent)",
