@@ -23,6 +23,7 @@ import {
   type AgentToolSummary,
 } from "@/lib/agents/runtime.functions";
 import { audio } from "@/lib/audio/AudioEngine";
+import { GEMINI_MODELS, DEFAULT_GEMINI_MODEL } from "@/lib/agents/models";
 
 export const Route = createFileRoute("/agent-hub_/$slug")({
   head: ({ params }) => ({
@@ -38,7 +39,7 @@ type SettingsPatch = {
   name?: string;
   role?: string | null;
   description?: string | null;
-  model?: "gemini-2.5-flash" | "gemini-2.5-pro" | null;
+  model?: string | null;
   isEnabled?: boolean;
   behaviour?: Partial<AgentBehaviourConfig>;
 };

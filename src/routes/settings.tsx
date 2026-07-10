@@ -18,6 +18,7 @@ import {
   type UserSettings,
 } from "@/lib/agents/runtime.functions";
 import { setServerRuntimePreference } from "@/lib/ai/jarvisBrain";
+import { GEMINI_MODELS } from "@/lib/agents/models";
 
 const GEMINI_LS_KEY = "jarvis_gemini_api_key";
 
@@ -309,23 +310,21 @@ function Settings() {
                 Model używany przez Orchestratora dla każdego runu.
               </p>
             </div>
-            <div className="flex gap-2">
-              {(["gemini-2.5-flash", "gemini-2.5-pro"] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  disabled={busy || !prefs}
-                  onClick={() => updatePref({ defaultModel: m })}
-                  className="font-display border border-primary/60 px-3 py-1 text-[10px] uppercase tracking-widest disabled:opacity-40"
-                  style={{
-                    color: prefs?.defaultModel === m ? "var(--primary)" : "var(--muted-foreground)",
-                    background: prefs?.defaultModel === m ? "rgba(56,189,248,0.1)" : "transparent",
-                  }}
-                >
-                  {m.replace("gemini-2.5-", "")}
-                </button>
+            <select
+              disabled={busy || !prefs}
+              value={prefs?.defaultModel ?? ""}
+              onChange={(e) => updatePref({ defaultModel: e.target.value })}
+              className="font-mono min-w-[220px] border border-primary/60 bg-black/60 px-3 py-1.5 text-xs text-primary outline-none focus:border-primary disabled:opacity-40"
+            >
+              {prefs && !GEMINI_MODELS.some((m) => m.id === prefs.defaultModel) && (
+                <option value={prefs.defaultModel}>{prefs.defaultModel} (custom)</option>
+              )}
+              {GEMINI_MODELS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label} — {m.id}
+                </option>
               ))}
-            </div>
+            </select>
           </div>
           <div className="flex items-start justify-between gap-4 border-t border-primary/20 pt-3">
             <div>
