@@ -38,15 +38,6 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
-      <div
-        className="pointer-events-none absolute inset-0 -z-10"
-        aria-hidden
-        style={{
-          background:
-            "radial-gradient(ellipse at 50% -10%, oklch(0.55 0.18 200 / 0.14), transparent 55%), radial-gradient(ellipse at 20% 100%, oklch(0.5 0.18 200 / 0.10), transparent 60%), linear-gradient(180deg, oklch(0.08 0.03 230 / 0.9), oklch(0.03 0.02 230 / 0.95))",
-        }}
-      />
-      <div className="bg-grid pointer-events-none absolute inset-0 -z-10 opacity-25" aria-hidden />
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-3 px-2 py-2">
           <MiniArcReactor size={36} />
