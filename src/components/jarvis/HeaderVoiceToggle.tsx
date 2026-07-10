@@ -16,8 +16,8 @@ export function HeaderVoiceToggle() {
     if (!supported) return;
     audio.playClick();
     const next = !enabled;
-    if (next) speak("Vocal override engaged.");
-    else speak("Vocal override standby.");
+    if (next) speak("Sterowanie głosowe aktywne.");
+    else speak("Sterowanie głosowe w trybie czuwania.");
     setEnabled(next);
   };
 

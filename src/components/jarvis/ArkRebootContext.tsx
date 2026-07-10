@@ -88,7 +88,7 @@ export function ArkRebootProvider({ children }: { children: ReactNode }) {
     // Phase 1 — Blackout & audio intro.
     playRebootIntro();
     speak(
-      "Initiating full core reboot sequence, Sir. Powering down secondary sub-systems.",
+      "Rozpoczynam pełną procedurę restartu rdzenia, Panie Sławiński. Wyłączam sub-systemy pomocnicze.",
     );
 
     // Phase 2 — Module tour, scheduled cascade.
@@ -119,7 +119,7 @@ export function ArkRebootProvider({ children }: { children: ReactNode }) {
           /* ignore */
         }
         speak(
-          "All systems fully operational, Mr. Slawinsky. Arc Core stability at 100%. We are online.",
+          "Wszystkie systemy w pełni sprawne, Panie Sławiński. Stabilność Arc Core na poziomie 100%. Jesteśmy online.",
         );
       }, totalTourMs),
     );

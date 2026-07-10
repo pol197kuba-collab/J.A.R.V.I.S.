@@ -35,8 +35,8 @@ export function VocalOverrideSwitch() {
         disabled={!supported}
         onCheckedChange={(v) => {
           audio.playClick();
-          if (v) speak("Vocal override engaged. Listening for commands.");
-          else speak("Vocal override standby.");
+          if (v) speak("Sterowanie głosowe aktywne. Nasłuchuję komend.");
+          else speak("Sterowanie głosowe w trybie czuwania.");
           setEnabled(v);
         }}
         aria-label="Vocal override"

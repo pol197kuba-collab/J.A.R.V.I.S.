@@ -72,7 +72,7 @@ export function AppSidebar() {
                       onClick={() => {
                         audio.playClick();
                         if (item.url === "/geo-tracking") {
-                          speak("Accessing satellite telemetry.");
+                          speak("Uruchamiam telemetrię satelitarną.");
                         }
                         if (isMobile) setOpenMobile(false);
                         go(item.url);

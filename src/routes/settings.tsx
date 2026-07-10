@@ -132,11 +132,11 @@ function Settings() {
       if (trimmed) {
         window.localStorage.setItem(GEMINI_LS_KEY, trimmed);
         setLinked(true);
-        speak("AI core updated, sir.");
+        speak("Rdzeń AI zaktualizowany, Panie Sławiński.");
       } else {
         window.localStorage.removeItem(GEMINI_LS_KEY);
         setLinked(false);
-        speak("AI core key cleared.");
+        speak("Klucz rdzenia AI usunięty.");
       }
       audio.playClick();
       setSavedAt(Date.now());
