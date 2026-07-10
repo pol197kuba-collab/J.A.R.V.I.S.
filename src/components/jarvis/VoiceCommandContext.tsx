@@ -216,21 +216,21 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
           break;
         case "fuel":
           pendingRef.current = "fuel-monitor";
-          say("Loading Fuel Monitor Matrix.");
+          say("Ładuję Fuel Monitor Matrix.");
           go("/sub-systems");
           break;
         case "rto":
           pendingRef.current = "rto-calculator";
-          say("Accessing RTO calculation systems.");
+          say("Uruchamiam kalkulator RTO.");
           go("/sub-systems");
           break;
         case "jobfit":
           pendingRef.current = "jobfit-ai";
-          say("Initializing AI resume optimizer.");
+          say("Uruchamiam optymalizator CV.");
           go("/sub-systems");
           break;
         case "telemetry":
-          say("Accessing satellite telemetry.");
+          say("Uruchamiam telemetrię satelitarną.");
           go("/geo-tracking");
           break;
         case "menu_open":
@@ -258,14 +258,14 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
         go("/sub-systems");
         break;
         case "system_check":
-          say("All systems operational, Mister Slawinsky. Core temperature is nominal.");
+          say("Wszystkie systemy sprawne, Panie Sławiński. Temperatura rdzenia nominalna.");
           break;
         case "sleep":
-          say("System in standby mode.");
+          say("Tryb czuwania aktywny.");
           setEnabled(false);
           break;
         case "shutdown":
-          say("Deactivating system. Goodbye, Mister Slawinsky.");
+          say("Wyłączam system. Do zobaczenia, Panie Sławiński.");
           setTimeout(() => speakCancel(), 3200);
           setPhase("shutdown");
           break;
