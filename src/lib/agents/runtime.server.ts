@@ -501,17 +501,41 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           const classifyCall = classifyParts.flatMap((p) =>
             "functionCall" in p && p.functionCall ? [p.functionCall] : [],
           )[0];
-          const requested = String((classifyCall?.args as Record<string, unknown> | undefined)?.action ?? "none");
-          if (requested !== "none" && (UI_ACTIONS as readonly string[]).includes(requested)) {
-            uiAction = requested as UiAction;
-            toolCallLog.push({ name: UI_ACTION_TOOL_NAME, args: { action: requested, via: "classifier_fallback" } });
-            await logEvent("info", "orchestrator", `ui action via classifier fallback: ${requested}`, {
-              run_id: runId,
-            } as Json);
+          if (!classifyCall) {
+            // Model returned 200 but no functionCall part — visible now
+            // instead of silently vanishing, so we can see WHY next time.
+            toolCallLog.push({
+              name: "classifier_no_function_call",
+              args: { raw: JSON.stringify(classifyData).slice(0, 300) },
+            });
+          } else {
+            const requested = String((classifyCall.args as Record<string, unknown> | undefined)?.action ?? "none");
+            if (requested !== "none" && (UI_ACTIONS as readonly string[]).includes(requested)) {
+              uiAction = requested as UiAction;
+              toolCallLog.push({ name: UI_ACTION_TOOL_NAME, args: { action: requested, via: "classifier_fallback" } });
+              await logEvent("info", "orchestrator", `ui action via classifier fallback: ${requested}`, {
+                run_id: runId,
+              } as Json);
+            } else {
+              toolCallLog.push({ name: "classifier_none", args: { requested } });
+            }
           }
+        } else {
+          // HTTP-level failure — surface status + body instead of swallowing it.
+          const bodyText = await classifyRes.text().catch(() => "");
+          toolCallLog.push({
+            name: "classifier_http_error",
+            args: { status: classifyRes.status, body: bodyText.slice(0, 300) },
+          });
+          await logEvent("warn", "orchestrator", `classifier HTTP ${classifyRes.status}`, {
+            run_id: runId,
+            body_preview: bodyText.slice(0, 200),
+          } as Json);
         }
-      } catch {
-        // Silent — the user still gets their normal text reply either way.
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        toolCallLog.push({ name: "classifier_exception", args: { message: msg } });
+        await logEvent("warn", "orchestrator", `classifier exception: ${msg}`, { run_id: runId } as Json);
       }
     }
 
