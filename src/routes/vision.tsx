@@ -15,7 +15,7 @@ export const Route = createFileRoute("/vision")({
 
 function VisionPage() {
   return (
-    <div className="min-h-[100dvh] w-full">
+    <div className="h-full w-full">
       <VisionScanner />
     </div>
   );
