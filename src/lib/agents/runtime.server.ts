@@ -12,6 +12,10 @@ import { getEnabledToolsForAgent, getToolByName } from "./tools.server";
 import { JARVIS_PERSONA } from "@/lib/ai/persona";
 import { DEFAULT_GEMINI_MODEL } from "./models";
 
+// UI actions the Orchestrator (or any agent facing the user directly) can
+// trigger via the perform_ui_action tool. Must stay in sync with the
+// JarvisAction union in src/lib/ai/jarvisBrain.ts — single vocabulary shared
+// by voice, chat and the old client-side fallback path.
 const UI_ACTIONS = [
   "open_dashboard", "open_fuel", "open_calculator", "open_jobfit", "open_telemetry",
   "open_menu", "close_menu", "system_check", "sleep", "shutdown", "reboot",
@@ -58,10 +62,20 @@ export type OrchestratorInput = {
   history: Array<{ role: "user" | "jarvis"; text: string }>;
   /** Prevents delegate_to_agent recursion loops. */
   delegationDepth?: number;
+  /** Existing conversation to append to. Omit to start a new one. */
+  conversationId?: string | null;
 };
 
 export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRunResult> {
-  const { supabase, userId, agentSlug, input, history, delegationDepth = 0 } = args;
+  const {
+    supabase,
+    userId,
+    agentSlug,
+    input,
+    history,
+    delegationDepth = 0,
+    conversationId: incomingConversationId = null,
+  } = args;
 
   // 1. Resolve agent (fallback: orchestrator).
   const { data: agent, error: agentErr } = await supabase
@@ -137,6 +151,24 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
   const maxOutputTokens = clampNum(configObj.max_output_tokens, 64, 8192, DEFAULT_MAX_OUTPUT_TOKENS);
   const maxToolIterations = Math.round(clampNum(configObj.max_tool_iterations, 1, 12, DEFAULT_MAX_TOOL_ITERATIONS));
 
+  // Conversation this turn belongs to. Only top-level calls own a
+  // conversation row — delegated sub-runs (delegationDepth > 0) piggyback
+  // on the parent's agent_run and don't need their own thread.
+  let resolvedConversationId: string | null = null;
+  if (delegationDepth === 0) {
+    if (incomingConversationId) {
+      resolvedConversationId = incomingConversationId;
+    } else {
+      const { data: convRow, error: convErr } = await supabase
+        .from("conversations")
+        .insert({ user_id: userId, agent_id: agent.id, title: input.slice(0, 60) })
+        .select("id")
+        .single();
+      if (convErr) throw new Error(`Conversation insert failed: ${convErr.message}`);
+      resolvedConversationId = convRow.id;
+    }
+  }
+
   // 3. Insert pending run row.
   const startedAt = Date.now();
   const { data: runRow, error: runErr } = await supabase
@@ -201,6 +233,26 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     const enabledTools = await getEnabledToolsForAgent(supabase, agent.id);
     const toolDeclarations = enabledTools.map((t) => t.declaration);
 
+    // UI action tool — available to any agent that might face the user
+    // directly in chat/voice (not gated behind delegation), so switching the
+    // active agent in ChatPanel doesn't lose navigation ability.
+    toolDeclarations.push({
+      name: UI_ACTION_TOOL_NAME,
+      description:
+        "Wykonaj akcję w interfejsie JARVIS HUD (nawigacja między ekranami, tryb systemowy). Użyj, gdy użytkownik prosi o otwarcie/zamknięcie czegoś w aplikacji lub zmianę stanu systemu — dopasuj po ZNACZENIU polecenia, niezależnie od dokładnych słów użytkownika.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: {
+            type: "string",
+            enum: UI_ACTIONS as unknown as string[],
+            description: "Konkretna akcja do wykonania w interfejsie.",
+          },
+        },
+        required: ["action"],
+      },
+    });
+
     // Orchestrator always gets an in-memory delegate tool, even without a DB
     // row, so it can hand off to teammates without a migration. Guard against
     // recursion depth so a chain of delegations can't loop forever.
@@ -233,6 +285,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     let totalTokensIn = 0;
     let totalTokensOut = 0;
     let finalText = "";
+    let uiAction: UiAction | null = null;
     const toolCallLog: Array<{ name: string; args: Record<string, unknown> }> = [];
 
     for (let iter = 0; iter < maxToolIterations; iter++) {
@@ -298,7 +351,16 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         toolCallLog.push({ name: call.name, args: call.args ?? {} });
         const tool = getToolByName(call.name);
         let response: Record<string, unknown>;
-        if (call.name === DELEGATE_TOOL_NAME && allowDelegate) {
+        if (call.name === UI_ACTION_TOOL_NAME) {
+          const requested = String((call.args as Record<string, unknown>)?.action ?? "");
+          if ((UI_ACTIONS as readonly string[]).includes(requested)) {
+            uiAction = requested as UiAction;
+            response = { ok: true, action: requested };
+            await logEvent("info", "orchestrator", `ui action: ${requested}`, { run_id: runId } as Json);
+          } else {
+            response = { error: "invalid_action", requested };
+          }
+        } else if (call.name === DELEGATE_TOOL_NAME && allowDelegate) {
           const targetSlug = String((call.args as Record<string, unknown>)?.slug ?? "").trim();
           const task = String((call.args as Record<string, unknown>)?.task ?? "").trim();
           const target = teammates.find((t) => t.slug === targetSlug && t.is_enabled);
@@ -383,10 +445,26 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       tokens_out: totalTokensOut,
     } as Json);
 
+    // Persist the visible turn (user message + final reply) so any device
+    // logged into the same account sees the same conversation. Only for
+    // top-level calls — delegated sub-runs don't own a conversation row.
+    if (resolvedConversationId) {
+      await supabase.from("messages").insert([
+        { user_id: userId, conversation_id: resolvedConversationId, run_id: runId, role: "user", content: input },
+        { user_id: userId, conversation_id: resolvedConversationId, run_id: runId, role: "jarvis", content: finalText },
+      ]);
+      await supabase
+        .from("conversations")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", resolvedConversationId);
+    }
+
     return {
       runId,
       status: "done",
       output: finalText,
+      action: uiAction ?? undefined,
+      conversationId: resolvedConversationId,
       tokensIn: totalTokensIn || undefined,
       tokensOut: totalTokensOut || undefined,
       latencyMs,
