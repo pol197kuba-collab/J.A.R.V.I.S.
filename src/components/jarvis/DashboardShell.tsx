@@ -141,7 +141,7 @@ function HudMenuTrigger() {
       className="font-display group relative flex items-center gap-1.5 border border-primary/60 bg-primary/5 px-2 py-1 text-[10px] uppercase tracking-[0.3em] text-primary shadow-[0_0_10px_rgba(56,189,248,0.35)] transition hover:bg-primary/15 hover:text-foreground landscape:max-md:px-1.5 landscape:max-md:py-0.5 landscape:max-md:text-[8px] landscape:max-md:tracking-[0.2em]"
     >
       <Menu className="h-3.5 w-3.5 landscape:max-md:h-3 landscape:max-md:w-3" strokeWidth={1.5} />
-      <span>MENU // SYS</span>
+      <span className="portrait:hidden">MENU // SYS</span>
     </button>
   );
 }
