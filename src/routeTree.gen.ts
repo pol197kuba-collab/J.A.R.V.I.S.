@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as VisionRouteImport } from './routes/vision'
 import { Route as SystemLogsRouteImport } from './routes/system-logs'
 import { Route as SubSystemsRouteImport } from './routes/sub-systems'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -18,6 +19,11 @@ import { Route as AgentHubRouteImport } from './routes/agent-hub'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AgentHubSlugRouteImport } from './routes/agent-hub_.$slug'
 
+const VisionRoute = VisionRouteImport.update({
+  id: '/vision',
+  path: '/vision',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SystemLogsRoute = SystemLogsRouteImport.update({
   id: '/system-logs',
   path: '/system-logs',
@@ -67,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
+  '/vision': typeof VisionRoute
   '/agent-hub/$slug': typeof AgentHubSlugRoute
 }
 export interface FileRoutesByTo {
@@ -77,6 +84,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
+  '/vision': typeof VisionRoute
   '/agent-hub/$slug': typeof AgentHubSlugRoute
 }
 export interface FileRoutesById {
@@ -88,6 +96,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
+  '/vision': typeof VisionRoute
   '/agent-hub_/$slug': typeof AgentHubSlugRoute
 }
 export interface FileRouteTypes {
@@ -100,6 +109,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sub-systems'
     | '/system-logs'
+    | '/vision'
     | '/agent-hub/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -110,6 +120,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sub-systems'
     | '/system-logs'
+    | '/vision'
     | '/agent-hub/$slug'
   id:
     | '__root__'
@@ -120,6 +131,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sub-systems'
     | '/system-logs'
+    | '/vision'
     | '/agent-hub_/$slug'
   fileRoutesById: FileRoutesById
 }
@@ -131,11 +143,19 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   SubSystemsRoute: typeof SubSystemsRoute
   SystemLogsRoute: typeof SystemLogsRoute
+  VisionRoute: typeof VisionRoute
   AgentHubSlugRoute: typeof AgentHubSlugRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/vision': {
+      id: '/vision'
+      path: '/vision'
+      fullPath: '/vision'
+      preLoaderRoute: typeof VisionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/system-logs': {
       id: '/system-logs'
       path: '/system-logs'
@@ -203,6 +223,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   SubSystemsRoute: SubSystemsRoute,
   SystemLogsRoute: SystemLogsRoute,
+  VisionRoute: VisionRoute,
   AgentHubSlugRoute: AgentHubSlugRoute,
 }
 export const routeTree = rootRouteImport
