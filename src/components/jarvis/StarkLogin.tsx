@@ -35,10 +35,10 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
     audio.playAccessGranted();
     const hour = new Date().getHours();
     const tod =
-      hour < 5 ? "late night" : hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+      hour < 5 ? "późna noc" : hour < 12 ? "poranek" : hour < 18 ? "popołudnie" : "wieczór";
     const who = name ? `${name} ` : "";
     void speakJarvis({
-      prompt: `${who}has just authenticated into the JARVIS cockpit. Local time of day: ${tod}. Greet them personally for the very first line of the session. Action must be "none".`,
+      prompt: `${who}właśnie zalogował się do kokpitu JARVIS. Pora dnia: ${tod}. Powitaj go osobiście po polsku, ciepło ale w swojej personie — to pierwsza kwestia sesji. Pole "action" musi być "none".`,
       fallbackKind: "greeting",
     });
     setLeaving(true);
