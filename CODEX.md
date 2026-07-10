@@ -360,3 +360,93 @@ Every module should make adding the next module easier.
 Every agent should make creating the next agent simpler.
 
 Every decision should move the platform closer to becoming a true AI Operating System.
+
+---
+
+# Current State (Living)
+
+> Last audited: 2026-07-10. This section reflects the **actual live state**
+> (git repo + Supabase data export), not the original plan. Update it after
+> every phase or major architectural change — do not let it go stale again.
+
+## Confirmed stack reality
+
+- **100% TypeScript.** No Python/FastAPI code exists anywhere in this repo,
+  despite earlier planning. If a Python service is introduced later, it will
+  be a **separate deployment** (Render/Fly/Railway) called via `fetch` from
+  a Supabase Edge Function — Edge Functions themselves run on Deno and
+  cannot host Python directly. Do not assume a Python backend exists unless
+  this section says otherwise.
+- Orchestration lives entirely in `src/lib/agents/runtime.server.ts`
+  (server-side, `chat_routing: "server"` confirmed in live `user_settings`).
+  The client-side `jarvisBrain.ts` path exists but is not the active route.
+- Default model: `gemini-2.5-flash` for all agents (reverted from a
+  `gemini-3.5-flash` preview experiment on 2026-07-10). `models.ts` is the
+  single source of truth for which model IDs are offered in the UI.
+
+## Two sources of truth — audit both, always
+
+- **Git repo** = schema (SQL migrations, DDL) + all application code.
+  Reliable for structure, never reliable for row-level data.
+- **Live Supabase data** (agent rows, tool bindings, settings) can be
+  created directly by the running app (e.g. via an "add agent" UI action)
+  **without ever producing a migration file**. The `marketer` agent was
+  discovered this way — it was invisible from git alone.
+- Practical rule: before any planning session that touches agents/tools,
+  pull a fresh data snapshot (agents, tools, agent_tools, user_settings —
+  excluding `user_secrets` and conversational tables) rather than relying on
+  migrations or memory of past sessions.
+
+## Agent registry (live, as of 2026-07-10)
+
+| slug | status | model | tools bound | notes |
+|---|---|---|---|---|
+| `orchestrator` | enabled | gemini-2.5-flash | web_search, fetch_url, save_note | Default agent, auto-seeded per user via `handle_new_user()`. `config.system_prompt` empty — uses code-level `DEFAULT_SYSTEM_PROMPT` as-is. |
+| `marketer` | enabled | gemini-2.5-flash | web_search | Created via app UI (not a migration). Previously had a **duplicated, stale copy of the full JARVIS persona** baked into `config.system_prompt`, which conflicted with the fresh `persona.ts` text prepended at runtime (`runtime.server.ts` line ~112: `JARVIS_PERSONA + "\n\n" + agentSpecific`). Fixed 2026-07-10: `config.system_prompt` now contains **only** the Marketer specialization, no identity/language text. **This is the pattern to follow for every future agent** — per-agent `system_prompt` must never restate persona or language rules; those come exclusively from `persona.ts`. |
+
+`delegate_to_agent` tool-calling exists in `runtime.server.ts` and is
+documented (with `marketer` as the literal example in its own description),
+but **end-to-end delegation from orchestrator → marketer has not yet been
+verified in practice.** Treat this as the first thing to test before adding
+a third agent.
+
+## Known dead/inconsistent config
+
+- `user_settings.default_model` (currently `gemini-2.5-flash`) is **not
+  actually read by anything** — each agent's own `agents.model` column
+  wins. Either wire it up as a real fallback when `agents.model` is null,
+  or remove it to avoid confusion.
+- Commit history on the connected branch is mostly generic ("Changes") from
+  Lovable auto-sync. Not urgent, but write clearer commit messages going
+  forward for anything done directly in github.dev.
+
+## Frontend surface (larger than "Phase 1" implies)
+
+Beyond the Marketer prompt-only agent, the HUD already has ~30 components
+including boot sequence, voice, threat stream, system logs, sub-systems,
+and a **`geo-tracking` route** (Leaflet-based, Warsaw fallback) that predates
+formal documentation of it here. Treat the frontend as further along than
+the backend/agent layer — new agent work should assume a fairly complete
+HUD shell already exists to plug into.
+
+## Phase status vs. original 3-phase plan
+
+- **Phase 1 (Marketer):** agent exists, persona bug fixed, tool binding
+  fixed (2026-07-10). Delegation from Orchestrator not yet verified live.
+- **Phase 2 (Analityk / file analysis):** not started. Open decision: build
+  file-parsing tools in TypeScript (`xlsx`/SheetJS, `papaparse`) inside the
+  existing Edge Function runtime — preferred default, no new
+  infrastructure — versus standing up a separate Python microservice only
+  if a specific capability genuinely requires it (e.g. pandas-level
+  statistical work JS libraries can't reasonably replicate). Do not
+  introduce a Python service pre-emptively.
+- **Phase 3 (Strażnik logów):** not started.
+
+## Immediate next steps (in order)
+
+1. Verify `delegate_to_agent` actually routes Orchestrator → Marketer in a
+   live conversation (cheap test, catches routing bugs before Phase 2 adds
+   more complexity).
+2. Decide and document the Analityk tooling approach (TS-first, per above)
+   before writing any Phase 2 code.
+3. Resolve or remove the dead `user_settings.default_model` field.
