@@ -525,7 +525,7 @@
 /* =========================
    ARC CORE — 3D Gyroscope
    ========================= */
-.reactor-perspective { perspective: 1200px; perspective-origin: 50% 45%; }
+.reactor-perspective { perspective: 900px; perspective-origin: 50% 45%; }
 .reactor-stage {
   transform-style: preserve-3d;
   transform: rotateX(25deg) rotateY(-15deg);
@@ -533,6 +533,11 @@
   will-change: transform;
 }
 .preserve-3d { transform-style: preserve-3d; }
+
+.reactor-stage,
+.reactor-stage * {
+  transform-style: preserve-3d;
+}
 
 @keyframes gyro-tilt {
   0%, 100% { transform: rotateX(22deg) rotateY(-18deg); }
@@ -577,26 +582,37 @@
   from { transform: rotateY(0deg); }
   to   { transform: rotateY(360deg); }
 }
-.sphere-wire { animation: sphere-spin 40s linear infinite; transform-style: preserve-3d; }
+.sphere-wire {
+  animation: sphere-spin 40s linear infinite;
+  backface-visibility: visible;
+  transform-style: preserve-3d;
+}
 .sphere-meridian {
   position: absolute; inset: 0;
-  border: 1px solid color-mix(in oklab, oklch(0.85 0.2 65) 62%, transparent);
+  border: 0.7px solid color-mix(in oklab, oklch(0.85 0.2 65) 44%, transparent);
   border-radius: 50%;
   box-shadow:
-    inset 0 0 14px color-mix(in oklab, oklch(0.85 0.2 65) 28%, transparent),
-    0 0 6px color-mix(in oklab, oklch(0.85 0.2 65) 35%, transparent);
+    inset 0 0 10px color-mix(in oklab, oklch(0.85 0.2 65) 14%, transparent),
+    0 0 4px color-mix(in oklab, oklch(0.85 0.2 65) 24%, transparent);
   backface-visibility: visible;
+}
+.sphere-latitude {
+  border-color: color-mix(in oklab, oklch(0.85 0.2 65) 36%, transparent);
+}
+.sphere-oblique {
+  border-color: color-mix(in oklab, oklch(0.85 0.2 65) 26%, transparent);
+  box-shadow: none;
 }
 .sphere-silhouette {
   position: absolute; inset: 0;
   border-radius: 50%;
-  border: 1px solid color-mix(in oklab, oklch(0.85 0.2 65) 55%, transparent);
+  border: 0.8px solid color-mix(in oklab, oklch(0.85 0.2 65) 50%, transparent);
   box-shadow:
-    0 0 22px color-mix(in oklab, oklch(0.85 0.2 65) 35%, transparent),
-    inset 0 0 30px color-mix(in oklab, oklch(0.85 0.2 65) 18%, transparent);
+    0 0 18px color-mix(in oklab, oklch(0.85 0.2 65) 32%, transparent),
+    inset 0 0 28px color-mix(in oklab, oklch(0.85 0.2 65) 12%, transparent);
   pointer-events: none;
 }
-.sphere-blend { mix-blend-mode: screen; }
+.sphere-blend { mix-blend-mode: screen; transform-style: preserve-3d; }
 
 /* GPU layering helpers for the reactor */
 .reactor-gpu { will-change: transform; transform: translateZ(0); contain: layout paint; }
@@ -621,10 +637,10 @@
 .reactor-gpu.is-listening .ring3d-e { animation-duration: 5s; }
 .reactor-gpu.is-listening .ring3d-f { animation-duration: 3s; }
 .reactor-gpu.is-listening .sphere-meridian {
-  border-color: color-mix(in oklab, oklch(0.82 0.14 220) 60%, transparent);
+  border-color: color-mix(in oklab, oklch(0.82 0.14 220) 44%, transparent);
   box-shadow:
-    inset 0 0 16px color-mix(in oklab, oklch(0.82 0.14 220) 30%, transparent),
-    0 0 6px color-mix(in oklab, oklch(0.82 0.14 220) 30%, transparent);
+    inset 0 0 12px color-mix(in oklab, oklch(0.82 0.14 220) 16%, transparent),
+    0 0 4px color-mix(in oklab, oklch(0.82 0.14 220) 22%, transparent);
 }
 
 /* Working — steady, busy cadence, cyan HUD tint */
@@ -637,10 +653,10 @@
 .reactor-gpu.is-working .ring3d-f { animation-duration: 2s; }
 .reactor-gpu.is-working .sphere-wire { animation-duration: 12s; }
 .reactor-gpu.is-working .sphere-meridian {
-  border-color: color-mix(in oklab, var(--primary) 70%, transparent);
+  border-color: color-mix(in oklab, var(--primary) 46%, transparent);
   box-shadow:
-    inset 0 0 16px color-mix(in oklab, var(--primary) 35%, transparent),
-    0 0 6px color-mix(in oklab, var(--primary) 35%, transparent);
+    inset 0 0 12px color-mix(in oklab, var(--primary) 18%, transparent),
+    0 0 4px color-mix(in oklab, var(--primary) 24%, transparent);
 }
 
 @keyframes core-speak-pulse {
