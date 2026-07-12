@@ -18,7 +18,14 @@ const MODELS = [
 const endpointFor = (model: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
-const ENV_KEY = (import.meta.env.VITE_GEMINI_API_KEY as string | undefined)?.trim();
+// Dev-only convenience: a key baked in via VITE_GEMINI_API_KEY ends up in the
+// shipped client bundle and every network request's query string, so it must
+// never be relied on in a production build — only the user's own per-browser
+// localStorage key (set from Settings) or the server-routed path may be used
+// once deployed.
+const ENV_KEY = import.meta.env.DEV
+  ? (import.meta.env.VITE_GEMINI_API_KEY as string | undefined)?.trim()
+  : undefined;
 const LS_KEY = "jarvis_gemini_api_key";
 // Cached mirror of user_settings.chat_routing so we can decide sync in the
 // hot path. Kept in sync by Settings page whenever the user toggles it.

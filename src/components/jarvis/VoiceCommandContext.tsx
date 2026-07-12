@@ -205,6 +205,18 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
     return v;
   }, []);
 
+  // The throttle-queue timer (set inside `route`) outlives any single mic
+  // session — it must still be cleared on provider unmount, or a queued
+  // command can fire `route()` against an unmounted tree.
+  useEffect(() => {
+    return () => {
+      if (queueTimerRef.current) {
+        clearTimeout(queueTimerRef.current);
+        queueTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const fire = useCallback(
     (action: LocalAction, spokenLine?: string) => {
       const now = Date.now();
