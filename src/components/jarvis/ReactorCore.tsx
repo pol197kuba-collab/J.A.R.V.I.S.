@@ -232,14 +232,16 @@ export function ReactorCore({ active: _active }: { active?: boolean } = {}) {
         <div className="reactor-stage absolute inset-0 sphere-blend">
           {/* Holographic wireframe sphere — meridians + parallels */}
           <div className="sphere-wire absolute inset-[12%]">
-            {Array.from({ length: 16 }, (_, i) => i * 22.5).map((deg) => (
+            {/* Always-round silhouette so the sphere never collapses visually */}
+            <div className="sphere-silhouette" />
+            {Array.from({ length: 24 }, (_, i) => (i * 180) / 24).map((deg) => (
               <div
                 key={`m${deg}`}
                 className="sphere-meridian"
                 style={{ transform: `rotateY(${deg}deg)` }}
               />
             ))}
-            {[-80, -64, -48, -32, -16, 0, 16, 32, 48, 64, 80].map((phi) => {
+            {[-84, -72, -60, -48, -36, -24, -12, 0, 12, 24, 36, 48, 60, 72, 84].map((phi) => {
               const rad = (phi * Math.PI) / 180;
               const R = 130; // sphere radius in px — matches meridian great-circle radius
               const s = Math.cos(rad);
