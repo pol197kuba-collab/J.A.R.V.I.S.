@@ -612,10 +612,14 @@
     inset 0 0 28px color-mix(in oklab, oklch(0.85 0.2 65) 12%, transparent);
   pointer-events: none;
 }
-.sphere-blend { mix-blend-mode: screen; transform-style: preserve-3d; }
+.sphere-blend {
+  isolation: auto;
+  mix-blend-mode: normal;
+  transform-style: preserve-3d;
+}
 
 /* GPU layering helpers for the reactor */
-.reactor-gpu { will-change: transform; transform: translateZ(0); contain: layout paint; }
+.reactor-gpu { will-change: transform; transform: translateZ(0); contain: layout; }
 .ring3d-a, .ring3d-b, .ring3d-c, .ring3d-d, .ring3d-e, .ring3d-f { will-change: transform; }
 
 /* Speech-reactive mode — rings spin faster, core pulses harder */
