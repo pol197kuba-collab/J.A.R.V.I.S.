@@ -525,7 +525,11 @@
 /* =========================
    ARC CORE — 3D Gyroscope
    ========================= */
-.reactor-perspective { perspective: 900px; perspective-origin: 50% 45%; }
+.reactor-perspective {
+  perspective: 900px;
+  perspective-origin: 50% 45%;
+  transform-style: preserve-3d;
+}
 .reactor-stage {
   transform-style: preserve-3d;
   transform: rotateX(25deg) rotateY(-15deg);
@@ -619,7 +623,10 @@
 }
 
 /* GPU layering helpers for the reactor */
-.reactor-gpu { will-change: transform; transform: translateZ(0); contain: layout; }
+.reactor-gpu {
+  contain: layout;
+  transform-style: preserve-3d;
+}
 .ring3d-a, .ring3d-b, .ring3d-c, .ring3d-d, .ring3d-e, .ring3d-f { will-change: transform; }
 
 /* Speech-reactive mode — rings spin faster, core pulses harder */
