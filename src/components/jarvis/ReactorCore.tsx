@@ -234,14 +234,14 @@ export function ReactorCore({ active: _active }: { active?: boolean } = {}) {
           <div className="sphere-wire absolute inset-[12%]">
             {/* Always-round silhouette so the sphere never collapses visually */}
             <div className="sphere-silhouette" />
-            {Array.from({ length: 24 }, (_, i) => (i * 180) / 24).map((deg) => (
+            {Array.from({ length: 36 }, (_, i) => (i * 180) / 36).map((deg) => (
               <div
                 key={`m${deg}`}
                 className="sphere-meridian"
                 style={{ transform: `rotateY(${deg}deg)` }}
               />
             ))}
-            {[-84, -72, -60, -48, -36, -24, -12, 0, 12, 24, 36, 48, 60, 72, 84].map((phi) => {
+            {[-80, -70, -60, -50, -40, -30, -20, -10, 0, 10, 20, 30, 40, 50, 60, 70, 80].map((phi) => {
               const rad = (phi * Math.PI) / 180;
               const R = 130; // sphere radius in px — matches meridian great-circle radius
               const s = Math.cos(rad);
@@ -249,11 +249,18 @@ export function ReactorCore({ active: _active }: { active?: boolean } = {}) {
               return (
                 <div
                   key={`p${phi}`}
-                  className="sphere-meridian"
+                  className="sphere-meridian sphere-latitude"
                   style={{ transform: `rotateX(90deg) translateZ(${z.toFixed(2)}px) scale(${s.toFixed(4)})` }}
                 />
               );
             })}
+            {Array.from({ length: 12 }, (_, i) => i * 15).map((deg) => (
+              <div
+                key={`o${deg}`}
+                className="sphere-meridian sphere-oblique"
+                style={{ transform: `rotateZ(${deg}deg) rotateY(58deg)` }}
+              />
+            ))}
           </div>
 
           {/* Ring 1 — outer dashed, tilted */}
