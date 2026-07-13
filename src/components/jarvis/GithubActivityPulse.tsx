@@ -161,11 +161,11 @@ export function GithubActivityPulse({ index = 0 }: { index?: number }) {
           {rows.map((it, i) => (
             <li
               key={it.id}
-              className="flex gap-3 border-l-2 border-primary/50 pl-2 font-mono text-[11px] uppercase leading-snug text-foreground/85 landscape:max-md:text-[9px]"
+              className="flex min-w-0 gap-3 border-l-2 border-primary/50 pl-2 font-mono text-[11px] uppercase leading-snug text-foreground/85 landscape:max-md:text-[9px]"
               style={{ animation: `fade-up 0.45s ease-out ${i * 80}ms both` }}
             >
               <span className="shrink-0 text-primary/80">[{it.time}]</span>
-              <span className="truncate-2">{it.text}</span>
+              <span className="min-w-0 flex-1 whitespace-normal break-words">{it.text}</span>
             </li>
           ))}
         </ul>
