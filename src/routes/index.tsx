@@ -4,7 +4,6 @@ import { ChatPanel } from "@/components/jarvis/ChatPanel";
 import { SystemStatsStrip } from "@/components/jarvis/SystemStatsStrip";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { WeatherTelemetry } from "@/components/jarvis/WeatherTelemetry";
-import { GlobalIntelFeed } from "@/components/jarvis/GlobalIntelFeed";
 import { NotesWidget } from "@/components/jarvis/NotesWidget";
 
 export const Route = createFileRoute("/")({
@@ -62,10 +61,7 @@ function Index() {
 
       <NotesWidget index={4} />
 
-      <div className="grid gap-6 lg:grid-cols-2 landscape:max-md:grid-cols-2 landscape:max-md:gap-2">
-        <WeatherTelemetry index={5} />
-        <GlobalIntelFeed index={6} />
-      </div>
+      <WeatherTelemetry index={5} />
     </div>
   );
 }
