@@ -5,6 +5,8 @@ import { SystemStatsStrip } from "@/components/jarvis/SystemStatsStrip";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { WeatherTelemetry } from "@/components/jarvis/WeatherTelemetry";
 import { NotesWidget } from "@/components/jarvis/NotesWidget";
+import { AgentOpsFeed } from "@/components/jarvis/AgentOpsFeed";
+import { GithubActivityPulse } from "@/components/jarvis/GithubActivityPulse";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -59,9 +61,14 @@ function Index() {
         <ChatPanel />
       </HudPanel>
 
-      <NotesWidget index={4} />
+      <AgentOpsFeed index={4} />
 
-      <WeatherTelemetry index={5} />
+      <NotesWidget index={5} />
+
+      <div className="grid gap-6 lg:grid-cols-2 landscape:max-md:grid-cols-2 landscape:max-md:gap-2">
+        <WeatherTelemetry index={6} />
+        <GithubActivityPulse index={7} />
+      </div>
     </div>
   );
 }
