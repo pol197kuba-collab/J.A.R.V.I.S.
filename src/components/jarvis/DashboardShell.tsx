@@ -79,7 +79,7 @@ function DashboardShellInner({
         }}
       />
       <AppSidebar />
-      <div className="relative flex min-h-screen flex-1 flex-col portrait:min-h-0 landscape:max-md:min-h-0">
+      <div className="relative flex min-h-screen min-w-0 flex-1 flex-col portrait:min-h-0 landscape:max-md:min-h-0">
         <header className="sticky top-0 z-10 flex h-12 min-w-0 items-center gap-2 overflow-hidden border-b border-primary/30 bg-black/70 px-4 backdrop-blur portrait:h-10 landscape:max-md:h-8 landscape:max-md:gap-1.5 landscape:max-md:px-2">
           <HudMenuTrigger />
           <div className="h-4 w-px bg-primary/40" />
