@@ -10,7 +10,6 @@ import { useRouteTransition } from "@/components/jarvis/TransitionContext";
 import { useSidebar } from "@/components/ui/sidebar";
 import { audio } from "@/lib/audio/AudioEngine";
 import { HeaderVoiceToggle } from "@/components/jarvis/HeaderVoiceToggle";
-import { ArcCoreWidget } from "@/components/jarvis/ArcCoreWidget";
 import {
   ArkRebootProvider,
   useArkReboot,
@@ -117,7 +116,6 @@ function DashboardShellInner({
           <HudRouteTransition />
         </main>
         <ArkRebootOverlay />
-        <ArcCoreWidget />
         {phase === "shutdown" && (
           <div
             className="pointer-events-none fixed inset-0 z-[90] bg-black animate-shutdown-flash"
