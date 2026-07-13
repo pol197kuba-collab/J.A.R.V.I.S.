@@ -15,6 +15,11 @@ import {
 } from "@/components/ui/sidebar";
 import { useHudNavigate } from "./TransitionContext";
 import { MiniArcReactor } from "./MiniArcReactor";
+import { ReactorCore } from "./ReactorCore";
+import { useVoiceCommands } from "./VoiceCommandContext";
+import { onSpeaking, isSpeakingNow } from "@/lib/audio/speak";
+import { onAgentBusy, isAgentBusyNow } from "@/lib/ai/agentActivity";
+import { useEffect, useState } from "react";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 import { useArkReboot } from "./ArkRebootContext";
@@ -100,6 +105,7 @@ export function AppSidebar() {
 
       {(!collapsed || isMobile) && (
         <SidebarFooter className="border-t border-sidebar-border">
+          <ArcCorePanel />
           <div className="space-y-1 px-2 py-2">
             <div className="flex items-center justify-between text-[10px] font-display uppercase tracking-widest">
               <span className="text-muted-foreground">Core</span>
