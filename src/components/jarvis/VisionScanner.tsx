@@ -1,7 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { HudPanel } from "./HudPanel";
 import { audio } from "@/lib/audio/AudioEngine";
-import { Aperture, Camera, ShieldAlert, VideoOff, Loader2, SwitchCamera, Minus, Plus } from "lucide-react";
+import { speak } from "@/lib/audio/speak";
+import { analyzeScan } from "@/lib/vision/vision.functions";
+import {
+  Aperture,
+  Camera,
+  ShieldAlert,
+  VideoOff,
+  Loader2,
+  SwitchCamera,
+  Minus,
+  Plus,
+  X,
+} from "lucide-react";
 
 type CamState = "loading" | "ready" | "denied" | "unavailable";
 
@@ -51,6 +64,9 @@ export function VisionScanner() {
   const [lastTapAt, setLastTapAt] = useState(0);
   const [lensPopoverOpen, setLensPopoverOpen] = useState(false);
   const lensPopoverRef = useRef<HTMLDivElement | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const runScanAnalysis = useServerFn(analyzeScan);
 
   const stopStream = useCallback(() => {
     const s = streamRef.current;
@@ -386,11 +402,12 @@ export function VisionScanner() {
     void tryTapFocus(nx, ny);
   };
 
-  const handleScan = () => {
-    if (state !== "ready") return;
+  const handleScan = async () => {
+    if (state !== "ready" || analyzing) return;
     audio.playClick();
     const video = videoRef.current;
     const canvas = canvasRef.current;
+    let frameBase64: string | null = null;
     if (video && canvas && video.videoWidth > 0) {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
@@ -399,13 +416,48 @@ export function VisionScanner() {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         try {
           setLastCapture(canvas.toDataURL("image/jpeg", 0.85));
+          // Downscaled copy for analysis — Gemini doesn't need full res, and
+          // a ~1024px frame keeps the POST payload small and fast on mobile.
+          const MAX_SIDE = 1024;
+          const scale = Math.min(1, MAX_SIDE / Math.max(video.videoWidth, video.videoHeight));
+          const small = document.createElement("canvas");
+          small.width = Math.round(video.videoWidth * scale);
+          small.height = Math.round(video.videoHeight * scale);
+          const smallCtx = small.getContext("2d");
+          if (smallCtx) {
+            smallCtx.drawImage(video, 0, 0, small.width, small.height);
+            frameBase64 = small.toDataURL("image/jpeg", 0.8).split(",")[1] ?? null;
+          }
         } catch {
-          // ignore taint / decoder errors — silent for stage 1
+          // taint / decoder errors — fall through with no frame
         }
       }
     }
     setFlashing(true);
     window.setTimeout(() => setFlashing(false), 450);
+
+    if (!frameBase64) {
+      setAnalysis({ kind: "error", text: "NIE UDAŁO SIĘ PRZECHWYCIĆ KLATKI — SPRÓBUJ PONOWNIE." });
+      return;
+    }
+    setAnalyzing(true);
+    setAnalysis(null);
+    try {
+      const result = await runScanAnalysis({
+        data: {
+          imageBase64: frameBase64,
+          mimeType: "image/jpeg",
+          language: typeof navigator !== "undefined" ? navigator.language : "pl-PL",
+        },
+      });
+      setAnalysis({ kind: "ok", text: result.description });
+      speak(result.description);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setAnalysis({ kind: "error", text: msg });
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   const digital = !zoomCaps;
@@ -600,6 +652,49 @@ export function VisionScanner() {
                 <span className="hud-corner br" />
               </div>
             )}
+
+            {/* Analysis in progress */}
+            {analyzing && (
+              <div className="pointer-events-none absolute inset-x-4 bottom-8 z-30 flex items-center gap-2 border border-primary/50 bg-black/75 px-3 py-2 font-display text-[10px] uppercase tracking-[0.3em] text-primary">
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" strokeWidth={1.5} />
+                ANALYZING OPTICAL DATA…
+              </div>
+            )}
+
+            {/* Analysis result */}
+            {analysis && !analyzing && (
+              <div
+                className="absolute inset-x-4 bottom-8 z-30 border bg-black/80 backdrop-blur-sm"
+                style={{
+                  borderColor:
+                    analysis.kind === "ok"
+                      ? "color-mix(in oklab, var(--primary) 60%, transparent)"
+                      : "color-mix(in oklab, var(--destructive) 60%, transparent)",
+                }}
+              >
+                <div className="flex min-w-0 items-center justify-between gap-2 border-b border-primary/25 px-3 py-1.5">
+                  <span
+                    className="font-display text-[9px] uppercase tracking-[0.35em]"
+                    style={{
+                      color: analysis.kind === "ok" ? "var(--primary)" : "var(--destructive)",
+                    }}
+                  >
+                    {analysis.kind === "ok" ? "ANALYSIS // COMPLETE" : "ANALYSIS // FAILED"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setAnalysis(null)}
+                    aria-label="Dismiss analysis"
+                    className="grid h-5 w-5 shrink-0 place-items-center border border-primary/50 text-primary transition hover:bg-primary/15"
+                  >
+                    <X className="h-3 w-3" strokeWidth={2} />
+                  </button>
+                </div>
+                <p className="max-h-28 min-w-0 overflow-y-auto whitespace-normal break-words px-3 py-2 font-mono text-[11px] leading-snug text-foreground/90 landscape:max-md:max-h-16 landscape:max-md:text-[9px] short:max-h-16 short:text-[9px]">
+                  {analysis.text}
+                </p>
+              </div>
+            )}
           </div>
 
           <canvas ref={canvasRef} className="hidden" />
@@ -685,8 +780,8 @@ export function VisionScanner() {
           )}
           <button
             type="button"
-            onClick={handleScan}
-            disabled={state !== "ready"}
+            onClick={() => void handleScan()}
+            disabled={state !== "ready" || analyzing}
             aria-label="Scan"
             className="font-display group relative flex min-w-0 items-center justify-center gap-2 border px-6 py-2 text-[11px] uppercase tracking-[0.35em] text-primary transition disabled:cursor-not-allowed disabled:opacity-40 portrait:flex-1 portrait:px-2 portrait:text-[10px] portrait:tracking-[0.24em]"
             style={{
@@ -695,8 +790,12 @@ export function VisionScanner() {
               boxShadow: "var(--glow-primary)",
             }}
           >
-            <Camera className="h-4 w-4" strokeWidth={1.5} />
-            SCAN
+            {analyzing ? (
+              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
+            ) : (
+              <Camera className="h-4 w-4" strokeWidth={1.5} />
+            )}
+            {analyzing ? "SCANNING" : "SCAN"}
           </button>
         </div>
       </HudPanel>
