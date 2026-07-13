@@ -1,4 +1,3 @@
-import { Mic, MicOff } from "lucide-react";
 import { useVoiceCommands } from "./VoiceCommandContext";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
@@ -16,7 +15,6 @@ export function HeaderVoiceToggle() {
     setEnabled(next);
   };
 
-  const Icon = enabled ? Mic : MicOff;
   const label = !supported
     ? "Voice unsupported"
     : enabled
@@ -33,6 +31,31 @@ export function HeaderVoiceToggle() {
         : "Armed"
       : "Standby";
 
+  const active = enabled;
+  const live = enabled && listening;
+
+  const Wave = ({ side }: { side: "left" | "right" }) => (
+    <span
+      aria-hidden
+      className={cn(
+        "flex h-3 items-end gap-[2px] portrait:hidden landscape:max-md:hidden",
+        side === "left" ? "flex-row" : "flex-row-reverse",
+        !live && "opacity-30",
+      )}
+    >
+      {[0, 1, 2, 3, 4].map((i) => (
+        <span
+          key={i}
+          className={cn(
+            "w-[2px] bg-current",
+            live ? "animate-voice-wave" : "h-1",
+          )}
+          style={live ? { animationDelay: `${i * 80}ms` } : undefined}
+        />
+      ))}
+    </span>
+  );
+
   return (
     <button
       type="button"
@@ -42,52 +65,34 @@ export function HeaderVoiceToggle() {
       aria-label={label}
       title={label}
       className={cn(
-        "relative flex h-7 items-center gap-1.5 border px-2 font-display text-[9px] uppercase tracking-[0.22em] transition landscape:max-md:h-5 landscape:max-md:px-1 landscape:max-md:text-[7px] landscape:max-md:tracking-[0.15em]",
-        enabled
-          ? "border-primary bg-primary/15 text-primary shadow-[0_0_10px_rgba(56,189,248,0.55)]"
-          : "border-primary/40 bg-primary/5 text-muted-foreground hover:text-primary",
+        "group relative flex h-8 items-center gap-2 rounded-full border px-3 font-display uppercase transition landscape:max-md:h-6 landscape:max-md:gap-1 landscape:max-md:px-2",
+        active
+          ? "border-primary bg-primary/10 text-primary shadow-[0_0_14px_rgba(56,189,248,0.55),inset_0_0_10px_rgba(56,189,248,0.25)]"
+          : "border-primary/40 bg-primary/5 text-muted-foreground hover:text-primary hover:border-primary/70",
         !supported && "cursor-not-allowed opacity-40",
       )}
     >
-      {enabled && listening && (
+      {live && (
         <span
-          className="pointer-events-none absolute inset-0 animate-ping border border-primary/60"
+          className="pointer-events-none absolute inset-0 animate-ping rounded-full border border-primary/60"
           aria-hidden
         />
       )}
-      <Icon className="h-3 w-3 shrink-0 landscape:max-md:h-2.5 landscape:max-md:w-2.5" strokeWidth={1.5} />
-      <span className="portrait:hidden landscape:max-md:hidden">TALK TO JARVIS</span>
-      {/* Live waveform — animated only when actively listening */}
-      <span
-        aria-hidden
-        className={cn(
-          "flex h-3 items-end gap-[2px] portrait:hidden landscape:max-md:hidden",
-          !(enabled && listening) && "opacity-30",
-        )}
-      >
-        {[0, 1, 2, 3].map((i) => (
-          <span
-            key={i}
-            className={cn(
-              "w-[2px] bg-current",
-              enabled && listening ? "animate-voice-wave" : "h-1",
-            )}
-            style={
-              enabled && listening
-                ? { animationDelay: `${i * 90}ms` }
-                : undefined
-            }
-          />
-        ))}
+      <Wave side="left" />
+      <span className="flex flex-col items-center leading-none">
+        <span className="text-[10px] tracking-[0.28em] landscape:max-md:text-[8px] landscape:max-md:tracking-[0.18em]">
+          TALK TO JARVIS
+        </span>
+        <span
+          className={cn(
+            "mt-0.5 text-[8px] tracking-[0.22em] landscape:max-md:text-[7px]",
+            live ? "text-primary" : "opacity-70",
+          )}
+        >
+          {status}
+        </span>
       </span>
-      <span
-        className={cn(
-          "border-l border-current/40 pl-1.5 text-[8px] tracking-[0.18em] portrait:hidden landscape:max-md:hidden",
-          enabled && listening ? "text-primary" : "opacity-70",
-        )}
-      >
-        {status}
-      </span>
+      <Wave side="right" />
     </button>
   );
 }
