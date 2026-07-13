@@ -127,3 +127,40 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
+
+function ArcCorePanel() {
+  const { listening } = useVoiceCommands();
+  const [speaking, setSpeaking] = useState(() => isSpeakingNow());
+  const [working, setWorking] = useState(() => isAgentBusyNow());
+  useEffect(() => onSpeaking(setSpeaking), []);
+  useEffect(() => onAgentBusy(setWorking), []);
+
+  const status = speaking
+    ? { label: "Speaking…", color: "var(--primary)" }
+    : working
+      ? { label: "Processing…", color: "var(--primary)" }
+      : listening
+        ? { label: "Listening…", color: "var(--primary)" }
+        : { label: "Standby", color: "var(--success)" };
+
+  return (
+    <div className="border-b border-sidebar-border px-2 py-2">
+      <div className="flex items-center justify-between font-display text-[9px] uppercase tracking-[0.28em] text-primary/80">
+        <span>ARC CORE // J-3140</span>
+        <span className="flex items-center gap-1 text-primary">
+          <span
+            className="h-1.5 w-1.5 animate-blink rounded-full"
+            style={{ backgroundColor: "var(--primary)" }}
+          />
+          LIVE
+        </span>
+      </div>
+      <div className="mx-auto mt-1 w-full max-w-[190px]">
+        <ReactorCore />
+      </div>
+      <div className="mt-1 text-center font-display text-[9px] uppercase tracking-[0.28em]" style={{ color: status.color }}>
+        {status.label}
+      </div>
+    </div>
+  );
+}
