@@ -155,7 +155,7 @@ function ArcCorePanel() {
           LIVE
         </span>
       </div>
-      <div className="mx-auto mt-1 w-full max-w-[190px]">
+      <div className="mx-auto mt-1 w-full max-w-[190px] short:max-w-[100px]">
         <ReactorCore />
       </div>
       <div className="mt-1 text-center font-display text-[9px] uppercase tracking-[0.28em]" style={{ color: status.color }}>
