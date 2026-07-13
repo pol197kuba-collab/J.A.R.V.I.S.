@@ -58,17 +58,17 @@ export function AgentOpsFeed({ index = 0 }: { index?: number }) {
             {events.map((e, i) => (
               <li
                 key={e.id}
-                className="flex items-center gap-2 border-l-2 pl-2 font-mono text-[10px] uppercase tracking-[0.08em] landscape:max-md:text-[8px]"
+                className="flex min-w-0 items-center gap-2 border-l-2 pl-2 font-mono text-[10px] uppercase tracking-[0.08em] landscape:max-md:text-[8px]"
                 style={{
                   borderColor: `color-mix(in oklab, ${LEVEL_COLOR[e.level]} 80%, transparent)`,
                   opacity: Math.max(0.35, 1 - i * 0.035),
                 }}
               >
-                <span className="text-muted-foreground">[{timeOf(e.createdAt)}]</span>
+                <span className="shrink-0 text-muted-foreground">[{timeOf(e.createdAt)}]</span>
                 <span style={{ color: LEVEL_COLOR[e.level] }} className="shrink-0">
                   {formatSource(e.source)}
                 </span>
-                <span className="truncate text-foreground/85">{e.message}</span>
+                <span className="min-w-0 flex-1 truncate text-foreground/85">{e.message}</span>
               </li>
             ))}
           </ul>
