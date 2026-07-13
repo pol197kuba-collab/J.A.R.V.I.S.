@@ -68,6 +68,8 @@ export type OrchestratorInput = {
   delegationDepth?: number;
   /** Existing conversation to append to. Omit to start a new one. */
   conversationId?: string | null;
+  /** agent_runs.id of the delegating run, when this call is a delegate_to_agent hop. */
+  parentRunId?: string | null;
 };
 
 export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRunResult> {
@@ -79,6 +81,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     history,
     delegationDepth = 0,
     conversationId: incomingConversationId = null,
+    parentRunId = null,
   } = args;
 
   // 1. Resolve agent (fallback: orchestrator).
@@ -188,6 +191,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     .insert({
       user_id: userId,
       agent_id: agent.id,
+      parent_run_id: parentRunId,
       status: "running",
       input: { text: input, history_len: history.length },
       started_at: new Date(startedAt).toISOString(),
@@ -393,6 +397,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
               input: task,
               history: [],
               delegationDepth: delegationDepth + 1,
+              parentRunId: runId,
             });
             response = {
               delegate: target.slug,
