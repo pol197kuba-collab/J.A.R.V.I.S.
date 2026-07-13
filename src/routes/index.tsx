@@ -3,8 +3,9 @@ import { ChatPanel } from "@/components/jarvis/ChatPanel";
 import { SystemStatsStrip } from "@/components/jarvis/SystemStatsStrip";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { WeatherTelemetry } from "@/components/jarvis/WeatherTelemetry";
-import { GlobalIntelFeed } from "@/components/jarvis/GlobalIntelFeed";
 import { NotesWidget } from "@/components/jarvis/NotesWidget";
+import { AgentOpsFeed } from "@/components/jarvis/AgentOpsFeed";
+import { GithubActivityPulse } from "@/components/jarvis/GithubActivityPulse";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -42,11 +43,13 @@ function Index() {
         <ChatPanel />
       </HudPanel>
 
-      <NotesWidget index={3} />
+      <AgentOpsFeed index={3} />
+
+      <NotesWidget index={4} />
 
       <div className="grid gap-6 lg:grid-cols-2 landscape:max-md:grid-cols-2 landscape:max-md:gap-2">
-        <WeatherTelemetry index={4} />
-        <GlobalIntelFeed index={5} />
+        <WeatherTelemetry index={5} />
+        <GithubActivityPulse index={6} />
       </div>
     </div>
   );
