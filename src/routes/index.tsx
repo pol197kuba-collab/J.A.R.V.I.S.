@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ReactorCore } from "@/components/jarvis/ReactorCore";
 import { ChatPanel } from "@/components/jarvis/ChatPanel";
 import { SystemStatsStrip } from "@/components/jarvis/SystemStatsStrip";
 import { HudPanel } from "@/components/jarvis/HudPanel";
@@ -39,32 +38,15 @@ function Index() {
         </div>
       </HudPanel>
 
-      <HudPanel
-        index={2}
-        title="ARC CORE // J-3140 // STATUS BEACON"
-        rightSlot={
-          <span className="font-display text-[10px] uppercase tracking-[0.3em] text-primary">
-            ● LIVE
-          </span>
-        }
-        className="flex flex-col"
-      >
-        <div className="flex w-full items-center justify-center px-4 py-6 landscape:max-md:py-3">
-          <div className="w-full max-w-[480px] landscape:max-md:max-w-[240px]">
-            <ReactorCore />
-          </div>
-        </div>
-      </HudPanel>
-
-      <HudPanel index={3} title="CONVERSATION STREAM" className="flex flex-col">
+      <HudPanel index={2} title="CONVERSATION STREAM" className="flex flex-col">
         <ChatPanel />
       </HudPanel>
 
-      <NotesWidget index={4} />
+      <NotesWidget index={3} />
 
       <div className="grid gap-6 lg:grid-cols-2 landscape:max-md:grid-cols-2 landscape:max-md:gap-2">
-        <WeatherTelemetry index={5} />
-        <GlobalIntelFeed index={6} />
+        <WeatherTelemetry index={4} />
+        <GlobalIntelFeed index={5} />
       </div>
     </div>
   );

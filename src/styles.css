@@ -182,6 +182,11 @@
   0%, 100% { transform: scaleY(0.25); }
   50% { transform: scaleY(1); }
 }
+@keyframes voice-wave {
+  0%, 100% { height: 20%; }
+  50% { height: 100%; }
+}
+.animate-voice-wave { animation: voice-wave 0.9s ease-in-out infinite; height: 100%; }
 @keyframes scanline {
   0% { transform: translateY(-100%); }
   100% { transform: translateY(100%); }
