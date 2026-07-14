@@ -108,7 +108,8 @@ export type JarvisAction =
   | "open_agents"
   | "open_settings"
   | "open_logs"
-  | "open_subsystems";
+  | "open_subsystems"
+  | "vision_scan";
 
 export type JarvisReply = { action: JarvisAction; speech: string };
 
@@ -138,11 +139,16 @@ INVALID examples (do NOT do this):
 
 Allowed values for "action": none, open_dashboard, open_fuel, open_calculator,
 open_jobfit, open_telemetry, open_menu, close_menu, system_check, sleep, shutdown, reboot,
-open_agents, open_settings, open_logs, open_subsystems.
+open_agents, open_settings, open_logs, open_subsystems, vision_scan.
 
 - Użyj "reboot" dla każdej formy: reboot, restart, zrestartuj system, zresetuj,
   reset, ark reboot. Linia "speech" powinna potwierdzić uruchomienie
   Protokołu Ark Reboot.
+
+- Użyj "vision_scan", gdy użytkownik pyta co widzisz / prosi o skan otoczenia
+  kamerą (np. "co widzisz", "zeskanuj otoczenie", "what do you see", "scan the
+  room"). System otworzy moduł Vision i wykona analizę obrazu — w "speech"
+  krótko potwierdź rozpoczęcie skanowania.
 
 - Używaj akcji UI TYLKO gdy użytkownik wyraźnie prosi o otwarcie/zamknięcie/
   wyłączenie czegoś w interfejsie. W innych wypadkach użyj "action":"none"

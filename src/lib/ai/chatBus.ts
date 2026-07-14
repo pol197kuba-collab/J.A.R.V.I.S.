@@ -13,9 +13,27 @@ export type ChatBusMessage = {
 };
 
 const EVENT = "jarvis:chat";
+const MAX_HISTORY = 60;
 
 function now() {
   return new Date().toTimeString().slice(0, 8);
+}
+
+// Persist at the bus level, not only in ChatPanel's listener — otherwise any
+// message emitted while ChatPanel is unmounted (voice replies on /vision,
+// scan results, etc.) never reaches jarvis_chat_history and silently
+// disappears from the transcript. ChatPanel's own save of the same array is
+// harmless: it writes identical content.
+function persist(msg: ChatBusMessage) {
+  try {
+    const raw = window.localStorage.getItem(HISTORY_KEY);
+    const items = raw ? (JSON.parse(raw) as ChatBusMessage[]) : [];
+    const list = Array.isArray(items) ? items : [];
+    if (list.some((m) => m?.id === msg.id)) return;
+    window.localStorage.setItem(HISTORY_KEY, JSON.stringify([...list, msg].slice(-MAX_HISTORY)));
+  } catch {
+    /* ignore */
+  }
 }
 
 export function emitChat(
@@ -36,6 +54,7 @@ export function emitChat(
     agentSlug: meta?.agentSlug,
     agentName: meta?.agentName,
   };
+  persist(msg);
   window.dispatchEvent(new CustomEvent<ChatBusMessage>(EVENT, { detail: msg }));
 }
 
