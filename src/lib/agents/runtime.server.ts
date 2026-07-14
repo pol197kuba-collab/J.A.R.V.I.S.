@@ -17,9 +17,22 @@ import { DEFAULT_GEMINI_MODEL } from "./models";
 // JarvisAction union in src/lib/ai/jarvisBrain.ts — single vocabulary shared
 // by voice, chat and the old client-side fallback path.
 const UI_ACTIONS = [
-  "open_dashboard", "open_fuel", "open_calculator", "open_jobfit", "open_telemetry",
-  "open_menu", "close_menu", "system_check", "sleep", "shutdown", "reboot",
-  "open_agents", "open_settings", "open_logs", "open_subsystems", "vision_scan",
+  "open_dashboard",
+  "open_fuel",
+  "open_calculator",
+  "open_jobfit",
+  "open_telemetry",
+  "open_menu",
+  "close_menu",
+  "system_check",
+  "sleep",
+  "shutdown",
+  "reboot",
+  "open_agents",
+  "open_settings",
+  "open_logs",
+  "open_subsystems",
+  "vision_scan",
 ] as const;
 type UiAction = (typeof UI_ACTIONS)[number];
 const UI_ACTION_TOOL_NAME = "perform_ui_action";
@@ -48,6 +61,18 @@ proactively rather than guessing or refusing:
   notatkę", "save this"), use a note-saving tool if one is available. Also use
   it when you have produced a substantive summary/list/plan the user should
   keep — but do not save trivial chit-chat.
+- MEMORY: if a long-term memory tool (remember/recall) is available, RECALL
+  before answering whenever the user refers to themselves, their preferences,
+  or past decisions ("as I said", "moje dane", "jak wolę") — you persist across
+  sessions, so never claim you can't remember. REMEMBER durable facts the user
+  reveals about themselves, their projects or preferences (pass a stable "key"
+  for facts that can change, e.g. key "user_name"). Do not store passing chit-chat.
+- TASKS: if task tools (create_task/list_tasks/update_task) are available, use
+  them for anything multi-step or worth following up: create a task when the
+  user asks you to do/track something, list tasks when they ask "what's
+  pending / co mam do zrobienia", and update a task to 'done' with a short
+  result once the work is actually finished. When you delegate work to a
+  teammate, it is good practice to create/assign a task for it.
 - If no tool fits or none are available, answer directly from your own
   knowledge instead of mentioning that a tool is missing.
 - After tool calls, produce a final natural-language answer in character. Do
@@ -102,7 +127,9 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     .maybeSingle();
   const apiKey = secret?.gemini_api_key?.trim();
   if (!apiKey) {
-    throw new Error("Brak klucza Gemini. Wpisz go w Settings → AI Core, aby uruchomić Agent Runtime.");
+    throw new Error(
+      "Brak klucza Gemini. Wpisz go w Settings → AI Core, aby uruchomić Agent Runtime.",
+    );
   }
 
   const configObj: Record<string, unknown> =
@@ -111,7 +138,9 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       : {};
 
   const agentSpecific =
-    typeof configObj.system_prompt === "string" && configObj.system_prompt.trim() ? configObj.system_prompt : null;
+    typeof configObj.system_prompt === "string" && configObj.system_prompt.trim()
+      ? configObj.system_prompt
+      : null;
 
   // Team roster — every agent should know who else is on the payroll so the
   // Orchestrator can delegate and any agent can name-drop a teammate instead
@@ -138,7 +167,9 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           : "")
       : "";
 
-  const basePrompt = agentSpecific ? `${JARVIS_PERSONA}\n\n${agentSpecific}` : DEFAULT_SYSTEM_PROMPT;
+  const basePrompt = agentSpecific
+    ? `${JARVIS_PERSONA}\n\n${agentSpecific}`
+    : DEFAULT_SYSTEM_PROMPT;
 
   // Always appended, regardless of whether the agent has a custom
   // system_prompt override — otherwise agents like Marketer never learn
@@ -163,8 +194,15 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
   const clampNum = (v: unknown, min: number, max: number, fallback: number) =>
     typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
   const temperature = clampNum(configObj.temperature, 0, 1, DEFAULT_TEMPERATURE);
-  const maxOutputTokens = clampNum(configObj.max_output_tokens, 64, 8192, DEFAULT_MAX_OUTPUT_TOKENS);
-  const maxToolIterations = Math.round(clampNum(configObj.max_tool_iterations, 1, 12, DEFAULT_MAX_TOOL_ITERATIONS));
+  const maxOutputTokens = clampNum(
+    configObj.max_output_tokens,
+    64,
+    8192,
+    DEFAULT_MAX_OUTPUT_TOKENS,
+  );
+  const maxToolIterations = Math.round(
+    clampNum(configObj.max_tool_iterations, 1, 12, DEFAULT_MAX_TOOL_ITERATIONS),
+  );
 
   // Conversation this turn belongs to. Only top-level calls own a
   // conversation row — delegated sub-runs (delegationDepth > 0) piggyback
@@ -202,7 +240,12 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
   const runId = runRow.id;
 
   // logEvent helper — writes to system_events so the System Logs page shows real telemetry.
-  const logEvent = async (level: "info" | "warn" | "error", source: string, message: string, meta?: Json) => {
+  const logEvent = async (
+    level: "info" | "warn" | "error",
+    source: string,
+    message: string,
+    meta?: Json,
+  ) => {
     await supabase.from("system_events").insert({
       owner_id: userId,
       level,
@@ -319,7 +362,9 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
             // Gemini rejects an empty functionDeclarations array, and an
             // agent may legitimately have zero tools enabled (all toggled
             // off in Settings) — omit the `tools` key entirely in that case.
-            ...(toolDeclarations.length > 0 ? { tools: [{ functionDeclarations: toolDeclarations }] } : {}),
+            ...(toolDeclarations.length > 0
+              ? { tools: [{ functionDeclarations: toolDeclarations }] }
+              : {}),
             contents,
           }),
         },
@@ -342,7 +387,9 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       totalTokensOut += data.usageMetadata?.candidatesTokenCount ?? 0;
 
       const parts = data.candidates?.[0]?.content?.parts ?? [];
-      const functionCalls = parts.flatMap((p) => ("functionCall" in p && p.functionCall ? [p.functionCall] : []));
+      const functionCalls = parts.flatMap((p) =>
+        "functionCall" in p && p.functionCall ? [p.functionCall] : [],
+      );
       const textOut = parts
         .flatMap((p) => ("text" in p && p.text ? [p.text] : []))
         .join("")
@@ -372,7 +419,9 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           if ((UI_ACTIONS as readonly string[]).includes(requested)) {
             uiAction = requested as UiAction;
             response = { ok: true, action: requested };
-            await logEvent("info", "orchestrator", `ui action: ${requested}`, { run_id: runId } as Json);
+            await logEvent("info", "orchestrator", `ui action: ${requested}`, {
+              run_id: runId,
+            } as Json);
           } else {
             response = { error: "invalid_action", requested };
           }
@@ -452,7 +501,9 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // out of using it. Best-effort: any failure here silently falls back to
     // the normal text-only reply the user already has.
     if (!uiAction) {
-      await logEvent("info", "orchestrator", "classifier fallback: block entered", { run_id: runId } as Json);
+      await logEvent("info", "orchestrator", "classifier fallback: block entered", {
+        run_id: runId,
+      } as Json);
       try {
         const classifyRes = await fetch(
           `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
@@ -463,7 +514,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
               systemInstruction: {
                 parts: [
                   {
-                    text: "Jesteś klasyfikatorem intencji dla interfejsu JARVIS HUD. Oceń wiadomość użytkownika i zdecyduj, czy odpowiada ona DOKŁADNIE jednej z dostępnych akcji UI. Zawsze wywołaj narzędzie perform_ui_action z jedną wartością — jeśli żadna akcja nie pasuje (np. zwykła pogawędka, pytanie merytoryczne, prośba o treść), wybierz \"none\". Nie odpowiadaj tekstem, nie tłumacz się.",
+                    text: 'Jesteś klasyfikatorem intencji dla interfejsu JARVIS HUD. Oceń wiadomość użytkownika i zdecyduj, czy odpowiada ona DOKŁADNIE jednej z dostępnych akcji UI. Zawsze wywołaj narzędzie perform_ui_action z jedną wartością — jeśli żadna akcja nie pasuje (np. zwykła pogawędka, pytanie merytoryczne, prośba o treść), wybierz "none". Nie odpowiadaj tekstem, nie tłumacz się.',
                   },
                 ],
               },
@@ -472,7 +523,8 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
                   functionDeclarations: [
                     {
                       name: UI_ACTION_TOOL_NAME,
-                      description: "Klasyfikacja: która akcja UI (jeśli którakolwiek) pasuje do wiadomości użytkownika.",
+                      description:
+                        "Klasyfikacja: która akcja UI (jeśli którakolwiek) pasuje do wiadomości użytkownika.",
                       parameters: {
                         type: "object",
                         properties: {
@@ -515,13 +567,23 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
               args: { raw: JSON.stringify(classifyData).slice(0, 300) },
             });
           } else {
-            const requested = String((classifyCall.args as Record<string, unknown> | undefined)?.action ?? "none");
+            const requested = String(
+              (classifyCall.args as Record<string, unknown> | undefined)?.action ?? "none",
+            );
             if (requested !== "none" && (UI_ACTIONS as readonly string[]).includes(requested)) {
               uiAction = requested as UiAction;
-              toolCallLog.push({ name: UI_ACTION_TOOL_NAME, args: { action: requested, via: "classifier_fallback" } });
-              await logEvent("info", "orchestrator", `ui action via classifier fallback: ${requested}`, {
-                run_id: runId,
-              } as Json);
+              toolCallLog.push({
+                name: UI_ACTION_TOOL_NAME,
+                args: { action: requested, via: "classifier_fallback" },
+              });
+              await logEvent(
+                "info",
+                "orchestrator",
+                `ui action via classifier fallback: ${requested}`,
+                {
+                  run_id: runId,
+                } as Json,
+              );
             } else {
               toolCallLog.push({ name: "classifier_none", args: { requested } });
             }
@@ -541,7 +603,9 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         toolCallLog.push({ name: "classifier_exception", args: { message: msg } });
-        await logEvent("warn", "orchestrator", `classifier exception: ${msg}`, { run_id: runId } as Json);
+        await logEvent("warn", "orchestrator", `classifier exception: ${msg}`, {
+          run_id: runId,
+        } as Json);
       }
     }
 
@@ -559,19 +623,36 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       })
       .eq("id", runId);
 
-    await logEvent("info", "orchestrator", `run done · ${toolCallLog.length} tool calls · ${latencyMs}ms`, {
-      run_id: runId,
-      tokens_in: totalTokensIn,
-      tokens_out: totalTokensOut,
-    } as Json);
+    await logEvent(
+      "info",
+      "orchestrator",
+      `run done · ${toolCallLog.length} tool calls · ${latencyMs}ms`,
+      {
+        run_id: runId,
+        tokens_in: totalTokensIn,
+        tokens_out: totalTokensOut,
+      } as Json,
+    );
 
     // Persist the visible turn (user message + final reply) so any device
     // logged into the same account sees the same conversation. Only for
     // top-level calls — delegated sub-runs don't own a conversation row.
     if (resolvedConversationId) {
       await supabase.from("messages").insert([
-        { user_id: userId, conversation_id: resolvedConversationId, run_id: runId, role: "user", content: input },
-        { user_id: userId, conversation_id: resolvedConversationId, run_id: runId, role: "jarvis", content: finalText },
+        {
+          user_id: userId,
+          conversation_id: resolvedConversationId,
+          run_id: runId,
+          role: "user",
+          content: input,
+        },
+        {
+          user_id: userId,
+          conversation_id: resolvedConversationId,
+          run_id: runId,
+          role: "jarvis",
+          content: finalText,
+        },
       ]);
       await supabase
         .from("conversations")

@@ -330,12 +330,366 @@ const saveNote: Tool = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// remember — write a durable fact/preference to public.memories
+// ---------------------------------------------------------------------------
+
+const clampInt = (v: unknown, min: number, max: number, fallback: number): number => {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(n)));
+};
+
+const remember: Tool = {
+  declaration: {
+    name: "remember",
+    description:
+      "Store a durable fact or preference in long-term memory so you recall it in FUTURE sessions. Use for things the user tells you about themselves, their projects, preferences, or decisions (e.g. 'my name is …', 'I prefer …', 'the API key lives in …'). Optionally pass a stable `key` (e.g. 'user_name') to overwrite the same fact instead of duplicating it. Do NOT store transient chit-chat.",
+    parameters: {
+      type: "object",
+      properties: {
+        value: {
+          type: "string",
+          description: "The fact/preference to remember, as a short sentence.",
+        },
+        key: {
+          type: "string",
+          description:
+            "Optional stable identifier (e.g. 'user_name', 'timezone'). If a memory with this key exists, it is overwritten rather than duplicated.",
+        },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional short tags for retrieval.",
+        },
+        importance: {
+          type: "integer",
+          description: "1 (trivial) … 5 (critical). Defaults to 3.",
+        },
+      },
+      required: ["value"],
+    },
+  },
+  async execute(args, ctx) {
+    const value = String(args.value ?? "").trim();
+    if (!value) return { error: "empty_value" };
+    const key =
+      typeof args.key === "string" && args.key.trim() ? args.key.trim().slice(0, 120) : null;
+    const tags = (Array.isArray(args.tags) ? args.tags : [])
+      .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+      .map((t) => t.trim().slice(0, 40))
+      .slice(0, 20);
+    const importance = clampInt(args.importance, 1, 5, 3);
+
+    // Upsert-by-key: a stable key means "this is the same fact, update it"
+    // rather than piling up duplicates every time the user restates it.
+    if (key) {
+      const { data: existing } = await ctx.supabase
+        .from("memories")
+        .select("id")
+        .eq("user_id", ctx.userId)
+        .eq("key", key)
+        .maybeSingle();
+      if (existing) {
+        const { error } = await ctx.supabase
+          .from("memories")
+          .update({ value, tags, importance, source: "orchestrator" })
+          .eq("id", existing.id);
+        if (error) return { error: error.message };
+        await ctx.logEvent("info", "tool.remember", `updated memory: ${key}`, {
+          memory_id: existing.id,
+          key,
+        } as Json);
+        return { ok: true, id: existing.id, key, updated: true };
+      }
+    }
+
+    const { data, error } = await ctx.supabase
+      .from("memories")
+      .insert({
+        user_id: ctx.userId,
+        kind: "fact",
+        key,
+        value,
+        tags,
+        importance,
+        source: "orchestrator",
+      })
+      .select("id")
+      .single();
+    if (error) return { error: error.message };
+    await ctx.logEvent("info", "tool.remember", `saved memory${key ? `: ${key}` : ""}`, {
+      memory_id: data.id,
+      key,
+    } as Json);
+    return { ok: true, id: data.id, key, updated: false };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// recall — read back facts from public.memories
+// ---------------------------------------------------------------------------
+
+// Strip characters that would break PostgREST's comma/paren-delimited `.or()`
+// filter grammar, so a free-text query can't corrupt the query or inject
+// extra filter clauses.
+const sanitizeForOrFilter = (s: string): string => s.replace(/[,()*%\\]/g, " ").trim();
+
+const recall: Tool = {
+  declaration: {
+    name: "recall",
+    description:
+      "Search your long-term memory for facts/preferences you stored earlier (with the `remember` tool). Use at the START of answering when the user refers to themselves, past decisions, or 'as I told you'. Returns matching memories newest/most-important first.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Free-text search over stored facts. Omit to list recent memories.",
+        },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional: only memories carrying any of these tags.",
+        },
+        limit: { type: "integer", description: "Max results (default 8, max 25)." },
+      },
+    },
+  },
+  async execute(args, ctx) {
+    const limit = clampInt(args.limit, 1, 25, 8);
+    let q = ctx.supabase
+      .from("memories")
+      .select("id, key, value, tags, importance, updated_at")
+      .eq("user_id", ctx.userId);
+
+    const query = typeof args.query === "string" ? sanitizeForOrFilter(args.query) : "";
+    if (query) {
+      q = q.or(`value.ilike.%${query}%,key.ilike.%${query}%`);
+    }
+    const tags = (Array.isArray(args.tags) ? args.tags : [])
+      .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+      .map((t) => t.trim());
+    if (tags.length > 0) {
+      q = q.overlaps("tags", tags);
+    }
+
+    const { data, error } = await q
+      .order("importance", { ascending: false })
+      .order("updated_at", { ascending: false })
+      .limit(limit);
+    if (error) return { error: error.message };
+    await ctx.logEvent(
+      "info",
+      "tool.recall",
+      `${query || "(recent)"} → ${data?.length ?? 0} hits`,
+      {
+        query,
+        tags,
+        hits: data?.length ?? 0,
+      } as Json,
+    );
+    return { count: data?.length ?? 0, memories: data ?? [] };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Task tools — public.tasks (owner-scoped to-do queue the agents drive)
+// ---------------------------------------------------------------------------
+
+const TASK_STATUSES = ["todo", "in_progress", "done", "cancelled"] as const;
+
+const createTask: Tool = {
+  declaration: {
+    name: "create_task",
+    description:
+      "Create a tracked task / to-do item for the user. Use when the user asks you to do something that spans multiple steps or should be remembered and followed up, or when you break a larger request into pieces. Optionally assign it to a teammate agent via `assignee_slug`.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Short, action-oriented title." },
+        details: {
+          type: "string",
+          description: "Optional fuller description / acceptance criteria.",
+        },
+        assignee_slug: {
+          type: "string",
+          description:
+            "Optional slug of the agent that should handle this (e.g. 'orchestrator', 'marketer').",
+        },
+        priority: { type: "integer", description: "1 (highest) … 5 (lowest). Defaults to 3." },
+        due_at: { type: "string", description: "Optional ISO-8601 due date/time." },
+        tags: { type: "array", items: { type: "string" }, description: "Optional short tags." },
+      },
+      required: ["title"],
+    },
+  },
+  async execute(args, ctx) {
+    const title = String(args.title ?? "")
+      .trim()
+      .slice(0, 200);
+    if (!title) return { error: "missing_title" };
+    const details =
+      typeof args.details === "string" && args.details.trim() ? args.details.trim() : null;
+    const assignee =
+      typeof args.assignee_slug === "string" && args.assignee_slug.trim()
+        ? args.assignee_slug.trim().slice(0, 60)
+        : null;
+    const priority = clampInt(args.priority, 1, 5, 3);
+    const tags = (Array.isArray(args.tags) ? args.tags : [])
+      .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+      .map((t) => t.trim().slice(0, 40))
+      .slice(0, 20);
+    // Accept a due date only if it parses as a real timestamp; silently drop
+    // garbage so a malformed model value can't fail the whole insert.
+    let dueAt: string | null = null;
+    if (typeof args.due_at === "string" && args.due_at.trim()) {
+      const parsed = new Date(args.due_at.trim());
+      if (!Number.isNaN(parsed.getTime())) dueAt = parsed.toISOString();
+    }
+
+    const { data, error } = await ctx.supabase
+      .from("tasks")
+      .insert({
+        user_id: ctx.userId,
+        title,
+        details,
+        assignee_slug: assignee,
+        priority,
+        tags,
+        due_at: dueAt,
+      })
+      .select("id, title, status, priority")
+      .single();
+    if (error) return { error: error.message };
+    await ctx.logEvent("info", "tool.create_task", `task created: ${title}`, {
+      task_id: data.id,
+      assignee,
+      priority,
+    } as Json);
+    return { ok: true, ...data };
+  },
+};
+
+const listTasks: Tool = {
+  declaration: {
+    name: "list_tasks",
+    description:
+      "List the user's tasks. By default returns OPEN tasks (todo + in_progress), highest priority first. Pass `status` to filter (todo | in_progress | done | cancelled) or `assignee_slug` to see one agent's queue.",
+    parameters: {
+      type: "object",
+      properties: {
+        status: {
+          type: "string",
+          description: "Filter to one status: todo | in_progress | done | cancelled.",
+        },
+        assignee_slug: {
+          type: "string",
+          description: "Filter to tasks assigned to this agent slug.",
+        },
+        limit: { type: "integer", description: "Max results (default 20, max 50)." },
+      },
+    },
+  },
+  async execute(args, ctx) {
+    const limit = clampInt(args.limit, 1, 50, 20);
+    let q = ctx.supabase
+      .from("tasks")
+      .select(
+        "id, title, details, status, priority, assignee_slug, due_at, tags, created_at, completed_at",
+      )
+      .eq("user_id", ctx.userId);
+
+    const status = typeof args.status === "string" ? args.status.trim() : "";
+    if (status && (TASK_STATUSES as readonly string[]).includes(status)) {
+      q = q.eq("status", status);
+    } else {
+      // Default view = the actionable queue, not the archive.
+      q = q.in("status", ["todo", "in_progress"]);
+    }
+    const assignee = typeof args.assignee_slug === "string" ? args.assignee_slug.trim() : "";
+    if (assignee) q = q.eq("assignee_slug", assignee);
+
+    const { data, error } = await q
+      .order("priority", { ascending: true })
+      .order("created_at", { ascending: true })
+      .limit(limit);
+    if (error) return { error: error.message };
+    return { count: data?.length ?? 0, tasks: data ?? [] };
+  },
+};
+
+const updateTask: Tool = {
+  declaration: {
+    name: "update_task",
+    description:
+      "Update an existing task by id — change its status (e.g. mark 'done'), attach a result/outcome, re-prioritise, or edit details. Use after you (or a delegated agent) actually complete or advance the work.",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "The task id (from create_task or list_tasks)." },
+        status: {
+          type: "string",
+          description: "New status: todo | in_progress | done | cancelled.",
+        },
+        result: { type: "string", description: "Outcome / notes to record on the task." },
+        priority: { type: "integer", description: "New priority 1 (highest) … 5 (lowest)." },
+        details: { type: "string", description: "Replace the task details." },
+      },
+      required: ["id"],
+    },
+  },
+  async execute(args, ctx) {
+    const id = String(args.id ?? "").trim();
+    if (!id) return { error: "missing_id" };
+    const patch: Database["public"]["Tables"]["tasks"]["Update"] = {};
+    if (typeof args.status === "string" && args.status.trim()) {
+      const status = args.status.trim();
+      if (!(TASK_STATUSES as readonly string[]).includes(status)) {
+        return { error: "invalid_status", allowed: TASK_STATUSES };
+      }
+      patch.status = status;
+      // Stamp / clear the completion time so it always reflects the state.
+      patch.completed_at =
+        status === "done" || status === "cancelled" ? new Date().toISOString() : null;
+    }
+    if (typeof args.result === "string") patch.result = args.result;
+    if (typeof args.details === "string") patch.details = args.details;
+    if (args.priority !== undefined) patch.priority = clampInt(args.priority, 1, 5, 3);
+    if (Object.keys(patch).length === 0) return { error: "nothing_to_update" };
+
+    const { data, error } = await ctx.supabase
+      .from("tasks")
+      .update(patch)
+      .eq("id", id)
+      .eq("user_id", ctx.userId)
+      .select("id, title, status, priority")
+      .maybeSingle();
+    if (error) return { error: error.message };
+    if (!data) return { error: "task_not_found" };
+    await ctx.logEvent("info", "tool.update_task", `task updated: ${data.title} → ${data.status}`, {
+      task_id: data.id,
+      status: data.status,
+    } as Json);
+    return { ok: true, ...data };
+  },
+};
+
 // Full catalog of tool *implementations* known to this codebase. This array
 // is the only place `execute` logic lives — it never shrinks based on DB
 // state, so a disabled tool's code stays available (just unreachable via the
 // declarations sent to the model). Slugs here MUST match `public.tools.slug`
 // rows; keep the two in sync by hand (see supabase/migrations for the seed).
-export const ALL_TOOLS: Tool[] = [webSearch, fetchUrl, saveNote];
+export const ALL_TOOLS: Tool[] = [
+  webSearch,
+  fetchUrl,
+  saveNote,
+  remember,
+  recall,
+  createTask,
+  listTasks,
+  updateTask,
+];
 
 export function getToolByName(name: string): Tool | undefined {
   return ALL_TOOLS.find((t) => t.declaration.name === name);
