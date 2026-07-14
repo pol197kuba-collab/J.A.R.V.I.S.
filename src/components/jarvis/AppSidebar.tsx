@@ -1,4 +1,5 @@
 import { useRouterState } from "@tanstack/react-router";
+import { cn } from "@/lib/utils";
 import { LayoutDashboard, Bot, Terminal, Settings as SettingsIcon, Boxes, Radar, Eye } from "lucide-react";
 import {
   Sidebar,
@@ -130,6 +131,7 @@ export function AppSidebar() {
 
 function ArcCorePanel() {
   const { listening } = useVoiceCommands();
+  const { isMobile } = useSidebar();
   const [speaking, setSpeaking] = useState(() => isSpeakingNow());
   const [working, setWorking] = useState(() => isAgentBusyNow());
   useEffect(() => onSpeaking(setSpeaking), []);
@@ -144,7 +146,7 @@ function ArcCorePanel() {
         : { label: "Standby", color: "var(--success)" };
 
   return (
-    <div className="border-b border-sidebar-border px-2 py-2">
+    <div className={cn("border-b border-sidebar-border px-2", isMobile ? "py-1.5" : "py-2")}>
       <div className="flex items-center justify-between font-display text-[9px] uppercase tracking-[0.28em] text-primary/80">
         <span>ARC CORE // J-3140</span>
         <span className="flex items-center gap-1 text-primary">
@@ -156,7 +158,12 @@ function ArcCorePanel() {
         </span>
       </div>
       <div className="mx-auto mt-1 flex w-full items-center justify-center">
-        <ArcReactorTriangle className="!w-[160px] short:!w-[100px]" />
+        <ArcReactorTriangle
+          className={cn(
+            "!w-[160px] short:!w-[100px]",
+            isMobile && "!w-[100px] short:!w-[80px]"
+          )}
+        />
       </div>
       <div className="mt-1 text-center font-display text-[9px] uppercase tracking-[0.28em]" style={{ color: status.color }}>
         {status.label}
