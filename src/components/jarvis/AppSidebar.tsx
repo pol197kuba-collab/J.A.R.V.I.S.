@@ -1,4 +1,5 @@
 import { useRouterState } from "@tanstack/react-router";
+import { cn } from "@/lib/utils";
 import { LayoutDashboard, Bot, Terminal, Settings as SettingsIcon, Boxes, Radar, Eye } from "lucide-react";
 import {
   Sidebar,
