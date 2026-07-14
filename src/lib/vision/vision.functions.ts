@@ -92,7 +92,16 @@ export const analyzeScan = createServerFn({ method: "POST" })
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: scanSystemPrompt(language) }] },
-            generationConfig: { temperature: 0.5, maxOutputTokens: 600 },
+            generationConfig: {
+              temperature: 0.5,
+              // gemini-2.5-flash is a "thinking" model: reasoning tokens count
+              // against maxOutputTokens. Describing a frame needs no chain of
+              // thought, so disable thinking (budget 0) — otherwise it ate most
+              // of the budget and the visible answer was truncated mid-sentence
+              // (finishReason MAX_TOKENS). Headroom bumped too as a backstop.
+              thinkingConfig: { thinkingBudget: 0 },
+              maxOutputTokens: 1024,
+            },
             contents: [
               {
                 role: "user",
@@ -120,16 +129,31 @@ export const analyzeScan = createServerFn({ method: "POST" })
     }
 
     const payload = (await res.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      candidates?: Array<{
+        finishReason?: string;
+        content?: { parts?: Array<{ text?: string }> };
+      }>;
     };
-    const description = (payload.candidates?.[0]?.content?.parts ?? [])
+    const candidate = payload.candidates?.[0];
+    const description = (candidate?.content?.parts ?? [])
       .flatMap((p) => (p.text ? [p.text] : []))
       .join("")
       .trim();
 
     if (!description) {
-      await logEvent("warn", "scan returned empty description");
+      await logEvent("warn", "scan returned empty description", {
+        finish_reason: candidate?.finishReason ?? null,
+      } as Json);
       throw new Error("Rdzeń AI nie zwrócił opisu — spróbuj ponownie.");
+    }
+
+    // MAX_TOKENS here means the model was still writing when it hit the ceiling,
+    // so the description is cut off mid-sentence. With thinking disabled this
+    // should be rare, but log it so the truncation is visible rather than silent.
+    if (candidate?.finishReason === "MAX_TOKENS") {
+      await logEvent("warn", "scan hit token ceiling — description truncated", {
+        finish_reason: candidate.finishReason,
+      } as Json);
     }
 
     const latencyMs = Date.now() - startedAt;
