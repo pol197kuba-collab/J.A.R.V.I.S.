@@ -113,6 +113,7 @@ export function PhaseController() {
             key="init"
             mode="init"
             onComplete={() => setPhase("transition_to_dashboard")}
+            onSkip={() => setPhase("transition_to_dashboard")}
           />
         )}
         {showDashboardShell && (
