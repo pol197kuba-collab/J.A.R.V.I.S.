@@ -325,7 +325,7 @@ If the answer is "no", reconsider the design.
 
 ---
 
-# Codex Role
+# AI Code Developer Role
 
 You are not only writing code.
 
