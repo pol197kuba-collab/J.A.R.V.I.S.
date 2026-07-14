@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -530,23 +531,28 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
     };
   }, [enabled, Ctor, routeFromMic]);
 
-  return (
-    <VoiceCtx.Provider
-      value={{
-        enabled,
-        supported,
-        listening,
-        lastTranscript,
-        setEnabled,
-        consumePendingModule,
-        routeText: (text: string) => route(text, "chat"),
-        performAction: (action: JarvisAction, spokenLine?: string) => {
-          const mapped = ACTION_MAP[action];
-          if (mapped) fire(mapped, spokenLine);
-        },
-      }}
-    >
-      {children}
-    </VoiceCtx.Provider>
+  const routeText = useCallback((text: string) => route(text, "chat"), [route]);
+  const performAction = useCallback(
+    (action: JarvisAction, spokenLine?: string) => {
+      const mapped = ACTION_MAP[action];
+      if (mapped) fire(mapped, spokenLine);
+    },
+    [fire],
   );
+
+  const value = useMemo<Ctx>(
+    () => ({
+      enabled,
+      supported,
+      listening,
+      lastTranscript,
+      setEnabled,
+      consumePendingModule,
+      routeText,
+      performAction,
+    }),
+    [enabled, supported, listening, lastTranscript, setEnabled, consumePendingModule, routeText, performAction],
+  );
+
+  return <VoiceCtx.Provider value={value}>{children}</VoiceCtx.Provider>;
 }

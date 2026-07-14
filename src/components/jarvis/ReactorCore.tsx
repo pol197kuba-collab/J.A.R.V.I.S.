@@ -135,6 +135,8 @@ export function ReactorCore({ active: _active }: { active?: boolean } = {}) {
   useEffect(() => {
     const cvs = canvasRef.current;
     if (!cvs) return;
+    const ctx = cvs.getContext("2d");
+    if (!ctx) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const resize = () => {
       const rect = cvs.getBoundingClientRect();
@@ -155,13 +157,20 @@ export function ReactorCore({ active: _active }: { active?: boolean } = {}) {
       ph: Math.random() * Math.PI * 2,
     }));
 
+    // Cap the particle redraw to ~30fps — the drift is slow enough that this
+    // is visually indistinguishable from 60fps but halves the (costly)
+    // shadowBlur canvas work per second.
+    const FRAME_BUDGET_MS = 1000 / 30;
     let raf = 0;
+    let running = false;
     let last = performance.now();
+    let lastDraw = last;
     const draw = (t: number) => {
+      raf = requestAnimationFrame(draw);
+      if (t - lastDraw < FRAME_BUDGET_MS) return;
       const dt = t - last;
       last = t;
-      const ctx = cvs.getContext("2d");
-      if (!ctx) return;
+      lastDraw = t;
       const w = cvs.width;
       const h = cvs.height;
       ctx.clearRect(0, 0, w, h);
@@ -191,13 +200,46 @@ export function ReactorCore({ active: _active }: { active?: boolean } = {}) {
         ctx.arc(x, y, sz, 0, Math.PI * 2);
         ctx.fill();
       }
+    };
 
+    // Only animate while the reactor is actually on screen and the tab is
+    // in the foreground — an always-on rAF + shadowBlur loop otherwise
+    // keeps burning CPU/GPU (and contributing to thermal throttling) even
+    // when nobody can see it.
+    const start = () => {
+      if (running) return;
+      running = true;
+      last = performance.now();
+      lastDraw = last;
       raf = requestAnimationFrame(draw);
     };
-    raf = requestAnimationFrame(draw);
-    return () => {
+    const stop = () => {
+      if (!running) return;
+      running = false;
       cancelAnimationFrame(raf);
+    };
+    const evaluate = () => {
+      if (document.visibilityState === "visible" && isIntersecting) start();
+      else stop();
+    };
+
+    let isIntersecting = true;
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        isIntersecting = entry.isIntersecting;
+        evaluate();
+      },
+      { threshold: 0 },
+    );
+    io.observe(cvs);
+    document.addEventListener("visibilitychange", evaluate);
+    evaluate();
+
+    return () => {
+      stop();
+      io.disconnect();
       ro.disconnect();
+      document.removeEventListener("visibilitychange", evaluate);
     };
   }, []);
 

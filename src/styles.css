@@ -702,6 +702,22 @@
 }
 .reactor-gpu.pulse-alert { animation: reactor-alert-flash 1.2s steps(6, end) both; border-radius: 9999px; }
 
+/* Respect OS/browser "reduce motion" (also set by Android battery saver) —
+   freezes the continuously-spinning Arc Core layers on their current frame
+   instead of animating forever, without changing layout or visibility. */
+@media (prefers-reduced-motion: reduce) {
+  .reactor-stage,
+  .ring3d-a, .ring3d-b, .ring3d-c, .ring3d-d, .ring3d-e, .ring3d-f,
+  .sphere-wire,
+  .animate-core-speak,
+  .animate-amber-pulse,
+  .animate-amber-pulse-fast,
+  .animate-mini-reactor-spin,
+  .animate-pulse-core {
+    animation-play-state: paused;
+  }
+}
+
 /* ===== Protocol: Ark Reboot ===== */
 .ark-dimmed {
   transition: opacity 400ms ease, filter 400ms ease;

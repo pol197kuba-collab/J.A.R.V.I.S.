@@ -38,7 +38,9 @@ export function SystemStatsStrip() {
   const [cpu, setCpu] = useState<Metric>({ label: "CPU // THREADS", value: "—", trend: [], pct: 0 });
   const [net, setNet] = useState<Metric>({ label: "NET", value: "—", trend: [], pct: 0 });
 
-  // FPS loop
+  // FPS loop — only samples while the tab is actually in the foreground;
+  // a backgrounded tab has nothing to measure and the loop would otherwise
+  // keep waking the JS engine for no visible benefit.
   const rafRef = useRef<number | null>(null);
   useEffect(() => {
     let frames = 0;
@@ -59,9 +61,23 @@ export function SystemStatsStrip() {
       }
       rafRef.current = requestAnimationFrame(tick);
     };
-    rafRef.current = requestAnimationFrame(tick);
+    const start = () => {
+      if (rafRef.current != null) return;
+      frames = 0;
+      last = performance.now();
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    const stop = () => {
+      if (rafRef.current == null) return;
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    };
+    const onVisibility = () => (document.visibilityState === "visible" ? start() : stop());
+    start();
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 
@@ -69,6 +85,7 @@ export function SystemStatsStrip() {
   useEffect(() => {
     const cores = navigator.hardwareConcurrency ?? 0;
     const sample = () => {
+      if (document.visibilityState !== "visible") return;
       const perf = performance as unknown as { memory?: PerfMemory };
       if (perf.memory) {
         const used = perf.memory.usedJSHeapSize / (1024 * 1024);
