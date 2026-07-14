@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { HudPanel } from "./HudPanel";
+import { useHudNavigate } from "./TransitionContext";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
+import { emitChat } from "@/lib/ai/chatBus";
 import { analyzeScan } from "@/lib/vision/vision.functions";
 import {
   Aperture,
   Camera,
+  MessageSquare,
   ShieldAlert,
   VideoOff,
   Loader2,
@@ -15,6 +18,10 @@ import {
   Plus,
   X,
 } from "lucide-react";
+
+// Set by VoiceCommandContext before it navigates here ("Jarvis, co widzisz?"),
+// consumed once on mount so the scan fires as soon as the camera is ready.
+const PENDING_SCAN_KEY = "jarvis_pending_scan";
 
 type CamState = "loading" | "ready" | "denied" | "unavailable";
 
@@ -67,6 +74,9 @@ export function VisionScanner() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const runScanAnalysis = useServerFn(analyzeScan);
+  const { go } = useHudNavigate();
+  // Voice-command bridge: scan queued before the camera finished booting.
+  const wantScanRef = useRef(false);
 
   const stopStream = useCallback(() => {
     const s = streamRef.current;
@@ -460,6 +470,63 @@ export function VisionScanner() {
     }
   };
 
+  // Stable handle so the voice-command effects below can call the freshest
+  // handleScan without re-binding listeners on every state change it touches.
+  const handleScanRef = useRef<(() => Promise<void>) | null>(null);
+  handleScanRef.current = handleScan;
+
+  // Voice-command bridge, part 1: flag left by VoiceCommandContext before it
+  // navigated here — consume once on mount.
+  useEffect(() => {
+    try {
+      if (window.sessionStorage.getItem(PENDING_SCAN_KEY) === "1") {
+        window.sessionStorage.removeItem(PENDING_SCAN_KEY);
+        wantScanRef.current = true;
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // Part 2: live event for when we're already mounted on /vision.
+  useEffect(() => {
+    const onScanCmd = () => {
+      try {
+        window.sessionStorage.removeItem(PENDING_SCAN_KEY);
+      } catch {
+        /* ignore */
+      }
+      if (state === "ready" && !analyzing) {
+        wantScanRef.current = false;
+        void handleScanRef.current?.();
+      } else {
+        wantScanRef.current = true;
+      }
+    };
+    window.addEventListener("jarvis:vision-scan", onScanCmd);
+    return () => window.removeEventListener("jarvis:vision-scan", onScanCmd);
+  }, [state, analyzing]);
+
+  // Part 3: fire a queued scan once the camera comes up. Short delay lets
+  // auto-exposure settle so Gemini doesn't get a half-black boot frame.
+  useEffect(() => {
+    if (state !== "ready" || !wantScanRef.current) return;
+    wantScanRef.current = false;
+    const t = window.setTimeout(() => void handleScanRef.current?.(), 400);
+    return () => window.clearTimeout(t);
+  }, [state]);
+
+  // "Discuss this" — drop the scan result into the Conversation Stream and
+  // jump to the dashboard chat, so follow-up questions carry it as context
+  // (getRecentHistory feeds it back to the model on the next turn).
+  const discussAnalysis = () => {
+    if (!analysis || analysis.kind !== "ok") return;
+    audio.playClick();
+    emitChat("jarvis", `[SKAN OPTYCZNY] ${analysis.text}`);
+    setAnalysis(null);
+    go("/");
+  };
+
   const digital = !zoomCaps;
   // Fallback CSS zoom uses fraction directly (0 → 1×, 1 → 3×).
   const digitalScale = 1 + zoomFraction * 2;
@@ -681,14 +748,27 @@ export function VisionScanner() {
                   >
                     {analysis.kind === "ok" ? "ANALYSIS // COMPLETE" : "ANALYSIS // FAILED"}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => setAnalysis(null)}
-                    aria-label="Dismiss analysis"
-                    className="grid h-5 w-5 shrink-0 place-items-center border border-primary/50 text-primary transition hover:bg-primary/15"
-                  >
-                    <X className="h-3 w-3" strokeWidth={2} />
-                  </button>
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    {analysis.kind === "ok" && (
+                      <button
+                        type="button"
+                        onClick={discussAnalysis}
+                        aria-label="Discuss this scan in chat"
+                        className="flex h-5 items-center gap-1 border border-primary/50 px-1.5 font-display text-[8px] uppercase tracking-[0.2em] text-primary transition hover:bg-primary/15"
+                      >
+                        <MessageSquare className="h-3 w-3" strokeWidth={2} />
+                        DISCUSS
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setAnalysis(null)}
+                      aria-label="Dismiss analysis"
+                      className="grid h-5 w-5 place-items-center border border-primary/50 text-primary transition hover:bg-primary/15"
+                    >
+                      <X className="h-3 w-3" strokeWidth={2} />
+                    </button>
+                  </span>
                 </div>
                 <p className="max-h-28 min-w-0 overflow-y-auto whitespace-normal break-words px-3 py-2 font-mono text-[11px] leading-snug text-foreground/90 landscape:max-md:max-h-16 landscape:max-md:text-[9px] short:max-h-16 short:text-[9px]">
                   {analysis.text}

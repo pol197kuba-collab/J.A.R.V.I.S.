@@ -136,7 +136,8 @@ type LocalAction =
   | "agents"
   | "settings"
   | "logs"
-  | "subsystems";
+  | "subsystems"
+  | "vision_scan";
 
 const ACTION_MAP: Record<JarvisAction, LocalAction | null> = {
   none: null,
@@ -155,6 +156,7 @@ const ACTION_MAP: Record<JarvisAction, LocalAction | null> = {
   open_settings: "settings",
   open_logs: "logs",
   open_subsystems: "subsystems",
+  vision_scan: "vision_scan",
 };
 
 const COMMANDS: Array<{ re: RegExp; action: LocalAction }> = [
@@ -168,6 +170,7 @@ const COMMANDS: Array<{ re: RegExp; action: LocalAction }> = [
   { re: /\b(open\s+settings|otwórz\s+ustawienia|otworz\s+ustawienia|pokaż\s+ustawienia|pokaz\s+ustawienia|konfiguracja)\b/i, action: "settings" },
   { re: /\b(open\s+logs|system\s+logs|otwórz\s+logi|otworz\s+logi|pokaż\s+logi|pokaz\s+logi|dziennik\s+systemu)\b/i, action: "logs" },
   { re: /\b(open\s+sub[-\s]?systems|otwórz\s+podsystemy|otworz\s+podsystemy|pokaż\s+podsystemy|pokaz\s+podsystemy)\b/i, action: "subsystems" },
+  { re: /\b(co\s+widzisz|powiedz\s+co\s+widzisz|zeskanuj\s+otoczenie|przeskanuj\s+otoczenie|skanuj\s+otoczenie|zeskanuj\s+to|what\s+do\s+you\s+see|scan\s+(?:the\s+)?(?:room|area|surroundings)|vision\s+scan)\b/i, action: "vision_scan" },
   // Interface
   { re: /\b(open\s+menu|show\s+sidebar|otwórz\s+menu|otworz\s+menu|pokaż\s+menu|pokaz\s+menu)\b/i, action: "menu_open" },
   { re: /\b(close\s+menu|hide\s+sidebar|zamknij\s+menu|schowaj\s+menu|ukryj\s+menu)\b/i, action: "menu_close" },
@@ -222,7 +225,10 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       const now = Date.now();
       // Nav actions get a short window; status/shutdown stay protected.
       const window_ms =
-        action === "shutdown" || action === "system_check" || action === "sleep"
+        action === "shutdown" ||
+        action === "system_check" ||
+        action === "sleep" ||
+        action === "vision_scan"
           ? 2000
           : 500;
       const last = lastFireMapRef.current.get(action) ?? 0;
@@ -293,6 +299,19 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
           // Bridge to ArkRebootProvider (mounted below this provider).
           window.dispatchEvent(new CustomEvent("jarvis:reboot"));
           if (spokenLine) speak(spokenLine);
+          break;
+        case "vision_scan":
+          // Bridge to VisionScanner: the sessionStorage flag survives the
+          // route transition when we're elsewhere, the event covers the
+          // already-on-/vision case (go() no-ops on same path).
+          say("Analizuję obraz z czujników optycznych.");
+          try {
+            window.sessionStorage.setItem("jarvis_pending_scan", "1");
+          } catch {
+            /* ignore */
+          }
+          window.dispatchEvent(new CustomEvent("jarvis:vision-scan"));
+          go("/vision");
           break;
       }
     },

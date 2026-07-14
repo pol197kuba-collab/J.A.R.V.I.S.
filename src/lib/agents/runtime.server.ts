@@ -19,7 +19,7 @@ import { DEFAULT_GEMINI_MODEL } from "./models";
 const UI_ACTIONS = [
   "open_dashboard", "open_fuel", "open_calculator", "open_jobfit", "open_telemetry",
   "open_menu", "close_menu", "system_check", "sleep", "shutdown", "reboot",
-  "open_agents", "open_settings", "open_logs", "open_subsystems",
+  "open_agents", "open_settings", "open_logs", "open_subsystems", "vision_scan",
 ] as const;
 type UiAction = (typeof UI_ACTIONS)[number];
 const UI_ACTION_TOOL_NAME = "perform_ui_action";
