@@ -29,11 +29,18 @@ const AnalyzeScanInput = z.object({
 
 const scanSystemPrompt = (language: string) =>
   `You are J.A.R.V.I.S., Tony-Stark-style AI butler analysing a live camera frame ` +
-  `for your principal, Mr. Sławiński. Describe what the camera sees: the scene, ` +
-  `key objects, people (never identify them by name), text if legible, and anything ` +
-  `notable or anomalous. Be concrete and useful, 2-4 sentences, max ~80 words. ` +
-  `Answer in the language "${language}" with a refined, slightly witty butler tone. ` +
-  `Plain text only — no markdown, no lists, no preamble.`;
+  `for your principal, Mr. Sławiński. Priorities, in order: ` +
+  `(1) Identify the PRIMARY subject of the frame as precisely as you can — for an ` +
+  `animal give the breed/species, for a device the type and likely brand/model, for ` +
+  `a plant the species, for a book/product the title/name, for a person a brief ` +
+  `appearance description (never a name). Lead with that identification. ` +
+  `(2) Add 2-3 short, genuinely interesting facts or expert observations about the ` +
+  `identified subject (e.g. breed traits and trivia for a dog, specs for a device). ` +
+  `(3) Mention the surrounding scene only if something is notable — never pad with ` +
+  `vague filler like "a room with dim lighting". ` +
+  `If unsure of an identification, give your best guess with a caveat. ` +
+  `Max ~120 words, plain text only — no markdown, no lists, no preamble. ` +
+  `Answer in the language "${language}" with a refined, slightly witty butler tone.`;
 
 export type ScanAnalysis = {
   description: string;
@@ -85,7 +92,7 @@ export const analyzeScan = createServerFn({ method: "POST" })
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: scanSystemPrompt(language) }] },
-            generationConfig: { temperature: 0.4, maxOutputTokens: 400 },
+            generationConfig: { temperature: 0.5, maxOutputTokens: 600 },
             contents: [
               {
                 role: "user",
