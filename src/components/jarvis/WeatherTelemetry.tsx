@@ -42,7 +42,10 @@ function jitter(prev: Reading): Reading {
 export function WeatherTelemetry({ index = 0 }: { index?: number }) {
   const [r, setR] = useState<Reading>(seed());
   useEffect(() => {
-    const id = setInterval(() => setR((p) => jitter(p)), 4000);
+    const id = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      setR((p) => jitter(p));
+    }, 4000);
     return () => clearInterval(id);
   }, []);
 
