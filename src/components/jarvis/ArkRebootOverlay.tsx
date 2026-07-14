@@ -1,5 +1,5 @@
 import { useArkReboot } from "./ArkRebootContext";
-import { ReactorCore } from "./ReactorCore";
+import { ArcReactorTriangle } from "./ArcReactorTriangle";
 
 export function ArkRebootOverlay() {
   const { isDiagnosticRunning, current, logTail, flashKey } = useArkReboot();
@@ -15,9 +15,7 @@ export function ArkRebootOverlay() {
 
       {/* Centered enlarged Arc Core. */}
       <div className="relative flex h-[80vmin] w-[80vmin] items-center justify-center animate-ark-pulse">
-        <div className="absolute inset-0 scale-[1.35]">
-          <ReactorCore />
-        </div>
+        <ArcReactorTriangle className="!w-[70vmin]" />
       </div>
 
       {/* Module label + streaming logs around the core. */}
