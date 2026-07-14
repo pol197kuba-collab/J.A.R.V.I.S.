@@ -82,6 +82,21 @@ export function BootSequence({
       />
       <CornerTicks />
 
+      {mode === "init" && onSkip && (
+        <button
+          type="button"
+          onClick={onSkip}
+          className="group absolute right-4 top-4 z-50 font-display cursor-pointer border border-primary/50 bg-primary/5 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-primary/80 opacity-70 transition hover:bg-primary/15 hover:text-foreground hover:opacity-100"
+          aria-label="Skip intro sequence"
+        >
+          <span className="absolute -left-px -top-px h-1.5 w-1.5 border-l border-t border-primary/70" />
+          <span className="absolute -right-px -top-px h-1.5 w-1.5 border-r border-t border-primary/70" />
+          <span className="absolute -left-px -bottom-px h-1.5 w-1.5 border-l border-b border-primary/70" />
+          <span className="absolute -right-px -bottom-px h-1.5 w-1.5 border-r border-b border-primary/70" />
+          SKIP
+        </button>
+      )}
+
       {mode === "init" && (
         <div className="pointer-events-none absolute left-1/2 top-6 z-20 -translate-x-1/2 text-center animate-fade-up">
           <p
