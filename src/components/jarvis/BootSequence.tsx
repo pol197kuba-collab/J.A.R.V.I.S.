@@ -13,10 +13,12 @@ export function BootSequence({
   mode = "engage",
   onEngage,
   onComplete,
+  onSkip,
 }: {
   mode?: "engage" | "init";
   onEngage?: () => void;
   onComplete?: () => void;
+  onSkip?: () => void;
 }) {
   // engage mode renders only step 3; init mode runs step 1 -> step 2 -> done
   const [step, setStep] = useState<Step>(mode === "engage" ? 3 : 1);
