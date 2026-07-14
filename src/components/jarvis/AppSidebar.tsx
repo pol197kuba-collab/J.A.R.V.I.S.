@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useHudNavigate } from "./TransitionContext";
 import { MiniArcReactor } from "./MiniArcReactor";
-import { ReactorCore } from "./ReactorCore";
+import { ArcReactorTriangle } from "./ArcReactorTriangle";
 import { useVoiceCommands } from "./VoiceCommandContext";
 import { onSpeaking, isSpeakingNow } from "@/lib/audio/speak";
 import { onAgentBusy, isAgentBusyNow } from "@/lib/ai/agentActivity";
@@ -155,8 +155,8 @@ function ArcCorePanel() {
           LIVE
         </span>
       </div>
-      <div className="mx-auto mt-1 w-full max-w-[190px] short:max-w-[100px]">
-        <ReactorCore />
+      <div className="mx-auto mt-1 flex w-full items-center justify-center">
+        <ArcReactorTriangle className="!w-[160px] short:!w-[100px]" />
       </div>
       <div className="mt-1 text-center font-display text-[9px] uppercase tracking-[0.28em]" style={{ color: status.color }}>
         {status.label}
