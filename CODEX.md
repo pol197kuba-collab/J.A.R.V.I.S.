@@ -429,6 +429,28 @@ formal documentation of it here. Treat the frontend as further along than
 the backend/agent layer — new agent work should assume a fairly complete
 HUD shell already exists to plug into.
 
+### Arc Core reactor components (consolidated 2026-07-14)
+
+The reactor visuals were consolidated during a Lovable-driven Arc Core /
+scaling pass. The legacy `ReactorCore.tsx` (~400 lines) and `ArcCoreWidget.tsx`
+were **removed**; there is now a single pair of SVG components, both driven
+purely by `--primary` and CSS animations (no runtime state, safe to render
+anywhere):
+
+- `MiniArcReactor.tsx` — small spinning three-triangle mark, `size` prop
+  (default 28). Used in the sidebar header, boot/login, and module frames.
+- `ArcReactorTriangle.tsx` — the large radial reactor. Self-scales
+  responsively via Tailwind (`w-[min(48vmin,360px)]`, `max-md:`,
+  `landscape:max-md:`, `short:`) and accepts `raised` + `className` for
+  per-slot overrides.
+
+In the sidebar, `ArcCorePanel` (in `AppSidebar.tsx`) wraps
+`ArcReactorTriangle` with size overrides (`!w-[160px]`, `short:!w-[100px]`,
+mobile `!w-[100px]`/`short:!w-[80px]`) — this is the "Zmniejszono Arc Core
+w sidebarze" change. The panel also surfaces live status (Speaking /
+Processing / Listening / Standby) from `speak.ts` + `agentActivity.ts`.
+No orphaned references to the removed components remain.
+
 ## Phase status vs. original 3-phase plan
 
 - **Phase 1 (Marketer):** agent exists, persona bug fixed, tool binding
