@@ -4,6 +4,7 @@ import { SystemStatsStrip } from "@/components/jarvis/SystemStatsStrip";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { WeatherTelemetry } from "@/components/jarvis/WeatherTelemetry";
 import { NotesWidget } from "@/components/jarvis/NotesWidget";
+import { TasksWidget } from "@/components/jarvis/TasksWidget";
 import { AgentOpsFeed } from "@/components/jarvis/AgentOpsFeed";
 import { GithubActivityPulse } from "@/components/jarvis/GithubActivityPulse";
 
@@ -45,11 +46,14 @@ function Index() {
 
       <AgentOpsFeed index={3} />
 
-      <NotesWidget index={4} />
+      <div className="grid gap-6 lg:grid-cols-2 landscape:max-md:grid-cols-2 landscape:max-md:gap-2">
+        <NotesWidget index={4} />
+        <TasksWidget index={5} />
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-2 landscape:max-md:grid-cols-2 landscape:max-md:gap-2">
-        <WeatherTelemetry index={5} />
-        <GithubActivityPulse index={6} />
+        <WeatherTelemetry index={6} />
+        <GithubActivityPulse index={7} />
       </div>
     </div>
   );

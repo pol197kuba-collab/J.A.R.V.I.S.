@@ -338,7 +338,7 @@ export type Database = {
         Row: {
           agent_id: string | null
           created_at: string
-          embedding: Json | null
+          embedding: string | null
           id: string
           importance: number
           key: string | null
@@ -352,7 +352,7 @@ export type Database = {
         Insert: {
           agent_id?: string | null
           created_at?: string
-          embedding?: Json | null
+          embedding?: string | null
           id?: string
           importance?: number
           key?: string | null
@@ -366,7 +366,7 @@ export type Database = {
         Update: {
           agent_id?: string | null
           created_at?: string
-          embedding?: Json | null
+          embedding?: string | null
           id?: string
           importance?: number
           key?: string | null
@@ -522,6 +522,65 @@ export type Database = {
         }
         Relationships: []
       }
+      tasks: {
+        Row: {
+          assignee_slug: string | null
+          completed_at: string | null
+          created_at: string
+          created_by_agent: string | null
+          details: string | null
+          due_at: string | null
+          id: string
+          priority: number
+          result: string | null
+          status: string
+          tags: string[]
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assignee_slug?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by_agent?: string | null
+          details?: string | null
+          due_at?: string | null
+          id?: string
+          priority?: number
+          result?: string | null
+          status?: string
+          tags?: string[]
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assignee_slug?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by_agent?: string | null
+          details?: string | null
+          due_at?: string | null
+          id?: string
+          priority?: number
+          result?: string | null
+          status?: string
+          tags?: string[]
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_created_by_agent_fkey"
+            columns: ["created_by_agent"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tools: {
         Row: {
           created_at: string
@@ -644,6 +703,22 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      match_memories: {
+        Args: {
+          query_embedding: string
+          match_count?: number
+          min_similarity?: number
+        }
+        Returns: {
+          id: string
+          key: string | null
+          value: string
+          tags: string[]
+          importance: number
+          updated_at: string
+          similarity: number
+        }[]
       }
     }
     Enums: {

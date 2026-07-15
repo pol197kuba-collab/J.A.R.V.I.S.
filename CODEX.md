@@ -420,6 +420,57 @@ a third agent.
   Lovable auto-sync. Not urgent, but write clearer commit messages going
   forward for anything done directly in github.dev.
 
+## Wired tool capabilities (Milestone 1 — 2026-07-14)
+
+The Orchestrator's tool set grew from "search + notes" to real
+**Memory + Tasks**. Implementations in `src/lib/agents/tools.server.ts`,
+seeded into `public.tools` and auto-bound to every `orchestrator` agent via
+`handle_new_user()` (migration `20260714101500_memory_and_tasks_tools.sql`).
+
+- **Memory** (`remember`, `recall`) — persist/retrieve durable facts in the
+  pre-existing `public.memories` table (no schema change was needed; the
+  table had simply never been wired). `remember` upserts by optional stable
+  `key`; `recall` is ILIKE + tag-overlap for now (the `embedding` column
+  exists but no vector pipeline is populated yet — future upgrade).
+- **Tasks** (`create_task`, `list_tasks`, `update_task`) — new
+  `public.tasks` table: owner-scoped queue with status
+  (todo/in_progress/done/cancelled), priority, assignee_slug, tags, due_at,
+  result. `list_tasks` defaults to the open queue; `update_task` stamps
+  `completed_at` on done/cancelled. `created_by_agent` is left NULL for now
+  because `ToolContext` doesn't carry the agent id — wire it through if
+  per-agent task attribution becomes useful.
+
+All 8 tools are DB-toggleable per agent (Settings → agent_tools), so no
+redeploy is needed to enable/disable them.
+
+## Milestone 2 — Tasks UI + semantic recall + created_by_agent (2026-07-15)
+
+Closes the three follow-ups from Milestone 1. Migration
+`20260715093000_semantic_memory.sql`.
+
+- **Tasks UI** — new server functions `src/lib/tasks/tasks.functions.ts`
+  (createServerFn + requireSupabaseAuth, mirrors notes.functions.ts) power
+  two surfaces: dashboard widget `TasksWidget.tsx` (open queue, add/check-off/
+  cancel/delete, 8s refetch) and full page `src/routes/tasks.tsx`
+  (OPEN/ARCHIVE/ALL filters, table with author + result). Sidebar entry +
+  `open_tasks` UI action wired end-to-end (jarvisBrain JarvisAction,
+  runtime UI_ACTIONS, VoiceCommandContext ACTION_MAP/COMMANDS/switch,
+  commandDirectory) so "otwórz zadania" navigates. Author shown via the
+  `agents!tasks_created_by_agent_fkey` embed. NOTE: `routeTree.gen.ts` was
+  hand-edited (sandbox has no router codegen) — regenerates identically on
+  the next Lovable build.
+- **Semantic recall** — `memories.embedding` swapped from dead JSONB to
+  `extensions.vector(768)` + HNSW index; RPC `match_memories` (SECURITY
+  INVOKER, cosine) does the search. `remember` now embeds each value via
+  Gemini `gemini-embedding-001` (embedText helper, best-effort → null on any
+  failure); `recall` embeds the query and MERGES semantic hits with the
+  existing ILIKE pass (dedupe by id), so keyword matches and rows saved
+  before embeddings existed are never lost. No backfill: old memories are
+  keyword-only until re-saved.
+- **created_by_agent** — `ToolContext` now carries `agentId`; runtime passes
+  `agent.id`; `create_task` sets `created_by_agent` and `remember` sets
+  `memories.agent_id`. Manual UI creates stay NULL (shown as "manual").
+
 ## Frontend surface (larger than "Phase 1" implies)
 
 Beyond the Marketer prompt-only agent, the HUD already has ~30 components

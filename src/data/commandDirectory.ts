@@ -119,6 +119,17 @@ export const COMMAND_DIRECTORY: CommandEntry[] = [
     category: "Navigation",
   },
   {
+    action: "open_tasks",
+    label: "Open Tasks",
+    phrases: [
+      "Open tasks",
+      "Jarvis, otwórz zadania",
+      "Jarvis, pokaż moje zadania",
+    ],
+    description: "Opens the task queue — to-do items you and the agents create and track.",
+    category: "Navigation",
+  },
+  {
     action: "open_menu",
     label: "Open Sidebar",
     phrases: [
