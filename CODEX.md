@@ -471,7 +471,21 @@ Closes the three follow-ups from Milestone 1. Migration
   `agent.id`; `create_task` sets `created_by_agent` and `remember` sets
   `memories.agent_id`. Manual UI creates stay NULL (shown as "manual").
 
-## Frontend surface (larger than "Phase 1" implies)
+## Milestone 2.1 — bug fixes found via live testing (2026-07-15)
+
+- **No current-date awareness (real bug)** — Gemini has no notion of "now",
+  so relative dates ("za tydzień") were computed from training-data guesses
+  (observed: landed on mid-2024 due dates). Fixed in `runtime.server.ts`: the
+  system prompt now always appends the actual current date/time
+  (`Europe/Warsaw`, both human-readable and ISO) via a `dateInstructions`
+  block, same pattern as `uiActionInstructions` — applies regardless of
+  per-agent `system_prompt` overrides.
+- **CRUD parity gap** — the agent could create notes/tasks but never delete
+  them. Migration `20260715120000_note_task_delete_tools.sql` adds
+  `list_notes` (search notes to discover an id — the model has no memory of
+  ids across conversations), `delete_note`, and `delete_task`. "Mark as
+  done" needed no new tool — `update_task` already supports
+  `status: "done"`.
 
 Beyond the Marketer prompt-only agent, the HUD already has ~30 components
 including boot sequence, voice, threat stream, system logs, sub-systems,

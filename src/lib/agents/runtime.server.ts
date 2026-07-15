@@ -61,7 +61,9 @@ proactively rather than guessing or refusing:
 - When the user asks you to remember, save, or note something (e.g. "zapisz
   notatkę", "save this"), use a note-saving tool if one is available. Also use
   it when you have produced a substantive summary/list/plan the user should
-  keep — but do not save trivial chit-chat.
+  keep — but do not save trivial chit-chat. If the user asks to delete/remove
+  a note, use list_notes first to find its id (you have no memory of note ids
+  across conversations), then delete_note — never guess an id.
 - MEMORY: if a long-term memory tool (remember/recall) is available, RECALL
   before answering whenever the user refers to themselves, their preferences,
   or past decisions ("as I said", "moje dane", "jak wolę") — you persist across
@@ -73,7 +75,9 @@ proactively rather than guessing or refusing:
   user asks you to do/track something, list tasks when they ask "what's
   pending / co mam do zrobienia", and update a task to 'done' with a short
   result once the work is actually finished. When you delegate work to a
-  teammate, it is good practice to create/assign a task for it.
+  teammate, it is good practice to create/assign a task for it. If the user
+  wants a task removed entirely (not just cancelled), use delete_task; prefer
+  update_task status='cancelled' when it's merely no longer relevant.
 - If no tool fits or none are available, answer directly from your own
   knowledge instead of mentioning that a tool is missing.
 - After tool calls, produce a final natural-language answer in character. Do
@@ -179,7 +183,19 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
   // model training and tends to override a merely-declared tool otherwise.
   const uiActionInstructions = `\n\nDOSTĘP DO INTERFEJSU: Masz REALNĄ możliwość sterowania interfejsem JARVIS HUD poprzez narzędzie ${UI_ACTION_TOOL_NAME}. Gdy użytkownik prosi o otwarcie, zamknięcie, przełączenie widoku, restart, uśpienie lub wyłączenie systemu — NIGDY nie odmawiaj i NIE twierdź, że nie masz dostępu do interfejsu. Zawsze wywołaj ${UI_ACTION_TOOL_NAME} z właściwą wartością "action", nawet jeśli polecenie jest sformułowane luźno lub pośrednio (np. "przełącz mnie na X", "pokaż mi Y", "zamknij to", "wróć do głównego ekranu"). Dopiero gdy żadna z dostępnych akcji faktycznie nie pasuje do prośby, wyjaśnij czego brakuje — nigdy nie zgaduj, że nie masz takiej mocy.`;
 
-  const systemPrompt = `${basePrompt}${rosterBlock}${uiActionInstructions}`;
+  // Gemini has no notion of "now" — without this it guesses a plausible date
+  // from training data (observed: computing "za tydzień" as mid-2024). Always
+  // appended, same reasoning as uiActionInstructions below.
+  const now = new Date();
+  const dateInstructions = `\n\nAKTUALNA DATA I CZAS: ${now.toLocaleDateString("pl-PL", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "Europe/Warsaw",
+  })}, ${now.toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Warsaw" })} (ISO: ${now.toISOString()}). Używaj TEJ daty jako punktu odniesienia dla wszelkich względnych określeń czasu ("jutro", "za tydzień", "w przyszły poniedziałek" itp.) — nigdy nie zgaduj daty z pamięci.`;
+
+  const systemPrompt = `${basePrompt}${rosterBlock}${uiActionInstructions}${dateInstructions}`;
 
   // Model resolution: agent override → user default → hardcoded fallback.
   let model = agent.model?.trim() ?? "";

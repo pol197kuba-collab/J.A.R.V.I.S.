@@ -332,6 +332,70 @@ const saveNote: Tool = {
   },
 };
 
+const listNotesTool: Tool = {
+  declaration: {
+    name: "list_notes",
+    description:
+      "List or search the user's saved notes. Use this BEFORE delete_note to find the note's id — you have no memory of note ids across conversations.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Optional free-text search over title+body. Omit to list recent notes.",
+        },
+        limit: { type: "integer", description: "Max results (default 10, max 50)." },
+      },
+    },
+  },
+  async execute(args, ctx) {
+    const limit = clampInt(args.limit, 1, 50, 10);
+    let q = ctx.supabase
+      .from("notes")
+      .select("id, title, body, tags, created_at")
+      .eq("owner_id", ctx.userId);
+    const query = typeof args.query === "string" ? sanitizeForOrFilter(args.query) : "";
+    if (query) {
+      q = q.or(`title.ilike.%${query}%,body.ilike.%${query}%`);
+    }
+    const { data, error } = await q.order("created_at", { ascending: false }).limit(limit);
+    if (error) return { error: error.message };
+    return { count: data?.length ?? 0, notes: data ?? [] };
+  },
+};
+
+const deleteNote: Tool = {
+  declaration: {
+    name: "delete_note",
+    description:
+      "Delete a note by id. Use list_notes first if you don't already know the id — never guess it.",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "The note id (from save_note or list_notes)." },
+      },
+      required: ["id"],
+    },
+  },
+  async execute(args, ctx) {
+    const id = String(args.id ?? "").trim();
+    if (!id) return { error: "missing_id" };
+    const { data, error } = await ctx.supabase
+      .from("notes")
+      .delete()
+      .eq("id", id)
+      .eq("owner_id", ctx.userId)
+      .select("id, title")
+      .maybeSingle();
+    if (error) return { error: error.message };
+    if (!data) return { error: "note_not_found" };
+    await ctx.logEvent("info", "tool.delete_note", `note deleted: ${data.title}`, {
+      note_id: data.id,
+    } as Json);
+    return { ok: true, id: data.id };
+  },
+};
+
 // ---------------------------------------------------------------------------
 // remember — write a durable fact/preference to public.memories
 // ---------------------------------------------------------------------------
@@ -784,6 +848,38 @@ const updateTask: Tool = {
   },
 };
 
+const deleteTask: Tool = {
+  declaration: {
+    name: "delete_task",
+    description:
+      "Permanently delete a task by id. Prefer update_task with status 'cancelled' when the task is simply no longer relevant — use delete_task only when the user explicitly asks to remove/delete it.",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "The task id (from create_task or list_tasks)." },
+      },
+      required: ["id"],
+    },
+  },
+  async execute(args, ctx) {
+    const id = String(args.id ?? "").trim();
+    if (!id) return { error: "missing_id" };
+    const { data, error } = await ctx.supabase
+      .from("tasks")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", ctx.userId)
+      .select("id, title")
+      .maybeSingle();
+    if (error) return { error: error.message };
+    if (!data) return { error: "task_not_found" };
+    await ctx.logEvent("info", "tool.delete_task", `task deleted: ${data.title}`, {
+      task_id: data.id,
+    } as Json);
+    return { ok: true, id: data.id };
+  },
+};
+
 // Full catalog of tool *implementations* known to this codebase. This array
 // is the only place `execute` logic lives — it never shrinks based on DB
 // state, so a disabled tool's code stays available (just unreachable via the
@@ -793,11 +889,14 @@ export const ALL_TOOLS: Tool[] = [
   webSearch,
   fetchUrl,
   saveNote,
+  listNotesTool,
+  deleteNote,
   remember,
   recall,
   createTask,
   listTasks,
   updateTask,
+  deleteTask,
 ];
 
 export function getToolByName(name: string): Tool | undefined {
