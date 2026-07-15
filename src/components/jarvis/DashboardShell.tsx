@@ -158,6 +158,7 @@ function JarvisBackdrop() {
     <div className="jarvis-bg-root" aria-hidden>
       <div className="jarvis-bg-radials" />
       <div className="jarvis-bg-grid" />
+      <div className="jarvis-bg-scan" />
       <div className="jarvis-bg-particles">
         {particles.map((p) => (
           <span
