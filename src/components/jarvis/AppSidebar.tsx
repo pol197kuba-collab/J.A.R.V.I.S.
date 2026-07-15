@@ -53,8 +53,8 @@ export function AppSidebar() {
   const { isDiagnosticRunning } = useArkReboot();
 
   return (
-    <Sidebar collapsible="icon" className="border-r border-sidebar-border">
-      <SidebarHeader className="border-b border-sidebar-border">
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border/50 bg-[color:var(--surface-1)]/60 backdrop-blur-md">
+      <SidebarHeader className="border-b border-sidebar-border/40 bg-gradient-to-b from-primary/5 to-transparent">
         <div className="flex items-center gap-3 px-2 py-2">
           <MiniArcReactor size={36} />
           {(!collapsed || isMobile) && (
@@ -71,14 +71,14 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
+        <SidebarGroup className="px-2 py-2">
           {(!collapsed || isMobile) && (
-            <SidebarGroupLabel className="font-display text-[10px] uppercase tracking-[0.3em]">
+            <SidebarGroupLabel className="font-display text-[10px] uppercase tracking-[0.22em] text-primary/60">
               Modules
             </SidebarGroupLabel>
           )}
-          <SidebarGroupContent>
-            <SidebarMenu>
+          <SidebarGroupContent className="mt-1 rounded-[var(--radius-md)] border border-primary/10 bg-[color:var(--surface-1)]/70 p-1 shadow-[inset_0_1px_0_color-mix(in_oklab,var(--primary)_10%,transparent)]">
+            <SidebarMenu className="gap-1">
               {items.map((item) => {
                 const active = pathname === item.url;
                 return (
@@ -94,11 +94,15 @@ export function AppSidebar() {
                         if (isMobile) setOpenMobile(false);
                         go(item.url);
                       }}
-                      className="group data-[active=true]:bg-primary/10 data-[active=true]:text-primary hover:text-primary"
+                      className={cn(
+                        "group relative rounded-[var(--radius-md)] transition-all duration-200 hover:bg-[color:var(--surface-2)] hover:text-primary",
+                        "data-[active=true]:bg-primary/10 data-[active=true]:text-primary data-[active=true]:shadow-[var(--glow-soft)]",
+                        active && "before:absolute before:left-0 before:top-1/2 before:h-4 before:w-[2px] before:-translate-y-1/2 before:rounded-full before:bg-primary before:shadow-[0_0_8px_var(--primary)]",
+                      )}
                     >
                       <item.icon className="icon-neon h-4 w-4" strokeWidth={1.5} />
                       {(!collapsed || isMobile) && (
-                        <span className="font-display text-xs uppercase tracking-[0.2em]">
+                        <span className="font-display text-xs uppercase tracking-[0.18em]">
                           {item.title}
                         </span>
                       )}
@@ -115,7 +119,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       {(!collapsed || isMobile) && (
-        <SidebarFooter className="border-t border-sidebar-border">
+        <SidebarFooter className="border-t border-sidebar-border/40 bg-gradient-to-t from-primary/5 to-transparent">
           <ArcCorePanel />
           <div className="space-y-1 px-2 py-2">
             <div className="flex items-center justify-between text-[10px] font-display uppercase tracking-widest">
