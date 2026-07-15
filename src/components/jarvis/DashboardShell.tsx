@@ -69,15 +69,7 @@ function DashboardShellInner({
 
   return (
     <div className="relative flex min-h-screen w-full bg-background text-foreground portrait:h-[100dvh] portrait:min-h-0 portrait:overflow-hidden landscape:max-md:h-[100dvh] landscape:max-md:min-h-0 landscape:max-md:overflow-hidden short:h-[100dvh] short:min-h-0 short:overflow-hidden">
-      <div className="bg-grid pointer-events-none fixed inset-0 opacity-30" aria-hidden />
-      <div
-        className="pointer-events-none fixed inset-0 opacity-60"
-        aria-hidden
-        style={{
-          background:
-            "radial-gradient(ellipse at 50% -10%, oklch(0.55 0.18 200 / 0.10), transparent 55%), radial-gradient(ellipse at 80% 100%, oklch(0.5 0.18 200 / 0.06), transparent 60%)",
-        }}
-      />
+      <JarvisBackdrop />
       <AppSidebar />
       <div className="relative flex min-h-screen min-w-0 flex-1 flex-col portrait:min-h-0 landscape:max-md:min-h-0 short:min-h-0">
         <header className="sticky top-0 z-10 flex h-12 min-w-0 items-center gap-2 overflow-hidden border-b border-primary/30 bg-black/70 px-4 backdrop-blur portrait:h-10 landscape:max-md:h-8 landscape:max-md:gap-1.5 landscape:max-md:px-2 short:h-8 short:gap-1.5 short:px-2">
