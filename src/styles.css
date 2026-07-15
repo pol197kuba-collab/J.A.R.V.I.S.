@@ -417,20 +417,52 @@
 /* Sharp HUD panel — used across the JARVIS surface */
 .hud-panel {
   position: relative;
-  border: 1px solid color-mix(in oklab, var(--primary) 18%, transparent);
+  border: 1px solid color-mix(in oklab, var(--primary) 20%, transparent);
   background:
+    linear-gradient(180deg, color-mix(in oklab, var(--primary) 4%, transparent), transparent 40%),
     var(--gradient-panel),
-    linear-gradient(180deg, color-mix(in oklab, var(--surface-2) 92%, transparent), color-mix(in oklab, #000 90%, transparent));
-  box-shadow: var(--glow-soft);
+    linear-gradient(180deg, color-mix(in oklab, var(--surface-2) 94%, transparent), color-mix(in oklab, #000 92%, transparent));
+  box-shadow:
+    0 1px 0 color-mix(in oklab, var(--primary) 22%, transparent) inset,
+    0 0 0 1px color-mix(in oklab, var(--primary) 8%, transparent) inset,
+    0 24px 60px -32px color-mix(in oklab, var(--primary) 55%, transparent),
+    0 8px 24px -12px oklch(0 0 0 / 0.7);
   border-radius: var(--radius);
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(10px) saturate(120%);
   transition: box-shadow .25s ease, transform .25s ease, border-color .25s ease;
+  overflow: hidden;
+}
+.hud-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(120% 60% at 50% -20%, color-mix(in oklab, var(--primary) 18%, transparent), transparent 60%);
+  pointer-events: none;
+  opacity: 0.9;
+}
+.hud-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, transparent 0, transparent 50%, color-mix(in oklab, var(--primary) 6%, transparent) 100%);
+  pointer-events: none;
+  mix-blend-mode: screen;
 }
 .hud-panel:hover {
-  border-color: color-mix(in oklab, var(--primary) 32%, transparent);
-  box-shadow: var(--glow-md);
+  border-color: color-mix(in oklab, var(--primary) 38%, transparent);
+  box-shadow:
+    0 1px 0 color-mix(in oklab, var(--primary) 30%, transparent) inset,
+    0 0 0 1px color-mix(in oklab, var(--primary) 14%, transparent) inset,
+    0 30px 70px -30px color-mix(in oklab, var(--primary) 70%, transparent),
+    0 12px 30px -12px oklch(0 0 0 / 0.75);
   transform: translateY(-1px);
 }
+/* Push panel content above ::before/::after decorative layers */
+.hud-panel > * { position: relative; z-index: 1; }
 
 /* Four corner brackets */
 .hud-corner {
