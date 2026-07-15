@@ -338,7 +338,7 @@ export type Database = {
         Row: {
           agent_id: string | null
           created_at: string
-          embedding: Json | null
+          embedding: string | null
           id: string
           importance: number
           key: string | null
@@ -352,7 +352,7 @@ export type Database = {
         Insert: {
           agent_id?: string | null
           created_at?: string
-          embedding?: Json | null
+          embedding?: string | null
           id?: string
           importance?: number
           key?: string | null
@@ -366,7 +366,7 @@ export type Database = {
         Update: {
           agent_id?: string | null
           created_at?: string
-          embedding?: Json | null
+          embedding?: string | null
           id?: string
           importance?: number
           key?: string | null
@@ -703,6 +703,22 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      match_memories: {
+        Args: {
+          query_embedding: string
+          match_count?: number
+          min_similarity?: number
+        }
+        Returns: {
+          id: string
+          key: string | null
+          value: string
+          tags: string[]
+          importance: number
+          updated_at: string
+          similarity: number
+        }[]
       }
     }
     Enums: {

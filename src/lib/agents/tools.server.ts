@@ -17,6 +17,8 @@ import type { Database, Json } from "@/integrations/supabase/types";
 export type ToolContext = {
   supabase: SupabaseClient<Database>;
   userId: string;
+  /** agents.id of the agent whose run is executing this tool. */
+  agentId: string;
   runId: string;
   apiKey: string;
   model: string;
@@ -340,6 +342,58 @@ const clampInt = (v: unknown, min: number, max: number, fallback: number): numbe
   return Math.min(max, Math.max(min, Math.round(n)));
 };
 
+// Dimensionality of the vector(768) column in public.memories. Must match
+// the migration (20260715..._semantic_memory.sql) and the value requested
+// from Gemini below.
+const EMBED_DIMS = 768;
+const EMBED_MODEL = "gemini-embedding-001";
+
+// Turn text into a 768-dim embedding via the user's own Gemini key. Best
+// effort by design: any failure (no quota, network, HTTP error, malformed
+// response) returns null so the caller falls back to keyword search instead
+// of failing the whole tool. `taskType` steers Gemini to produce embeddings
+// tuned for either the stored document or the search query.
+async function embedText(
+  text: string,
+  apiKey: string,
+  taskType: "RETRIEVAL_DOCUMENT" | "RETRIEVAL_QUERY",
+): Promise<number[] | null> {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10_000);
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${EMBED_MODEL}:embedContent?key=${encodeURIComponent(
+        apiKey,
+      )}`,
+      {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: `models/${EMBED_MODEL}`,
+          content: { parts: [{ text: trimmed.slice(0, 8_000) }] },
+          taskType,
+          outputDimensionality: EMBED_DIMS,
+        }),
+      },
+    );
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { embedding?: { values?: number[] } };
+    const values = data.embedding?.values;
+    if (!Array.isArray(values) || values.length !== EMBED_DIMS) return null;
+    return values;
+  } catch {
+    return null;
+  }
+}
+
+// supabase-js serialises a vector column value as a JSON-array string, e.g.
+// "[0.12,-0.03,…]". Kept as a tiny helper so remember/recall agree on format.
+const toVectorLiteral = (values: number[]): string => JSON.stringify(values);
+
 const remember: Tool = {
   declaration: {
     name: "remember",
@@ -381,6 +435,11 @@ const remember: Tool = {
       .slice(0, 20);
     const importance = clampInt(args.importance, 1, 5, 3);
 
+    // Embed the value so `recall` can find it by meaning. Best-effort: a null
+    // embedding just means this row is keyword-only searchable for now.
+    const embedding = await embedText(value, ctx.apiKey, "RETRIEVAL_DOCUMENT");
+    const embeddingPatch = embedding ? { embedding: toVectorLiteral(embedding) } : {};
+
     // Upsert-by-key: a stable key means "this is the same fact, update it"
     // rather than piling up duplicates every time the user restates it.
     if (key) {
@@ -393,12 +452,13 @@ const remember: Tool = {
       if (existing) {
         const { error } = await ctx.supabase
           .from("memories")
-          .update({ value, tags, importance, source: "orchestrator" })
+          .update({ value, tags, importance, source: "orchestrator", ...embeddingPatch })
           .eq("id", existing.id);
         if (error) return { error: error.message };
         await ctx.logEvent("info", "tool.remember", `updated memory: ${key}`, {
           memory_id: existing.id,
           key,
+          embedded: Boolean(embedding),
         } as Json);
         return { ok: true, id: existing.id, key, updated: true };
       }
@@ -408,12 +468,14 @@ const remember: Tool = {
       .from("memories")
       .insert({
         user_id: ctx.userId,
+        agent_id: ctx.agentId,
         kind: "fact",
         key,
         value,
         tags,
         importance,
         source: "orchestrator",
+        ...embeddingPatch,
       })
       .select("id")
       .single();
@@ -421,6 +483,7 @@ const remember: Tool = {
     await ctx.logEvent("info", "tool.remember", `saved memory${key ? `: ${key}` : ""}`, {
       memory_id: data.id,
       key,
+      embedded: Boolean(embedding),
     } as Json);
     return { ok: true, id: data.id, key, updated: false };
   },
@@ -458,38 +521,83 @@ const recall: Tool = {
   },
   async execute(args, ctx) {
     const limit = clampInt(args.limit, 1, 25, 8);
+    const rawQuery = typeof args.query === "string" ? args.query.trim() : "";
+    const tags = (Array.isArray(args.tags) ? args.tags : [])
+      .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+      .map((t) => t.trim());
+
+    type Hit = {
+      id: string;
+      key: string | null;
+      value: string;
+      tags: string[];
+      importance: number;
+      updated_at: string;
+      similarity?: number;
+    };
+    const merged: Hit[] = [];
+    const seen = new Set<string>();
+    const push = (rows: Hit[] | null | undefined) => {
+      for (const r of rows ?? []) {
+        if (seen.has(r.id)) continue;
+        if (tags.length > 0 && !r.tags.some((t) => tags.includes(t))) continue;
+        seen.add(r.id);
+        merged.push(r);
+      }
+    };
+
+    // 1. Semantic pass — embed the query and rank by cosine similarity.
+    //    Best-effort: skipped entirely if there's no query text or embedding
+    //    fails (no key/quota/network), leaving the keyword pass to cover it.
+    let semanticUsed = false;
+    if (rawQuery) {
+      const queryEmbedding = await embedText(rawQuery, ctx.apiKey, "RETRIEVAL_QUERY");
+      if (queryEmbedding) {
+        const { data: sem, error: semErr } = await ctx.supabase.rpc("match_memories", {
+          query_embedding: toVectorLiteral(queryEmbedding),
+          match_count: limit,
+        });
+        if (!semErr) {
+          semanticUsed = true;
+          push(sem as Hit[] | null);
+        }
+      }
+    }
+
+    // 2. Keyword / recency pass — ILIKE on value+key (or recent memories when
+    //    no query). Always runs so exact word hits and pre-embedding rows are
+    //    never lost, and it backfills up to `limit` after semantic hits.
     let q = ctx.supabase
       .from("memories")
       .select("id, key, value, tags, importance, updated_at")
       .eq("user_id", ctx.userId);
-
-    const query = typeof args.query === "string" ? sanitizeForOrFilter(args.query) : "";
-    if (query) {
-      q = q.or(`value.ilike.%${query}%,key.ilike.%${query}%`);
+    const kwQuery = rawQuery ? sanitizeForOrFilter(rawQuery) : "";
+    if (kwQuery) {
+      q = q.or(`value.ilike.%${kwQuery}%,key.ilike.%${kwQuery}%`);
     }
-    const tags = (Array.isArray(args.tags) ? args.tags : [])
-      .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
-      .map((t) => t.trim());
     if (tags.length > 0) {
       q = q.overlaps("tags", tags);
     }
-
-    const { data, error } = await q
+    const { data: kw, error } = await q
       .order("importance", { ascending: false })
       .order("updated_at", { ascending: false })
       .limit(limit);
-    if (error) return { error: error.message };
+    if (error && merged.length === 0) return { error: error.message };
+    push(kw as Hit[] | null);
+
+    const results = merged.slice(0, limit);
     await ctx.logEvent(
       "info",
       "tool.recall",
-      `${query || "(recent)"} → ${data?.length ?? 0} hits`,
+      `${rawQuery || "(recent)"} → ${results.length} hits${semanticUsed ? " (semantic)" : ""}`,
       {
-        query,
+        query: rawQuery,
         tags,
-        hits: data?.length ?? 0,
+        hits: results.length,
+        semantic: semanticUsed,
       } as Json,
     );
-    return { count: data?.length ?? 0, memories: data ?? [] };
+    return { count: results.length, memories: results };
   },
 };
 
@@ -552,6 +660,7 @@ const createTask: Tool = {
       .from("tasks")
       .insert({
         user_id: ctx.userId,
+        created_by_agent: ctx.agentId,
         title,
         details,
         assignee_slug: assignee,

@@ -31,6 +31,7 @@ const UI_ACTIONS = [
   "open_agents",
   "open_settings",
   "open_logs",
+  "open_tasks",
   "open_subsystems",
   "vision_scan",
 ] as const;
@@ -465,6 +466,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
             response = await tool.execute(call.args ?? {}, {
               supabase,
               userId,
+              agentId: agent.id,
               runId,
               apiKey,
               model,

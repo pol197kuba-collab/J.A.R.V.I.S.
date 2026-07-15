@@ -137,6 +137,7 @@ type LocalAction =
   | "agents"
   | "settings"
   | "logs"
+  | "tasks"
   | "subsystems"
   | "vision_scan";
 
@@ -156,6 +157,7 @@ const ACTION_MAP: Record<JarvisAction, LocalAction | null> = {
   open_agents: "agents",
   open_settings: "settings",
   open_logs: "logs",
+  open_tasks: "tasks",
   open_subsystems: "subsystems",
   vision_scan: "vision_scan",
 };
@@ -170,6 +172,7 @@ const COMMANDS: Array<{ re: RegExp; action: LocalAction }> = [
   { re: /\b(open\s+agents?|agent\s+hub|otwórz\s+agentów|otworz\s+agentow|pokaż\s+agentów|pokaz\s+agentow)\b/i, action: "agents" },
   { re: /\b(open\s+settings|otwórz\s+ustawienia|otworz\s+ustawienia|pokaż\s+ustawienia|pokaz\s+ustawienia|konfiguracja)\b/i, action: "settings" },
   { re: /\b(open\s+logs|system\s+logs|otwórz\s+logi|otworz\s+logi|pokaż\s+logi|pokaz\s+logi|dziennik\s+systemu)\b/i, action: "logs" },
+  { re: /\b(open\s+tasks?|task\s+queue|otwórz\s+zadania|otworz\s+zadania|pokaż\s+zadania|pokaz\s+zadania|moje\s+zadania|lista\s+zadań|lista\s+zadan)\b/i, action: "tasks" },
   { re: /\b(open\s+sub[-\s]?systems|otwórz\s+podsystemy|otworz\s+podsystemy|pokaż\s+podsystemy|pokaz\s+podsystemy)\b/i, action: "subsystems" },
   { re: /\b(co\s+widzisz|powiedz\s+co\s+widzisz|zeskanuj\s+otoczenie|przeskanuj\s+otoczenie|skanuj\s+otoczenie|zeskanuj\s+to|what\s+do\s+you\s+see|scan\s+(?:the\s+)?(?:room|area|surroundings)|vision\s+scan)\b/i, action: "vision_scan" },
   // Interface
@@ -279,6 +282,10 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       case "logs":
         say("Otwieram dziennik systemu.");
         go("/system-logs");
+        break;
+      case "tasks":
+        say("Otwieram kolejkę zadań, sir.");
+        go("/tasks");
         break;
       case "subsystems":
         say("Otwieram podsystemy.");

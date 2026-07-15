@@ -108,6 +108,7 @@ export type JarvisAction =
   | "open_agents"
   | "open_settings"
   | "open_logs"
+  | "open_tasks"
   | "open_subsystems"
   | "vision_scan";
 
@@ -139,7 +140,11 @@ INVALID examples (do NOT do this):
 
 Allowed values for "action": none, open_dashboard, open_fuel, open_calculator,
 open_jobfit, open_telemetry, open_menu, close_menu, system_check, sleep, shutdown, reboot,
-open_agents, open_settings, open_logs, open_subsystems, vision_scan.
+open_agents, open_settings, open_logs, open_tasks, open_subsystems, vision_scan.
+
+- Użyj "open_tasks", gdy użytkownik prosi o otwarcie zadań / listy zadań /
+  kolejki zadań (np. "otwórz zadania", "pokaż zadania", "moje zadania",
+  "open tasks", "task queue").
 
 - Użyj "reboot" dla każdej formy: reboot, restart, zrestartuj system, zresetuj,
   reset, ark reboot. Linia "speech" powinna potwierdzić uruchomienie

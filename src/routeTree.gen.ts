@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VisionRouteImport } from './routes/vision'
+import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as SystemLogsRouteImport } from './routes/system-logs'
 import { Route as SubSystemsRouteImport } from './routes/sub-systems'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -22,6 +23,11 @@ import { Route as AgentHubSlugRouteImport } from './routes/agent-hub_.$slug'
 const VisionRoute = VisionRouteImport.update({
   id: '/vision',
   path: '/vision',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TasksRoute = TasksRouteImport.update({
+  id: '/tasks',
+  path: '/tasks',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SystemLogsRoute = SystemLogsRouteImport.update({
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
+  '/tasks': typeof TasksRoute
   '/vision': typeof VisionRoute
   '/agent-hub/$slug': typeof AgentHubSlugRoute
 }
@@ -84,6 +91,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
+  '/tasks': typeof TasksRoute
   '/vision': typeof VisionRoute
   '/agent-hub/$slug': typeof AgentHubSlugRoute
 }
@@ -96,6 +104,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
+  '/tasks': typeof TasksRoute
   '/vision': typeof VisionRoute
   '/agent-hub_/$slug': typeof AgentHubSlugRoute
 }
@@ -109,6 +118,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sub-systems'
     | '/system-logs'
+    | '/tasks'
     | '/vision'
     | '/agent-hub/$slug'
   fileRoutesByTo: FileRoutesByTo
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sub-systems'
     | '/system-logs'
+    | '/tasks'
     | '/vision'
     | '/agent-hub/$slug'
   id:
@@ -131,6 +142,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sub-systems'
     | '/system-logs'
+    | '/tasks'
     | '/vision'
     | '/agent-hub_/$slug'
   fileRoutesById: FileRoutesById
@@ -143,6 +155,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   SubSystemsRoute: typeof SubSystemsRoute
   SystemLogsRoute: typeof SystemLogsRoute
+  TasksRoute: typeof TasksRoute
   VisionRoute: typeof VisionRoute
   AgentHubSlugRoute: typeof AgentHubSlugRoute
 }
@@ -154,6 +167,13 @@ declare module '@tanstack/react-router' {
       path: '/vision'
       fullPath: '/vision'
       preLoaderRoute: typeof VisionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tasks': {
+      id: '/tasks'
+      path: '/tasks'
+      fullPath: '/tasks'
+      preLoaderRoute: typeof TasksRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/system-logs': {
@@ -223,6 +243,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   SubSystemsRoute: SubSystemsRoute,
   SystemLogsRoute: SystemLogsRoute,
+  TasksRoute: TasksRoute,
   VisionRoute: VisionRoute,
   AgentHubSlugRoute: AgentHubSlugRoute,
 }

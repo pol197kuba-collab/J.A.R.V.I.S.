@@ -1,6 +1,15 @@
 import { useRouterState } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Bot, Terminal, Settings as SettingsIcon, Boxes, Radar, Eye } from "lucide-react";
+import {
+  LayoutDashboard,
+  Bot,
+  Terminal,
+  Settings as SettingsIcon,
+  Boxes,
+  Radar,
+  Eye,
+  ListChecks,
+} from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -28,6 +37,7 @@ import { useArkReboot } from "./ArkRebootContext";
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Agent Hub", url: "/agent-hub", icon: Bot },
+  { title: "Tasks", url: "/tasks", icon: ListChecks },
   { title: "Sub-Systems", url: "/sub-systems", icon: Boxes },
   { title: "Geo-Tracking", url: "/geo-tracking", icon: Radar },
   { title: "Vision", url: "/vision", icon: Eye },
