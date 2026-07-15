@@ -74,9 +74,9 @@ function DashboardShellInner({
         <AppSidebar />
       </div>
       <div className="relative z-10 flex min-h-screen min-w-0 flex-1 flex-col portrait:min-h-0 landscape:max-md:min-h-0 short:min-h-0">
-        <header className="sticky top-0 z-10 flex h-12 min-w-0 items-center gap-2 overflow-hidden border-b border-primary/30 bg-black/70 px-4 backdrop-blur portrait:h-10 landscape:max-md:h-8 landscape:max-md:gap-1.5 landscape:max-md:px-2 short:h-8 short:gap-1.5 short:px-2">
+        <header className="sticky top-0 z-10 flex h-12 min-w-0 items-center gap-2 overflow-hidden border-b border-primary/20 bg-gradient-to-b from-black/80 to-black/50 px-4 backdrop-blur-xl shadow-[0_8px_24px_-16px_color-mix(in_oklab,var(--primary)_60%,transparent)] portrait:h-10 landscape:max-md:h-8 landscape:max-md:gap-1.5 landscape:max-md:px-2 short:h-8 short:gap-1.5 short:px-2">
           <HudMenuTrigger />
-          <div className="h-4 w-px bg-primary/40" />
+          <div className="h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent" />
           <MiniArcReactor size={20} />
           <span className="font-display text-[10px] uppercase tracking-[0.3em] text-primary/80 portrait:hidden landscape:max-md:text-[8px] landscape:max-md:tracking-[0.2em] short:hidden">
             J.A.R.V.I.S. // STARK SECURE TERMINAL
@@ -92,13 +92,13 @@ function DashboardShellInner({
             >
               All Systems Nominal
             </span>
-            <div className="ml-3 h-4 w-px bg-primary/40 portrait:ml-1" />
+            <div className="ml-3 h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent portrait:ml-1" />
             <HeaderVoiceToggle />
-            <div className="h-4 w-px bg-primary/40" />
+            <div className="h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent" />
             <RebootButton />
-            <div className="h-4 w-px bg-primary/40 portrait:hidden short:hidden" />
+            <div className="h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent portrait:hidden short:hidden" />
             <FullscreenToggle />
-            <div className="h-4 w-px bg-primary/40" />
+            <div className="h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent" />
             <DeactivateButton onClick={onShutdown} />
           </div>
         </header>
@@ -135,7 +135,7 @@ function HudMenuTrigger() {
         else toggleSidebar();
       }}
       aria-label="Open menu"
-      className="font-display group relative flex items-center gap-1.5 border border-primary/60 bg-primary/5 px-2 py-1 text-[10px] uppercase tracking-[0.3em] text-primary shadow-[0_0_10px_rgba(56,189,248,0.35)] transition hover:bg-primary/15 hover:text-foreground landscape:max-md:px-1.5 landscape:max-md:py-0.5 landscape:max-md:text-[8px] landscape:max-md:tracking-[0.2em]"
+      className="font-display group relative flex items-center gap-1.5 rounded-md border border-primary/40 bg-gradient-to-b from-primary/10 to-primary/[0.02] px-2.5 py-1 text-[10px] uppercase tracking-[0.28em] text-primary shadow-[inset_0_1px_0_color-mix(in_oklab,var(--primary)_20%,transparent),0_0_12px_-4px_color-mix(in_oklab,var(--primary)_60%,transparent)] transition-all duration-200 hover:border-primary/70 hover:bg-primary/15 hover:text-foreground hover:shadow-[inset_0_1px_0_color-mix(in_oklab,var(--primary)_30%,transparent),0_0_18px_-4px_var(--primary)] landscape:max-md:px-1.5 landscape:max-md:py-0.5 landscape:max-md:text-[8px] landscape:max-md:tracking-[0.2em]"
     >
       <Menu className="h-3.5 w-3.5 landscape:max-md:h-3 landscape:max-md:w-3" strokeWidth={1.5} />
       <span className="portrait:hidden">MENU // SYS</span>
@@ -158,6 +158,7 @@ function JarvisBackdrop() {
     <div className="jarvis-bg-root" aria-hidden>
       <div className="jarvis-bg-radials" />
       <div className="jarvis-bg-grid" />
+      <div className="jarvis-bg-scan" />
       <div className="jarvis-bg-particles">
         {particles.map((p) => (
           <span
@@ -194,7 +195,7 @@ function FullscreenToggle() {
         void toggleAppFullscreen();
       }}
       aria-label={active ? "Exit fullscreen" : "Enter fullscreen"}
-      className="flex items-center justify-center border border-primary/50 bg-primary/5 p-1 text-primary transition hover:bg-primary/15 hover:text-foreground portrait:hidden"
+      className="flex items-center justify-center rounded-md border border-primary/40 bg-primary/[0.06] p-1.5 text-primary shadow-[inset_0_1px_0_color-mix(in_oklab,var(--primary)_18%,transparent)] transition-all duration-200 hover:border-primary/70 hover:bg-primary/15 hover:text-foreground hover:shadow-[0_0_12px_-4px_var(--primary)] portrait:hidden"
     >
       <Icon className="h-3 w-3" strokeWidth={1.75} />
     </button>

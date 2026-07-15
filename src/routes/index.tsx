@@ -23,14 +23,41 @@ export const Route = createFileRoute("/")({
 function Index() {
   return (
     <div className="relative space-y-6 p-6 landscape:max-md:max-h-full landscape:max-md:space-y-1.5 landscape:max-md:overflow-hidden landscape:max-md:p-1.5">
-      <HudPanel index={0} title="COMMAND // OVERVIEW" className="p-5 landscape:max-md:p-2">
-        <div className="flex flex-wrap items-end justify-between gap-2 pt-3 landscape:max-md:gap-1 landscape:max-md:pt-1">
-          <h1 className="font-display text-3xl font-bold tracking-[0.18em] text-foreground landscape:max-md:text-[11px] landscape:max-md:leading-none landscape:max-md:tracking-[0.1em]">
-            SYSTEM OPERATIONAL // WELCOME, MR. SLAWINSKY
-          </h1>
-          <p className="max-w-md text-sm text-muted-foreground landscape:max-md:text-[9px] landscape:max-md:leading-tight">
-            All subsystems are operating within acceptable parameters. Standing by for next directive, Mr. Slawinsky.
-          </p>
+      <HudPanel index={0} title="COMMAND // OVERVIEW" className="relative overflow-hidden p-8 landscape:max-md:p-2">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full opacity-60 blur-3xl landscape:max-md:hidden"
+          style={{
+            background:
+              "radial-gradient(circle at center, oklch(0.85 0.18 210 / 0.35), transparent 70%)",
+          }}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute right-8 top-1/2 hidden -translate-y-1/2 opacity-40 md:block"
+        >
+          <div className="relative h-32 w-32">
+            <div className="absolute inset-0 rounded-full border border-primary/40 animate-ring-spin" />
+            <div className="absolute inset-3 rounded-full border border-dashed border-primary/30 animate-ring-spin-rev" />
+            <div className="absolute inset-6 rounded-full border border-primary/60 shadow-[0_0_24px_var(--primary)]" />
+            <div className="absolute inset-11 rounded-full bg-primary/80 shadow-[0_0_18px_var(--primary)]" />
+          </div>
+        </div>
+        <div className="relative flex flex-wrap items-end justify-between gap-4 pt-4 landscape:max-md:gap-1 landscape:max-md:pt-1">
+          <div className="max-w-2xl space-y-3 landscape:max-md:space-y-1">
+            <p className="font-display text-[10px] uppercase tracking-[0.4em] text-primary/70 landscape:max-md:text-[8px]">
+              ▸ Stark Industries · Operating System
+            </p>
+            <h1 className="font-display text-4xl font-bold leading-tight tracking-[0.14em] text-foreground landscape:max-md:text-[11px] landscape:max-md:leading-none landscape:max-md:tracking-[0.1em]">
+              SYSTEM OPERATIONAL
+              <span className="block text-primary/90 mt-1 text-2xl tracking-[0.2em] landscape:max-md:mt-0 landscape:max-md:text-[10px]">
+                WELCOME, MR. SLAWINSKY
+              </span>
+            </h1>
+            <p className="max-w-md text-sm leading-relaxed text-muted-foreground landscape:max-md:text-[9px] landscape:max-md:leading-tight">
+              All subsystems are operating within acceptable parameters. Standing by for next directive.
+            </p>
+          </div>
         </div>
       </HudPanel>
 
