@@ -777,3 +777,58 @@
   100% { transform: translateX(30%); opacity: 0; letter-spacing: 0.6em; }
 }
 .animate-log-streak { animation: log-streak 700ms cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+
+/* =========================
+   Ambient background layers
+   ========================= */
+.jarvis-bg-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+.jarvis-bg-grid {
+  position: absolute; inset: 0;
+  background-image: var(--grid-bg);
+  background-size: 48px 48px;
+  opacity: 0.28;
+  animation: grid-pan 30s linear infinite;
+  mask-image: radial-gradient(ellipse at center, black 40%, transparent 90%);
+}
+.jarvis-bg-radials {
+  position: absolute; inset: -10%;
+  background:
+    radial-gradient(ellipse 60% 45% at 15% 20%, oklch(0.7 0.18 210 / 0.18), transparent 65%),
+    radial-gradient(ellipse 55% 45% at 85% 80%, oklch(0.65 0.16 200 / 0.16), transparent 65%),
+    radial-gradient(ellipse 40% 35% at 50% 110%, oklch(0.6 0.14 195 / 0.12), transparent 60%);
+  filter: blur(20px);
+  mix-blend-mode: screen;
+  opacity: 0.9;
+}
+.jarvis-bg-vignette {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at center, transparent 55%, oklch(0 0 0 / 0.75) 100%);
+}
+.jarvis-bg-particles {
+  position: absolute; inset: 0;
+}
+@keyframes hud-particle-drift {
+  0%   { transform: translate(0, 0) scale(0.6); opacity: 0; }
+  15%  { opacity: 1; }
+  100% { transform: translate(var(--px, 0), var(--py, -80px)) scale(1); opacity: 0; }
+}
+.hud-particle {
+  position: absolute;
+  width: 2px; height: 2px;
+  border-radius: 9999px;
+  background: oklch(0.9 0.15 210);
+  box-shadow: 0 0 6px oklch(0.85 0.18 210 / 0.9), 0 0 14px oklch(0.75 0.18 210 / 0.5);
+  animation: hud-particle-drift var(--dur, 12s) linear infinite;
+  animation-delay: var(--delay, 0s);
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jarvis-bg-grid, .hud-particle { animation: none; }
+}
