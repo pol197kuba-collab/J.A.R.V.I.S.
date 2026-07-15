@@ -69,17 +69,11 @@ function DashboardShellInner({
 
   return (
     <div className="relative flex min-h-screen w-full bg-background text-foreground portrait:h-[100dvh] portrait:min-h-0 portrait:overflow-hidden landscape:max-md:h-[100dvh] landscape:max-md:min-h-0 landscape:max-md:overflow-hidden short:h-[100dvh] short:min-h-0 short:overflow-hidden">
-      <div className="bg-grid pointer-events-none fixed inset-0 opacity-30" aria-hidden />
-      <div
-        className="pointer-events-none fixed inset-0 opacity-60"
-        aria-hidden
-        style={{
-          background:
-            "radial-gradient(ellipse at 50% -10%, oklch(0.55 0.18 200 / 0.10), transparent 55%), radial-gradient(ellipse at 80% 100%, oklch(0.5 0.18 200 / 0.06), transparent 60%)",
-        }}
-      />
-      <AppSidebar />
-      <div className="relative flex min-h-screen min-w-0 flex-1 flex-col portrait:min-h-0 landscape:max-md:min-h-0 short:min-h-0">
+      <JarvisBackdrop />
+      <div className="relative z-10 contents">
+        <AppSidebar />
+      </div>
+      <div className="relative z-10 flex min-h-screen min-w-0 flex-1 flex-col portrait:min-h-0 landscape:max-md:min-h-0 short:min-h-0">
         <header className="sticky top-0 z-10 flex h-12 min-w-0 items-center gap-2 overflow-hidden border-b border-primary/30 bg-black/70 px-4 backdrop-blur portrait:h-10 landscape:max-md:h-8 landscape:max-md:gap-1.5 landscape:max-md:px-2 short:h-8 short:gap-1.5 short:px-2">
           <HudMenuTrigger />
           <div className="h-4 w-px bg-primary/40" />
@@ -146,6 +140,42 @@ function HudMenuTrigger() {
       <Menu className="h-3.5 w-3.5 landscape:max-md:h-3 landscape:max-md:w-3" strokeWidth={1.5} />
       <span className="portrait:hidden">MENU // SYS</span>
     </button>
+  );
+}
+
+function JarvisBackdrop() {
+  const particles = Array.from({ length: 14 }).map((_, i) => {
+    const seed = i * 97 + 13;
+    const left = (seed * 37) % 100;
+    const top = (seed * 53) % 100;
+    const px = ((seed * 17) % 80) - 40;
+    const py = -60 - ((seed * 23) % 80);
+    const dur = 10 + ((seed * 7) % 12);
+    const delay = ((seed * 11) % 100) / 10;
+    return { i, left, top, px, py, dur, delay };
+  });
+  return (
+    <div className="jarvis-bg-root" aria-hidden>
+      <div className="jarvis-bg-radials" />
+      <div className="jarvis-bg-grid" />
+      <div className="jarvis-bg-particles">
+        {particles.map((p) => (
+          <span
+            key={p.i}
+            className="hud-particle"
+            style={{
+              left: `${p.left}%`,
+              top: `${p.top}%`,
+              ["--px" as string]: `${p.px}px`,
+              ["--py" as string]: `${p.py}px`,
+              ["--dur" as string]: `${p.dur}s`,
+              ["--delay" as string]: `${p.delay}s`,
+            }}
+          />
+        ))}
+      </div>
+      <div className="jarvis-bg-vignette" />
+    </div>
   );
 }
 
