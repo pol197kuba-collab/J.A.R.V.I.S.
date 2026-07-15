@@ -706,18 +706,18 @@ export type Database = {
       }
       match_memories: {
         Args: {
-          query_embedding: string
           match_count?: number
           min_similarity?: number
+          query_embedding: string
         }
         Returns: {
           id: string
-          key: string | null
-          value: string
-          tags: string[]
           importance: number
-          updated_at: string
+          key: string
           similarity: number
+          tags: string[]
+          updated_at: string
+          value: string
         }[]
       }
     }
