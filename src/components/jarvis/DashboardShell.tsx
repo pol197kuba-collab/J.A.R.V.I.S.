@@ -141,6 +141,42 @@ function HudMenuTrigger() {
   );
 }
 
+function JarvisBackdrop() {
+  const particles = Array.from({ length: 14 }).map((_, i) => {
+    const seed = i * 97 + 13;
+    const left = (seed * 37) % 100;
+    const top = (seed * 53) % 100;
+    const px = ((seed * 17) % 80) - 40;
+    const py = -60 - ((seed * 23) % 80);
+    const dur = 10 + ((seed * 7) % 12);
+    const delay = ((seed * 11) % 100) / 10;
+    return { i, left, top, px, py, dur, delay };
+  });
+  return (
+    <div className="jarvis-bg-root" aria-hidden>
+      <div className="jarvis-bg-radials" />
+      <div className="jarvis-bg-grid" />
+      <div className="jarvis-bg-particles">
+        {particles.map((p) => (
+          <span
+            key={p.i}
+            className="hud-particle"
+            style={{
+              left: `${p.left}%`,
+              top: `${p.top}%`,
+              ["--px" as string]: `${p.px}px`,
+              ["--py" as string]: `${p.py}px`,
+              ["--dur" as string]: `${p.dur}s`,
+              ["--delay" as string]: `${p.delay}s`,
+            }}
+          />
+        ))}
+      </div>
+      <div className="jarvis-bg-vignette" />
+    </div>
+  );
+}
+
 function FullscreenToggle() {
   const [active, setActive] = useState(false);
   useEffect(() => {
