@@ -68,7 +68,7 @@
 }
 
 :root {
-  --radius: 0rem;
+  --radius: 0.875rem;
   /* JARVIS dark palette */
   --background: oklch(0 0 0);
   --foreground: oklch(0.96 0.02 210);
@@ -81,7 +81,7 @@
   --secondary: oklch(0.04 0 0);
   --secondary-foreground: oklch(0.96 0.02 210);
   --muted: oklch(0.04 0 0);
-  --muted-foreground: oklch(0.7 0.08 200);
+  --muted-foreground: oklch(0.78 0.08 200);
   --accent: oklch(0.85 0.18 200);
   --accent-foreground: oklch(0.05 0.02 230);
   --destructive: oklch(0.7 0.24 25);
@@ -109,6 +109,23 @@
   --grid-bg:
     linear-gradient(oklch(0.88 0.17 200 / 0.06) 1px, transparent 1px),
     linear-gradient(90deg, oklch(0.88 0.17 200 / 0.06) 1px, transparent 1px);
+  /* Premium AI OS surfaces */
+  --surface-1: color-mix(in oklab, oklch(0.88 0.17 200) 5%, oklch(0.03 0 0) 95%);
+  --surface-2: color-mix(in oklab, oklch(0.88 0.17 200) 8%, oklch(0.04 0 0) 92%);
+  --surface-3: color-mix(in oklab, oklch(0.88 0.17 200) 14%, oklch(0.05 0 0) 86%);
+  --holo-edge: color-mix(in oklab, oklch(0.88 0.17 200) 35%, transparent);
+  --gradient-panel:
+    radial-gradient(ellipse at 20% 0%, oklch(0.88 0.17 200 / 0.08), transparent 55%),
+    radial-gradient(ellipse at 100% 100%, oklch(0.72 0.16 215 / 0.06), transparent 60%);
+  --glow-soft: 0 0 0 1px color-mix(in oklab, var(--primary) 12%, transparent),
+               0 6px 24px -8px color-mix(in oklab, var(--primary) 30%, transparent),
+               inset 0 1px 0 color-mix(in oklab, var(--primary) 15%, transparent);
+  --glow-md:   0 0 0 1px color-mix(in oklab, var(--primary) 22%, transparent),
+               0 10px 40px -8px color-mix(in oklab, var(--primary) 45%, transparent),
+               inset 0 1px 0 color-mix(in oklab, var(--primary) 22%, transparent);
+  --glow-lg:   0 0 0 1px color-mix(in oklab, var(--primary) 30%, transparent),
+               0 20px 60px -12px color-mix(in oklab, var(--primary) 55%, transparent),
+               inset 0 1px 0 color-mix(in oklab, var(--primary) 30%, transparent);
 }
 
 .dark {
