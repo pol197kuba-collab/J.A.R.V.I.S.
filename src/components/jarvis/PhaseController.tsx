@@ -25,7 +25,8 @@ export function PhaseController() {
   const navigate = useNavigate();
   const [phase, setPhase] = useState<AppPhase>("booting");
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const isPublicRoute = pathname === "/reset-password";
+  const isPublicRoute =
+    pathname === "/reset-password" || pathname.startsWith("/.lovable/oauth/");
 
   if (isPublicRoute) {
     return <Outlet />;
