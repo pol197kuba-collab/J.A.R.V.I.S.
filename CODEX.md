@@ -32,6 +32,12 @@ local bridge process) before they're possible at all — see
   clearly better solution exists; don't preserve it out of inertia.
 - Business logic in the backend, presentation in the frontend — never leak
   backend details into the UI.
+- **Delivery cadence: alternate Fundament and Wow.** Don't ship two
+  invisible backend milestones in a row, and don't ship two demo gadgets in
+  a row either. Roughly every other shipped item should be a durable
+  capability (agent, tool, memory, routing — the "operating system" half)
+  and the others a visible, demo-able gadget in the HUD (Vision Scanner is
+  the reference example). See `TODO.md` for the current ordered queue.
 
 ## Feature Roadmap
 
@@ -232,18 +238,22 @@ No orphaned references to the removed components remain.
   twice.
 - **Phase 3 (Strażnik logów):** not started.
 
-## Immediate next steps (in order)
+## Immediate next steps
 
-1. Fix `agent_runs.parent_run_id` not being populated on delegated runs —
-   blocks readable tracing before Phase 3 / multi-level delegation.
-2. Decide and document the Analityk/RAG-on-documents tooling approach
-   (TS-first, per above) before writing any Phase 2 code — merge it with
-   the "RAG over personal documents" roadmap item instead of treating them
-   as separate efforts.
-3. Resolve or remove the dead `user_settings.default_model` field (or
-   repurpose it as the multi-provider default once that lands).
+Superseded by **`TODO.md`** at the repo root — that file is now the single
+ordered, checkable execution queue (Fundament/Wow/UI tagged, per the
+cadence principle above). Keep this section as architecture context only;
+update `TODO.md` as items ship instead of duplicating a list here.
 
-Unrelated observation from 2026-07-10 telemetry: a separate automated flow
-(likely the HUD news/intel widget) showed 2 error-status runs out of 3
-attempts on the same prompt, no output captured on failure. Not yet
-investigated — flag for a future debugging pass, not blocking Phase 2.
+### 2026-07-16 frontend note
+
+The last Lovable-driven visual pass (`.lovable/plan.md`, "Premium AI OS
+Visual Refresh — v2") was scoped as *styling-only*: rounded corners, soft
+glow, a decorative background layer — it explicitly kept every panel's
+existing box composition untouched ("Zero moved/renamed/removed
+features"). That is why it read as "just rounded corners" rather than the
+deeper dark/glass redesign that was actually wanted — the plan never
+touched panel composition, only its edges. Any real redesign needs to
+start one level up: what a "panel" *is* (composition, layering, whether it
+should read as a window at all), not just how its border/radius look. See
+`TODO.md` item 0.
