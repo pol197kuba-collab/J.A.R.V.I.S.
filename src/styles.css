@@ -442,8 +442,16 @@
   pointer-events: none;
   mix-blend-mode: screen;
 }
-/* Push panel content above ::before/::after decorative layers */
-.hud-panel > * { position: relative; z-index: 1; }
+/* Push panel content above ::before/::after decorative layers. Must live
+   in Tailwind's `utilities` cascade layer — unlayered CSS always beats
+   layered CSS regardless of specificity, so outside that layer this rule
+   would silently win over a child's `absolute` (or any other) position
+   utility no matter what. Wrapped in :where() too so that within the
+   layer, an explicit position utility (same layer, real specificity)
+   still wins over this zero-specificity fallback. */
+@layer utilities {
+  :where(.hud-panel) > * { position: relative; z-index: 1; }
+}
 
 /* Elevated — the one or two focal panels per screen (hero, chat). Full
    glass lift, strongest glow, floats forward from the HUD surface. */

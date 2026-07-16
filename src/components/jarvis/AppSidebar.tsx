@@ -26,10 +26,7 @@ import {
 import { useHudNavigate } from "./TransitionContext";
 import { MiniArcReactor } from "./MiniArcReactor";
 import { ArcReactorTriangle } from "./ArcReactorTriangle";
-import { useVoiceCommands } from "./VoiceCommandContext";
-import { onSpeaking, isSpeakingNow } from "@/lib/audio/speak";
-import { onAgentBusy, isAgentBusyNow } from "@/lib/ai/agentActivity";
-import { useEffect, useState } from "react";
+import { useAgentStatus } from "./useAgentStatus";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 import { useArkReboot } from "./ArkRebootContext";
@@ -159,20 +156,8 @@ export function AppSidebar() {
 }
 
 function ArcCorePanel() {
-  const { listening } = useVoiceCommands();
   const { isMobile } = useSidebar();
-  const [speaking, setSpeaking] = useState(() => isSpeakingNow());
-  const [working, setWorking] = useState(() => isAgentBusyNow());
-  useEffect(() => onSpeaking(setSpeaking), []);
-  useEffect(() => onAgentBusy(setWorking), []);
-
-  const status = speaking
-    ? { label: "Speaking…", color: "var(--primary)" }
-    : working
-      ? { label: "Processing…", color: "var(--primary)" }
-      : listening
-        ? { label: "Listening…", color: "var(--primary)" }
-        : { label: "Standby", color: "var(--success)" };
+  const status = useAgentStatus();
 
   return (
     <div className={cn("border-b border-sidebar-border px-2", isMobile ? "py-1.5" : "py-2")}>
