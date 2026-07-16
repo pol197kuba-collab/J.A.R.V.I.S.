@@ -7,6 +7,8 @@ import { NotesWidget } from "@/components/jarvis/NotesWidget";
 import { TasksWidget } from "@/components/jarvis/TasksWidget";
 import { AgentOpsFeed } from "@/components/jarvis/AgentOpsFeed";
 import { GithubActivityPulse } from "@/components/jarvis/GithubActivityPulse";
+import { ArcReactorTriangle } from "@/components/jarvis/ArcReactorTriangle";
+import { useAgentStatus } from "@/components/jarvis/useAgentStatus";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -21,6 +23,8 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
+  const status = useAgentStatus();
+
   return (
     <div className="relative space-y-6 p-6 landscape:max-md:max-h-full landscape:max-md:space-y-1.5 landscape:max-md:overflow-hidden landscape:max-md:p-1.5">
       <HudPanel index={0} title="COMMAND // OVERVIEW" className="relative overflow-hidden p-8 landscape:max-md:p-2">
@@ -49,14 +53,15 @@ function Index() {
           </div>
           <div
             aria-hidden
-            className="pointer-events-none hidden shrink-0 opacity-70 md:block"
+            className="pointer-events-none hidden shrink-0 flex-col items-center gap-2 md:flex"
           >
-            <div className="relative h-28 w-28">
-              <div className="absolute inset-0 rounded-full border border-primary/40 animate-ring-spin" />
-              <div className="absolute inset-3 rounded-full border border-dashed border-primary/30 animate-ring-spin-rev" />
-              <div className="absolute inset-6 rounded-full border border-primary/60 shadow-[0_0_24px_var(--primary)]" />
-              <div className="absolute inset-11 rounded-full bg-primary/80 shadow-[0_0_18px_var(--primary)]" />
-            </div>
+            <ArcReactorTriangle className="!w-[150px]" />
+            <span
+              className="font-display text-[9px] uppercase tracking-[0.28em]"
+              style={{ color: status.color }}
+            >
+              {status.label}
+            </span>
           </div>
         </div>
       </HudPanel>
