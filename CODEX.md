@@ -1,371 +1,113 @@
 # CODEX.md
 
-# J.A.R.V.I.S. - Project Context for Codex
-
 ## Project Vision
 
-J.A.R.V.I.S. (Just A Rather Very Intelligent System) is **not a chatbot**.
-
-The goal of this repository is to build a long-term AI Operating System inspired by J.A.R.V.I.S. from Iron Man.
-
-The system should eventually become a central platform capable of orchestrating multiple AI agents, workflows, tools and external services through a single intelligent interface.
-
-The frontend already provides a cinematic HUD experience. The backend should evolve into a scalable AI platform rather than a traditional REST application.
-
----
-
-# Mission
-
-The purpose of this project is to build an ecosystem where specialized AI agents cooperate under one intelligent core.
-
-The long-term architecture should support:
-
-- Multiple specialized AI agents
-- Agent orchestration
-- Shared memory
-- Workflow execution
-- External integrations
-- Automation
-- Plugin system
-- Knowledge base
-- Long-term scalability
-
-The current implementation should focus only on the next logical step while preserving this long-term vision.
-
----
-
-# Architectural Philosophy
-
-Think about this project as an operating system.
-
-NOT as a chatbot.
-
-NOT as a CRUD application.
-
-NOT as a single AI assistant.
-
-The frontend is the user interface.
-
-The backend is the operating system.
-
-Agents are workers.
-
-The Orchestrator is the coordinator.
-
-Tools provide capabilities.
-
-Memory stores knowledge.
-
-Every component should have one clear responsibility.
-
----
-
-# Development Philosophy
-
-The project is intentionally developed in small iterations.
-
-Avoid overengineering.
-
-Avoid unnecessary abstraction.
-
-Avoid creating infrastructure that is not yet needed.
-
-However...
-
-Never introduce architectural decisions that make future evolution difficult.
-
-The preferred approach is:
-
-> Simple today.
->
-> Scalable tomorrow.
-
----
-
-# Current Technology Stack
-
-Current technologies include:
-
-- React 19
-- TanStack Start
-- TypeScript
-- TailwindCSS
-- Supabase
-- PostgreSQL
-- FastAPI
-- Python
-- Gemini
-
-These technologies may evolve over time.
-
-Codex may suggest improvements if they provide clear architectural advantages.
-
----
-
-# Backend Direction
-
-The backend should evolve as a **modular monolith**.
-
-Do NOT design microservices unless there is a compelling reason.
-
-Modules should be independent and loosely coupled.
-
-Typical domains may include:
-
-- Core
-- API
-- Agents
-- Tasks
-- Memory
-- Tools
-- Services
-- Orchestrator
-- Scheduler
-- Plugins
-
-This list is not fixed.
-
-Codex may propose a better organization when appropriate.
-
----
-
-# AI Agents
-
-Agents are not prompts.
-
-Agents are software components.
-
-Every agent should eventually have:
-
-- identity
-- role
-- capabilities
-- tools
-- permissions
-- memory
-- configuration
-- lifecycle
-- metrics
-- health status
-
-Avoid hardcoded behavior.
-
-Prefer extensible designs.
-
-The first agents are expected to become reusable building blocks for future agents.
-
----
-
-# Orchestrator
-
-The Orchestrator is expected to become the heart of the system.
-
-Responsibilities:
-
-- coordinate agents
-- distribute work
-- monitor execution
-- manage workflows
-- schedule tasks
-
-The Orchestrator should NOT contain business logic that belongs inside agents.
-
-Agents execute.
-
-The Orchestrator coordinates.
-
----
-
-# Memory
-
-Memory should evolve gradually.
-
-Initial implementations may be simple.
-
-Long-term vision includes:
-
-- Working Memory
-- Conversation Memory
-- Long-Term Memory
-- Structured Knowledge
-- Vector Memory
-
-Current implementations should leave room for future expansion.
-
----
-
-# Database Philosophy
-
-Design the database with future growth in mind.
-
-Do not create unnecessary tables only because they may become useful.
-
-However...
-
-Relationships, naming and structure should naturally support future evolution.
-
-Whenever proposing schema changes:
-
-- explain the reasoning
-- explain tradeoffs
-- avoid unnecessary complexity
-- avoid breaking extensibility
-
----
-
-# Coding Principles
-
-Always prefer:
-
-- readability
-- maintainability
-- modularity
-- explicit naming
-- clean interfaces
-- composition over duplication
-- single responsibility
-
-Avoid:
-
-- magic values
-- hidden side effects
-- tightly coupled code
-- unnecessary complexity
-
-Code should be understandable by another developer without additional explanation.
-
----
-
-# Decision Making
-
-Whenever multiple solutions exist:
-
-1. Prefer long-term maintainability.
-2. Prefer scalability.
-3. Prefer modularity.
-4. Explain tradeoffs.
-5. Challenge existing assumptions if a significantly better solution exists.
-
-Do not blindly preserve existing code if it limits future development.
-
----
-
-# Communication
-
-When proposing architectural decisions:
-
-Explain WHY.
-
-Not only WHAT.
-
-When proposing improvements:
-
-Include advantages.
-
-Include disadvantages.
-
-Explain long-term consequences.
-
-Do not optimize only for today's requirements.
-
----
-
-# Frontend Philosophy
-
-The frontend already provides a premium cinematic experience.
-
-Future backend development should respect the existing UI architecture.
-
-Business logic belongs in the backend.
-
-Presentation belongs in the frontend.
-
-Avoid leaking backend implementation details into the UI.
-
----
-
-# Long-Term Features
-
-The platform is expected to support, over time:
-
-- Multi-agent collaboration
-- Autonomous agents
-- Planning
-- Workflow engine
-- Shared memory
-- Plugin system
-- Tool registry
-- External APIs
-- GitHub integration
-- File analysis
-- Smart Home integration
-- Monitoring
-- Notifications
-- Multiple LLM providers
-- Voice interaction
-- AI-powered automation
-
-These features should emerge naturally through iterative development.
-
-Do not build them prematurely.
-
----
-
-# What Success Looks Like
-
-The goal is NOT to build software quickly.
-
-The goal is to build a platform that can evolve for many years without requiring architectural rewrites.
-
-Every architectural decision should answer one question:
-
-> "Will this still be a good decision when J.A.R.V.I.S. manages 100+ specialized agents?"
-
-If the answer is "no", reconsider the design.
-
----
-
-# AI Code Developer Role
-
-You are not only writing code.
-
-You are acting as a senior software architect working on a long-term AI platform.
-
-When appropriate:
-
-- suggest architectural improvements
-- identify technical debt
-- recommend better abstractions
-- keep the codebase consistent
-- think ahead
-- avoid unnecessary complexity
-- preserve flexibility
-
-Feel free to challenge existing implementations when a better solution exists.
-
-The objective is not to preserve today's architecture.
-
-The objective is to continuously improve it without breaking the long-term vision.
-
----
-
-# Final Principle
-
-Build foundations.
-
-Not shortcuts.
-
-Every module should make adding the next module easier.
-
-Every agent should make creating the next agent simpler.
-
-Every decision should move the platform closer to becoming a true AI Operating System.
+J.A.R.V.I.S. (Just A Rather Very Intelligent System) is **not a chatbot** —
+it's a long-term AI Operating System, inspired by J.A.R.V.I.S. from Iron
+Man, that orchestrates multiple specialized AI agents, tools, memory and
+external services through one cinematic interface.
+
+Product shape: a **hosted web HUD** (React + TanStack Start, Supabase
+backend), not a native desktop app. That single fact governs which features
+below are a natural fit and which require an architectural addition (a
+local bridge process) before they're possible at all — see
+[Architecture constraints](#architecture-constraints).
+
+## Principles
+
+- **Frontend = interface. Backend = operating system.** Agents are workers,
+  the Orchestrator coordinates, tools provide capabilities, memory stores
+  knowledge. One clear responsibility per component.
+- **Simple today, scalable tomorrow.** Small iterations, no premature
+  infrastructure — but never make a decision that blocks future evolution.
+  Test: *"Will this still be a good decision at 100+ agents?"*
+- **Modular monolith**, not microservices, unless there's a compelling
+  reason. Typical domains: Core, Agents, Tasks, Memory, Tools, Orchestrator.
+- **Agents are software components, not prompts.** Identity, role, tools,
+  permissions, memory, config — avoid hardcoded behavior.
+- Prefer readability, explicit naming, composition over duplication. Avoid
+  magic values, hidden side effects, unnecessary complexity.
+- When proposing a change: explain **why**, not just what — advantages,
+  disadvantages, long-term consequences. Challenge existing code if a
+  clearly better solution exists; don't preserve it out of inertia.
+- Business logic in the backend, presentation in the frontend — never leak
+  backend details into the UI.
+
+## Feature Roadmap
+
+Benchmarked 2026-07-16 against a comparable product (multi-AI Windows
+desktop assistant with RAG, memory, voice, tool-calling and OS automation).
+Where we already match or lead, and where their feature list points at a
+real next step for **our** architecture:
+
+### Already have (and in some cases ahead)
+- AI Memory — `remember`/`recall`, pgvector semantic search (Milestone 2).
+- Tool-calling agent — 11 tools, multi-step reasoning (web search, notes,
+  tasks, memory, all CRUD).
+- Voice — continuous conversation mode, wake-word-once + 20s follow-up
+  window, echo guard (Milestone 2.2). More natural than a one-shot
+  wake-word-per-utterance design.
+- Web dashboard — the HUD itself; already ~30 components deep.
+
+### Natural next steps (fit our stack directly)
+1. **Multi-provider AI routing.** Today every call is hardcoded to Gemini's
+   REST endpoint (`runtime.server.ts`, `tools.server.ts`). A provider
+   abstraction (Claude, OpenAI, Groq, OpenRouter — each just a `fetch` to a
+   different endpoint with a shared function-calling contract) lets a user
+   bring their own key for whichever model fits the task, or let the
+   Orchestrator route by task type. Highest-value, lowest-architecture-risk
+   item on this list — user's own explicit interest.
+2. **RAG over personal documents.** We already proved the pattern with
+   `memories` + `match_memories` (pgvector, HNSW, Gemini embeddings). Extend
+   it: a `documents`/`document_chunks` schema, an upload + chunking pipeline
+   (Edge Function), and a `search_documents` tool. Same infrastructure,
+   new content type (PDFs, notes, project files) instead of chat-derived
+   facts.
+3. **Calendar / email tools.** Fits the existing tool-registry pattern
+   exactly (`public.tools` + per-agent binding) — OAuth-backed integrations
+   alongside `web_search`/`fetch_url`. No new architecture, just new tools.
+4. **Intelligent model routing.** Falls out naturally once (1) exists — the
+   Orchestrator picks a provider/model per request instead of a user
+   picking one manually.
+
+### Long-shot — needs a new architectural piece first
+- **Local/desktop automation** (launch apps, organize files, browser
+  automation, OS-level control) and **local AI via Ollama** both require
+  code running *on the user's machine*, which a browser tab and a Supabase
+  Edge Function cannot do. This is the same shape as the previously-scoped
+  "Tier 3 — device bridge" (smart-home/Tapo), generalized: a small local
+  companion process that authenticates to the user's account and executes
+  commands queued via `device_commands`. Don't attempt either feature
+  without deciding on and building that bridge first — chasing them
+  directly inside the current web stack is a dead end.
+
+## Architecture constraints
+
+Product shape is a **hosted web app**, not an Electron/native desktop app.
+Concretely, this means:
+- No filesystem access, no launching local processes, no local Ollama —
+  anything requiring code on the user's machine needs the bridge concept
+  above, not a browser API.
+- All AI calls happen server-side (Edge Function / TanStack server fn) with
+  the user's own API key — never expose provider keys to the client.
+- The `devices`/`device_commands` tables already exist for exactly this
+  "queue a command for something outside our runtime" pattern — reuse them
+  for any future local-bridge work rather than inventing a parallel channel.
+
+## Coding & Decision-Making
+
+- Prefer long-term maintainability > scalability > modularity, in that
+  order, when solutions trade off against each other.
+- Whenever proposing schema changes: explain the reasoning, the tradeoffs,
+  and confirm they don't foreclose extensibility.
+- Don't build long-term features prematurely — they should emerge through
+  iteration, not upfront scaffolding.
 
 ---
 
 # Current State (Living)
 
-> Last audited: 2026-07-10. This section reflects the **actual live state**
+> Last audited: 2026-07-16. This section reflects the **actual live state**
 > (git repo + Supabase data export), not the original plan. Update it after
 > every phase or major architectural change — do not let it go stale again.
 
@@ -380,9 +122,10 @@ Every decision should move the platform closer to becoming a true AI Operating S
 - Orchestration lives entirely in `src/lib/agents/runtime.server.ts`
   (server-side, `chat_routing: "server"` confirmed in live `user_settings`).
   The client-side `jarvisBrain.ts` path exists but is not the active route.
-- Default model: `gemini-2.5-flash` for all agents (reverted from a
-  `gemini-3.5-flash` preview experiment on 2026-07-10). `models.ts` is the
-  single source of truth for which model IDs are offered in the UI.
+- Default model: `gemini-2.5-flash` for all agents. `models.ts` is the
+  single source of truth for which model IDs are offered in the UI. (Will
+  need to become provider-aware once multi-provider routing lands — see
+  Feature Roadmap above.)
 
 ## Two sources of truth — audit both, always
 
@@ -401,14 +144,16 @@ Every decision should move the platform closer to becoming a true AI Operating S
 
 | slug | status | model | tools bound | notes |
 |---|---|---|---|---|
-| `orchestrator` | enabled | gemini-2.5-flash | web_search, fetch_url, save_note | Default agent, auto-seeded per user via `handle_new_user()`. `config.system_prompt` empty — uses code-level `DEFAULT_SYSTEM_PROMPT` as-is. |
-| `marketer` | enabled | gemini-2.5-flash | web_search | Created via app UI (not a migration). Previously had a **duplicated, stale copy of the full JARVIS persona** baked into `config.system_prompt`, which conflicted with the fresh `persona.ts` text prepended at runtime (`runtime.server.ts` line ~112: `JARVIS_PERSONA + "\n\n" + agentSpecific`). Fixed 2026-07-10: `config.system_prompt` now contains **only** the Marketer specialization, no identity/language text. **This is the pattern to follow for every future agent** — per-agent `system_prompt` must never restate persona or language rules; those come exclusively from `persona.ts`. |
+| `orchestrator` | enabled | gemini-2.5-flash | 11 tools (web_search, fetch_url, save_note, list_notes, delete_note, remember, recall, create_task, list_tasks, update_task, delete_task) | Default agent, auto-seeded per user via `handle_new_user()`. `config.system_prompt` empty — uses code-level `DEFAULT_SYSTEM_PROMPT` as-is. |
+| `marketer` | enabled | gemini-2.5-flash | web_search | Created via app UI (not a migration). Fixed 2026-07-10: `config.system_prompt` now contains **only** the Marketer specialization, no identity/language text — that comes exclusively from `persona.ts`. This is the pattern to follow for every future agent. |
 
-`delegate_to_agent` tool-calling exists in `runtime.server.ts` and is
-documented (with `marketer` as the literal example in its own description),
-but **end-to-end delegation from orchestrator → marketer has not yet been
-verified in practice.** Treat this as the first thing to test before adding
-a third agent.
+`delegate_to_agent` tool-calling exists in `runtime.server.ts` and was
+**verified end-to-end 2026-07-10** (orchestrator run `eb968ad8` →
+`delegate_to_agent(slug: "marketer", ...)` → marketer run `115fb1fc`
+executed ~2s later, output relayed back). Known gap:
+`agent_runs.parent_run_id` is not being populated on the child run despite
+the column existing for this exact purpose — fix before adding multi-level
+delegation, or tracing becomes unreadable with more agents.
 
 ## Known dead/inconsistent config
 
@@ -420,97 +165,27 @@ a third agent.
   Lovable auto-sync. Not urgent, but write clearer commit messages going
   forward for anything done directly in github.dev.
 
-## Wired tool capabilities (Milestone 1 — 2026-07-14)
+## Milestone log
 
-The Orchestrator's tool set grew from "search + notes" to real
-**Memory + Tasks**. Implementations in `src/lib/agents/tools.server.ts`,
-seeded into `public.tools` and auto-bound to every `orchestrator` agent via
-`handle_new_user()` (migration `20260714101500_memory_and_tasks_tools.sql`).
-
-- **Memory** (`remember`, `recall`) — persist/retrieve durable facts in the
-  pre-existing `public.memories` table (no schema change was needed; the
-  table had simply never been wired). `remember` upserts by optional stable
-  `key`; `recall` is ILIKE + tag-overlap for now (the `embedding` column
-  exists but no vector pipeline is populated yet — future upgrade).
-- **Tasks** (`create_task`, `list_tasks`, `update_task`) — new
-  `public.tasks` table: owner-scoped queue with status
-  (todo/in_progress/done/cancelled), priority, assignee_slug, tags, due_at,
-  result. `list_tasks` defaults to the open queue; `update_task` stamps
-  `completed_at` on done/cancelled. `created_by_agent` is left NULL for now
-  because `ToolContext` doesn't carry the agent id — wire it through if
-  per-agent task attribution becomes useful.
-
-All 8 tools are DB-toggleable per agent (Settings → agent_tools), so no
-redeploy is needed to enable/disable them.
-
-## Milestone 2 — Tasks UI + semantic recall + created_by_agent (2026-07-15)
-
-Closes the three follow-ups from Milestone 1. Migration
-`20260715093000_semantic_memory.sql`.
-
-- **Tasks UI** — new server functions `src/lib/tasks/tasks.functions.ts`
-  (createServerFn + requireSupabaseAuth, mirrors notes.functions.ts) power
-  two surfaces: dashboard widget `TasksWidget.tsx` (open queue, add/check-off/
-  cancel/delete, 8s refetch) and full page `src/routes/tasks.tsx`
-  (OPEN/ARCHIVE/ALL filters, table with author + result). Sidebar entry +
-  `open_tasks` UI action wired end-to-end (jarvisBrain JarvisAction,
-  runtime UI_ACTIONS, VoiceCommandContext ACTION_MAP/COMMANDS/switch,
-  commandDirectory) so "otwórz zadania" navigates. Author shown via the
-  `agents!tasks_created_by_agent_fkey` embed. NOTE: `routeTree.gen.ts` was
-  hand-edited (sandbox has no router codegen) — regenerates identically on
-  the next Lovable build.
-- **Semantic recall** — `memories.embedding` swapped from dead JSONB to
-  `extensions.vector(768)` + HNSW index; RPC `match_memories` (SECURITY
-  INVOKER, cosine) does the search. `remember` now embeds each value via
-  Gemini `gemini-embedding-001` (embedText helper, best-effort → null on any
-  failure); `recall` embeds the query and MERGES semantic hits with the
-  existing ILIKE pass (dedupe by id), so keyword matches and rows saved
-  before embeddings existed are never lost. No backfill: old memories are
-  keyword-only until re-saved.
-- **created_by_agent** — `ToolContext` now carries `agentId`; runtime passes
-  `agent.id`; `create_task` sets `created_by_agent` and `remember` sets
-  `memories.agent_id`. Manual UI creates stay NULL (shown as "manual").
-
-## Milestone 2.1 — bug fixes found via live testing (2026-07-15)
-
-- **No current-date awareness (real bug)** — Gemini has no notion of "now",
-  so relative dates ("za tydzień") were computed from training-data guesses
-  (observed: landed on mid-2024 due dates). Fixed in `runtime.server.ts`: the
-  system prompt now always appends the actual current date/time
-  (`Europe/Warsaw`, both human-readable and ISO) via a `dateInstructions`
-  block, same pattern as `uiActionInstructions` — applies regardless of
-  per-agent `system_prompt` overrides.
-- **CRUD parity gap** — the agent could create notes/tasks but never delete
-  them. Migration `20260715120000_note_task_delete_tools.sql` adds
-  `list_notes` (search notes to discover an id — the model has no memory of
-  ids across conversations), `delete_note`, and `delete_task`. "Mark as
-  done" needed no new tool — `update_task` already supports
-  `status: "done"`.
-
-## Milestone 2.2 — conversation mode for voice (2026-07-15)
-
-The wake word "Jarvis" is now required only to START an interaction, not for
-every utterance. All in `VoiceCommandContext.tsx` (no backend changes):
-
-- **Follow-up window** — after JARVIS finishes speaking a reply
-  (`onSpeaking` true→false from `speak.ts` — covers BOTH reply paths, voice
-  `route()` and ChatPanel's server `runAgent`, since both end in `speak()`),
-  a `CONVERSATION_WINDOW_MS = 20s` window opens during which mic speech is
-  routed WITHOUT the wake word. Each accepted utterance extends it. Window
-  closes on expiry or when the mic is disarmed.
-- **Echo guard (prerequisite)** — transcripts arriving while TTS is speaking
-  (or within `ECHO_GRACE_MS = 600ms` after) are dropped and the speech
-  buffer cleared, so JARVIS never routes his own voice. Before this, nothing
-  gated recognition on `isSpeakingNow()` at all.
-- **`wake_word_enabled` finally wired** — the Settings toggle existed since
-  the initial schema but nothing read it. Now: ON = wake word to start +
-  20s follow-up windows; OFF = full free-talk (never required). Read via
-  `getUserSettings` on mount; `settings.tsx` broadcasts
-  `jarvis:prefs-updated` (CustomEvent) on save so changes apply live.
-- **UI** — `inConversation` exposed from the context; `HeaderVoiceToggle`
-  shows a blinking "In conversation" status so the user knows they can
-  speak freely. Noise filter (`isNoise`) applies on every path; the Gemini
-  throttle+queue in `route()` is unchanged.
+- **Milestone 1 (2026-07-14)** — Orchestrator gained Memory
+  (`remember`/`recall` on `public.memories`) and Tasks
+  (`create_task`/`list_tasks`/`update_task` on new `public.tasks`).
+  Migration `20260714101500_memory_and_tasks_tools.sql`.
+- **Milestone 2 (2026-07-15)** — Tasks UI (dashboard widget + `/tasks`
+  page), semantic recall (pgvector + `match_memories` RPC, Gemini
+  `gemini-embedding-001` embeddings merged with ILIKE), `created_by_agent`/
+  `memories.agent_id` attribution. Migration
+  `20260715093000_semantic_memory.sql`.
+- **Milestone 2.1 (2026-07-15)** — Bug fixes from live testing: system
+  prompt now always carries the real current date/time (agents previously
+  guessed relative dates from training data); CRUD parity — added
+  `list_notes`, `delete_note`, `delete_task` tools. Migration
+  `20260715120000_note_task_delete_tools.sql`.
+- **Milestone 2.2 (2026-07-15)** — Voice conversation mode: wake word
+  required only to start, 20s follow-up window after each reply (extended
+  per utterance), echo guard against JARVIS hearing his own TTS,
+  `wake_word_enabled` setting finally wired up (was dead since initial
+  schema). All in `VoiceCommandContext.tsx`, no backend changes.
 
 Beyond the Marketer prompt-only agent, the HUD already has ~30 components
 including boot sequence, voice, threat stream, system logs, sub-systems,
@@ -544,31 +219,31 @@ No orphaned references to the removed components remain.
 ## Phase status vs. original 3-phase plan
 
 - **Phase 1 (Marketer):** agent exists, persona bug fixed, tool binding
-  fixed (2026-07-10). Delegation from Orchestrator not yet verified live.
+  fixed, delegation verified end-to-end (2026-07-10).
 - **Phase 2 (Analityk / file analysis):** not started. Open decision: build
   file-parsing tools in TypeScript (`xlsx`/SheetJS, `papaparse`) inside the
   existing Edge Function runtime — preferred default, no new
   infrastructure — versus standing up a separate Python microservice only
   if a specific capability genuinely requires it (e.g. pandas-level
   statistical work JS libraries can't reasonably replicate). Do not
-  introduce a Python service pre-emptively.
+  introduce a Python service pre-emptively. **Note:** this phase now
+  overlaps with the "RAG over personal documents" item in the Feature
+  Roadmap above — worth merging into one piece of work rather than building
+  twice.
 - **Phase 3 (Strażnik logów):** not started.
 
 ## Immediate next steps (in order)
 
-`delegate_to_agent` verified end-to-end on 2026-07-10: orchestrator run
-`eb968ad8` correctly invoked `delegate_to_agent(slug: "marketer", ...)`,
-marketer run `115fb1fc` executed ~2s later and returned the content the
-orchestrator then relayed to the user. **Delegation mechanism confirmed
-working.** Known gap: `agent_runs.parent_run_id` is not being populated on
-the child run despite the column existing for this exact purpose — fix
-before adding multi-level delegation (Phase 3), or tracing will become
-unreadable with more agents.
+1. Fix `agent_runs.parent_run_id` not being populated on delegated runs —
+   blocks readable tracing before Phase 3 / multi-level delegation.
+2. Decide and document the Analityk/RAG-on-documents tooling approach
+   (TS-first, per above) before writing any Phase 2 code — merge it with
+   the "RAG over personal documents" roadmap item instead of treating them
+   as separate efforts.
+3. Resolve or remove the dead `user_settings.default_model` field (or
+   repurpose it as the multi-provider default once that lands).
 
-Unrelated observation from the same telemetry pull: a separate automated
-flow (likely the HUD news/intel widget) showed 2 error-status runs out of 3
+Unrelated observation from 2026-07-10 telemetry: a separate automated flow
+(likely the HUD news/intel widget) showed 2 error-status runs out of 3
 attempts on the same prompt, no output captured on failure. Not yet
 investigated — flag for a future debugging pass, not blocking Phase 2.
-2. Decide and document the Analityk tooling approach (TS-first, per above)
-   before writing any Phase 2 code.
-3. Resolve or remove the dead `user_settings.default_model` field.
