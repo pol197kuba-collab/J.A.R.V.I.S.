@@ -146,20 +146,23 @@ Concretely, this means:
   excluding `user_secrets` and conversational tables) rather than relying on
   migrations or memory of past sessions.
 
-## Agent registry (live, as of 2026-07-10)
+## Agent registry (live, as of 2026-07-16)
 
 | slug | status | model | tools bound | notes |
 |---|---|---|---|---|
 | `orchestrator` | enabled | gemini-2.5-flash | 11 tools (web_search, fetch_url, save_note, list_notes, delete_note, remember, recall, create_task, list_tasks, update_task, delete_task) | Default agent, auto-seeded per user via `handle_new_user()`. `config.system_prompt` empty — uses code-level `DEFAULT_SYSTEM_PROMPT` as-is. |
 | `marketer` | enabled | gemini-2.5-flash | web_search | Created via app UI (not a migration). Fixed 2026-07-10: `config.system_prompt` now contains **only** the Marketer specialization, no identity/language text — that comes exclusively from `persona.ts`. This is the pattern to follow for every future agent. |
+| `guardian` (Strażnik) | enabled | gemini-2.5-flash | 3 tools (guardian_scan_errors, guardian_run_stats, guardian_check_delegation) | Added 2026-07-16 via migration (`20260716150000_guardian_agent.sql`) for every existing + future user — the "seed through a migration, not the UI" lesson from `marketer` applied. Read-only system-health monitoring + active smoke-tests over `event_log`/`agent_runs`. Explicitly **no** code/filesystem access and **no** UI/voice test automation — see TODO.md for why that's out of scope for any in-app agent. |
 
 `delegate_to_agent` tool-calling exists in `runtime.server.ts` and was
 **verified end-to-end 2026-07-10** (orchestrator run `eb968ad8` →
 `delegate_to_agent(slug: "marketer", ...)` → marketer run `115fb1fc`
-executed ~2s later, output relayed back). Known gap:
-`agent_runs.parent_run_id` is not being populated on the child run despite
-the column existing for this exact purpose — fix before adding multi-level
-delegation, or tracing becomes unreadable with more agents.
+executed ~2s later, output relayed back). `agent_runs.parent_run_id` was
+fixed 2026-07-13 (commit `c40347a`) — this section had gone stale claiming
+it as an open gap for three days past that fix; caught 2026-07-16 while
+scoping the Guardian agent. `guardian_check_delegation` now exists
+specifically so this kind of regression gets caught by a smoke-test
+instead of by a documentation audit next time.
 
 ## Known dead/inconsistent config
 
@@ -192,6 +195,19 @@ delegation, or tracing becomes unreadable with more agents.
   per utterance), echo guard against JARVIS hearing his own TTS,
   `wake_word_enabled` setting finally wired up (was dead since initial
   schema). All in `VoiceCommandContext.tsx`, no backend changes.
+- **Milestone 3 (2026-07-16)** — Dashboard depth pass (PRs #10-#12).
+  `HudPanel` gained an `"elevated" | "quiet"` tone; the real fix, found via
+  live DOM inspection rather than screenshots, was a cascade-layer bug in
+  `styles.css`: an unlayered `.hud-panel > * { position: relative }` rule
+  was silently beating Tailwind's layered `.absolute` utility on every
+  panel in the app (unlayered CSS always wins regardless of specificity),
+  forcing decorative absolutely-positioned elements into normal flow. Fixed
+  by moving it into `@layer utilities` + `:where()`. Hero panel dropped
+  552px → 264px. Hero redesign reuses `ArcReactorTriangle` (previously
+  sidebar-only) + a new shared `useAgentStatus()` hook instead of a second
+  bespoke decoration.
+- **Milestone 4 (2026-07-16)** — Guardian (Strażnik) agent, see Phase 3
+  below.
 
 Beyond the Marketer prompt-only agent, the HUD already has ~30 components
 including boot sequence, voice, threat stream, system logs, sub-systems,
@@ -218,9 +234,15 @@ anywhere):
 In the sidebar, `ArcCorePanel` (in `AppSidebar.tsx`) wraps
 `ArcReactorTriangle` with size overrides (`!w-[160px]`, `short:!w-[100px]`,
 mobile `!w-[100px]`/`short:!w-[80px]`) — this is the "Zmniejszono Arc Core
-w sidebarze" change. The panel also surfaces live status (Speaking /
-Processing / Listening / Standby) from `speak.ts` + `agentActivity.ts`.
-No orphaned references to the removed components remain.
+w sidebarze" change. No orphaned references to the removed components
+remain.
+
+Since Milestone 3, `ArcReactorTriangle` is also used in the dashboard
+hero (`routes/index.tsx`, `!w-[150px]`), both consumers reading live
+status (Speaking / Processing / Listening / Standby) from a shared
+`useAgentStatus()` hook (`components/jarvis/useAgentStatus.ts`) wrapping
+`speak.ts` + `agentActivity.ts` — don't duplicate that logic again if a
+third consumer shows up, extend the hook instead.
 
 ## Phase status vs. original 3-phase plan
 
@@ -233,11 +255,15 @@ No orphaned references to the removed components remain.
   unless a specific capability genuinely requires it. Overlaps with the
   "RAG over personal documents" Feature Roadmap item — merge into one piece
   of work rather than building twice, whenever it's picked back up.
-- **Phase 3 (Strażnik logów): reordered ahead of Phase 2, next agent up.**
-  Decided 2026-07-16 — cheaper to build (reuses existing `event_log`/
-  `agent_runs`/`GithubActivityPulse` data, no new pipeline) and absorbs the
-  `parent_run_id` tracing fix plus the still-open 2026-07-10 failed-run
-  investigation as its first real task. See `TODO.md` item 2 for scope.
+- **Phase 3 (Strażnik logów / Guardian): done, 2026-07-16.** Reordered
+  ahead of Phase 2 because it reuses existing `event_log`/`agent_runs`
+  data (no new pipeline). Shipped as `guardian_scan_errors` (recent
+  errors/warnings), `guardian_run_stats` (per-agent trend/regression
+  detection), `guardian_check_delegation` (smoke-tests the `parent_run_id`
+  fix stays fixed). Migration `20260716150000_guardian_agent.sql`.
+  Deliberately scoped to read-only backend/data monitoring — no code/
+  filesystem access, no UI/voice test automation (see `TODO.md` for why
+  that's out of scope for any in-app agent, not just this one).
 
 Two new agent ideas beyond the original 3-phase plan, tentatively queued
 in `TODO.md`:
@@ -270,5 +296,5 @@ Decided direction (after reviewing a live screenshot against
 `space-y-6` stack of equal-weight `HudPanel`s): keep the single-column
 layout, but give panels real elevation/layering and let selected elements
 bleed past their container edge, instead of every section being a flat,
-equally-weighted, strictly-clipped box. Full detail and scope in
-`TODO.md` item 1 (in progress).
+equally-weighted, strictly-clipped box. **Shipped — see Milestone 3
+above.**

@@ -10,7 +10,7 @@
 > keep building the "operating system" half while still shipping things
 > worth showing off (Vision Scanner is the bar for [W]).
 
-## 1. [UI] Dashboard redesign — holo-panels with depth — **shipped 2026-07-16, pending visual sign-off**
+## 1. [UI] Dashboard redesign — holo-panels with depth — **shipped 2026-07-16, confirmed working**
 
 Root cause (confirmed against the screenshot + `src/routes/index.tsx:25`,
 which wrapped every section in one `space-y-6` stack of uniform `HudPanel`s):
@@ -62,23 +62,33 @@ gone; if it isn't, the cause is something outside `routes/index.tsx` /
 `HudPanel`/`styles.css` and needs live DOM inspection, not another
 guess-and-patch round.
 
-## 2. [F] Strażnik logów (Log Guardian agent) — next agent
+## 2. [F] Strażnik logów (Guardian agent) — **shipped 2026-07-16**
 
-Reordered ahead of Analityk on purpose: this reuses data we already have
-(`event_log`, `agent_runs`, `GithubActivityPulse`) instead of needing a new
-pipeline, and it absorbs two loose ends in one build instead of doing them
-as isolated fixes:
-- Fix `agent_runs.parent_run_id` not being populated on `delegate_to_agent`
-  child runs — needed for the Guardian to reconstruct multi-agent traces at
-  all, and blocks every future delegation feature until it's fixed anyway.
-- Investigate the still-open 2026-07-10 telemetry finding: HUD news/intel
-  widget showed 2 error-status runs out of 3 attempts, no captured output
-  on failure. This is exactly the kind of thing a Log Guardian should have
-  caught and surfaced — good first real task for it once it exists.
-- Agent shape: read-only over `event_log`/`agent_runs`/tool-call history,
-  surfaces anomalies (repeated failures, error-status runs, silent
-  failures) either proactively (a HUD alert) or on request ("co się
-  ostatnio wywaliło?").
+Reordered ahead of Analityk on purpose: reuses data already logged
+(`event_log`, `agent_runs`) instead of needing a new pipeline.
+
+While scoping it, found the `parent_run_id` fix listed here was **already
+shipped 2026-07-13** (commit `c40347a`) — this file and `CODEX.md` had both
+gone stale claiming it as an open gap for three days past that fix.
+Corrected in `CODEX.md`'s Agent registry section.
+
+**Scope decision** (discussed at length before building): Guardian covers
+backend/data-layer monitoring + active smoke-tests only —
+`guardian_scan_errors` (recent errors/warnings across `event_log` +
+`agent_runs`), `guardian_run_stats` (per-agent trend/regression detection:
+error rate, avg latency over a time window), `guardian_check_delegation`
+(smoke-tests that the `parent_run_id` fix above stays fixed, instead of
+that regressing silently again). **Explicitly does not cover UI/voice
+testing** — no agent in this architecture can drive a browser or listen to
+audio (agents run server-side in an Edge Function with no browser
+runtime); that stays a manual Claude Code verification pass per frontend
+change, same as the dashboard redesign above. Decided 2026-07-16, not
+re-litigating this — no "automated UI tests" item tracked here on purpose.
+
+Shipped: migration `20260716150000_guardian_agent.sql` (new `guardian`
+agent seeded for every existing + future user, matching the "seed via
+migration, not the UI" lesson from how `marketer` was created), 3 new
+tools in `tools.server.ts`.
 
 ## 3. [W] Situation Room / Radar Sweep — next gadget
 
