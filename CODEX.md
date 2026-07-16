@@ -32,6 +32,12 @@ local bridge process) before they're possible at all — see
   clearly better solution exists; don't preserve it out of inertia.
 - Business logic in the backend, presentation in the frontend — never leak
   backend details into the UI.
+- **Delivery cadence: alternate Fundament and Wow.** Don't ship two
+  invisible backend milestones in a row, and don't ship two demo gadgets in
+  a row either. Roughly every other shipped item should be a durable
+  capability (agent, tool, memory, routing — the "operating system" half)
+  and the others a visible, demo-able gadget in the HUD (Vision Scanner is
+  the reference example). See `TODO.md` for the current ordered queue.
 
 ## Feature Roadmap
 
@@ -220,30 +226,49 @@ No orphaned references to the removed components remain.
 
 - **Phase 1 (Marketer):** agent exists, persona bug fixed, tool binding
   fixed, delegation verified end-to-end (2026-07-10).
-- **Phase 2 (Analityk / file analysis):** not started. Open decision: build
-  file-parsing tools in TypeScript (`xlsx`/SheetJS, `papaparse`) inside the
-  existing Edge Function runtime — preferred default, no new
-  infrastructure — versus standing up a separate Python microservice only
-  if a specific capability genuinely requires it (e.g. pandas-level
-  statistical work JS libraries can't reasonably replicate). Do not
-  introduce a Python service pre-emptively. **Note:** this phase now
-  overlaps with the "RAG over personal documents" item in the Feature
-  Roadmap above — worth merging into one piece of work rather than building
-  twice.
-- **Phase 3 (Strażnik logów):** not started.
+- **Phase 2 (Analityk / file analysis):** not started, and **reordered
+  after Strażnik** (see below) — decided 2026-07-16. Still the right
+  eventual scope: file-parsing tools in TypeScript (`xlsx`/SheetJS,
+  `papaparse`) inside the existing Edge Function runtime, no Python service
+  unless a specific capability genuinely requires it. Overlaps with the
+  "RAG over personal documents" Feature Roadmap item — merge into one piece
+  of work rather than building twice, whenever it's picked back up.
+- **Phase 3 (Strażnik logów): reordered ahead of Phase 2, next agent up.**
+  Decided 2026-07-16 — cheaper to build (reuses existing `event_log`/
+  `agent_runs`/`GithubActivityPulse` data, no new pipeline) and absorbs the
+  `parent_run_id` tracing fix plus the still-open 2026-07-10 failed-run
+  investigation as its first real task. See `TODO.md` item 2 for scope.
 
-## Immediate next steps (in order)
+Two new agent ideas beyond the original 3-phase plan, tentatively queued
+in `TODO.md`:
+- **Concierge** (calendar/email) — cheap, prompt-only like Marketer, paired
+  with the calendar/email OAuth tools item.
+- Second wow-gadget slot may eventually want a **Researcher**-style agent
+  (deep multi-step web research, complementing Marketer's marketing focus)
+  once RAG-on-documents exists to ground it — not scheduled yet, noted for
+  when that decision comes up.
 
-1. Fix `agent_runs.parent_run_id` not being populated on delegated runs —
-   blocks readable tracing before Phase 3 / multi-level delegation.
-2. Decide and document the Analityk/RAG-on-documents tooling approach
-   (TS-first, per above) before writing any Phase 2 code — merge it with
-   the "RAG over personal documents" roadmap item instead of treating them
-   as separate efforts.
-3. Resolve or remove the dead `user_settings.default_model` field (or
-   repurpose it as the multi-provider default once that lands).
+## Immediate next steps
 
-Unrelated observation from 2026-07-10 telemetry: a separate automated flow
-(likely the HUD news/intel widget) showed 2 error-status runs out of 3
-attempts on the same prompt, no output captured on failure. Not yet
-investigated — flag for a future debugging pass, not blocking Phase 2.
+Superseded by **`TODO.md`** at the repo root — that file is now the single
+ordered, checkable execution queue (Fundament/Wow/UI tagged, per the
+cadence principle above). Keep this section as architecture context only;
+update `TODO.md` as items ship instead of duplicating a list here.
+
+### 2026-07-16 frontend note
+
+The last Lovable-driven visual pass (`.lovable/plan.md`, "Premium AI OS
+Visual Refresh — v2") was scoped as *styling-only*: rounded corners, soft
+glow, a decorative background layer — it explicitly kept every panel's
+existing box composition untouched ("Zero moved/renamed/removed
+features"). That is why it read as "just rounded corners" rather than the
+deeper dark/glass redesign that was actually wanted — the plan never
+touched panel composition, only its edges.
+
+Decided direction (after reviewing a live screenshot against
+`src/routes/index.tsx`, which wraps every section in one uniform
+`space-y-6` stack of equal-weight `HudPanel`s): keep the single-column
+layout, but give panels real elevation/layering and let selected elements
+bleed past their container edge, instead of every section being a flat,
+equally-weighted, strictly-clipped box. Full detail and scope in
+`TODO.md` item 1 (in progress).
