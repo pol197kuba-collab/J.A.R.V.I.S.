@@ -226,17 +226,27 @@ No orphaned references to the removed components remain.
 
 - **Phase 1 (Marketer):** agent exists, persona bug fixed, tool binding
   fixed, delegation verified end-to-end (2026-07-10).
-- **Phase 2 (Analityk / file analysis):** not started. Open decision: build
-  file-parsing tools in TypeScript (`xlsx`/SheetJS, `papaparse`) inside the
-  existing Edge Function runtime — preferred default, no new
-  infrastructure — versus standing up a separate Python microservice only
-  if a specific capability genuinely requires it (e.g. pandas-level
-  statistical work JS libraries can't reasonably replicate). Do not
-  introduce a Python service pre-emptively. **Note:** this phase now
-  overlaps with the "RAG over personal documents" item in the Feature
-  Roadmap above — worth merging into one piece of work rather than building
-  twice.
-- **Phase 3 (Strażnik logów):** not started.
+- **Phase 2 (Analityk / file analysis):** not started, and **reordered
+  after Strażnik** (see below) — decided 2026-07-16. Still the right
+  eventual scope: file-parsing tools in TypeScript (`xlsx`/SheetJS,
+  `papaparse`) inside the existing Edge Function runtime, no Python service
+  unless a specific capability genuinely requires it. Overlaps with the
+  "RAG over personal documents" Feature Roadmap item — merge into one piece
+  of work rather than building twice, whenever it's picked back up.
+- **Phase 3 (Strażnik logów): reordered ahead of Phase 2, next agent up.**
+  Decided 2026-07-16 — cheaper to build (reuses existing `event_log`/
+  `agent_runs`/`GithubActivityPulse` data, no new pipeline) and absorbs the
+  `parent_run_id` tracing fix plus the still-open 2026-07-10 failed-run
+  investigation as its first real task. See `TODO.md` item 2 for scope.
+
+Two new agent ideas beyond the original 3-phase plan, tentatively queued
+in `TODO.md`:
+- **Concierge** (calendar/email) — cheap, prompt-only like Marketer, paired
+  with the calendar/email OAuth tools item.
+- Second wow-gadget slot may eventually want a **Researcher**-style agent
+  (deep multi-step web research, complementing Marketer's marketing focus)
+  once RAG-on-documents exists to ground it — not scheduled yet, noted for
+  when that decision comes up.
 
 ## Immediate next steps
 
@@ -253,7 +263,12 @@ glow, a decorative background layer — it explicitly kept every panel's
 existing box composition untouched ("Zero moved/renamed/removed
 features"). That is why it read as "just rounded corners" rather than the
 deeper dark/glass redesign that was actually wanted — the plan never
-touched panel composition, only its edges. Any real redesign needs to
-start one level up: what a "panel" *is* (composition, layering, whether it
-should read as a window at all), not just how its border/radius look. See
-`TODO.md` item 0.
+touched panel composition, only its edges.
+
+Decided direction (after reviewing a live screenshot against
+`src/routes/index.tsx`, which wraps every section in one uniform
+`space-y-6` stack of equal-weight `HudPanel`s): keep the single-column
+layout, but give panels real elevation/layering and let selected elements
+bleed past their container edge, instead of every section being a flat,
+equally-weighted, strictly-clipped box. Full detail and scope in
+`TODO.md` item 1 (in progress).

@@ -1,55 +1,67 @@
 # TODO — Near Term
 
-> Working queue, refreshed 2026-07-16. Ordered — work top to bottom unless
-> noted. Check items off as they ship; keep this in sync instead of letting
-> `CODEX.md`'s roadmap section and this file drift apart. Tags: **[F]**
-> Fundament (backend/agent, durable, mostly invisible) · **[W]** Wow
-> (visible, demo-able gadget) · **[UI]** frontend/dashboard.
+> Working queue, refreshed 2026-07-16 (post-decision pass). Ordered — work
+> top to bottom unless noted. Check items off as they ship; keep this in
+> sync instead of letting `CODEX.md`'s roadmap section and this file drift
+> apart. Tags: **[F]** Fundament (backend/agent, durable, mostly invisible)
+> · **[W]** Wow (visible, demo-able gadget) · **[UI]** frontend/dashboard.
 >
 > Cadence: don't ship two [F]s or two [W]s back to back — alternate, so we
 > keep building the "operating system" half while still shipping things
 > worth showing off (Vision Scanner is the bar for [W]).
 
-## 0. Blocked on you — dashboard redesign [UI]
+## 1. [UI] Dashboard redesign — holo-panels with depth — **starting now**
 
-Waiting on your screenshot to scope this properly, but the root cause is
-already clear from `.lovable/plan.md`: the last Lovable pass ("Premium AI OS
-Visual Refresh — v2") was explicitly styling-only — it softened
-`.hud-panel` edges (radius, glow, backdrop-blur) and added a decorative
-background layer, but kept every panel's box composition **identical**
-("Zero moved/renamed/removed features"). That's the whole gap: rounding
-corners on the same boxy grid of windows was never going to produce "depth,
-away from boxy windows" — that needs a rethink of what a panel *is*
-(layering, asymmetric composition, panels that don't read as discrete
-windows), not a border-radius tweak.
+Decided direction: **keep the single-column layout**, don't rebuild it as a
+bento grid — but stop every panel from reading as a discrete boxy window.
+Root cause (confirmed against the screenshot + `src/routes/index.tsx:25`,
+which wraps every section in one `space-y-6` stack of uniform `HudPanel`s):
+the last Lovable pass (`.lovable/plan.md`) only softened `.hud-panel`'s
+edges (radius, glow, backdrop-blur) while explicitly keeping every panel's
+box composition identical ("Zero moved/renamed/removed features"). Rounding
+corners on the same uniform boxes was never going to read as "depth."
 
-Once the screenshot's in: audit `src/styles.css` (`.hud-panel`,
-`.hud-corner`, surface/glow tokens) and `DashboardShell.tsx` layout, and
-plan an actual compositional pass — not another "soften the same boxes"
-pass.
+Scope for this pass: `src/styles.css` (`.hud-panel`, `.hud-corner`, surface/
+glow tokens) + `HudPanel.tsx` + `DashboardShell.tsx` background layering.
+Real changes, not just tokens:
+- Break uniform panel weight — hero/chat get genuine elevation and depth
+  layering; secondary panels (telemetry, weather, github) sit visually
+  "behind" or "lighter" rather than equal-weight boxes.
+- Layer translucent glass surfaces at different z-depths so panels read as
+  floating holo-planes, not flat cards with a border.
+- Let selected elements bleed past their container edge (icons, corner
+  accents, glow) instead of everything being strictly clipped inside a
+  rounded rect — this is what actually kills the "window" read.
+- Keep all content, routes, data, and component order untouched — visual
+  layer only, same discipline as the Lovable plan, different target.
 
-## 1. [F] Fix `agent_runs.parent_run_id` tracing gap
+## 2. [F] Strażnik logów (Log Guardian agent) — next agent
 
-`delegate_to_agent` works end-to-end but doesn't populate `parent_run_id`
-on the child run despite the column existing for this. Small, fast fix —
-do it first because it blocks readable tracing for every multi-agent
-feature below it (RAG delegation, future agents, Phase 3).
+Reordered ahead of Analityk on purpose: this reuses data we already have
+(`event_log`, `agent_runs`, `GithubActivityPulse`) instead of needing a new
+pipeline, and it absorbs two loose ends in one build instead of doing them
+as isolated fixes:
+- Fix `agent_runs.parent_run_id` not being populated on `delegate_to_agent`
+  child runs — needed for the Guardian to reconstruct multi-agent traces at
+  all, and blocks every future delegation feature until it's fixed anyway.
+- Investigate the still-open 2026-07-10 telemetry finding: HUD news/intel
+  widget showed 2 error-status runs out of 3 attempts, no captured output
+  on failure. This is exactly the kind of thing a Log Guardian should have
+  caught and surfaced — good first real task for it once it exists.
+- Agent shape: read-only over `event_log`/`agent_runs`/tool-call history,
+  surfaces anomalies (repeated failures, error-status runs, silent
+  failures) either proactively (a HUD alert) or on request ("co się
+  ostatnio wywaliło?").
 
-## 2. [W] Ship one new gadget
+## 3. [W] Situation Room / Radar Sweep — next gadget
 
-Pick one (or propose your own) — candidates that reuse data we already
-have live in the HUD:
+Merge geo-tracking (Leaflet/Warsaw fallback), `WeatherTelemetry`,
+`GithubActivityPulse`, and `ThreatStream` into one animated radar-style
+panel — rotating sweep line, blips popping in for live events instead of
+four static list panels. Zero new backend, pure frontend composition, and
+a genuine "wow" moment reusing data we already surface elsewhere.
 
-- **Situation Room widget** — merge geo-tracking (Leaflet/Warsaw fallback),
-  `WeatherTelemetry`, `GithubActivityPulse`, and `ThreatStream` into one
-  glanceable radar-style panel. Zero new backend, pure frontend
-  composition + a genuine wow layout moment.
-- **Vision Scanner v2** — feed scan results into Memory (`remember`), so a
-  scanned document/object becomes recallable later ("what did I scan
-  yesterday about X?"). Ties the existing gadget into the agent brain.
-- Your call — this slot is deliberately open.
-
-## 3. [F] Multi-provider AI routing
+## 4. [F] Multi-provider AI routing
 
 Every call is hardcoded to Gemini's REST endpoint (`runtime.server.ts`,
 `tools.server.ts`). Add a provider abstraction (Claude, OpenAI, Groq,
@@ -58,32 +70,40 @@ function-calling contract) so a user can bring their own key per task.
 Highest-value, lowest-architecture-risk item on the backlog, and unlocks
 intelligent model routing afterward for free.
 
-## 4. [F] RAG over personal documents (= Analityk Phase 2, merged)
+## 5. [F] RAG over personal documents (= Analityk, deprioritized not dropped)
 
 Extend the proven `memories`/`match_memories` pgvector pattern to a
 `documents`/`document_chunks` schema + upload/chunking Edge Function +
 `search_documents` tool. TypeScript-first (`xlsx`/`papaparse`) — no Python
-service unless a specific capability genuinely can't be done in JS.
+service unless a specific capability genuinely can't be done in JS. Still
+valuable, just heavier (new pipeline, not reused data) than Strażnik — goes
+after it rather than first, per the reordering above.
 
-## 5. [W] Second gadget slot
+## 6. [W] Second gadget slot — open
 
-Reassess after items 2-4 ship — could be a voice-driven "scan → remember"
-live demo, or something new depending on what's shipped by then.
+Reassess once items above ship — candidates: **Vision Scanner v2** (feed
+scan results into `remember`/`recall` so a scan becomes recallable later),
+or **ambient reactive Arc Core** (reactor/background reacting to voice in
+real time full-screen, building on the existing Speaking/Processing state
+in `ArcCorePanel`).
 
-## 6. [F] Calendar / email tools
+## 7. [F] Concierge agent (calendar / email) — new agent proposal
+
+Cheap to add: prompt-only persona like Marketer, no new architecture,
+bound to the calendar/email OAuth tools below once they exist. Natural
+pairing rather than a standalone "tools" item with no agent to use them.
+
+## 8. [F] Calendar / email tools
 
 OAuth-backed tools via the existing tool-registry pattern
 (`public.tools` + per-agent binding) — same shape as `web_search`/
-`fetch_url`, no new architecture.
+`fetch_url`, no new architecture. Ships together with Concierge (#7).
 
-## 7. [F] Cleanup backlog (low priority, batch together)
+## 9. [F] Cleanup backlog (low priority, batch together)
 
 - `user_settings.default_model` is dead — nothing reads it (`agents.model`
   always wins). Wire it up as a real fallback once multi-provider routing
   lands, or delete it.
-- Investigate 2026-07-10 telemetry: HUD news/intel widget showed 2
-  error-status runs out of 3 attempts on the same prompt, no captured
-  output on failure. Not blocking, but flagged and unresolved.
 
 ---
 
