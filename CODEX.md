@@ -487,6 +487,31 @@ Closes the three follow-ups from Milestone 1. Migration
   done" needed no new tool — `update_task` already supports
   `status: "done"`.
 
+## Milestone 2.2 — conversation mode for voice (2026-07-15)
+
+The wake word "Jarvis" is now required only to START an interaction, not for
+every utterance. All in `VoiceCommandContext.tsx` (no backend changes):
+
+- **Follow-up window** — after JARVIS finishes speaking a reply
+  (`onSpeaking` true→false from `speak.ts` — covers BOTH reply paths, voice
+  `route()` and ChatPanel's server `runAgent`, since both end in `speak()`),
+  a `CONVERSATION_WINDOW_MS = 20s` window opens during which mic speech is
+  routed WITHOUT the wake word. Each accepted utterance extends it. Window
+  closes on expiry or when the mic is disarmed.
+- **Echo guard (prerequisite)** — transcripts arriving while TTS is speaking
+  (or within `ECHO_GRACE_MS = 600ms` after) are dropped and the speech
+  buffer cleared, so JARVIS never routes his own voice. Before this, nothing
+  gated recognition on `isSpeakingNow()` at all.
+- **`wake_word_enabled` finally wired** — the Settings toggle existed since
+  the initial schema but nothing read it. Now: ON = wake word to start +
+  20s follow-up windows; OFF = full free-talk (never required). Read via
+  `getUserSettings` on mount; `settings.tsx` broadcasts
+  `jarvis:prefs-updated` (CustomEvent) on save so changes apply live.
+- **UI** — `inConversation` exposed from the context; `HeaderVoiceToggle`
+  shows a blinking "In conversation" status so the user knows they can
+  speak freely. Noise filter (`isNoise`) applies on every path; the Gemini
+  throttle+queue in `route()` is unchanged.
+
 Beyond the Marketer prompt-only agent, the HUD already has ~30 components
 including boot sequence, voice, threat stream, system logs, sub-systems,
 and a **`geo-tracking` route** (Leaflet-based, Warsaw fallback) that predates

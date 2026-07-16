@@ -4,7 +4,7 @@ import { speak } from "@/lib/audio/speak";
 import { cn } from "@/lib/utils";
 
 export function HeaderVoiceToggle() {
-  const { enabled, supported, listening, setEnabled } = useVoiceCommands();
+  const { enabled, supported, listening, inConversation, setEnabled } = useVoiceCommands();
 
   const onClick = () => {
     if (!supported) return;
@@ -15,20 +15,26 @@ export function HeaderVoiceToggle() {
     setEnabled(next);
   };
 
+  const conversing = enabled && listening && inConversation;
+
   const label = !supported
     ? "Voice unsupported"
     : enabled
-      ? listening
-        ? "Listening — disable mic"
-        : "Vocal override armed — disable mic"
+      ? conversing
+        ? "In conversation — speak freely, no wake word needed"
+        : listening
+          ? "Listening — disable mic"
+          : "Vocal override armed — disable mic"
       : "Enable vocal override";
 
   const status = !supported
     ? "OFFLINE"
     : enabled
-      ? listening
-        ? "Listening…"
-        : "Armed"
+      ? conversing
+        ? "In conversation"
+        : listening
+          ? "Listening…"
+          : "Armed"
       : "Standby";
 
   const active = enabled;
@@ -87,6 +93,7 @@ export function HeaderVoiceToggle() {
           className={cn(
             "mt-0.5 text-[8px] tracking-[0.22em] landscape:max-md:text-[7px] short:text-[7px]",
             live ? "text-primary" : "opacity-70",
+            conversing && "animate-blink font-semibold",
           )}
         >
           {status}
