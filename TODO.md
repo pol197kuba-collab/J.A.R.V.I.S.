@@ -37,8 +37,30 @@ errors elsewhere untouched). **Could not get a live browser screenshot in
 this environment** — `vite.config.ts` depends on private `@lovable.dev/*`
 build packages only resolvable inside the Lovable-connected environment,
 and no real Supabase credentials were available to get past the login
-phase either way. Next step: pull this branch in Lovable (or locally) and
-eyeball it — flag anything that doesn't read as intended before merging.
+phase either way. Merged as #10 — verified against a real screenshot after
+deploy.
+
+### Follow-up (2026-07-16, same day): hero panel composition fix
+
+Screenshot after #10 confirmed the panel-chrome tone split (elevated/quiet)
+was too subtle to register as real depth, and specifically called out
+"COMMAND // OVERVIEW" as still weak — large dead vertical space with the
+reactor-ring graphic reading as orphaned/disconnected rather than part of
+the design. Root cause: the ring graphic (`src/routes/index.tsx`) was
+`position: absolute`, `top-1/2 -translate-y-1/2` inside a `relative`
+container with only one other content row (`items-end`) — floating
+decoration centered in empty space rather than laid out content.
+
+Fix: moved the ring graphic into the actual flex row as a normal sibling
+of the text block (`items-center justify-between gap-8`, `shrink-0`,
+h-28 w-28, no more `position: absolute`/`top-1/2`). The row's height is now
+driven by its real content instead of an empty relative container with a
+decoration floating inside it. Still no live screenshot available in this
+sandbox (same private-package/credentials blocker as above) — **needs a
+fresh screenshot after this ships** to confirm the dead space is actually
+gone; if it isn't, the cause is something outside `routes/index.tsx` /
+`HudPanel`/`styles.css` and needs live DOM inspection, not another
+guess-and-patch round.
 
 ## 2. [F] Strażnik logów (Log Guardian agent) — next agent
 
