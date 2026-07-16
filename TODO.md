@@ -10,30 +10,35 @@
 > keep building the "operating system" half while still shipping things
 > worth showing off (Vision Scanner is the bar for [W]).
 
-## 1. [UI] Dashboard redesign — holo-panels with depth — **starting now**
+## 1. [UI] Dashboard redesign — holo-panels with depth — **shipped 2026-07-16, pending visual sign-off**
 
-Decided direction: **keep the single-column layout**, don't rebuild it as a
-bento grid — but stop every panel from reading as a discrete boxy window.
 Root cause (confirmed against the screenshot + `src/routes/index.tsx:25`,
-which wraps every section in one `space-y-6` stack of uniform `HudPanel`s):
+which wrapped every section in one `space-y-6` stack of uniform `HudPanel`s):
 the last Lovable pass (`.lovable/plan.md`) only softened `.hud-panel`'s
 edges (radius, glow, backdrop-blur) while explicitly keeping every panel's
 box composition identical ("Zero moved/renamed/removed features"). Rounding
 corners on the same uniform boxes was never going to read as "depth."
 
-Scope for this pass: `src/styles.css` (`.hud-panel`, `.hud-corner`, surface/
-glow tokens) + `HudPanel.tsx` + `DashboardShell.tsx` background layering.
-Real changes, not just tokens:
-- Break uniform panel weight — hero/chat get genuine elevation and depth
-  layering; secondary panels (telemetry, weather, github) sit visually
-  "behind" or "lighter" rather than equal-weight boxes.
-- Layer translucent glass surfaces at different z-depths so panels read as
-  floating holo-planes, not flat cards with a border.
-- Let selected elements bleed past their container edge (icons, corner
-  accents, glow) instead of everything being strictly clipped inside a
-  rounded rect — this is what actually kills the "window" read.
-- Keep all content, routes, data, and component order untouched — visual
-  layer only, same discipline as the Lovable plan, different target.
+Implemented: `HudPanel` now takes a `tone` prop (`"elevated" | "quiet"`).
+- **Elevated** (hero "COMMAND // OVERVIEW", "CONVERSATION STREAM") keeps
+  full glass/glow lift, and its corner brackets now sit *outside* the
+  rounded edge (`-5px`, was `4px` inset) instead of drawn inside — reads as
+  floating instrumentation, not a frame on the border.
+- **Quiet** (telemetry strip, notes, tasks, agent ops, weather, github)
+  dropped corner brackets entirely, thinner border/background, no
+  backdrop-blur lift — recessed into the HUD surface instead of reading as
+  an equal-weight floating window.
+- `src/styles.css`: `.hud-panel` now shared structure only;
+  `.hud-panel--elevated` / `.hud-panel--quiet` carry the actual visual
+  weight difference.
+
+Verified: `tsc --noEmit` clean on all touched files (pre-existing unrelated
+errors elsewhere untouched). **Could not get a live browser screenshot in
+this environment** — `vite.config.ts` depends on private `@lovable.dev/*`
+build packages only resolvable inside the Lovable-connected environment,
+and no real Supabase credentials were available to get past the login
+phase either way. Next step: pull this branch in Lovable (or locally) and
+eyeball it — flag anything that doesn't read as intended before merging.
 
 ## 2. [F] Strażnik logów (Log Guardian agent) — next agent
 

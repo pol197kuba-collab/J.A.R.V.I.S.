@@ -70,6 +70,7 @@ export function TasksWidget({ index = 0 }: { index?: number }) {
   return (
     <HudPanel
       index={index}
+      tone="quiet"
       title="OPS // TASK QUEUE"
       rightSlot={
         <button

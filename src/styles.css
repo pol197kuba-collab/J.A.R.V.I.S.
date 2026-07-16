@@ -414,21 +414,11 @@
 }
 .animate-audio-ring { animation: audio-ring-grow var(--ring-dur, 0.5s) ease-in-out infinite; transform-origin: center; }
 
-/* Sharp HUD panel — used across the JARVIS surface */
+/* HUD panel — shared structure. Visual weight (elevated vs quiet) lives in
+   the two modifier classes below; this rule only sets shape/behavior. */
 .hud-panel {
   position: relative;
-  border: 1px solid color-mix(in oklab, var(--primary) 20%, transparent);
-  background:
-    linear-gradient(180deg, color-mix(in oklab, var(--primary) 4%, transparent), transparent 40%),
-    var(--gradient-panel),
-    linear-gradient(180deg, color-mix(in oklab, var(--surface-2) 94%, transparent), color-mix(in oklab, #000 92%, transparent));
-  box-shadow:
-    0 1px 0 color-mix(in oklab, var(--primary) 22%, transparent) inset,
-    0 0 0 1px color-mix(in oklab, var(--primary) 8%, transparent) inset,
-    0 24px 60px -32px color-mix(in oklab, var(--primary) 55%, transparent),
-    0 8px 24px -12px oklch(0 0 0 / 0.7);
   border-radius: var(--radius);
-  backdrop-filter: blur(10px) saturate(120%);
   transition: box-shadow .25s ease, transform .25s ease, border-color .25s ease;
   overflow: hidden;
 }
@@ -452,32 +442,76 @@
   pointer-events: none;
   mix-blend-mode: screen;
 }
-.hud-panel:hover {
-  border-color: color-mix(in oklab, var(--primary) 38%, transparent);
-  box-shadow:
-    0 1px 0 color-mix(in oklab, var(--primary) 30%, transparent) inset,
-    0 0 0 1px color-mix(in oklab, var(--primary) 14%, transparent) inset,
-    0 30px 70px -30px color-mix(in oklab, var(--primary) 70%, transparent),
-    0 12px 30px -12px oklch(0 0 0 / 0.75);
-  transform: translateY(-1px);
-}
 /* Push panel content above ::before/::after decorative layers */
 .hud-panel > * { position: relative; z-index: 1; }
 
-/* Four corner brackets */
+/* Elevated — the one or two focal panels per screen (hero, chat). Full
+   glass lift, strongest glow, floats forward from the HUD surface. */
+.hud-panel--elevated {
+  border: 1px solid color-mix(in oklab, var(--primary) 22%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--primary) 4%, transparent), transparent 40%),
+    var(--gradient-panel),
+    linear-gradient(180deg, color-mix(in oklab, var(--surface-3) 92%, transparent), color-mix(in oklab, #000 90%, transparent));
+  box-shadow:
+    0 1px 0 color-mix(in oklab, var(--primary) 24%, transparent) inset,
+    0 0 0 1px color-mix(in oklab, var(--primary) 10%, transparent) inset,
+    0 32px 80px -28px color-mix(in oklab, var(--primary) 60%, transparent),
+    0 10px 30px -10px oklch(0 0 0 / 0.75);
+  backdrop-filter: blur(14px) saturate(130%);
+}
+.hud-panel--elevated:hover {
+  border-color: color-mix(in oklab, var(--primary) 40%, transparent);
+  box-shadow:
+    0 1px 0 color-mix(in oklab, var(--primary) 32%, transparent) inset,
+    0 0 0 1px color-mix(in oklab, var(--primary) 16%, transparent) inset,
+    0 40px 90px -26px color-mix(in oklab, var(--primary) 75%, transparent),
+    0 14px 34px -10px oklch(0 0 0 / 0.8);
+  transform: translateY(-2px);
+}
+
+/* Quiet — secondary telemetry/widget panels. Recessed into the HUD
+   surface rather than reading as an equal-weight floating window: no
+   corner brackets, thin border, barely-there lift. */
+.hud-panel--quiet {
+  border: 1px solid color-mix(in oklab, var(--primary) 10%, transparent);
+  background: color-mix(in oklab, var(--surface-1) 88%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--primary) 5%, transparent) inset,
+    0 10px 30px -24px oklch(0 0 0 / 0.85);
+  backdrop-filter: blur(4px);
+}
+.hud-panel--quiet:hover {
+  border-color: color-mix(in oklab, var(--primary) 18%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--primary) 10%, transparent) inset,
+    0 14px 34px -24px oklch(0 0 0 / 0.9);
+}
+
+/* Four corner brackets — elevated panels only. Sit just outside the
+   rounded edge instead of inset inside it, so they read as floating
+   instrumentation rather than a frame drawn on the panel's own border. */
 .hud-corner {
   position: absolute;
-  width: 8px;
-  height: 8px;
-  border: 1px solid var(--primary);
-  opacity: 0.55;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--primary);
+  opacity: 0.7;
   pointer-events: none;
-  filter: drop-shadow(0 0 3px var(--primary));
+  filter: drop-shadow(0 0 4px var(--primary));
 }
-.hud-corner.tl { top: 4px; left: 4px; border-right: 0; border-bottom: 0; }
-.hud-corner.tr { top: 4px; right: 4px; border-left: 0; border-bottom: 0; }
-.hud-corner.bl { bottom: 4px; left: 4px; border-right: 0; border-top: 0; }
-.hud-corner.br { bottom: 4px; right: 4px; border-left: 0; border-top: 0; }
+.hud-corner.tl { top: -5px; left: -5px; border-right: 0; border-bottom: 0; }
+.hud-corner.tr { top: -5px; right: -5px; border-left: 0; border-bottom: 0; }
+.hud-corner.bl { bottom: -5px; left: -5px; border-right: 0; border-top: 0; }
+.hud-corner.br { bottom: -5px; right: -5px; border-left: 0; border-top: 0; }
+
+/* Fade for the corner-bracket/tag shell on elevated panels — kept as a
+   plain opacity fade (no transform) so it doesn't double up with the
+   inner panel's own tile-in/dissolve transform animation. */
+@keyframes hud-shell-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes hud-shell-out { from { opacity: 1; } to { opacity: 0; } }
+.animate-hud-shell-in { animation: hud-shell-in .6s ease both; }
+.animate-hud-shell-out { animation: hud-shell-out .7s ease both; }
 
 /* Tile materialize / dematerialize for route transitions */
 @keyframes hud-dematerialize {

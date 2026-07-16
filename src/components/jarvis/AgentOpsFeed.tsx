@@ -34,6 +34,7 @@ export function AgentOpsFeed({ index = 0 }: { index?: number }) {
   return (
     <HudPanel
       index={index}
+      tone="quiet"
       title="AGENT OPS // LIVE FEED"
       rightSlot={
         <span className="flex items-center gap-1.5 font-display text-[10px] uppercase tracking-[0.3em] text-primary">
