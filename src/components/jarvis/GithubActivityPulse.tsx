@@ -141,6 +141,7 @@ export function GithubActivityPulse({ index = 0 }: { index?: number }) {
   return (
     <HudPanel
       index={index}
+      tone="quiet"
       title="CONSTRUCTION LOG // GITHUB PULSE"
       rightSlot={
         <button

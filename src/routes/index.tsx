@@ -61,7 +61,7 @@ function Index() {
         </div>
       </HudPanel>
 
-      <HudPanel index={1} title="TELEMETRY // CORE METRICS" className="p-4 landscape:max-md:p-2">
+      <HudPanel index={1} title="TELEMETRY // CORE METRICS" tone="quiet" className="p-4 landscape:max-md:p-2">
         <div className="pt-3 landscape:max-md:pt-1">
           <SystemStatsStrip />
         </div>

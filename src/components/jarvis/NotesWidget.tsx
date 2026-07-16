@@ -72,6 +72,7 @@ export function NotesWidget({ index = 0 }: { index?: number }) {
   return (
     <HudPanel
       index={index}
+      tone="quiet"
       title="ARCHIVE // NOTES"
       rightSlot={
         <button

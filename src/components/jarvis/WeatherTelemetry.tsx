@@ -59,7 +59,7 @@ export function WeatherTelemetry({ index = 0 }: { index?: number }) {
   ];
 
   return (
-    <HudPanel index={index} title="WEATHER // TELEMETRY GRID" className="flex flex-col">
+    <HudPanel index={index} tone="quiet" title="WEATHER // TELEMETRY GRID" className="flex flex-col">
       <div className="flex gap-3 p-3 landscape:max-md:gap-2 landscape:max-md:p-2">
         <ul className="flex-1 space-y-1 font-display text-[10px] uppercase tracking-[0.2em] text-foreground/85 landscape:max-md:text-[8px]">
           {rows.map(([k, v]) => (
