@@ -11,15 +11,19 @@ import {
 import { useHudNavigate } from "./TransitionContext";
 import { usePhase } from "./PhaseContext";
 import type { SubSystemId } from "@/data/subSystems";
-import { speak, speakCancel } from "@/lib/audio/speak";
+import { useServerFn } from "@tanstack/react-start";
+import { speak, speakCancel, onSpeaking, isSpeakingNow } from "@/lib/audio/speak";
 import { askJarvis, hasGeminiKey, type JarvisAction } from "@/lib/ai/jarvisBrain";
 import { emitChat, getRecentHistory } from "@/lib/ai/chatBus";
 import { matchesReboot } from "@/lib/ai/rebootPhrases";
+import { getUserSettings } from "@/lib/agents/runtime.functions";
 
 type Ctx = {
   enabled: boolean;
   supported: boolean;
   listening: boolean;
+  /** Follow-up window is open — mic input is routed WITHOUT the wake word. */
+  inConversation: boolean;
   lastTranscript: string;
   setEnabled: (v: boolean) => void;
   /** Module-init handoff for /sub-systems route */
@@ -39,6 +43,7 @@ const VoiceCtx = createContext<Ctx>({
   enabled: false,
   supported: false,
   listening: false,
+  inConversation: false,
   lastTranscript: "",
   setEnabled: () => {},
   consumePendingModule: () => null,
@@ -58,6 +63,14 @@ const SPEECH_FLUSH_MS = 900;
 // Safety flush: if interim keeps streaming but no final arrives, force-flush
 // whatever we have after this much silence-from-finals.
 const SPEECH_SAFETY_MS = 1500;
+// Conversation mode: after JARVIS finishes speaking a reply (and after each
+// accepted mic utterance), a follow-up window opens during which speech is
+// routed WITHOUT the wake word — like Alexa/Google Home follow-up mode.
+const CONVERSATION_WINDOW_MS = 20_000;
+// Echo guard: transcripts arriving while TTS is speaking (or within this
+// grace period after it stops) are the browser hearing JARVIS's own voice —
+// drop them, or conversation mode would make him answer himself.
+const ECHO_GRACE_MS = 600;
 // Loose wake-word detector: matches the word ANYWHERE in the utterance.
 // We slice off everything up to and INCLUDING the last occurrence so
 // "ok jarvis open fuel" → "open fuel" and "jarvis, jarvis open fuel" →
@@ -206,6 +219,33 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
   // Show the "no key" system warning at most once per session.
   const offlineNoticeShownRef = useRef(false);
 
+  // --- Conversation mode state -------------------------------------------
+  const [inConversation, setInConversation] = useState(false);
+  // Epoch ms until which mic input is accepted without the wake word.
+  const conversationUntilRef = useRef(0);
+  const conversationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Echo guard — mirrors speak.ts state into refs usable inside rec.onresult.
+  const speakingRef = useRef(isSpeakingNow());
+  const lastSpeakEndRef = useRef(0);
+  // Wake-word requirement from user_settings (Settings → Voice). Kept in a
+  // ref because routeFromMic lives inside the recognition effect's closure.
+  const wakeWordEnabledRef = useRef(true);
+  const fetchSettings = useServerFn(getUserSettings);
+  // `enabled` mirrored into a ref so the onSpeaking subscription (mounted
+  // once) can check mic state without resubscribing on every toggle.
+  const enabledRef = useRef(false);
+
+  const openConversationWindow = useCallback(() => {
+    if (!enabledRef.current) return; // mic disarmed — window is meaningless
+    conversationUntilRef.current = Date.now() + CONVERSATION_WINDOW_MS;
+    setInConversation(true);
+    if (conversationTimerRef.current) clearTimeout(conversationTimerRef.current);
+    conversationTimerRef.current = setTimeout(() => {
+      // The window may have been extended since this timer was armed.
+      if (Date.now() >= conversationUntilRef.current) setInConversation(false);
+    }, CONVERSATION_WINDOW_MS + 50);
+  }, []);
+
   const consumePendingModule = useCallback(() => {
     const v = pendingRef.current;
     pendingRef.current = null;
@@ -221,7 +261,58 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
         clearTimeout(queueTimerRef.current);
         queueTimerRef.current = null;
       }
+      if (conversationTimerRef.current) {
+        clearTimeout(conversationTimerRef.current);
+        conversationTimerRef.current = null;
+      }
     };
+  }, []);
+
+  useEffect(() => {
+    enabledRef.current = enabled;
+    if (!enabled) {
+      // Disarming the mic closes the conversation window immediately.
+      conversationUntilRef.current = 0;
+      setInConversation(false);
+    }
+  }, [enabled]);
+
+  // Track TTS state for the echo guard, and open the follow-up window the
+  // moment JARVIS finishes speaking a reply — this covers BOTH reply paths
+  // (voice route() and ChatPanel's server runAgent), since both end in
+  // speak().
+  useEffect(() => {
+    return onSpeaking((speaking) => {
+      const was = speakingRef.current;
+      speakingRef.current = speaking;
+      if (was && !speaking) {
+        lastSpeakEndRef.current = Date.now();
+        openConversationWindow();
+      }
+    });
+  }, [openConversationWindow]);
+
+  // Wake-word requirement: read once on mount and re-read when Settings
+  // broadcasts a change (see settings.tsx updatePref). Fail-open to `true`
+  // (current behaviour) when settings can't be loaded (e.g. not signed in).
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const s = await fetchSettings();
+        if (!cancelled) wakeWordEnabledRef.current = s.wakeWordEnabled ?? true;
+      } catch {
+        /* keep current value */
+      }
+    };
+    void load();
+    const onPrefs = () => void load();
+    window.addEventListener("jarvis:prefs-updated", onPrefs);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("jarvis:prefs-updated", onPrefs);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fire = useCallback(
@@ -412,23 +503,39 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
     [fire],
   );
 
-  // Microphone-only router: enforces wake word + noise filter, then delegates
-  // to the shared Gemini pipeline. Chat input bypasses this and calls
-  // `route()` directly via the exposed `routeText`.
+  // Microphone-only router. The wake word is required only to START an
+  // interaction; once JARVIS replies, a follow-up conversation window keeps
+  // routing wake-word-less speech (extended by each accepted utterance).
+  // With the Settings wake-word toggle OFF, speech is always routed. Noise
+  // filtering applies on every path. Chat input bypasses this entirely and
+  // calls `route()` directly via the exposed `routeText`.
   const routeFromMic = useCallback(
     async (transcript: string) => {
       const command = stripWakeWord(transcript);
-      if (command === null) {
-        console.debug("[voice] ignored: no wake word", transcript);
+      if (command !== null) {
+        if (isNoise(command)) {
+          console.debug("[voice] ignored: noise/filler", command);
+          return;
+        }
+        openConversationWindow();
+        await route(command, "voice");
         return;
       }
-      if (isNoise(command)) {
-        console.debug("[voice] ignored: noise/filler", command);
+      const windowOpen = Date.now() < conversationUntilRef.current;
+      if (!wakeWordEnabledRef.current || windowOpen) {
+        const phrase = transcript.trim();
+        if (isNoise(phrase)) {
+          console.debug("[voice] ignored: noise/filler", phrase);
+          return;
+        }
+        console.debug("[voice] follow-up accepted (no wake word)", phrase);
+        openConversationWindow();
+        await route(phrase, "voice");
         return;
       }
-      await route(command, "voice");
+      console.debug("[voice] ignored: no wake word, window closed", transcript);
     },
-    [route],
+    [route, openConversationWindow],
   );
 
   useEffect(() => {
@@ -460,11 +567,20 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
         safetyTimer = null;
       }
     };
+    // Echo guard: anything heard while JARVIS is speaking (or in the short
+    // grace period right after) is his own TTS bleeding into the mic.
+    const isEchoWindow = () =>
+      speakingRef.current || Date.now() - lastSpeakEndRef.current < ECHO_GRACE_MS;
+
     const flush = () => {
       clearTimers();
       const phrase = speechBuffer.trim();
       speechBuffer = "";
       if (!phrase) return;
+      if (isEchoWindow()) {
+        console.debug("[voice] dropped (echo guard)", phrase);
+        return;
+      }
       console.debug("[voice] flush", phrase);
       setLastTranscript(phrase);
       void routeFromMic(phrase);
@@ -472,6 +588,14 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
 
     rec.onresult = (e) => {
       console.log("RAW EVENT RECEIVED", e.results, "resultIndex=", e.resultIndex);
+      if (isEchoWindow()) {
+        // Discard everything captured while TTS is audible — including any
+        // partial phrase from just before, so a user fragment can't get
+        // glued to echo fragments.
+        speechBuffer = "";
+        clearTimers();
+        return;
+      }
       const start = typeof e.resultIndex === "number" ? e.resultIndex : 0;
       let appendedFinal = false;
       let sawInterim = false;
@@ -552,13 +676,24 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       enabled,
       supported,
       listening,
+      inConversation,
       lastTranscript,
       setEnabled,
       consumePendingModule,
       routeText,
       performAction,
     }),
-    [enabled, supported, listening, lastTranscript, setEnabled, consumePendingModule, routeText, performAction],
+    [
+      enabled,
+      supported,
+      listening,
+      inConversation,
+      lastTranscript,
+      setEnabled,
+      consumePendingModule,
+      routeText,
+      performAction,
+    ],
   );
 
   return <VoiceCtx.Provider value={value}>{children}</VoiceCtx.Provider>;

@@ -175,6 +175,9 @@ function Settings() {
         routing: next.chatRouting,
         keyLinked: serverStatus === "linked",
       });
+      // Notify live consumers (VoiceCommandContext reads wake_word_enabled)
+      // so the change applies without a page reload.
+      window.dispatchEvent(new CustomEvent("jarvis:prefs-updated"));
       audio.playClick();
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Update failed");
@@ -355,7 +358,8 @@ function Settings() {
             <div>
               <p className="text-sm text-foreground">Wake word „J.A.R.V.I.S."</p>
               <p className="text-xs text-muted-foreground">
-                Wymaga wypowiedzenia „Jarvis" przed komendą głosową.
+                ON: „Jarvis" wymagany tylko do ROZPOCZĘCIA rozmowy — po każdej odpowiedzi masz 20 s
+                na kontynuację bez wake worda. OFF: słucha zawsze, „Jarvis" nigdy nie jest wymagany.
               </p>
             </div>
             <button
