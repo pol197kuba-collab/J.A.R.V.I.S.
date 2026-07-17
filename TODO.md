@@ -139,6 +139,41 @@ data path: no live Supabase session here to confirm `getAgentFlow` against
 actual `agent_runs`. Confirm live: ask the Orchestrator to delegate to
 Strażnik (as already tested) and watch this widget while it happens.
 
+### Follow-up (2026-07-17): full roster + two live-testing bugs
+
+Live-tested after merge — worked, but three things came back from real
+usage:
+
+1. **"CLASSIFIER NO FUNCTION CALL" chip.** `runOrchestrator`'s internal
+   fallback UI-action classifier (a second Gemini call on every turn that
+   doesn't already call `perform_ui_action`) logs its own outcome into the
+   same `tool_calls` array as real tool invocations. The tree rendered
+   that as if it were a tool the agent chose to use. Fixed: filter
+   anything starting with `classifier_` in `flow.functions.ts`.
+   `perform_ui_action` itself stays visible when the classifier fallback
+   genuinely triggers a real action.
+2. **Strażnik briefly disappearing mid-delegation.** The tree recomputed
+   "latest interaction" from scratch on every 3s poll; a child run's own
+   `createdAt` briefly reading as the max in the fetched set (independent
+   of whether it's really a new interaction) could flip which subtree got
+   shown. Fixed: pin the chosen root run (`useRef`) across polls, only
+   adopting a new one when a genuinely newer top-level run appears.
+3. **"Widzę tylko Strażnika, nie widzę Marketera."** Original design only
+   rendered agents that actually appeared in the current interaction's
+   run tree — Marketer never showed because it wasn't delegated to.
+   Explicit decision: **always show the full enabled-agent roster as a
+   persistent structure** (Orchestrator + every teammate, always
+   present), with only the agents actually involved in the current/most
+   recent interaction highlighted (glow, status color, tool chips) —
+   everyone else renders dimmed/"standby". `getAgentFlow` now returns
+   `{ agents, runs }` instead of just a run list.
+
+Re-verified structurally in this sandbox (same synthetic-data approach —
+the RPC mechanism itself doesn't execute against a real backend here
+regardless of auth, a sandbox limitation, not code-specific) after these
+three fixes: full three-node roster renders, idle node dimmed correctly,
+active path highlighted correctly.
+
 ## 4. [F] Multi-provider AI routing
 
 Every call is hardcoded to Gemini's REST endpoint (`runtime.server.ts`,
