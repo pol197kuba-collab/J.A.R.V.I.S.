@@ -350,10 +350,14 @@
 }
 .animate-vision-flash { animation: vision-flash 0.45s ease-out forwards; }
 
-/* Leaflet dark/cyan HUD filter for Geo-Tracking */
+/* Leaflet HUD tint for Situation Room's TacticalMap. The tile source
+   (CARTO dark_all) is already dark — this used to also run grayscale +
+   brightness(0.55) + contrast(1.4), which was written for INVERTING
+   light OSM tiles and instead crushed the already-dark tiles to near
+   black. Kept intentionally light-touch: a cyan lean, no darkening. */
 .geo-map { background: #000; }
 .geo-map .leaflet-tile {
-  filter: grayscale(1) brightness(0.55) contrast(1.4) hue-rotate(170deg) saturate(2.6);
+  filter: saturate(1.3) hue-rotate(170deg);
 }
 .geo-map .leaflet-container { background: #000; outline: none; }
 
