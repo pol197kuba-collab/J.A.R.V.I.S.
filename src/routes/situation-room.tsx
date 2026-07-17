@@ -2,11 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { HudPanel } from "@/components/jarvis/HudPanel";
-import { TacticalRadar, type RadarContact } from "@/components/jarvis/TacticalRadar";
+import { TacticalMap } from "@/components/jarvis/TacticalMap";
 import { WeatherTelemetry } from "@/components/jarvis/WeatherTelemetry";
 import { GithubActivityPulse } from "@/components/jarvis/GithubActivityPulse";
 import { SystemPulseStream } from "@/components/jarvis/SystemPulseStream";
-import { fetchNearbyFlights } from "@/lib/geo/flightRadar";
+import { fetchNearbyFlights, type Aircraft } from "@/lib/geo/flightRadar";
 
 export const Route = createFileRoute("/situation-room")({
   head: () => ({
@@ -50,7 +50,7 @@ const FALLBACK: Fix = {
 // Only starts once a real fix is locked — the FALLBACK coordinates
 // shouldn't trigger a flight query for Warsaw before we actually know
 // where the user is.
-function useFlightContacts(lat: number, lon: number, enabled: boolean): RadarContact[] {
+function useFlightContacts(lat: number, lon: number, enabled: boolean): Aircraft[] {
   const { data } = useQuery({
     queryKey: ["flight-radar", lat.toFixed(2), lon.toFixed(2)],
     queryFn: () => fetchNearbyFlights(lat, lon),
@@ -161,27 +161,29 @@ function SituationRoomPage() {
         className="flex flex-col"
       >
         <div className="relative h-[55vh] overflow-hidden bg-black landscape:max-md:h-[50vh]">
-          <TacticalRadar lat={fix.lat} lon={fix.lon} active={!isLoading} contacts={contacts} />
+          <TacticalMap lat={fix.lat} lon={fix.lon} active={!isLoading} aircraft={contacts} />
           {isLoading ? <AcquireOverlay progress={bootProgress} /> : null}
 
-          <HudCorners />
-          <div className="pointer-events-none absolute left-3 top-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
-            LIVE FEED // STARK SAT-LINK // CH:
-            {(Math.abs(fix.lat * 100) | 0).toString(16).toUpperCase().padStart(3, "0")}-
-            {(Math.abs(fix.lon * 100) | 0).toString(16).toUpperCase().padStart(3, "0")}
-          </div>
-          <div className="pointer-events-none absolute right-3 top-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
-            AIRCRAFT: {contacts.length}
-          </div>
-          <div className="pointer-events-none absolute left-3 bottom-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
-            GRID: TACTICAL // MODE: ADS-B // RANGE: 150KM
-          </div>
-          <div className="pointer-events-none absolute right-3 bottom-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
-            {status === "locked"
-              ? "LOCK: STABLE"
-              : status === "fallback"
-                ? "LOCK: DEGRADED"
-                : "LOCK: PENDING"}
+          <div className="pointer-events-none absolute inset-0">
+            <HudCorners />
+            <div className="absolute left-3 top-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
+              LIVE FEED // STARK SAT-LINK // CH:
+              {(Math.abs(fix.lat * 100) | 0).toString(16).toUpperCase().padStart(3, "0")}-
+              {(Math.abs(fix.lon * 100) | 0).toString(16).toUpperCase().padStart(3, "0")}
+            </div>
+            <div className="absolute right-3 top-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
+              AIRCRAFT: {contacts.length}
+            </div>
+            <div className="absolute left-3 bottom-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
+              GRID: MAP // MODE: ADS-B // RANGE: 150KM
+            </div>
+            <div className="absolute right-3 bottom-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
+              {status === "locked"
+                ? "LOCK: STABLE"
+                : status === "fallback"
+                  ? "LOCK: DEGRADED"
+                  : "LOCK: PENDING"}
+            </div>
           </div>
         </div>
       </HudPanel>

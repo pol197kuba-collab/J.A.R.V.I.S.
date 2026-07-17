@@ -382,9 +382,50 @@ from the rest of the HUD — not a quick add-on).
   "WEATHER // Warsaw, Poland" instead of an unlabeled panel. Verified both
   APIs' exact response field names against live `curl` calls.
 
-Vision Scanner v2, ambient reactive Arc Core, and a real precipitation
-weather radar (Leaflet + RainViewer free tiles, on an actual map — bigger,
-separate project) remain queued as future gadget work.
+### Second follow-up (2026-07-17): "still looks like a radar, no aircraft visible, I want a real map I can pan/zoom"
+
+Screenshot showed `AIRCRAFT: 0` — the OpenSky integration was actually
+working correctly (genuinely nothing in range at that moment over Zduńska
+Wola), but the empty stylized SVG radar read as "broken" rather than
+"empty", and it wasn't pannable/zoomable at all. Replaced the SVG radar
+outright with a real Leaflet map (dark CARTO tiles) instead of layering
+fake data on top of it:
+
+- **`src/components/jarvis/TacticalMap.tsx`** — vanilla Leaflet (no
+  react-leaflet needed; `leaflet` was already a dependency, unused, and
+  `styles.css` already had a `.geo-map` dark/cyan tile-filter class
+  prepared for exactly this, apparently left over from an earlier attempt
+  that got swapped for the SVG radar). Real pan (drag) and zoom
+  (scroll/pinch/double-click) — Leaflet's defaults, no extra work needed.
+  Aircraft plotted at their actual lat/lon as rotated triangle markers
+  (rotation = real heading), colored by altitude band; hover shows
+  callsign/altitude/speed/country. A glowing dot marks the real position.
+- **Real bug caught before shipping**: Leaflet touches `window` at
+  module-load time, which crashed this app's SSR (every route is
+  server-rendered) with `ReferenceError: window is not defined` the
+  moment it was statically imported — confirmed via a live sandbox dev
+  server run, not assumed. Fixed by making the import client-only: a
+  dynamic `import("leaflet")` inside a `useEffect`, keeping only `import
+  type * as LeafletNS from "leaflet"` at the top level (type-only imports
+  are erased at compile time, so they never reach the SSR bundle). Fixed
+  and reverified — the crash was gone and the map rendered correctly
+  (confirmed home marker at the mocked coordinates, HUD text overlays
+  stacking correctly over the map, Leaflet's own attribution control)
+  before this shipped, not after.
+- `flightRadar.ts` simplified to return raw `Aircraft` (lat/lon/heading)
+  instead of the old radar-projected `angleDeg`/normalized `distance` —
+  a real map needs real coordinates, not a bearing-and-range projection.
+  `TacticalRadar.tsx` (now fully unused) deleted.
+- Map tiles didn't load in this sandbox's screenshot for the same
+  established reason as weather/GitHub — the sandbox browser doesn't
+  trust the outbound proxy's TLS cert — but the map container, controls,
+  and marker positioning all verified correctly against the real (mocked)
+  coordinates.
+
+A real precipitation weather radar overlay (RainViewer tiles on this same
+map) is now a much smaller add-on than originally scoped, since the real
+map/Leaflet groundwork is already in place — worth revisiting sooner than
+"separate big project" implied earlier.
 
 ## 8. [F] Concierge agent (calendar / email) — new agent proposal
 

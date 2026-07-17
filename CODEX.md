@@ -319,13 +319,34 @@ instead of by a documentation audit next time.
   precipitation weather radar on an actual map (Leaflet + RainViewer) was
   discussed and deliberately deferred — different visual language from
   the rest of the HUD, bigger scope, queued as its own future item.
+- **Milestone 8.2 (2026-07-17)** — more live feedback: the SVG radar with
+  zero aircraft in range read as "broken", not "empty", and wasn't
+  pannable/zoomable. Replaced it outright with a real Leaflet map (dark
+  CARTO tiles, `.geo-map` filter class already prepared in `styles.css`
+  from an earlier, apparently-abandoned Leaflet attempt).
+  `TacticalMap.tsx` plots aircraft at real lat/lon as heading-rotated
+  markers; pan/zoom are Leaflet's own defaults, no extra work. **Caught a
+  real bug before shipping**: Leaflet touches `window` at module load
+  time, which crashed this app's SSR (every route is server-rendered)
+  with `window is not defined` — confirmed live in the sandbox dev
+  server, not assumed. Fixed with a client-only dynamic `import("leaflet")`
+  inside a `useEffect`, keeping only `import type * as LeafletNS` at the
+  top level (type-only imports are erased, never reach the SSR bundle) —
+  reverified clean (no crash, map renders, HUD overlays stack correctly)
+  before merging. `flightRadar.ts` simplified to return raw
+  lat/lon/heading instead of a radar-projected angle/distance;
+  `TacticalRadar.tsx` deleted (fully superseded). A precipitation-radar
+  tile overlay (RainViewer) on this same map is now a much smaller
+  add-on than originally scoped, since the map/Leaflet groundwork already
+  exists.
 
 Beyond the Marketer prompt-only agent, the HUD already has ~30 components
 including boot sequence, voice, system logs, sub-systems, and (since
-Milestone 8) a **`situation-room` route** — real browser Geolocation, a
-shared `TacticalRadar` SVG component plotting real ADS-B contacts, and
-real telemetry (GitHub Events API, Open-Meteo). Treat the frontend as
-further along than the backend/agent layer — new agent work should
+Milestone 8.2) a **`situation-room` route** — real browser Geolocation, a
+real pannable/zoomable Leaflet map (`TacticalMap.tsx`) plotting real
+ADS-B contacts, and real telemetry (GitHub Events API, Open-Meteo). Treat
+the frontend as further along than the backend/agent layer — new agent
+work should
 assume a fairly complete
 HUD shell already exists to plug into.
 
