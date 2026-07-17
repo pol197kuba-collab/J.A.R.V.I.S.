@@ -174,7 +174,25 @@ regardless of auth, a sandbox limitation, not code-specific) after these
 three fixes: full three-node roster renders, idle node dimmed correctly,
 active path highlighted correctly.
 
-## 4. [F] Multi-provider AI routing
+### Second follow-up (2026-07-17): highlight never expired
+
+Live-tested again after the full-roster fix: on a fresh app load, with
+nothing asked yet, Strażnik showed up already lit up (green, "3207ms") —
+the last-ever completed interaction stayed pinned as "active" forever,
+including across app restarts, reading as if it were still working.
+
+Fixed: added `HIGHLIGHT_EXPIRY_MS` (10s, per explicit ask — first proposed
+60s, corrected down). Once every run in the currently-pinned interaction
+has settled (nothing `running`) and the most recent `finished_at` is more
+than 10s old, the pin clears and the whole tree fades back to full
+standby. Needed `agent_runs.finished_at` added to the `getAgentFlow`
+select (wasn't fetched before), plus a small polling-independent clock
+(`setInterval` tick in the component) so the expiry actually re-evaluates
+on a timer rather than only when new run data arrives.
+
+Verified in this sandbox: synthetic data with `finished_at` 15s in the
+past renders the entire tree as standby (all three nodes dimmed),
+confirming the expiry path.
 
 Every call is hardcoded to Gemini's REST endpoint (`runtime.server.ts`,
 `tools.server.ts`). Add a provider abstraction (Claude, OpenAI, Groq,
