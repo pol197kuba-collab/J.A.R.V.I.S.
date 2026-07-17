@@ -14,6 +14,7 @@ import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as SystemLogsRouteImport } from './routes/system-logs'
 import { Route as SubSystemsRouteImport } from './routes/sub-systems'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SchemaRouteImport } from './routes/schema'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as GeoTrackingRouteImport } from './routes/geo-tracking'
@@ -48,6 +49,11 @@ const SubSystemsRoute = SubSystemsRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SchemaRoute = SchemaRouteImport.update({
+  id: '/schema',
+  path: '/schema',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -110,6 +116,7 @@ export interface FileRoutesByFullPath {
   '/geo-tracking': typeof GeoTrackingRoute
   '/mcp': typeof McpRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/schema': typeof SchemaRoute
   '/settings': typeof SettingsRoute
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
@@ -127,6 +134,7 @@ export interface FileRoutesByTo {
   '/geo-tracking': typeof GeoTrackingRoute
   '/mcp': typeof McpRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/schema': typeof SchemaRoute
   '/settings': typeof SettingsRoute
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
@@ -145,6 +153,7 @@ export interface FileRoutesById {
   '/geo-tracking': typeof GeoTrackingRoute
   '/mcp': typeof McpRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/schema': typeof SchemaRoute
   '/settings': typeof SettingsRoute
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
@@ -164,6 +173,7 @@ export interface FileRouteTypes {
     | '/geo-tracking'
     | '/mcp'
     | '/reset-password'
+    | '/schema'
     | '/settings'
     | '/sub-systems'
     | '/system-logs'
@@ -181,6 +191,7 @@ export interface FileRouteTypes {
     | '/geo-tracking'
     | '/mcp'
     | '/reset-password'
+    | '/schema'
     | '/settings'
     | '/sub-systems'
     | '/system-logs'
@@ -198,6 +209,7 @@ export interface FileRouteTypes {
     | '/geo-tracking'
     | '/mcp'
     | '/reset-password'
+    | '/schema'
     | '/settings'
     | '/sub-systems'
     | '/system-logs'
@@ -216,6 +228,7 @@ export interface RootRouteChildren {
   GeoTrackingRoute: typeof GeoTrackingRoute
   McpRoute: typeof McpRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  SchemaRoute: typeof SchemaRoute
   SettingsRoute: typeof SettingsRoute
   SubSystemsRoute: typeof SubSystemsRoute
   SystemLogsRoute: typeof SystemLogsRoute
@@ -263,6 +276,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/schema': {
+      id: '/schema'
+      path: '/schema'
+      fullPath: '/schema'
+      preLoaderRoute: typeof SchemaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -344,6 +364,7 @@ const rootRouteChildren: RootRouteChildren = {
   GeoTrackingRoute: GeoTrackingRoute,
   McpRoute: McpRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  SchemaRoute: SchemaRoute,
   SettingsRoute: SettingsRoute,
   SubSystemsRoute: SubSystemsRoute,
   SystemLogsRoute: SystemLogsRoute,
