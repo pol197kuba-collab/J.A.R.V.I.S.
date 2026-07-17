@@ -233,6 +233,28 @@ instead of by a documentation audit next time.
   `guardian_scan_errors` querying the dead `event_log` table instead of
   `system_events` (the table the runtime actually writes telemetry to) —
   caught while tracing exactly where run/tool data lives for this widget.
+- **Milestone 6 (2026-07-17)** — Schema Explorer (`/schema`), admin-only.
+  Shipped directly via Lovable (not this session) from a plan the user
+  shared for review first. Reviewed the plan against the codebase before
+  it landed: confirmed the owner auto-admin-grant trigger would satisfy an
+  admin gate, and that the `supabaseAdmin` service-role pattern already
+  existed if needed as a fallback — but flagged the plan's "Bez zmian w
+  bazie" claim as likely wrong, since PostgREST only exposes the `public`
+  schema and can't query `information_schema`/`pg_catalog` directly. The
+  shipped implementation confirms that call: migration
+  `20260717103728_e976ee53-...sql` adds
+  `public.get_public_schema_snapshot()`, a `SECURITY DEFINER` function
+  (queries `pg_class`/`pg_attribute`/`pg_constraint`/`pg_policies`/
+  `pg_type`, gated by `has_role(auth.uid(), 'admin')` *inside* the
+  function body, `RAISE EXCEPTION` on failure) called via
+  `supabase.rpc(...)` from `src/lib/schema/schema.functions.ts` — the
+  exact pattern predicted, consistent with `has_role`/`handle_new_user`.
+  `/schema` (`src/routes/schema.tsx`) renders it as a table index + detail
+  panel (columns, PK/nullable/default, inbound/outbound FKs, RLS policies
+  with `USING`/`WITH CHECK`) plus an SVG graph view. Minor gap: the
+  sidebar "Schema" link isn't itself gated by an admin check (the RPC's
+  own check is what actually protects the data) — low risk in this
+  single-tenant app, tracked in `TODO.md` cleanup backlog.
 
 Beyond the Marketer prompt-only agent, the HUD already has ~30 components
 including boot sequence, voice, threat stream, system logs, sub-systems,

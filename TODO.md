@@ -110,7 +110,7 @@ added no real information.
 
 This directly fills the "next wow gadget" slot — better fit than Situation
 Room (real product mechanics, not a mashup of unrelated data), so Situation
-Room / Radar Sweep is bumped to the open second-gadget slot (item 6) rather
+Room / Radar Sweep is bumped to the open second-gadget slot (item 7) rather
 than built now.
 
 Turned out to need **zero new backend work**: `agent_runs.parent_run_id`
@@ -194,6 +194,40 @@ Verified in this sandbox: synthetic data with `finished_at` 15s in the
 past renders the entire tree as standby (all three nodes dimmed),
 confirming the expiry path.
 
+## 4. [UI] Schema Explorer (`/schema`) — **shipped 2026-07-17, live, confirmed working**
+
+Admin-only HUD module to browse the live database topology: tables,
+columns (type/nullable/default/PK), foreign keys (outbound + inbound,
+clickable to jump between tables), RLS policies (per table, with
+`USING`/`WITH CHECK` expressions), and enums — plus a graph view (SVG,
+grid-laid-out nodes with FK arrows). Shipped directly via Lovable, not
+this session; reviewed the plan against the codebase before it landed and
+confirmed live behavior after by reading the merged diff.
+
+Implementation matches what the pre-build review flagged as the
+architecturally-necessary approach: the plan's own framing ("Bez zmian w
+bazie") undersold it slightly — one migration was needed after all,
+`20260717103728_e976ee53-...sql`, adding `public.get_public_schema_snapshot()`,
+a `SECURITY DEFINER` function that queries `pg_class`/`pg_attribute`/
+`pg_constraint`/`pg_policies`/`pg_type` internally and is called via
+`supabase.rpc(...)` (`src/lib/schema/schema.functions.ts`). Supabase's
+PostgREST client only exposes the `public` schema through `.from(...)` —
+`information_schema`/`pg_catalog` aren't reachable that way, so a
+`SECURITY DEFINER` RPC wrapper was the only viable route, consistent with
+the existing `has_role`/`handle_new_user` pattern.
+
+Access control is enforced **inside the RPC itself**
+(`IF NOT has_role(auth.uid(), 'admin') THEN RAISE EXCEPTION`), not just
+client-side — a non-admin calling it gets a hard `42501` error, not a
+silently-filtered response. The sidebar "Schema" entry
+(`AppSidebar.tsx`) is currently shown unconditionally rather than gated
+by an admin check, which is cosmetic-only risk in this single-tenant app
+(the owner is the only account that can ever exist, and is always admin)
+but worth a follow-up if the app ever stops being single-tenant — see
+cleanup backlog (#10).
+
+## 5. [F] Multi-provider AI routing
+
 Every call is hardcoded to Gemini's REST endpoint (`runtime.server.ts`,
 `tools.server.ts`). Add a provider abstraction (Claude, OpenAI, Groq,
 OpenRouter — each a `fetch` to a different endpoint behind a shared
@@ -201,7 +235,7 @@ function-calling contract) so a user can bring their own key per task.
 Highest-value, lowest-architecture-risk item on the backlog, and unlocks
 intelligent model routing afterward for free.
 
-## 5. [F] RAG over personal documents (= Analityk, deprioritized not dropped)
+## 6. [F] RAG over personal documents (= Analityk, deprioritized not dropped)
 
 Extend the proven `memories`/`match_memories` pgvector pattern to a
 `documents`/`document_chunks` schema + upload/chunking Edge Function +
@@ -210,7 +244,7 @@ service unless a specific capability genuinely can't be done in JS. Still
 valuable, just heavier (new pipeline, not reused data) than Strażnik — goes
 after it rather than first, per the reordering above.
 
-## 6. [W] Next gadget slot — open (bumped from item 3: Agent Flow Tree shipped instead)
+## 7. [W] Next gadget slot — open (bumped from item 3: Agent Flow Tree shipped instead)
 
 Reassess once items above ship — candidates: **Situation Room / Radar
 Sweep** (merge geo-tracking, `WeatherTelemetry`, `GithubActivityPulse`,
@@ -220,19 +254,19 @@ later), or **ambient reactive Arc Core** (reactor/background reacting to
 voice in real time full-screen, building on the existing Speaking/
 Processing state in `ArcCorePanel`).
 
-## 7. [F] Concierge agent (calendar / email) — new agent proposal
+## 8. [F] Concierge agent (calendar / email) — new agent proposal
 
 Cheap to add: prompt-only persona like Marketer, no new architecture,
 bound to the calendar/email OAuth tools below once they exist. Natural
 pairing rather than a standalone "tools" item with no agent to use them.
 
-## 8. [F] Calendar / email tools
+## 9. [F] Calendar / email tools
 
 OAuth-backed tools via the existing tool-registry pattern
 (`public.tools` + per-agent binding) — same shape as `web_search`/
-`fetch_url`, no new architecture. Ships together with Concierge (#7).
+`fetch_url`, no new architecture. Ships together with Concierge (#8).
 
-## 9. [F] Cleanup backlog (low priority, batch together)
+## 10. [F] Cleanup backlog (low priority, batch together)
 
 - `user_settings.default_model` is dead — nothing reads it (`agents.model`
   always wins). Wire it up as a real fallback once multi-provider routing
