@@ -9,6 +9,7 @@ import {
   Radar,
   Eye,
   ListChecks,
+  Database,
 } from "lucide-react";
 import {
   Sidebar,
@@ -39,6 +40,7 @@ const items = [
   { title: "Geo-Tracking", url: "/geo-tracking", icon: Radar },
   { title: "Vision", url: "/vision", icon: Eye },
   { title: "System Logs", url: "/system-logs", icon: Terminal },
+  { title: "Schema", url: "/schema", icon: Database },
   { title: "Settings", url: "/settings", icon: SettingsIcon },
 ] as const;
 
