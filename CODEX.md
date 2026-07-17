@@ -56,13 +56,17 @@ real next step for **our** architecture:
 - Web dashboard — the HUD itself; already ~30 components deep.
 
 ### Natural next steps (fit our stack directly)
-1. **Multi-provider AI routing.** Today every call is hardcoded to Gemini's
-   REST endpoint (`runtime.server.ts`, `tools.server.ts`). A provider
-   abstraction (Claude, OpenAI, Groq, OpenRouter — each just a `fetch` to a
-   different endpoint with a shared function-calling contract) lets a user
-   bring their own key for whichever model fits the task, or let the
-   Orchestrator route by task type. Highest-value, lowest-architecture-risk
-   item on this list — user's own explicit interest.
+1. **Multi-provider AI routing — increment 1 shipped, see Milestone 7.**
+   Gemini is still the primary reasoning engine for every agent's main
+   conversation and every tool (`tools.server.ts` — `web_search` grounding,
+   embeddings — is untouched and stays Gemini-only). What shipped: a
+   provider abstraction (`src/lib/agents/providers/`) that currently has one
+   extra adapter, Groq (free tier), used automatically for the UI-action
+   classifier pass and as emergency failover when Gemini errors — not yet a
+   user-selectable primary model. Claude was evaluated and ruled out for
+   now (the user only has claude.ai, not an API console key — adding it
+   would require a new purchase, which was explicitly declined).
+   OpenRouter was approved but not built yet — same adapter shape as Groq.
 2. **RAG over personal documents.** We already proved the pattern with
    `memories` + `match_memories` (pgvector, HNSW, Gemini embeddings). Extend
    it: a `documents`/`document_chunks` schema, an upload + chunking pipeline
@@ -233,6 +237,56 @@ instead of by a documentation audit next time.
   `guardian_scan_errors` querying the dead `event_log` table instead of
   `system_events` (the table the runtime actually writes telemetry to) —
   caught while tracing exactly where run/tool data lives for this widget.
+- **Milestone 6 (2026-07-17)** — Schema Explorer (`/schema`), admin-only.
+  Shipped directly via Lovable (not this session) from a plan the user
+  shared for review first. Reviewed the plan against the codebase before
+  it landed: confirmed the owner auto-admin-grant trigger would satisfy an
+  admin gate, and that the `supabaseAdmin` service-role pattern already
+  existed if needed as a fallback — but flagged the plan's "Bez zmian w
+  bazie" claim as likely wrong, since PostgREST only exposes the `public`
+  schema and can't query `information_schema`/`pg_catalog` directly. The
+  shipped implementation confirms that call: migration
+  `20260717103728_e976ee53-...sql` adds
+  `public.get_public_schema_snapshot()`, a `SECURITY DEFINER` function
+  (queries `pg_class`/`pg_attribute`/`pg_constraint`/`pg_policies`/
+  `pg_type`, gated by `has_role(auth.uid(), 'admin')` *inside* the
+  function body, `RAISE EXCEPTION` on failure) called via
+  `supabase.rpc(...)` from `src/lib/schema/schema.functions.ts` — the
+  exact pattern predicted, consistent with `has_role`/`handle_new_user`.
+  `/schema` (`src/routes/schema.tsx`) renders it as a table index + detail
+  panel (columns, PK/nullable/default, inbound/outbound FKs, RLS policies
+  with `USING`/`WITH CHECK`) plus an SVG graph view. Minor gap: the
+  sidebar "Schema" link isn't itself gated by an admin check (the RPC's
+  own check is what actually protects the data) — low risk in this
+  single-tenant app, tracked in `TODO.md` cleanup backlog.
+- **Milestone 7 (2026-07-17)** — Multi-provider AI routing, increment 1.
+  Interviewed the user before building anything, since this is a spend
+  decision: Claude turned out to be claude.ai only (no API console key —
+  ruled out without a new purchase, which the user explicitly didn't want),
+  Gemini is a real paid pay-as-you-go BYOK key (unchanged, stays the
+  primary reasoning engine), and Groq (genuinely free tier) was approved as
+  the one new provider. Scoped narrowly on purpose: Groq never replaces
+  Gemini, it only removes waste and adds a safety net around it.
+  `src/lib/agents/providers/types.ts` promotes the Gemini-shaped
+  turn representation `runtime.server.ts` already used internally
+  (`GeminiContent`/`GeminiPart`) to a shared type, so `providers/groq.ts`
+  can translate to/from Groq's OpenAI-compatible chat completions at
+  exactly that one boundary — the tool-calling loop itself is untouched
+  and still thinks entirely in Gemini's shape. Two uses: (1) the
+  `perform_ui_action` classifier fallback pass — previously a **second
+  full paid Gemini call on every turn that didn't already call a UI
+  action** — now runs on free Groq (`llama-3.1-8b-instant`) first, falling
+  through to the original Gemini path unchanged if no Groq key is set;
+  (2) automatic failover — a Gemini error mid-turn (rate limit/5xx/
+  timeout) retries once via Groq (`llama-3.3-70b-versatile`) before the
+  run fails, logged to `system_events`. `web_search` (Google Search
+  grounding) and `remember`/`recall` (Gemini embeddings) are deliberately
+  untouched — Gemini-exclusive capabilities, not something Groq
+  substitutes for. Migration `20260717120000_groq_api_key.sql` adds
+  `user_secrets.groq_api_key`; Settings gained a matching BYOK panel.
+  OpenRouter was approved too but not built this round (same adapter
+  shape as Groq, easy follow-on). See `TODO.md` item 5 for the full
+  writeup and what's deliberately still out of scope.
 
 Beyond the Marketer prompt-only agent, the HUD already has ~30 components
 including boot sequence, voice, threat stream, system logs, sub-systems,

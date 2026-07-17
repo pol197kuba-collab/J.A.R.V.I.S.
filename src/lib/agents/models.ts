@@ -24,5 +24,11 @@ export const GEMINI_MODELS: GeminiModelOption[] = [
 
 export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 
-export const isKnownGeminiModel = (id: string): boolean =>
-  GEMINI_MODELS.some((m) => m.id === id);
+export const isKnownGeminiModel = (id: string): boolean => GEMINI_MODELS.some((m) => m.id === id);
+
+// Groq — free-tier only, used internally for the UI-action classifier pass
+// and emergency failover (see providers/groq.ts). Not yet exposed as a
+// user-selectable primary agent model, so no provider-prefix parsing is
+// needed yet; these are plain Groq model IDs passed straight to their API.
+export const DEFAULT_GROQ_CLASSIFIER_MODEL = "llama-3.1-8b-instant";
+export const DEFAULT_GROQ_FALLBACK_MODEL = "llama-3.3-70b-versatile";

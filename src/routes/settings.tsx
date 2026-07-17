@@ -8,10 +8,13 @@ import { CommandDirectory } from "@/components/jarvis/CommandDirectory";
 import { useServerFn } from "@tanstack/react-start";
 import {
   deleteGeminiKey,
+  deleteGroqKey,
   getGeminiKeyStatus,
+  getGroqKeyStatus,
   getUserSettings,
   listAgentTools,
   saveGeminiKey,
+  saveGroqKey,
   setAgentToolEnabled,
   updateUserSettings,
   type AgentToolSummary,
@@ -52,6 +55,18 @@ function Settings() {
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Groq — optional, free-tier fallback (UI-action classifier + failover
+  // only). No client-side/localStorage copy: unlike Gemini, nothing in the
+  // browser ever calls Groq directly, so the server key is the only copy.
+  const fetchGroqStatus = useServerFn(getGroqKeyStatus);
+  const persistGroqKey = useServerFn(saveGroqKey);
+  const clearGroqKey = useServerFn(deleteGroqKey);
+  const [groqApiKey, setGroqApiKey] = useState("");
+  const [groqStatus, setGroqStatus] = useState<"loading" | "linked" | "empty" | "error">("loading");
+  const [groqPreview, setGroqPreview] = useState<string | null>(null);
+  const [groqBusy, setGroqBusy] = useState(false);
+  const [groqErrorMsg, setGroqErrorMsg] = useState<string | null>(null);
+
   const fetchAgentTools = useServerFn(listAgentTools);
   const persistAgentTool = useServerFn(setAgentToolEnabled);
   const [tools, setTools] = useState<AgentToolSummary[] | null>(null);
@@ -87,6 +102,40 @@ function Settings() {
   useEffect(() => {
     void refreshServerState();
   }, [refreshServerState]);
+
+  const refreshGroqState = useCallback(async () => {
+    try {
+      const status = await fetchGroqStatus();
+      setGroqStatus(status.linked ? "linked" : "empty");
+      setGroqPreview(status.preview);
+    } catch (err) {
+      console.warn("[settings] groq refresh failed", err);
+      setGroqStatus("error");
+    }
+  }, [fetchGroqStatus]);
+
+  useEffect(() => {
+    void refreshGroqState();
+  }, [refreshGroqState]);
+
+  const handleSaveGroqKey = async () => {
+    const trimmed = groqApiKey.trim();
+    setGroqBusy(true);
+    setGroqErrorMsg(null);
+    try {
+      if (trimmed) {
+        await persistGroqKey({ data: { key: trimmed } });
+      } else {
+        await clearGroqKey();
+      }
+      audio.playClick();
+      await refreshGroqState();
+    } catch (err) {
+      setGroqErrorMsg(err instanceof Error ? err.message : "Server sync failed");
+    } finally {
+      setGroqBusy(false);
+    }
+  };
 
   const refreshTools = useCallback(async () => {
     try {
@@ -276,6 +325,68 @@ function Settings() {
             ℹ „Save local" trzyma klucz tylko w tej przeglądarce. „Sync to Agent Runtime" wysyła go
             zaszyfrowanym połączeniem na serwer, gdzie używa go Orchestrator — nadal Twój klucz,
             Twój ruch, darmowy tier Gemini. Puste pole + zapis = usunięcie klucza.
+          </p>
+        </div>
+      </HudPanel>
+      <HudPanel index={1} title="GROQ // FREE FALLBACK ENGINE" className="p-5">
+        <div className="mt-4 space-y-3">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            GROQ API KEY // OPCJONALNY, DARMOWY TIER
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              value={groqApiKey}
+              onChange={(e) => setGroqApiKey(e.target.value)}
+              placeholder="Wklej Groq API Key..."
+              className="font-mono flex-1 border border-primary/60 bg-black/40 px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+            />
+            <button
+              type="button"
+              disabled={groqBusy}
+              onClick={handleSaveGroqKey}
+              className="font-display border border-primary/60 bg-primary/20 px-4 py-2 text-[10px] uppercase tracking-widest text-primary hover:bg-primary/30 disabled:opacity-50"
+            >
+              SYNC TO AGENT RUNTIME
+            </button>
+          </div>
+          <div className="flex items-center justify-between border-t border-primary/20 pt-2">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              AGENT RUNTIME
+            </span>
+            <span
+              className="font-display text-[10px] uppercase tracking-widest"
+              style={{
+                color:
+                  groqStatus === "linked"
+                    ? "var(--success)"
+                    : groqStatus === "error"
+                      ? "var(--destructive)"
+                      : "var(--muted-foreground)",
+              }}
+            >
+              {groqStatus === "linked"
+                ? `● LINKED ${groqPreview ?? ""}`
+                : groqStatus === "error"
+                  ? "✕ UNREACHABLE"
+                  : groqStatus === "loading"
+                    ? "… CHECKING"
+                    : "○ NOT SYNCED"}
+            </span>
+          </div>
+          {groqErrorMsg && (
+            <p className="font-mono text-[10px]" style={{ color: "var(--destructive)" }}>
+              ✕ {groqErrorMsg}
+            </p>
+          )}
+          <p className="font-mono text-[10px] text-muted-foreground/70">
+            ℹ Darmowy klucz z console.groq.com, bez karty płatniczej. Orchestrator używa go tylko do
+            dwóch rzeczy: (1) klasyfikacji „czy to komenda UI" zamiast płatnego wywołania Gemini
+            przy każdej wiadomości, (2) awaryjnego fallbacku, gdy Gemini padnie (rate limit / błąd).
+            Główna rozmowa i narzędzia (web_search, pamięć) nadal idą przez Gemini. Puste pole +
+            zapis = usunięcie klucza.
           </p>
         </div>
       </HudPanel>
