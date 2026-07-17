@@ -37,7 +37,7 @@ const items = [
   { title: "Agent Hub", url: "/agent-hub", icon: Bot },
   { title: "Tasks", url: "/tasks", icon: ListChecks },
   { title: "Sub-Systems", url: "/sub-systems", icon: Boxes },
-  { title: "Geo-Tracking", url: "/geo-tracking", icon: Radar },
+  { title: "Situation Room", url: "/situation-room", icon: Radar },
   { title: "Vision", url: "/vision", icon: Eye },
   { title: "System Logs", url: "/system-logs", icon: Terminal },
   { title: "Schema", url: "/schema", icon: Database },
@@ -98,7 +98,7 @@ export function AppSidebar() {
                       disabled={isTransitioning || isDiagnosticRunning}
                       onClick={() => {
                         audio.playClick();
-                        if (item.url === "/geo-tracking") {
+                        if (item.url === "/situation-room") {
                           speak("Uruchamiam telemetrię satelitarną.");
                         }
                         if (isMobile) setOpenMobile(false);
@@ -108,7 +108,8 @@ export function AppSidebar() {
                         "group relative overflow-hidden rounded-[var(--radius-md)] transition-all duration-250 hover:bg-primary/[0.06] hover:text-primary",
                         "data-[active=true]:bg-gradient-to-r data-[active=true]:from-primary/15 data-[active=true]:via-primary/8 data-[active=true]:to-transparent",
                         "data-[active=true]:text-primary data-[active=true]:shadow-[inset_0_1px_0_color-mix(in_oklab,var(--primary)_25%,transparent),0_0_20px_-8px_var(--primary)]",
-                        active && "before:absolute before:left-0 before:top-1/2 before:h-6 before:w-[3px] before:-translate-y-1/2 before:rounded-r-full before:bg-primary before:shadow-[0_0_10px_var(--primary),0_0_20px_var(--primary)]",
+                        active &&
+                          "before:absolute before:left-0 before:top-1/2 before:h-6 before:w-[3px] before:-translate-y-1/2 before:rounded-r-full before:bg-primary before:shadow-[0_0_10px_var(--primary),0_0_20px_var(--primary)]",
                       )}
                     >
                       <item.icon className="icon-neon h-4 w-4" strokeWidth={1.5} />
@@ -175,13 +176,13 @@ function ArcCorePanel() {
       </div>
       <div className="mx-auto mt-1 flex w-full items-center justify-center">
         <ArcReactorTriangle
-          className={cn(
-            "!w-[160px] short:!w-[100px]",
-            isMobile && "!w-[100px] short:!w-[80px]"
-          )}
+          className={cn("!w-[160px] short:!w-[100px]", isMobile && "!w-[100px] short:!w-[80px]")}
         />
       </div>
-      <div className="mt-1 text-center font-display text-[9px] uppercase tracking-[0.28em]" style={{ color: status.color }}>
+      <div
+        className="mt-1 text-center font-display text-[9px] uppercase tracking-[0.28em]"
+        style={{ color: status.color }}
+      >
         {status.label}
       </div>
     </div>

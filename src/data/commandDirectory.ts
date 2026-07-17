@@ -63,69 +63,50 @@ export const COMMAND_DIRECTORY: CommandEntry[] = [
   },
   {
     action: "open_telemetry",
-    label: "Open Geo-Tracking",
+    label: "Open Situation Room",
     phrases: [
       "Show telemetry",
       "Open map",
       "Jarvis, pokaż mapę satelitarną",
       "Jarvis, otwórz geolokalizację",
     ],
-    description: "Opens the satellite telemetry route with the live geo-tracking map.",
+    description:
+      "Opens the Situation Room — live position radar, system events, weather and GitHub pulse.",
     category: "Navigation",
   },
   {
     action: "open_subsystems",
     label: "Open Sub-Systems",
-    phrases: [
-      "Open sub-systems",
-      "Jarvis, otwórz podsystemy",
-      "Jarvis, pokaż podsystemy",
-    ],
+    phrases: ["Open sub-systems", "Jarvis, otwórz podsystemy", "Jarvis, pokaż podsystemy"],
     description: "Opens the full sub-systems grid (Fuel Monitor, RTO, JobFit and more).",
     category: "Navigation",
   },
   {
     action: "open_agents",
     label: "Open Agent Hub",
-    phrases: [
-      "Open Agent Hub",
-      "Show agents",
-      "Jarvis, otwórz Agent Hub",
-      "Jarvis, pokaż agentów",
-    ],
-    description: "Opens the Agent Hub — full registry of JARVIS sub-agents with per-agent console access.",
+    phrases: ["Open Agent Hub", "Show agents", "Jarvis, otwórz Agent Hub", "Jarvis, pokaż agentów"],
+    description:
+      "Opens the Agent Hub — full registry of JARVIS sub-agents with per-agent console access.",
     category: "Navigation",
   },
   {
     action: "open_settings",
     label: "Open Settings",
-    phrases: [
-      "Open settings",
-      "Jarvis, otwórz ustawienia",
-      "Jarvis, konfiguracja",
-    ],
+    phrases: ["Open settings", "Jarvis, otwórz ustawienia", "Jarvis, konfiguracja"],
     description: "Opens the JARVIS configuration panel (AI core, audio, voice, tools, commands).",
     category: "Navigation",
   },
   {
     action: "open_logs",
     label: "Open System Logs",
-    phrases: [
-      "Open system logs",
-      "Jarvis, otwórz logi",
-      "Jarvis, pokaż dziennik systemu",
-    ],
+    phrases: ["Open system logs", "Jarvis, otwórz logi", "Jarvis, pokaż dziennik systemu"],
     description: "Opens the system event log with agent runs, tool calls and warnings.",
     category: "Navigation",
   },
   {
     action: "open_tasks",
     label: "Open Tasks",
-    phrases: [
-      "Open tasks",
-      "Jarvis, otwórz zadania",
-      "Jarvis, pokaż moje zadania",
-    ],
+    phrases: ["Open tasks", "Jarvis, otwórz zadania", "Jarvis, pokaż moje zadania"],
     description: "Opens the task queue — to-do items you and the agents create and track.",
     category: "Navigation",
   },
@@ -144,12 +125,7 @@ export const COMMAND_DIRECTORY: CommandEntry[] = [
   {
     action: "close_menu",
     label: "Close Sidebar",
-    phrases: [
-      "Jarvis close menu",
-      "Hide sidebar",
-      "Jarvis, zamknij menu",
-      "Jarvis, schowaj menu",
-    ],
+    phrases: ["Jarvis close menu", "Hide sidebar", "Jarvis, zamknij menu", "Jarvis, schowaj menu"],
     description: "Collapses the side navigation drawer.",
     category: "Interface",
   },
@@ -169,12 +145,7 @@ export const COMMAND_DIRECTORY: CommandEntry[] = [
   {
     action: "sleep",
     label: "Standby Mode",
-    phrases: [
-      "Jarvis sleep",
-      "Standby",
-      "Jarvis, uśpij",
-      "Jarvis, tryb czuwania",
-    ],
+    phrases: ["Jarvis sleep", "Standby", "Jarvis, uśpij", "Jarvis, tryb czuwania"],
     description: "Disables the continuous voice listener and enters standby mode.",
     category: "System",
   },
@@ -201,7 +172,8 @@ export const COMMAND_DIRECTORY: CommandEntry[] = [
       "Jarvis, zrestartuj system",
       "Jarvis, uruchom ponownie",
     ],
-    description: "Triggers Protocol: Ark Reboot — a cinematic full-stack module diagnostic sweep, then returns to the dashboard.",
+    description:
+      "Triggers Protocol: Ark Reboot — a cinematic full-stack module diagnostic sweep, then returns to the dashboard.",
     category: "System",
   },
 ];

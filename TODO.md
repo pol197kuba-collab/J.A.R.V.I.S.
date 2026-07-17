@@ -264,12 +264,40 @@ Shipped:
   OpenRouter was approved by the user too but not built this round — same
   adapter shape as Groq, cheap follow-on whenever it's picked back up.
 
-Verified: `tsc --noEmit` and `eslint` clean on every touched file, and a
-full `vite build` (SSR) succeeds. Could not exercise a real Gemini failure
-or a real Groq response in this sandbox (no live API keys/network here) —
-the translation logic was verified by reading it against the exact shapes
-`runtime.server.ts` already produces (its own tool-call round-trip
-invariant), not by guessing the OpenAI/Groq API shape from memory.
+Verified at ship time: `tsc --noEmit` and `eslint` clean on every touched
+file, and a full `vite build` (SSR) succeeds. Could not exercise a real
+Gemini failure or a real Groq response in this sandbox (no live API
+keys/network here) — the translation logic was verified by reading it
+against the exact shapes `runtime.server.ts` already produces (its own
+tool-call round-trip invariant), not by guessing the OpenAI/Groq API shape
+from memory.
+
+### Follow-up (2026-07-17): live-tested with a real Groq key, two real bugs found and fixed
+
+1. **Classifier logging gap** — the "none" branch (ordinary chat, the
+   common case) never called `logEvent`, so System Logs showed zero
+   evidence Groq was running on most turns — only the rare UI-action hits
+   were visible. Fixed: logs `classifier fallback via groq: none` too.
+2. **Groq key looked "lost" after reload** — unlike Gemini, the Groq key
+   input had no `localStorage` copy, so it always rendered empty on
+   Settings reload even though the server-side key was fine. Fixed by
+   mirroring Gemini's local-copy pattern (server copy remains the only
+   functional one).
+3. **Classifier fallback overwrote nothing** — when the fallback (Groq or
+   Gemini) found a real UI action, it only set `uiAction` for navigation
+   and never touched `finalText`, so the chat bubble kept showing whatever
+   confused text the main turn produced before failing to call
+   `perform_ui_action` itself (observed live: "ostrzeżenie: agent
+   unknown"). Fixed with a `UI_ACTION_CONFIRMATIONS` map that overwrites
+   `finalText` with a clean confirmation once the fallback succeeds.
+
+Also clarified through live testing (not a bug): the classifier only runs
+when the main turn doesn't already call `perform_ui_action` itself — for
+obvious commands ("otwórz system logs") Gemini's main turn often succeeds
+directly, so **no** classifier call (Groq or otherwise) happens at all,
+which is the cheapest possible outcome, not a regression back to Gemini.
+Confirmed live: `classifier fallback via groq: none` appears reliably for
+ordinary chat messages after a Groq key is linked.
 
 ## 6. [F] RAG over personal documents (= Analityk, deprioritized not dropped)
 
@@ -280,15 +308,53 @@ service unless a specific capability genuinely can't be done in JS. Still
 valuable, just heavier (new pipeline, not reused data) than Strażnik — goes
 after it rather than first, per the reordering above.
 
-## 7. [W] Next gadget slot — open (bumped from item 3: Agent Flow Tree shipped instead)
+## 7. [W] Situation Room — **shipped 2026-07-17**
 
-Reassess once items above ship — candidates: **Situation Room / Radar
-Sweep** (merge geo-tracking, `WeatherTelemetry`, `GithubActivityPulse`,
-`ThreatStream` into one animated radar-style panel), **Vision Scanner v2**
-(feed scan results into `remember`/`recall` so a scan becomes recallable
-later), or **ambient reactive Arc Core** (reactor/background reacting to
-voice in real time full-screen, building on the existing Speaking/
-Processing state in `ArcCorePanel`).
+Merged `geo-tracking`, `WeatherTelemetry`, `GithubActivityPulse` and
+`ThreatStream` into one unified radar command panel at `/situation-room`
+(`geo-tracking` route removed, sidebar entry renamed). Went further than
+"merge the widgets" — audited what was actually real first: `geo-tracking`
+(browser Geolocation) and `GithubActivityPulse` (GitHub Events API) were
+genuine; `WeatherTelemetry` was pure random-jitter fiction and
+`ThreatStream` was a scripted fake feed that wasn't even wired into any
+route. Fixed both instead of just relocating them:
+
+- **`TacticalRadar.tsx`** — the tactical grid/sweep/rings SVG extracted
+  from the old geo-tracking page into a shared component, generalized to
+  plot a `contacts: RadarContact[]` prop instead of decorative lat/lon-
+  seeded blips. Contacts are the real `system_events` feed (same one
+  System Logs reads) — distance from center = recency, angle = a
+  deterministic hash of the event id (stable across polls), color = level.
+- **`WeatherTelemetry.tsx`** rewritten to call Open-Meteo (free, no API
+  key) with the real geolocation fix, replacing the random-jitter numbers.
+  Added an 8s abort timeout after live-testing surfaced it could hang on
+  "acquiring telemetry…" forever with no timeout — now cleanly shows an
+  error state on failure.
+- **`ThreatStream.tsx` → `SystemPulseStream.tsx`** — same color-coded/
+  fade-in ticker UI, but sourced from real `system_events` instead of the
+  deleted `data/threatStream.ts` fake generator. Title changed from
+  "Global Threat // Sat-Link Stream" (fiction) to "System Pulse // Event
+  Stream" (honest).
+- Dashboard (`index.tsx`) dropped the standalone `WeatherTelemetry`/
+  `GithubActivityPulse` cards since both now live inside Situation Room.
+- All UI-action/voice references to `/geo-tracking` updated
+  (`AppSidebar`, `VoiceCommandContext`, `ArkRebootContext`, `jarvisBrain`,
+  `commandDirectory`) so `perform_ui_action: open_telemetry` and the
+  "pokaż telemetrię" voice command still resolve correctly.
+
+Verified in this sandbox: `tsc --noEmit`/`eslint` clean, `vite build`
+succeeds and regenerates `routeTree.gen.ts`. Also did a real Playwright
+render (mocked geolocation) — layout, radar, HUD corners and all three
+side panels render correctly with real coordinates reflected. Weather/
+GitHub/system-events all showed empty/error states rather than real data
+in the screenshot, but confirmed via direct `curl` from the host that
+Open-Meteo itself is reachable — the failures are this sandbox's browser
+not trusting the outbound proxy's TLS cert (a known, previously-
+established sandbox limitation, not a code bug), and the weather panel's
+new error state proved it fails cleanly rather than hanging.
+
+Vision Scanner v2 and ambient reactive Arc Core remain queued as the next
+gadget slot after this one.
 
 ## 8. [F] Concierge agent (calendar / email) — new agent proposal
 

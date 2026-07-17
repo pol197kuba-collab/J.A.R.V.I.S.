@@ -287,11 +287,29 @@ instead of by a documentation audit next time.
   OpenRouter was approved too but not built this round (same adapter
   shape as Groq, easy follow-on). See `TODO.md` item 5 for the full
   writeup and what's deliberately still out of scope.
+- **Milestone 8 (2026-07-17)** — Situation Room (`/situation-room`),
+  replacing `/geo-tracking`. Audited the four widgets being merged before
+  touching code: `geo-tracking` (real browser Geolocation) and
+  `GithubActivityPulse` (real GitHub Events API) were genuine;
+  `WeatherTelemetry` was random-jitter fiction with no real API behind it,
+  and `ThreatStream` was a scripted fake feed that wasn't even wired into
+  any route. Fixed both instead of relocating fake data: `WeatherTelemetry`
+  now calls Open-Meteo (free, no key) with the real geolocation fix;
+  `ThreatStream` became `SystemPulseStream`, same UI, sourced from real
+  `system_events`. `TacticalRadar.tsx` extracts the radar SVG from the old
+  geo-tracking page into a shared component that plots real contacts
+  (`system_events`, distance = recency, angle = a deterministic hash of
+  the event id, color = level) instead of decorative lat/lon-seeded blips.
+  Live-testing during a Playwright render caught a real gap: the weather
+  fetch had no timeout and could hang on "acquiring telemetry…" forever —
+  added an 8s `AbortController` timeout so it fails cleanly instead.
+  `data/threatStream.ts` deleted (dead fake-data generator).
 
 Beyond the Marketer prompt-only agent, the HUD already has ~30 components
-including boot sequence, voice, threat stream, system logs, sub-systems,
-and a **`geo-tracking` route** (Leaflet-based, Warsaw fallback) that predates
-formal documentation of it here. Treat the frontend as further along than
+including boot sequence, voice, system logs, sub-systems, and (since
+Milestone 8) a **`situation-room` route** — real browser Geolocation, a
+shared `TacticalRadar` SVG component, and real telemetry (system_events,
+GitHub Events API, Open-Meteo). Treat the frontend as further along than
 the backend/agent layer — new agent work should assume a fairly complete
 HUD shell already exists to plug into.
 
