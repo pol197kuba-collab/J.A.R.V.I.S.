@@ -45,11 +45,19 @@ export const getAgentFlow = createServerFn({ method: "GET" })
         agentName: agent?.name ?? "Unknown",
         parentRunId: r.parent_run_id,
         status: r.status,
-        // delegate_to_agent hops are already represented structurally via
-        // parentRunId — listing it again as a tool chip would be noise.
+        // Two kinds of noise filtered out:
+        // - delegate_to_agent hops are already represented structurally via
+        //   parentRunId — listing it again as a tool chip would be noise.
+        // - classifier_* entries are runOrchestrator's internal UI-action
+        //   classification pass (runtime.server.ts, "Fallback classifier
+        //   pass"), not a tool the agent chose to use — it runs on every
+        //   turn that doesn't already call perform_ui_action and logs its
+        //   outcome (classifier_none, classifier_no_function_call, etc.)
+        //   into the same tool_calls array. perform_ui_action itself stays
+        //   visible — that one IS a real action taken.
         toolCalls: (output.tool_calls ?? [])
           .map((t) => t.name)
-          .filter((name) => name !== "delegate_to_agent"),
+          .filter((name) => name !== "delegate_to_agent" && !name.startsWith("classifier_")),
         latencyMs: r.latency_ms,
         createdAt: r.created_at,
       };
