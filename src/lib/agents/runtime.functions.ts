@@ -182,7 +182,58 @@ export const deleteGeminiKey = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase.from("user_secrets").delete().eq("owner_id", userId);
+    // Clears only this column, not the whole row — user_secrets now also
+    // holds groq_api_key, and a full row delete would silently wipe that
+    // too even though the user only asked to clear their Gemini key.
+    const { error } = await supabase
+      .from("user_secrets")
+      .update({ gemini_api_key: null })
+      .eq("owner_id", userId);
+    if (error) throw new Error(error.message);
+    return { ok: true as const };
+  });
+
+// ---------------------------------------------------------------------------
+// user_secrets (Groq API key — optional, free-tier fallback provider)
+// ---------------------------------------------------------------------------
+
+export const getGroqKeyStatus = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { data, error } = await supabase
+      .from("user_secrets")
+      .select("groq_api_key")
+      .eq("owner_id", userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const key = data?.groq_api_key?.trim() ?? "";
+    return {
+      linked: key.length > 0,
+      preview: key ? `••••••••${key.slice(-4)}` : null,
+    };
+  });
+
+export const saveGroqKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => SaveKeyInput.parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { error } = await supabase
+      .from("user_secrets")
+      .upsert({ owner_id: userId, groq_api_key: data.key.trim() }, { onConflict: "owner_id" });
+    if (error) throw new Error(error.message);
+    return { ok: true as const };
+  });
+
+export const deleteGroqKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { error } = await supabase
+      .from("user_secrets")
+      .update({ groq_api_key: null })
+      .eq("owner_id", userId);
     if (error) throw new Error(error.message);
     return { ok: true as const };
   });
@@ -448,44 +499,49 @@ export type ConversationMessage = {
 export const getActiveConversation = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => GetConversationInput.parse(input))
-  .handler(async ({ data, context }): Promise<{ conversationId: string | null; messages: ConversationMessage[] }> => {
-    const { supabase, userId } = context;
+  .handler(
+    async ({
+      data,
+      context,
+    }): Promise<{ conversationId: string | null; messages: ConversationMessage[] }> => {
+      const { supabase, userId } = context;
 
-    const { data: agent } = await supabase
-      .from("agents")
-      .select("id")
-      .eq("owner_id", userId)
-      .eq("slug", data.agentSlug)
-      .maybeSingle();
-    if (!agent) return { conversationId: null, messages: [] };
+      const { data: agent } = await supabase
+        .from("agents")
+        .select("id")
+        .eq("owner_id", userId)
+        .eq("slug", data.agentSlug)
+        .maybeSingle();
+      if (!agent) return { conversationId: null, messages: [] };
 
-    const { data: conv } = await supabase
-      .from("conversations")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("agent_id", agent.id)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!conv) return { conversationId: null, messages: [] };
+      const { data: conv } = await supabase
+        .from("conversations")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("agent_id", agent.id)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!conv) return { conversationId: null, messages: [] };
 
-    const { data: msgs } = await supabase
-      .from("messages")
-      .select("id, role, content, created_at")
-      .eq("conversation_id", conv.id)
-      .order("created_at", { ascending: true })
-      .limit(60);
+      const { data: msgs } = await supabase
+        .from("messages")
+        .select("id, role, content, created_at")
+        .eq("conversation_id", conv.id)
+        .order("created_at", { ascending: true })
+        .limit(60);
 
-    return {
-      conversationId: conv.id,
-      messages: (msgs ?? []).map((m) => ({
-        id: m.id,
-        role: m.role as "user" | "jarvis",
-        text: m.content,
-        time: new Date(m.created_at).toTimeString().slice(0, 8),
-      })),
-    };
-  });
+      return {
+        conversationId: conv.id,
+        messages: (msgs ?? []).map((m) => ({
+          id: m.id,
+          role: m.role as "user" | "jarvis",
+          text: m.content,
+          time: new Date(m.created_at).toTimeString().slice(0, 8),
+        })),
+      };
+    },
+  );
 
 // ---------------------------------------------------------------------------
 // clearConversation — usuwa wiadomości aktywnego wątku PO STRONIE SERWERA.
@@ -669,7 +725,9 @@ export const getAgentDetail = createServerFn({ method: "GET" })
         ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length)
         : null;
     const p95Latency =
-      latencies.length > 0 ? latencies[Math.min(latencies.length - 1, Math.floor(latencies.length * 0.95))] : null;
+      latencies.length > 0
+        ? latencies[Math.min(latencies.length - 1, Math.floor(latencies.length * 0.95))]
+        : null;
 
     const sumTokens = (list: typeof runs, key: "tokens_input" | "tokens_output") =>
       list.reduce((sum, r) => sum + ((r[key] as number | null) ?? 0), 0);
@@ -714,7 +772,9 @@ export const getAgentDetail = createServerFn({ method: "GET" })
       output: r.output,
     });
 
-    const activeRuns = runs.filter((r) => r.status === "running" || r.status === "pending").map(toRunRecord);
+    const activeRuns = runs
+      .filter((r) => r.status === "running" || r.status === "pending")
+      .map(toRunRecord);
     const recentRuns = runs.slice(0, 20).map(toRunRecord);
 
     // Tool usage aggregates — parsed from output.tool_calls in agent_runs.
@@ -890,7 +950,8 @@ export const updateAgentSettings = createServerFn({ method: "POST" })
       const currentVoice = ((current.voice ?? {}) as Record<string, unknown>) || {};
       const b = data.patch.behaviour;
       const nextConfig: Record<string, unknown> = { ...current };
-      if (b.systemPromptOverride !== undefined) nextConfig.system_prompt = b.systemPromptOverride ?? null;
+      if (b.systemPromptOverride !== undefined)
+        nextConfig.system_prompt = b.systemPromptOverride ?? null;
       if (b.temperature !== undefined) nextConfig.temperature = b.temperature;
       if (b.maxOutputTokens !== undefined) nextConfig.max_output_tokens = b.maxOutputTokens;
       if (b.maxToolIterations !== undefined) nextConfig.max_tool_iterations = b.maxToolIterations;

@@ -10,7 +10,13 @@ import type { Database, Json } from "@/integrations/supabase/types";
 import type { AgentRunResult } from "./runtime.functions";
 import { getEnabledToolsForAgent, getToolByName } from "./tools.server";
 import { JARVIS_PERSONA } from "@/lib/ai/persona";
-import { DEFAULT_GEMINI_MODEL } from "./models";
+import {
+  DEFAULT_GEMINI_MODEL,
+  DEFAULT_GROQ_CLASSIFIER_MODEL,
+  DEFAULT_GROQ_FALLBACK_MODEL,
+} from "./models";
+import { callGroq } from "./providers/groq";
+import type { GeminiContent, GeminiPart } from "./providers/types";
 
 // UI actions the Orchestrator (or any agent facing the user directly) can
 // trigger via the perform_ui_action tool. Must stay in sync with the
@@ -124,10 +130,12 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
   if (agentErr) throw new Error(`Agent lookup failed: ${agentErr.message}`);
   if (!agent) throw new Error(`Agent not found: ${agentSlug}`);
 
-  // 2. Resolve Gemini API key from user_secrets.
+  // 2. Resolve Gemini API key (required) + Groq API key (optional — free-tier
+  // fallback, used only for the UI-action classifier pass and emergency
+  // failover, never as the primary reasoning engine) from user_secrets.
   const { data: secret } = await supabase
     .from("user_secrets")
-    .select("gemini_api_key")
+    .select("gemini_api_key, groq_api_key")
     .eq("owner_id", userId)
     .maybeSingle();
   const apiKey = secret?.gemini_api_key?.trim();
@@ -136,6 +144,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       "Brak klucza Gemini. Wpisz go w Settings → AI Core, aby uruchomić Agent Runtime.",
     );
   }
+  const groqApiKey = secret?.groq_api_key?.trim() || null;
 
   const configObj: Record<string, unknown> =
     agent.config && typeof agent.config === "object" && !Array.isArray(agent.config)
@@ -280,17 +289,6 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
 
   // 4. Call Gemini with function-calling loop.
   try {
-    type GeminiPart =
-      | { text: string }
-      | { functionCall: { name: string; args: Record<string, unknown> } }
-      | {
-          functionResponse: {
-            name: string;
-            response: Record<string, unknown>;
-          };
-        };
-    type GeminiContent = { role: "user" | "model" | "function"; parts: GeminiPart[] };
-
     const contents: GeminiContent[] = [
       ...history
         .filter((h) => h.text && h.text.trim())
@@ -365,52 +363,100 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     const toolCallLog: Array<{ name: string; args: Record<string, unknown> }> = [];
 
     for (let iter = 0; iter < maxToolIterations; iter++) {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 45_000);
-      const res = await fetch(
-        `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-        {
-          method: "POST",
-          signal: ctrl.signal,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-            generationConfig: { temperature, maxOutputTokens },
-            // Gemini rejects an empty functionDeclarations array, and an
-            // agent may legitimately have zero tools enabled (all toggled
-            // off in Settings) — omit the `tools` key entirely in that case.
-            ...(toolDeclarations.length > 0
-              ? { tools: [{ functionDeclarations: toolDeclarations }] }
-              : {}),
-            contents,
-          }),
-        },
-      );
-      clearTimeout(timer);
+      let functionCalls: Array<{ name: string; args: Record<string, unknown> }>;
+      let textOut: string;
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 45_000);
+        const res = await fetch(
+          `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+          {
+            method: "POST",
+            signal: ctrl.signal,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              generationConfig: { temperature, maxOutputTokens },
+              // Gemini rejects an empty functionDeclarations array, and an
+              // agent may legitimately have zero tools enabled (all toggled
+              // off in Settings) — omit the `tools` key entirely in that case.
+              ...(toolDeclarations.length > 0
+                ? { tools: [{ functionDeclarations: toolDeclarations }] }
+                : {}),
+              contents,
+            }),
+          },
+        );
+        clearTimeout(timer);
 
-      if (!res.ok) {
-        const bodyText = await res.text().catch(() => "");
-        throw new Error(`Gemini HTTP ${res.status}: ${bodyText.slice(0, 300)}`);
-      }
+        if (!res.ok) {
+          const bodyText = await res.text().catch(() => "");
+          throw new Error(`Gemini HTTP ${res.status}: ${bodyText.slice(0, 300)}`);
+        }
 
-      const data = (await res.json()) as {
-        candidates?: Array<{ content?: { role?: string; parts?: GeminiPart[] } }>;
-        usageMetadata?: {
-          promptTokenCount?: number;
-          candidatesTokenCount?: number;
+        const data = (await res.json()) as {
+          candidates?: Array<{ content?: { role?: string; parts?: GeminiPart[] } }>;
+          usageMetadata?: {
+            promptTokenCount?: number;
+            candidatesTokenCount?: number;
+          };
         };
-      };
-      totalTokensIn += data.usageMetadata?.promptTokenCount ?? 0;
-      totalTokensOut += data.usageMetadata?.candidatesTokenCount ?? 0;
+        totalTokensIn += data.usageMetadata?.promptTokenCount ?? 0;
+        totalTokensOut += data.usageMetadata?.candidatesTokenCount ?? 0;
 
-      const parts = data.candidates?.[0]?.content?.parts ?? [];
-      const functionCalls = parts.flatMap((p) =>
-        "functionCall" in p && p.functionCall ? [p.functionCall] : [],
-      );
-      const textOut = parts
-        .flatMap((p) => ("text" in p && p.text ? [p.text] : []))
-        .join("")
-        .trim();
+        const parts = data.candidates?.[0]?.content?.parts ?? [];
+        functionCalls = parts.flatMap((p) =>
+          "functionCall" in p && p.functionCall ? [p.functionCall] : [],
+        );
+        textOut = parts
+          .flatMap((p) => ("text" in p && p.text ? [p.text] : []))
+          .join("")
+          .trim();
+      } catch (geminiErr) {
+        // Emergency failover: Gemini errored (rate limit, 5xx, timeout,
+        // network) — retry this exact turn against the free Groq tier
+        // instead of failing the whole run, when a key is configured. The
+        // running `contents` array stays in Gemini's canonical shape either
+        // way (see providers/groq.ts), so subsequent iterations still try
+        // Gemini first — this is a per-turn retry, not a permanent switch.
+        const geminiMsg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
+        if (!groqApiKey) throw geminiErr;
+        await logEvent(
+          "warn",
+          "orchestrator",
+          `gemini call failed, failing over to groq: ${geminiMsg}`,
+          {
+            run_id: runId,
+            iter,
+          } as Json,
+        );
+        try {
+          const groqResult = await callGroq({
+            apiKey: groqApiKey,
+            model: DEFAULT_GROQ_FALLBACK_MODEL,
+            systemPrompt,
+            contents,
+            toolDeclarations: toolDeclarations.length > 0 ? toolDeclarations : undefined,
+            temperature,
+            maxOutputTokens,
+          });
+          totalTokensIn += groqResult.tokensIn;
+          totalTokensOut += groqResult.tokensOut;
+          functionCalls = groqResult.functionCalls;
+          textOut = groqResult.text;
+          await logEvent("info", "orchestrator", "failover to groq succeeded", {
+            run_id: runId,
+            iter,
+          } as Json);
+        } catch (groqErr) {
+          const groqMsg = groqErr instanceof Error ? groqErr.message : String(groqErr);
+          await logEvent("error", "orchestrator", `groq failover also failed: ${groqMsg}`, {
+            run_id: runId,
+            iter,
+          } as Json);
+          throw geminiErr;
+        }
+      }
 
       if (functionCalls.length === 0) {
         finalText = textOut;
@@ -522,108 +568,180 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       await logEvent("info", "orchestrator", "classifier fallback: block entered", {
         run_id: runId,
       } as Json);
-      try {
-        const classifyRes = await fetch(
-          `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              systemInstruction: {
-                parts: [
-                  {
-                    text: 'Jesteś klasyfikatorem intencji dla interfejsu JARVIS HUD. Oceń wiadomość użytkownika i zdecyduj, czy odpowiada ona DOKŁADNIE jednej z dostępnych akcji UI. Zawsze wywołaj narzędzie perform_ui_action z jedną wartością — jeśli żadna akcja nie pasuje (np. zwykła pogawędka, pytanie merytoryczne, prośba o treść), wybierz "none". Nie odpowiadaj tekstem, nie tłumacz się.',
-                  },
-                ],
-              },
-              tools: [
-                {
-                  functionDeclarations: [
+
+      const classifierSystemPrompt =
+        'Jesteś klasyfikatorem intencji dla interfejsu JARVIS HUD. Oceń wiadomość użytkownika i zdecyduj, czy odpowiada ona DOKŁADNIE jednej z dostępnych akcji UI. Zawsze wywołaj narzędzie perform_ui_action z jedną wartością — jeśli żadna akcja nie pasuje (np. zwykła pogawędka, pytanie merytoryczne, prośba o treść), wybierz "none". Nie odpowiadaj tekstem, nie tłumacz się.';
+      const classifierToolDeclaration = {
+        name: UI_ACTION_TOOL_NAME,
+        description:
+          "Klasyfikacja: która akcja UI (jeśli którakolwiek) pasuje do wiadomości użytkownika.",
+        parameters: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: UI_ACTIONS_WITH_NONE as unknown as string[],
+              description: 'Dokładnie jedna wartość — konkretna akcja albo "none".',
+            },
+          },
+          required: ["action"],
+        },
+      };
+
+      // This entire pass exists only to force one narrow yes/no decision — it
+      // never needs Gemini's specific capabilities. Route it through the free
+      // Groq tier when a key is configured, saving a full paid Gemini call on
+      // every single turn that doesn't already invoke perform_ui_action (the
+      // majority of turns). Falls through to the original Gemini path below
+      // on any Groq failure or when no Groq key is set — never a regression.
+      let classifiedByGroq = false;
+      if (groqApiKey) {
+        try {
+          const groqResult = await callGroq({
+            apiKey: groqApiKey,
+            model: DEFAULT_GROQ_CLASSIFIER_MODEL,
+            systemPrompt: classifierSystemPrompt,
+            contents: [{ role: "user", parts: [{ text: input }] }],
+            toolDeclarations: [classifierToolDeclaration],
+            forceToolName: UI_ACTION_TOOL_NAME,
+            temperature: 0.1,
+            maxOutputTokens: 50,
+          });
+          const requested = String(
+            (groqResult.functionCalls[0]?.args as Record<string, unknown> | undefined)?.action ??
+              "none",
+          );
+          if (requested !== "none" && (UI_ACTIONS as readonly string[]).includes(requested)) {
+            uiAction = requested as UiAction;
+            toolCallLog.push({
+              name: UI_ACTION_TOOL_NAME,
+              args: { action: requested, via: "classifier_fallback_groq" },
+            });
+            await logEvent(
+              "info",
+              "orchestrator",
+              `ui action via classifier fallback (groq): ${requested}`,
+              { run_id: runId } as Json,
+            );
+          } else {
+            toolCallLog.push({ name: "classifier_none", args: { requested, via: "groq" } });
+          }
+          classifiedByGroq = true;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          await logEvent("warn", "orchestrator", `classifier groq failed, falling back: ${msg}`, {
+            run_id: runId,
+          } as Json);
+        }
+      }
+
+      if (!classifiedByGroq) {
+        try {
+          const classifyRes = await fetch(
+            `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                systemInstruction: {
+                  parts: [
                     {
-                      name: UI_ACTION_TOOL_NAME,
-                      description:
-                        "Klasyfikacja: która akcja UI (jeśli którakolwiek) pasuje do wiadomości użytkownika.",
-                      parameters: {
-                        type: "object",
-                        properties: {
-                          action: {
-                            type: "string",
-                            enum: UI_ACTIONS_WITH_NONE as unknown as string[],
-                            description: 'Dokładnie jedna wartość — konkretna akcja albo "none".',
-                          },
-                        },
-                        required: ["action"],
-                      },
+                      text: 'Jesteś klasyfikatorem intencji dla interfejsu JARVIS HUD. Oceń wiadomość użytkownika i zdecyduj, czy odpowiada ona DOKŁADNIE jednej z dostępnych akcji UI. Zawsze wywołaj narzędzie perform_ui_action z jedną wartością — jeśli żadna akcja nie pasuje (np. zwykła pogawędka, pytanie merytoryczne, prośba o treść), wybierz "none". Nie odpowiadaj tekstem, nie tłumacz się.',
                     },
                   ],
                 },
-              ],
-              toolConfig: {
-                functionCallingConfig: { mode: "ANY", allowedFunctionNames: [UI_ACTION_TOOL_NAME] },
-              },
-              generationConfig: { temperature: 0.1, maxOutputTokens: 50 },
-              contents: [{ role: "user", parts: [{ text: input }] }],
-            }),
-          },
-        );
-        if (classifyRes.ok) {
-          const classifyData = (await classifyRes.json()) as {
-            candidates?: Array<{ content?: { parts?: GeminiPart[] } }>;
-            usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
-          };
-          totalTokensIn += classifyData.usageMetadata?.promptTokenCount ?? 0;
-          totalTokensOut += classifyData.usageMetadata?.candidatesTokenCount ?? 0;
-          const classifyParts = classifyData.candidates?.[0]?.content?.parts ?? [];
-          const classifyCall = classifyParts.flatMap((p) =>
-            "functionCall" in p && p.functionCall ? [p.functionCall] : [],
-          )[0];
-          if (!classifyCall) {
-            // Model returned 200 but no functionCall part — visible now
-            // instead of silently vanishing, so we can see WHY next time.
-            toolCallLog.push({
-              name: "classifier_no_function_call",
-              args: { raw: JSON.stringify(classifyData).slice(0, 300) },
-            });
-          } else {
-            const requested = String(
-              (classifyCall.args as Record<string, unknown> | undefined)?.action ?? "none",
-            );
-            if (requested !== "none" && (UI_ACTIONS as readonly string[]).includes(requested)) {
-              uiAction = requested as UiAction;
+                tools: [
+                  {
+                    functionDeclarations: [
+                      {
+                        name: UI_ACTION_TOOL_NAME,
+                        description:
+                          "Klasyfikacja: która akcja UI (jeśli którakolwiek) pasuje do wiadomości użytkownika.",
+                        parameters: {
+                          type: "object",
+                          properties: {
+                            action: {
+                              type: "string",
+                              enum: UI_ACTIONS_WITH_NONE as unknown as string[],
+                              description: 'Dokładnie jedna wartość — konkretna akcja albo "none".',
+                            },
+                          },
+                          required: ["action"],
+                        },
+                      },
+                    ],
+                  },
+                ],
+                toolConfig: {
+                  functionCallingConfig: {
+                    mode: "ANY",
+                    allowedFunctionNames: [UI_ACTION_TOOL_NAME],
+                  },
+                },
+                generationConfig: { temperature: 0.1, maxOutputTokens: 50 },
+                contents: [{ role: "user", parts: [{ text: input }] }],
+              }),
+            },
+          );
+          if (classifyRes.ok) {
+            const classifyData = (await classifyRes.json()) as {
+              candidates?: Array<{ content?: { parts?: GeminiPart[] } }>;
+              usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+            };
+            totalTokensIn += classifyData.usageMetadata?.promptTokenCount ?? 0;
+            totalTokensOut += classifyData.usageMetadata?.candidatesTokenCount ?? 0;
+            const classifyParts = classifyData.candidates?.[0]?.content?.parts ?? [];
+            const classifyCall = classifyParts.flatMap((p) =>
+              "functionCall" in p && p.functionCall ? [p.functionCall] : [],
+            )[0];
+            if (!classifyCall) {
+              // Model returned 200 but no functionCall part — visible now
+              // instead of silently vanishing, so we can see WHY next time.
               toolCallLog.push({
-                name: UI_ACTION_TOOL_NAME,
-                args: { action: requested, via: "classifier_fallback" },
+                name: "classifier_no_function_call",
+                args: { raw: JSON.stringify(classifyData).slice(0, 300) },
               });
-              await logEvent(
-                "info",
-                "orchestrator",
-                `ui action via classifier fallback: ${requested}`,
-                {
-                  run_id: runId,
-                } as Json,
-              );
             } else {
-              toolCallLog.push({ name: "classifier_none", args: { requested } });
+              const requested = String(
+                (classifyCall.args as Record<string, unknown> | undefined)?.action ?? "none",
+              );
+              if (requested !== "none" && (UI_ACTIONS as readonly string[]).includes(requested)) {
+                uiAction = requested as UiAction;
+                toolCallLog.push({
+                  name: UI_ACTION_TOOL_NAME,
+                  args: { action: requested, via: "classifier_fallback" },
+                });
+                await logEvent(
+                  "info",
+                  "orchestrator",
+                  `ui action via classifier fallback: ${requested}`,
+                  {
+                    run_id: runId,
+                  } as Json,
+                );
+              } else {
+                toolCallLog.push({ name: "classifier_none", args: { requested } });
+              }
             }
+          } else {
+            // HTTP-level failure — surface status + body instead of swallowing it.
+            const bodyText = await classifyRes.text().catch(() => "");
+            toolCallLog.push({
+              name: "classifier_http_error",
+              args: { status: classifyRes.status, body: bodyText.slice(0, 300) },
+            });
+            await logEvent("warn", "orchestrator", `classifier HTTP ${classifyRes.status}`, {
+              run_id: runId,
+              body_preview: bodyText.slice(0, 200),
+            } as Json);
           }
-        } else {
-          // HTTP-level failure — surface status + body instead of swallowing it.
-          const bodyText = await classifyRes.text().catch(() => "");
-          toolCallLog.push({
-            name: "classifier_http_error",
-            args: { status: classifyRes.status, body: bodyText.slice(0, 300) },
-          });
-          await logEvent("warn", "orchestrator", `classifier HTTP ${classifyRes.status}`, {
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          toolCallLog.push({ name: "classifier_exception", args: { message: msg } });
+          await logEvent("warn", "orchestrator", `classifier exception: ${msg}`, {
             run_id: runId,
-            body_preview: bodyText.slice(0, 200),
           } as Json);
         }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        toolCallLog.push({ name: "classifier_exception", args: { message: msg } });
-        await logEvent("warn", "orchestrator", `classifier exception: ${msg}`, {
-          run_id: runId,
-        } as Json);
       }
     }
 

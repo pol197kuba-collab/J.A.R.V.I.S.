@@ -642,18 +642,21 @@ export type Database = {
         Row: {
           created_at: string
           gemini_api_key: string | null
+          groq_api_key: string | null
           owner_id: string
           updated_at: string
         }
         Insert: {
           created_at?: string
           gemini_api_key?: string | null
+          groq_api_key?: string | null
           owner_id: string
           updated_at?: string
         }
         Update: {
           created_at?: string
           gemini_api_key?: string | null
+          groq_api_key?: string | null
           owner_id?: string
           updated_at?: string
         }

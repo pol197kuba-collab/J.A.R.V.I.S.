@@ -226,14 +226,50 @@ by an admin check, which is cosmetic-only risk in this single-tenant app
 but worth a follow-up if the app ever stops being single-tenant — see
 cleanup backlog (#10).
 
-## 5. [F] Multi-provider AI routing
+## 5. [F] Multi-provider AI routing — **increment 1 shipped 2026-07-17**
 
-Every call is hardcoded to Gemini's REST endpoint (`runtime.server.ts`,
-`tools.server.ts`). Add a provider abstraction (Claude, OpenAI, Groq,
-OpenRouter — each a `fetch` to a different endpoint behind a shared
-function-calling contract) so a user can bring their own key per task.
-Highest-value, lowest-architecture-risk item on the backlog, and unlocks
-intelligent model routing afterward for free.
+Interviewed the user first since this touches money: Claude access turned
+out to be claude.ai (Pro/Max) only, no API console key — off the table
+without a new purchase, which was explicitly ruled out. Gemini is a real
+paid pay-as-you-go plan (the existing BYOK key). Landed on: **Groq is the
+only new provider, free tier only**, used strictly as a cost/resilience
+layer around Gemini — never as the primary reasoning engine, and never
+replacing Gemini-exclusive capabilities (`web_search`'s Google Search
+grounding, `remember`/`recall` embeddings — both stay Gemini-only).
+
+Shipped:
+- Migration `20260717120000_groq_api_key.sql` — `user_secrets.groq_api_key`
+  (same BYOK pattern as Gemini). Settings → "Groq // Free Fallback Engine"
+  panel to paste a free console.groq.com key (no card required).
+- `src/lib/agents/providers/` — `types.ts` (the canonical Gemini-shaped
+  turn representation `runtime.server.ts` already used internally, now
+  shared) + `groq.ts` (translates that shape to/from Groq's
+  OpenAI-compatible chat completions, including reconstructing
+  `tool_call_id` pairing from Gemini's id-less functionCall/functionResponse
+  ordering — documented invariant, not a guess).
+- **Classifier fallback pass now runs on Groq first.** This was the actual
+  token-efficiency win: every turn that doesn't call `perform_ui_action`
+  was silently making a *second* full paid Gemini call just to force a
+  yes/no "is this a UI command" decision. That's now a free, near-instant
+  Groq call (`llama-3.1-8b-instant`), with the original Gemini path kept
+  intact as the fallback if no Groq key is set or Groq errors — zero
+  regression for anyone who skips the Groq setup.
+- **Automatic failover**: if Gemini errors mid-turn (rate limit/5xx/
+  timeout) and a Groq key exists, that turn retries once against
+  `llama-3.3-70b-versatile` before the run is marked failed. Logged to
+  `system_events` either way (warn on failover attempt, error if both
+  providers failed) so Guardian/System Logs shows it happened.
+- Not done yet, deliberately: Groq is not a user-selectable primary model
+  for an agent's main conversation (only used internally, automatically).
+  OpenRouter was approved by the user too but not built this round — same
+  adapter shape as Groq, cheap follow-on whenever it's picked back up.
+
+Verified: `tsc --noEmit` and `eslint` clean on every touched file, and a
+full `vite build` (SSR) succeeds. Could not exercise a real Gemini failure
+or a real Groq response in this sandbox (no live API keys/network here) —
+the translation logic was verified by reading it against the exact shapes
+`runtime.server.ts` already produces (its own tool-call round-trip
+invariant), not by guessing the OpenAI/Groq API shape from memory.
 
 ## 6. [F] RAG over personal documents (= Analityk, deprioritized not dropped)
 
