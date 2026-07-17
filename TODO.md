@@ -353,8 +353,38 @@ not trusting the outbound proxy's TLS cert (a known, previously-
 established sandbox limitation, not a code bug), and the weather panel's
 new error state proved it fails cleanly rather than hanging.
 
-Vision Scanner v2 and ambient reactive Arc Core remain queued as the next
-gadget slot after this one.
+### Follow-up (2026-07-17): live feedback — "this radar is weak, what are the green dots" + weather had no sky condition or location label
+
+User asked for something real to look at instead of abstract dots, and
+for weather to actually say whether it's sunny/cloudy and for where.
+Interviewed on the radar direction: chose Flight Radar now (smaller
+scope), real weather-precipitation radar on an actual map later as a
+separate, bigger project (new mapping library, different visual language
+from the rest of the HUD — not a quick add-on).
+
+- **`src/lib/geo/flightRadar.ts`** — real ADS-B aircraft via OpenSky
+  Network's free, keyless `states/all` endpoint, bounding-boxed around the
+  real geolocation fix (150km range, padded box so circular-radar edges
+  aren't clipped by the square bbox). Real bearing (`bearingDeg`) and
+  real distance (`haversineKm`) computed from lat/lon — no hash-derived
+  placeholder angle this time. Color by altitude band (low = amber,
+  mid = cyan, high = green). Verified the OpenSky response shape and every
+  field index against a live `curl` response (not assumed from memory of
+  the docs) before writing the parser.
+- Radar's `contacts` now come from `useFlightContacts` (30s poll,
+  disabled until a real fix is locked) instead of `system_events` —
+  `SystemPulseStream` (unchanged) remains the right home for that data as
+  a ticker, not as abstract radar blips.
+- **`WeatherTelemetry.tsx`**: added a `SKY` row (Open-Meteo's
+  `weather_code`, WMO table mapped to short labels like "PARTLY CLOUDY" /
+  "THUNDERSTORM") and a location name in the panel title via a free,
+  keyless reverse-geocode (BigDataCloud's client endpoint) — so it reads
+  "WEATHER // Warsaw, Poland" instead of an unlabeled panel. Verified both
+  APIs' exact response field names against live `curl` calls.
+
+Vision Scanner v2, ambient reactive Arc Core, and a real precipitation
+weather radar (Leaflet + RainViewer free tiles, on an actual map — bigger,
+separate project) remain queued as future gadget work.
 
 ## 8. [F] Concierge agent (calendar / email) — new agent proposal
 

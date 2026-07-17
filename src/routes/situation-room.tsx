@@ -1,13 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { TacticalRadar, type RadarContact } from "@/components/jarvis/TacticalRadar";
 import { WeatherTelemetry } from "@/components/jarvis/WeatherTelemetry";
 import { GithubActivityPulse } from "@/components/jarvis/GithubActivityPulse";
 import { SystemPulseStream } from "@/components/jarvis/SystemPulseStream";
-import { listSystemEvents } from "@/lib/system/events.functions";
+import { fetchNearbyFlights } from "@/lib/geo/flightRadar";
 
 export const Route = createFileRoute("/situation-room")({
   head: () => ({
@@ -47,48 +46,26 @@ const FALLBACK: Fix = {
   heading: null,
 };
 
-const LEVEL_COLOR: Record<string, string> = {
-  info: "var(--success)",
-  warn: "var(--warning)",
-  error: "var(--destructive)",
-  debug: "var(--muted-foreground)",
-};
-
-// Deterministic per-id bearing so a given event's contact doesn't jump
-// around the radar between polls — only its distance-from-center (recency)
-// changes as it ages relative to newer events.
-function hashAngle(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return h % 360;
-}
-
-function useRadarContacts(): RadarContact[] {
-  const fetchEvents = useServerFn(listSystemEvents);
-  const { data: events = [] } = useQuery({
-    queryKey: ["system_events", "radar"],
-    queryFn: () => fetchEvents({ data: { limit: 16 } }),
-    refetchInterval: 5000,
+// Real ADS-B aircraft near the observer (OpenSky Network, free/keyless).
+// Only starts once a real fix is locked — the FALLBACK coordinates
+// shouldn't trigger a flight query for Warsaw before we actually know
+// where the user is.
+function useFlightContacts(lat: number, lon: number, enabled: boolean): RadarContact[] {
+  const { data } = useQuery({
+    queryKey: ["flight-radar", lat.toFixed(2), lon.toFixed(2)],
+    queryFn: () => fetchNearbyFlights(lat, lon),
+    enabled,
+    staleTime: 25_000,
+    refetchInterval: 30_000,
   });
-
-  return useMemo(() => {
-    const n = events.length;
-    if (n === 0) return [];
-    return events.map((e, i) => ({
-      id: e.id,
-      angleDeg: hashAngle(e.id),
-      distance: n === 1 ? 0.2 : 0.15 + (i / (n - 1)) * 0.75,
-      color: LEVEL_COLOR[e.level] ?? LEVEL_COLOR.info,
-      label: `${e.level.toUpperCase()} · ${e.message}`,
-    }));
-  }, [events]);
+  return data ?? [];
 }
 
 function SituationRoomPage() {
   const [fix, setFix] = useState<Fix>(FALLBACK);
   const [status, setStatus] = useState<Status>("acquiring");
   const [bootProgress, setBootProgress] = useState(0);
-  const contacts = useRadarContacts();
+  const contacts = useFlightContacts(fix.lat, fix.lon, status !== "acquiring");
 
   // Boot / acquisition sequence — runs once
   useEffect(() => {
@@ -194,10 +171,10 @@ function SituationRoomPage() {
             {(Math.abs(fix.lon * 100) | 0).toString(16).toUpperCase().padStart(3, "0")}
           </div>
           <div className="pointer-events-none absolute right-3 top-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
-            CONTACTS: {contacts.length}
+            AIRCRAFT: {contacts.length}
           </div>
           <div className="pointer-events-none absolute left-3 bottom-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
-            GRID: TACTICAL // MODE: SURVEILLANCE
+            GRID: TACTICAL // MODE: ADS-B // RANGE: 150KM
           </div>
           <div className="pointer-events-none absolute right-3 bottom-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
             {status === "locked"
