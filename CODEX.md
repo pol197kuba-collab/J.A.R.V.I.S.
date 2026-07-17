@@ -222,6 +222,17 @@ instead of by a documentation audit next time.
   bespoke decoration.
 - **Milestone 4 (2026-07-16)** — Guardian (Strażnik) agent, see Phase 3
   below.
+- **Milestone 5 (2026-07-16)** — Agent Flow Tree. Replaces the
+  `SystemStatsStrip` dashboard widget (FPS/CPU/MEM/NET — real but
+  uninteresting) with a live delegation tree: Orchestrator at the root,
+  branching down to whichever agent it delegates to, tool calls per node,
+  built entirely from `agent_runs.parent_run_id` +
+  `agent_runs.output.tool_calls` (both already written by the runtime —
+  no new tables). `src/lib/agents/flow.functions.ts` +
+  `src/components/jarvis/AgentFlowTree.tsx`. Also fixed
+  `guardian_scan_errors` querying the dead `event_log` table instead of
+  `system_events` (the table the runtime actually writes telemetry to) —
+  caught while tracing exactly where run/tool data lives for this widget.
 
 Beyond the Marketer prompt-only agent, the HUD already has ~30 components
 including boot sequence, voice, threat stream, system logs, sub-systems,

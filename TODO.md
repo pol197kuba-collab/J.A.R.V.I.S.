@@ -90,13 +90,54 @@ agent seeded for every existing + future user, matching the "seed via
 migration, not the UI" lesson from how `marketer` was created), 3 new
 tools in `tools.server.ts`.
 
-## 3. [W] Situation Room / Radar Sweep — next gadget
+Follow-up fix (same day): `guardian_scan_errors` queried `event_log`,
+which nothing in the live runtime has ever written to — the real
+telemetry stream is `system_events` (different table, different column
+names: `owner_id` not `user_id`, `meta` not `metadata`). `event_log` is
+dead schema left over from the initial migration. Fixed to query
+`system_events`; caught while building item 3 below, which needed to know
+exactly where run/tool telemetry actually lives.
 
-Merge geo-tracking (Leaflet/Warsaw fallback), `WeatherTelemetry`,
-`GithubActivityPulse`, and `ThreatStream` into one animated radar-style
-panel — rotating sweep line, blips popping in for live events instead of
-four static list panels. Zero new backend, pure frontend composition, and
-a genuine "wow" moment reusing data we already surface elsewhere.
+## 3. [W] Agent Flow Tree — **shipped 2026-07-16, superseding Situation Room**
+
+User feedback after using Strażnik: no way to *see* delegation happening —
+which agent got a request, whether it called a tool, when it handed back
+to the Orchestrator. Requested a live "inverted family tree" — Orchestrator
+at the top, branching down to whichever agent it delegates to, tool calls
+shown per node — that grows on its own as new agents get added, replacing
+the old `SystemStatsStrip` (FPS/CPU/MEM/NET) telemetry widget, which
+added no real information.
+
+This directly fills the "next wow gadget" slot — better fit than Situation
+Room (real product mechanics, not a mashup of unrelated data), so Situation
+Room / Radar Sweep is bumped to the open second-gadget slot (item 6) rather
+than built now.
+
+Turned out to need **zero new backend work**: `agent_runs.parent_run_id`
+already links delegated runs to their parent (fixed 2026-07-13, confirmed
+working via Strażnik's own smoke-test), and `agent_runs.output.tool_calls`
+already records every tool (including `delegate_to_agent`) a run invoked.
+The whole tree builds from one existing table.
+
+Shipped:
+- `src/lib/agents/flow.functions.ts` — `getAgentFlow`, reads recent
+  `agent_runs` + `agents`, returns a flat list the client groups into a
+  tree (topmost ancestor of the most recent run = "current interaction").
+- `src/components/jarvis/AgentFlowTree.tsx` — replaces
+  `SystemStatsStrip` in `routes/index.tsx` (index 1, same `tone="quiet"`
+  slot). Minimalist glass tiles, pulsing glow while a run is `running`,
+  settled green/red on done/error, a small dot travelling down the
+  connector while a delegation is in flight, tool-call chips per node.
+  New keyframes in `styles.css`: `flow-node-in`, `flow-dot-travel`.
+- `SystemStatsStrip.tsx` left in place (unused for now) rather than
+  deleted, in case it's wanted elsewhere later.
+
+Verified structurally (tree-building + visual render, including the
+pulsing/travelling-dot states) via a temporary local-only dev server in
+this sandbox with synthetic data — the usual blocker applies to the *real*
+data path: no live Supabase session here to confirm `getAgentFlow` against
+actual `agent_runs`. Confirm live: ask the Orchestrator to delegate to
+Strażnik (as already tested) and watch this widget while it happens.
 
 ## 4. [F] Multi-provider AI routing
 
@@ -116,13 +157,15 @@ service unless a specific capability genuinely can't be done in JS. Still
 valuable, just heavier (new pipeline, not reused data) than Strażnik — goes
 after it rather than first, per the reordering above.
 
-## 6. [W] Second gadget slot — open
+## 6. [W] Next gadget slot — open (bumped from item 3: Agent Flow Tree shipped instead)
 
-Reassess once items above ship — candidates: **Vision Scanner v2** (feed
-scan results into `remember`/`recall` so a scan becomes recallable later),
-or **ambient reactive Arc Core** (reactor/background reacting to voice in
-real time full-screen, building on the existing Speaking/Processing state
-in `ArcCorePanel`).
+Reassess once items above ship — candidates: **Situation Room / Radar
+Sweep** (merge geo-tracking, `WeatherTelemetry`, `GithubActivityPulse`,
+`ThreatStream` into one animated radar-style panel), **Vision Scanner v2**
+(feed scan results into `remember`/`recall` so a scan becomes recallable
+later), or **ambient reactive Arc Core** (reactor/background reacting to
+voice in real time full-screen, building on the existing Speaking/
+Processing state in `ArcCorePanel`).
 
 ## 7. [F] Concierge agent (calendar / email) — new agent proposal
 

@@ -890,7 +890,7 @@ const scanErrors: Tool = {
   declaration: {
     name: "guardian_scan_errors",
     description:
-      "Scan event_log and agent_runs for recent warnings/errors across the whole system (not just this conversation). Use to answer 'what broke recently' or a general system health check.",
+      "Scan system_events and agent_runs for recent warnings/errors across the whole system (not just this conversation). Use to answer 'what broke recently' or a general system health check.",
     parameters: {
       type: "object",
       properties: {
@@ -910,10 +910,15 @@ const scanErrors: Tool = {
     const limit = clampInt(args.limit, 1, 50, 20);
     const since = new Date(Date.now() - hours * 3_600_000).toISOString();
 
+    // NOTE: the live runtime (runOrchestrator's logEvent, every ctx.logEvent
+    // call in this file) writes to system_events, not the older event_log
+    // table — event_log has no writer anywhere in the current codebase.
+    // This originally queried event_log and would have silently returned
+    // nothing forever; caught while building the agent flow tree widget.
     const { data: events, error: eventsErr } = await ctx.supabase
-      .from("event_log")
-      .select("source, level, message, metadata, created_at")
-      .eq("user_id", ctx.userId)
+      .from("system_events")
+      .select("source, level, message, meta, created_at")
+      .eq("owner_id", ctx.userId)
       .in("level", ["warn", "error"])
       .gte("created_at", since)
       .order("created_at", { ascending: false })
