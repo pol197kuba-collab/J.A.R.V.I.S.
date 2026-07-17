@@ -13,11 +13,11 @@ import { Route as VisionRouteImport } from './routes/vision'
 import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as SystemLogsRouteImport } from './routes/system-logs'
 import { Route as SubSystemsRouteImport } from './routes/sub-systems'
+import { Route as SituationRoomRouteImport } from './routes/situation-room'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SchemaRouteImport } from './routes/schema'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as McpRouteImport } from './routes/mcp'
-import { Route as GeoTrackingRouteImport } from './routes/geo-tracking'
 import { Route as AgentHubRouteImport } from './routes/agent-hub'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AgentHubSlugRouteImport } from './routes/agent-hub_.$slug'
@@ -46,6 +46,11 @@ const SubSystemsRoute = SubSystemsRouteImport.update({
   path: '/sub-systems',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SituationRoomRoute = SituationRoomRouteImport.update({
+  id: '/situation-room',
+  path: '/situation-room',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -64,11 +69,6 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
 const McpRoute = McpRouteImport.update({
   id: '/mcp',
   path: '/mcp',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const GeoTrackingRoute = GeoTrackingRouteImport.update({
-  id: '/geo-tracking',
-  path: '/geo-tracking',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AgentHubRoute = AgentHubRouteImport.update({
@@ -113,11 +113,11 @@ const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
-  '/geo-tracking': typeof GeoTrackingRoute
   '/mcp': typeof McpRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schema': typeof SchemaRoute
   '/settings': typeof SettingsRoute
+  '/situation-room': typeof SituationRoomRoute
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
   '/tasks': typeof TasksRoute
@@ -131,11 +131,11 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
-  '/geo-tracking': typeof GeoTrackingRoute
   '/mcp': typeof McpRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schema': typeof SchemaRoute
   '/settings': typeof SettingsRoute
+  '/situation-room': typeof SituationRoomRoute
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
   '/tasks': typeof TasksRoute
@@ -150,11 +150,11 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
-  '/geo-tracking': typeof GeoTrackingRoute
   '/mcp': typeof McpRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schema': typeof SchemaRoute
   '/settings': typeof SettingsRoute
+  '/situation-room': typeof SituationRoomRoute
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
   '/tasks': typeof TasksRoute
@@ -170,11 +170,11 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/agent-hub'
-    | '/geo-tracking'
     | '/mcp'
     | '/reset-password'
     | '/schema'
     | '/settings'
+    | '/situation-room'
     | '/sub-systems'
     | '/system-logs'
     | '/tasks'
@@ -188,11 +188,11 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/agent-hub'
-    | '/geo-tracking'
     | '/mcp'
     | '/reset-password'
     | '/schema'
     | '/settings'
+    | '/situation-room'
     | '/sub-systems'
     | '/system-logs'
     | '/tasks'
@@ -206,11 +206,11 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/agent-hub'
-    | '/geo-tracking'
     | '/mcp'
     | '/reset-password'
     | '/schema'
     | '/settings'
+    | '/situation-room'
     | '/sub-systems'
     | '/system-logs'
     | '/tasks'
@@ -225,11 +225,11 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgentHubRoute: typeof AgentHubRoute
-  GeoTrackingRoute: typeof GeoTrackingRoute
   McpRoute: typeof McpRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SchemaRoute: typeof SchemaRoute
   SettingsRoute: typeof SettingsRoute
+  SituationRoomRoute: typeof SituationRoomRoute
   SubSystemsRoute: typeof SubSystemsRoute
   SystemLogsRoute: typeof SystemLogsRoute
   TasksRoute: typeof TasksRoute
@@ -271,6 +271,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SubSystemsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/situation-room': {
+      id: '/situation-room'
+      path: '/situation-room'
+      fullPath: '/situation-room'
+      preLoaderRoute: typeof SituationRoomRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -297,13 +304,6 @@ declare module '@tanstack/react-router' {
       path: '/mcp'
       fullPath: '/mcp'
       preLoaderRoute: typeof McpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/geo-tracking': {
-      id: '/geo-tracking'
-      path: '/geo-tracking'
-      fullPath: '/geo-tracking'
-      preLoaderRoute: typeof GeoTrackingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/agent-hub': {
@@ -361,11 +361,11 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgentHubRoute: AgentHubRoute,
-  GeoTrackingRoute: GeoTrackingRoute,
   McpRoute: McpRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SchemaRoute: SchemaRoute,
   SettingsRoute: SettingsRoute,
+  SituationRoomRoute: SituationRoomRoute,
   SubSystemsRoute: SubSystemsRoute,
   SystemLogsRoute: SystemLogsRoute,
   TasksRoute: TasksRoute,

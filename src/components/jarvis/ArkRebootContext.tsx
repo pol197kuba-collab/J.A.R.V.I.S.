@@ -20,9 +20,21 @@ export type RebootStep = {
 export const REBOOT_SEQUENCE: RebootStep[] = [
   { path: "/", module: "DASHBOARD", log: "[DASHBOARD: CORE REFRESHED // 100%]" },
   { path: "/agent-hub", module: "AGENT HUB", log: "[AGENT_HUB: RECONNECTING NEURAL AGENTS...]" },
-  { path: "/sub-systems", module: "SUB-SYSTEMS", log: "[SUB_SYSTEMS: COMPILING LOGISTICS UTILITIES...]" },
-  { path: "/geo-tracking", module: "GEO-TRACKING", log: "[GEO_TRACKING: CALIBRATING SATELLITE LINKS...]" },
-  { path: "/system-logs", module: "SYSTEM LOGS", log: "[SYSTEM_LOGS: CLEARING BUFFER & STABILIZING...]" },
+  {
+    path: "/sub-systems",
+    module: "SUB-SYSTEMS",
+    log: "[SUB_SYSTEMS: COMPILING LOGISTICS UTILITIES...]",
+  },
+  {
+    path: "/situation-room",
+    module: "SITUATION ROOM",
+    log: "[SITUATION_ROOM: CALIBRATING SATELLITE LINKS...]",
+  },
+  {
+    path: "/system-logs",
+    module: "SYSTEM LOGS",
+    log: "[SYSTEM_LOGS: CLEARING BUFFER & STABILIZING...]",
+  },
   { path: "/settings", module: "SETTINGS", log: "[SETTINGS: RESTORING USER PREFERENCES...]" },
 ];
 

@@ -10,11 +10,7 @@
 import { JARVIS_PERSONA } from "./persona";
 import { setAgentBusy, reportOutcome } from "./agentActivity";
 
-const MODELS = [
-  "gemini-2.5-flash",
-  "gemini-flash-latest",
-  "gemini-2.0-flash",
-];
+const MODELS = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"];
 const endpointFor = (model: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
@@ -183,7 +179,7 @@ const FALLBACK_MODULE: Record<string, string[]> = {
     "Uruchamiam JobFit AI. Optymalizator CV online.",
     "Moduł JobFit aktywny, Panie Sławiński.",
   ],
-  telemetry: ["Uruchamiam telemetrię satelitarną.", "Kanał geo-tracking startuje."],
+  telemetry: ["Uruchamiam telemetrię satelitarną.", "Kanał Situation Room startuje."],
   dashboard: ["Wracam do głównego kokpitu, Panie Sławiński."],
 };
 
@@ -204,7 +200,8 @@ export function fallbackFor(kind: string, hint?: string): JarvisReply {
     };
   if (kind === "shutdown")
     return { action: "shutdown", speech: "Wyłączam system. Do zobaczenia, Panie Sławiński." };
-  if (kind === "sleep") return { action: "sleep", speech: "Przechodzę w tryb czuwania, Panie Sławiński." };
+  if (kind === "sleep")
+    return { action: "sleep", speech: "Przechodzę w tryb czuwania, Panie Sławiński." };
   return { action: "none", speech: pick(FALLBACK_GENERIC) };
 }
 

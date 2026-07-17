@@ -94,7 +94,10 @@ function stripWakeWord(transcript: string): string | null {
   }
   if (lastEnd < 0) return null;
   // Strip leading punctuation/whitespace left after the wake word.
-  return cleaned.slice(lastEnd).replace(/^[\s,.:;!?-]+/, "").trim();
+  return cleaned
+    .slice(lastEnd)
+    .replace(/^[\s,.:;!?-]+/, "")
+    .trim();
 }
 
 function isNoise(command: string): boolean {
@@ -124,9 +127,7 @@ type AnySpeechRecognition = {
   stop: () => void;
 };
 
-function getSpeechCtor():
-  | (new () => AnySpeechRecognition)
-  | null {
+function getSpeechCtor(): (new () => AnySpeechRecognition) | null {
   if (typeof window === "undefined") return null;
   const w = window as unknown as {
     SpeechRecognition?: new () => AnySpeechRecognition;
@@ -177,25 +178,76 @@ const ACTION_MAP: Record<JarvisAction, LocalAction | null> = {
 
 const COMMANDS: Array<{ re: RegExp; action: LocalAction }> = [
   // Navigation
-  { re: /\b(open\s+dashboard|show\s+status|show\s+core|jarvis\s+dashboard|otwórz\s+pulpit|otworz\s+pulpit|pokaż\s+dashboard|pokaz\s+dashboard|wróć\s+do\s+dashboardu|wroc\s+do\s+dashboardu)\b/i, action: "dashboard" },
-  { re: /\b(open\s+fuel|launch\s+monitor|jarvis\s+fuel|otwórz\s+paliwo|otworz\s+paliwo|monitor\s+paliwa)\b/i, action: "fuel" },
-  { re: /\b(open\s+calculator|launch\s+rto|jarvis\s+office|otwórz\s+kalkulator|otworz\s+kalkulator|kalkulator\s+rto)\b/i, action: "rto" },
-  { re: /\b(open\s+jobfit|launch\s+ai|jarvis\s+job|otwórz\s+jobfit|otworz\s+jobfit)\b/i, action: "jobfit" },
-  { re: /\b(show\s+telemetry|open\s+map|geo[-\s]?tracking|otwórz\s+mapę|otworz\s+mape|pokaż\s+mapę|pokaz\s+mape|geolokalizacja)\b/i, action: "telemetry" },
-  { re: /\b(open\s+agents?|agent\s+hub|otwórz\s+agentów|otworz\s+agentow|pokaż\s+agentów|pokaz\s+agentow)\b/i, action: "agents" },
-  { re: /\b(open\s+settings|otwórz\s+ustawienia|otworz\s+ustawienia|pokaż\s+ustawienia|pokaz\s+ustawienia|konfiguracja)\b/i, action: "settings" },
-  { re: /\b(open\s+logs|system\s+logs|otwórz\s+logi|otworz\s+logi|pokaż\s+logi|pokaz\s+logi|dziennik\s+systemu)\b/i, action: "logs" },
-  { re: /\b(open\s+tasks?|task\s+queue|otwórz\s+zadania|otworz\s+zadania|pokaż\s+zadania|pokaz\s+zadania|moje\s+zadania|lista\s+zadań|lista\s+zadan)\b/i, action: "tasks" },
-  { re: /\b(open\s+sub[-\s]?systems|otwórz\s+podsystemy|otworz\s+podsystemy|pokaż\s+podsystemy|pokaz\s+podsystemy)\b/i, action: "subsystems" },
-  { re: /\b(co\s+widzisz|powiedz\s+co\s+widzisz|zeskanuj\s+otoczenie|przeskanuj\s+otoczenie|skanuj\s+otoczenie|zeskanuj\s+to|what\s+do\s+you\s+see|scan\s+(?:the\s+)?(?:room|area|surroundings)|vision\s+scan)\b/i, action: "vision_scan" },
+  {
+    re: /\b(open\s+dashboard|show\s+status|show\s+core|jarvis\s+dashboard|otwórz\s+pulpit|otworz\s+pulpit|pokaż\s+dashboard|pokaz\s+dashboard|wróć\s+do\s+dashboardu|wroc\s+do\s+dashboardu)\b/i,
+    action: "dashboard",
+  },
+  {
+    re: /\b(open\s+fuel|launch\s+monitor|jarvis\s+fuel|otwórz\s+paliwo|otworz\s+paliwo|monitor\s+paliwa)\b/i,
+    action: "fuel",
+  },
+  {
+    re: /\b(open\s+calculator|launch\s+rto|jarvis\s+office|otwórz\s+kalkulator|otworz\s+kalkulator|kalkulator\s+rto)\b/i,
+    action: "rto",
+  },
+  {
+    re: /\b(open\s+jobfit|launch\s+ai|jarvis\s+job|otwórz\s+jobfit|otworz\s+jobfit)\b/i,
+    action: "jobfit",
+  },
+  {
+    re: /\b(show\s+telemetry|open\s+map|geo[-\s]?tracking|otwórz\s+mapę|otworz\s+mape|pokaż\s+mapę|pokaz\s+mape|geolokalizacja)\b/i,
+    action: "telemetry",
+  },
+  {
+    re: /\b(open\s+agents?|agent\s+hub|otwórz\s+agentów|otworz\s+agentow|pokaż\s+agentów|pokaz\s+agentow)\b/i,
+    action: "agents",
+  },
+  {
+    re: /\b(open\s+settings|otwórz\s+ustawienia|otworz\s+ustawienia|pokaż\s+ustawienia|pokaz\s+ustawienia|konfiguracja)\b/i,
+    action: "settings",
+  },
+  {
+    re: /\b(open\s+logs|system\s+logs|otwórz\s+logi|otworz\s+logi|pokaż\s+logi|pokaz\s+logi|dziennik\s+systemu)\b/i,
+    action: "logs",
+  },
+  {
+    re: /\b(open\s+tasks?|task\s+queue|otwórz\s+zadania|otworz\s+zadania|pokaż\s+zadania|pokaz\s+zadania|moje\s+zadania|lista\s+zadań|lista\s+zadan)\b/i,
+    action: "tasks",
+  },
+  {
+    re: /\b(open\s+sub[-\s]?systems|otwórz\s+podsystemy|otworz\s+podsystemy|pokaż\s+podsystemy|pokaz\s+podsystemy)\b/i,
+    action: "subsystems",
+  },
+  {
+    re: /\b(co\s+widzisz|powiedz\s+co\s+widzisz|zeskanuj\s+otoczenie|przeskanuj\s+otoczenie|skanuj\s+otoczenie|zeskanuj\s+to|what\s+do\s+you\s+see|scan\s+(?:the\s+)?(?:room|area|surroundings)|vision\s+scan)\b/i,
+    action: "vision_scan",
+  },
   // Interface
-  { re: /\b(open\s+menu|show\s+sidebar|otwórz\s+menu|otworz\s+menu|pokaż\s+menu|pokaz\s+menu)\b/i, action: "menu_open" },
-  { re: /\b(close\s+menu|hide\s+sidebar|zamknij\s+menu|schowaj\s+menu|ukryj\s+menu)\b/i, action: "menu_close" },
+  {
+    re: /\b(open\s+menu|show\s+sidebar|otwórz\s+menu|otworz\s+menu|pokaż\s+menu|pokaz\s+menu)\b/i,
+    action: "menu_open",
+  },
+  {
+    re: /\b(close\s+menu|hide\s+sidebar|zamknij\s+menu|schowaj\s+menu|ukryj\s+menu)\b/i,
+    action: "menu_close",
+  },
   // Status & shutdown
-  { re: /\b(system\s+check|sprawdź\s+system|sprawdz\s+system|status\s+systemu|raport\s+systemu)\b/i, action: "system_check" },
-  { re: /\b(jarvis\s+sleep|standby|uśpij|uspij|tryb\s+czuwania|stan\s+czuwania)\b/i, action: "sleep" },
-  { re: /\b(disconnect|shutdown|system\s+shutdown|wyłącz\s+system|wylacz\s+system|zamknij\s+system|rozłącz|rozlacz)\b/i, action: "shutdown" },
-  { re: /\b(reboot|restart|reset|zrestartuj|zresetuj|ark\s+reboot|zrestartuj\s+system|uruchom\s+ponownie)\b/i, action: "reboot" },
+  {
+    re: /\b(system\s+check|sprawdź\s+system|sprawdz\s+system|status\s+systemu|raport\s+systemu)\b/i,
+    action: "system_check",
+  },
+  {
+    re: /\b(jarvis\s+sleep|standby|uśpij|uspij|tryb\s+czuwania|stan\s+czuwania)\b/i,
+    action: "sleep",
+  },
+  {
+    re: /\b(disconnect|shutdown|system\s+shutdown|wyłącz\s+system|wylacz\s+system|zamknij\s+system|rozłącz|rozlacz)\b/i,
+    action: "shutdown",
+  },
+  {
+    re: /\b(reboot|restart|reset|zrestartuj|zresetuj|ark\s+reboot|zrestartuj\s+system|uruchom\s+ponownie)\b/i,
+    action: "reboot",
+  },
 ];
 
 export function VoiceCommandProvider({ children }: { children: ReactNode }) {
@@ -329,7 +381,8 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       const last = lastFireMapRef.current.get(action) ?? 0;
       if (now - last < window_ms) return;
       lastFireMapRef.current.set(action, now);
-      const say = (fallback: string) => speak(spokenLine && spokenLine.trim() ? spokenLine : fallback);
+      const say = (fallback: string) =>
+        speak(spokenLine && spokenLine.trim() ? spokenLine : fallback);
       switch (action) {
         case "dashboard":
           go("/");
@@ -352,7 +405,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
           break;
         case "telemetry":
           say("Uruchamiam telemetrię satelitarną.");
-          go("/geo-tracking");
+          go("/situation-room");
           break;
         case "menu_open":
           window.dispatchEvent(new CustomEvent("jarvis:sidebar", { detail: "open" }));
@@ -362,26 +415,26 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
           window.dispatchEvent(new CustomEvent("jarvis:sidebar", { detail: "close" }));
           if (spokenLine) speak(spokenLine);
           break;
-      case "agents":
-        say("Przechodzę do Agent Hub, sir.");
-        go("/agent-hub");
-        break;
-      case "settings":
-        say("Otwieram konfigurację.");
-        go("/settings");
-        break;
-      case "logs":
-        say("Otwieram dziennik systemu.");
-        go("/system-logs");
-        break;
-      case "tasks":
-        say("Otwieram kolejkę zadań, sir.");
-        go("/tasks");
-        break;
-      case "subsystems":
-        say("Otwieram podsystemy.");
-        go("/sub-systems");
-        break;
+        case "agents":
+          say("Przechodzę do Agent Hub, sir.");
+          go("/agent-hub");
+          break;
+        case "settings":
+          say("Otwieram konfigurację.");
+          go("/settings");
+          break;
+        case "logs":
+          say("Otwieram dziennik systemu.");
+          go("/system-logs");
+          break;
+        case "tasks":
+          say("Otwieram kolejkę zadań, sir.");
+          go("/tasks");
+          break;
+        case "subsystems":
+          say("Otwieram podsystemy.");
+          go("/sub-systems");
+          break;
         case "system_check":
           say("Wszystkie systemy sprawne, Panie Sławiński. Temperatura rdzenia nominalna.");
           break;
@@ -437,8 +490,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       // Global 3s throttle so back-to-back voice/chat requests don't pile up.
       const now = Date.now();
       const since = now - lastGeminiAtRef.current;
-      const throttleMs =
-        source === "chat" ? GEMINI_CHAT_THROTTLE_MS : GEMINI_VOICE_THROTTLE_MS;
+      const throttleMs = source === "chat" ? GEMINI_CHAT_THROTTLE_MS : GEMINI_VOICE_THROTTLE_MS;
       if (since < throttleMs) {
         // Queue at most one follow-up; dedup identical transcripts.
         if (queuedRef.current !== transcript) {
@@ -473,7 +525,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       }
       // Try regex first for instant response on known commands.
       const local = COMMANDS.find((c) => c.re.test(transcript));
-            if (local) {
+      if (local) {
         fire(local.action);
         return;
       }
