@@ -28,16 +28,54 @@ function degToCompass(deg: number): string {
   return COMPASS[Math.round(deg / 22.5) % 16];
 }
 
+// WMO weather interpretation codes, as used by Open-Meteo's `weather_code`.
+// https://open-meteo.com/en/docs — condensed to the labels that matter for
+// a quick glance, not the full spec.
+const WMO_LABELS: Record<number, string> = {
+  0: "CLEAR SKY",
+  1: "MAINLY CLEAR",
+  2: "PARTLY CLOUDY",
+  3: "OVERCAST",
+  45: "FOG",
+  48: "DEPOSITING FOG",
+  51: "LIGHT DRIZZLE",
+  53: "DRIZZLE",
+  55: "DENSE DRIZZLE",
+  56: "FREEZING DRIZZLE",
+  57: "FREEZING DRIZZLE",
+  61: "LIGHT RAIN",
+  63: "RAIN",
+  65: "HEAVY RAIN",
+  66: "FREEZING RAIN",
+  67: "FREEZING RAIN",
+  71: "LIGHT SNOW",
+  73: "SNOW",
+  75: "HEAVY SNOW",
+  77: "SNOW GRAINS",
+  80: "RAIN SHOWERS",
+  81: "RAIN SHOWERS",
+  82: "VIOLENT RAIN SHOWERS",
+  85: "SNOW SHOWERS",
+  86: "HEAVY SNOW SHOWERS",
+  95: "THUNDERSTORM",
+  96: "THUNDERSTORM + HAIL",
+  99: "THUNDERSTORM + HAIL",
+};
+function weatherCodeToLabel(code: number): string {
+  return WMO_LABELS[code] ?? `CODE ${code}`;
+}
+
 type WeatherReading = {
   temperature: number;
   pressure: number;
   windDir: string;
   windSpeed: number;
   humidity: number;
+  sky: string;
 };
 
 async function fetchWeather(lat: number, lon: number): Promise<WeatherReading> {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m`;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,weather_code`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 8000);
   const res = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
@@ -49,6 +87,7 @@ async function fetchWeather(lat: number, lon: number): Promise<WeatherReading> {
       surface_pressure?: number;
       wind_speed_10m?: number;
       wind_direction_10m?: number;
+      weather_code?: number;
     };
   };
   const c = data.current ?? {};
@@ -58,7 +97,23 @@ async function fetchWeather(lat: number, lon: number): Promise<WeatherReading> {
     windDir: degToCompass(c.wind_direction_10m ?? 0),
     windSpeed: c.wind_speed_10m ?? 0,
     humidity: Math.round(c.relative_humidity_2m ?? 0),
+    sky: weatherCodeToLabel(c.weather_code ?? 0),
   };
+}
+
+// Free, no-key, CORS-enabled reverse geocoding meant for client-side use —
+// just enough to answer "weather for WHERE, exactly" instead of leaving the
+// user to guess from raw coordinates.
+async function fetchLocationName(lat: number, lon: number): Promise<string> {
+  const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  const res = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
+  if (!res.ok) throw new Error(`reverse_geocode_http_${res.status}`);
+  const data = (await res.json()) as { city?: string; locality?: string; countryName?: string };
+  const place = data.city || data.locality || null;
+  if (place && data.countryName) return `${place}, ${data.countryName}`;
+  return place || data.countryName || "UNKNOWN LOCATION";
 }
 
 export function WeatherTelemetry({
@@ -76,9 +131,15 @@ export function WeatherTelemetry({
     staleTime: 10 * 60 * 1000,
     refetchInterval: 10 * 60 * 1000,
   });
+  const { data: place } = useQuery({
+    queryKey: ["weather-location", lat.toFixed(2), lon.toFixed(2)],
+    queryFn: () => fetchLocationName(lat, lon),
+    staleTime: 60 * 60 * 1000,
+  });
 
   const rows: Array<[string, string]> = data
     ? [
+        ["SKY", data.sky],
         ["TEMPERATURE", `${data.temperature.toFixed(1)}°C`],
         ["PRESSURE", `${data.pressure} hPa`],
         ["WIND_VECTOR", `${data.windDir} ${data.windSpeed.toFixed(1)} km/h`],
@@ -90,7 +151,7 @@ export function WeatherTelemetry({
     <HudPanel
       index={index}
       tone="quiet"
-      title="WEATHER // LIVE (OPEN-METEO)"
+      title={`WEATHER // ${place ?? "LOCATING…"}`}
       className="flex flex-col"
     >
       <div className="flex gap-3 p-3 landscape:max-md:gap-2 landscape:max-md:p-2">

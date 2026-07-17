@@ -304,13 +304,29 @@ instead of by a documentation audit next time.
   fetch had no timeout and could hang on "acquiring telemetry…" forever —
   added an 8s `AbortController` timeout so it fails cleanly instead.
   `data/threatStream.ts` deleted (dead fake-data generator).
+- **Milestone 8.1 (2026-07-17)** — live user feedback on Milestone 8:
+  `system_events`-as-radar-blips read as meaningless ("what are the green
+  dots"), and weather had no sky condition or location label. Radar's
+  contacts swapped to real ADS-B aircraft (`src/lib/geo/flightRadar.ts`,
+  OpenSky Network free/keyless `states/all`, bounding-boxed to a 150km
+  range around the real fix) — real bearing/distance from lat/lon, not a
+  hash. `system_events` stays visible via `SystemPulseStream`'s ticker
+  instead, which fits that data shape better anyway. `WeatherTelemetry`
+  gained a `weather_code`→condition label (WMO table) and a reverse-
+  geocoded location name in the panel title (BigDataCloud, free/keyless).
+  Both new external APIs' response shapes were verified against live
+  `curl` calls before coding the parsers, not assumed from memory. A real
+  precipitation weather radar on an actual map (Leaflet + RainViewer) was
+  discussed and deliberately deferred — different visual language from
+  the rest of the HUD, bigger scope, queued as its own future item.
 
 Beyond the Marketer prompt-only agent, the HUD already has ~30 components
 including boot sequence, voice, system logs, sub-systems, and (since
 Milestone 8) a **`situation-room` route** — real browser Geolocation, a
-shared `TacticalRadar` SVG component, and real telemetry (system_events,
-GitHub Events API, Open-Meteo). Treat the frontend as further along than
-the backend/agent layer — new agent work should assume a fairly complete
+shared `TacticalRadar` SVG component plotting real ADS-B contacts, and
+real telemetry (GitHub Events API, Open-Meteo). Treat the frontend as
+further along than the backend/agent layer — new agent work should
+assume a fairly complete
 HUD shell already exists to plug into.
 
 ### Arc Core reactor components (consolidated 2026-07-14)
