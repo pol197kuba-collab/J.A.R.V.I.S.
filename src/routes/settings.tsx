@@ -24,6 +24,10 @@ import { setServerRuntimePreference } from "@/lib/ai/jarvisBrain";
 import { GEMINI_MODELS } from "@/lib/agents/models";
 
 const GEMINI_LS_KEY = "jarvis_gemini_api_key";
+// Groq has no browser-side consumer (unlike Gemini) — this local copy exists
+// purely so the input field doesn't look empty/"lost" every time Settings
+// reloads, even though the real, functional copy already lives server-side.
+const GROQ_LS_KEY = "jarvis_groq_api_key";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -81,6 +85,11 @@ function Settings() {
     } catch {
       /* ignore */
     }
+    try {
+      setGroqApiKey(window.localStorage.getItem(GROQ_LS_KEY) ?? "");
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   const refreshServerState = useCallback(async () => {
@@ -127,6 +136,15 @@ function Settings() {
         await persistGroqKey({ data: { key: trimmed } });
       } else {
         await clearGroqKey();
+      }
+      try {
+        if (trimmed) {
+          window.localStorage.setItem(GROQ_LS_KEY, trimmed);
+        } else {
+          window.localStorage.removeItem(GROQ_LS_KEY);
+        }
+      } catch {
+        /* ignore — cosmetic only, server sync above is what actually matters */
       }
       audio.playClick();
       await refreshGroqState();
