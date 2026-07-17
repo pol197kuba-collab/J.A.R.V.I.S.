@@ -117,12 +117,39 @@ function pump() {
   }
 }
 
+// Agent replies are plain Markdown (**bold**, bullet lists, headers, links,
+// code) meant for the on-screen chat bubble. Speech synthesis has no notion
+// of Markdown, so without this it reads punctuation literally — "gwiazdka
+// gwiazdka" for every "**". Strips syntax down to the words underneath;
+// never touches the text shown in the chat panel, only what gets spoken.
+function stripMarkdownForSpeech(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, " ") // fenced code blocks — not worth reading aloud
+    .replace(/`([^`]+)`/g, "$1") // inline code
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1") // images -> alt text
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1") // links -> link text
+    .replace(/(\*{1,3}|_{1,3})(\S(?:.*?\S)?)\1/g, "$2") // **bold**, *italic*, ___, etc.
+    .replace(/~~(.*?)~~/g, "$1") // ~~strikethrough~~
+    .replace(/^#{1,6}\s+/gm, "") // # headers
+    .replace(/^>\s?/gm, "") // > blockquotes
+    .replace(/^[ \t]*[-*+]\s+/gm, "") // bullet list markers
+    .replace(/^[ \t]*\d+[.)]\s+/gm, "") // numbered list markers
+    .replace(/^\s*([-*_])\1{2,}\s*$/gm, " ") // --- horizontal rules
+    .replace(/[*_`#]/g, "") // any stray markdown characters left over
+    .replace(/\n{2,}/g, ". ") // paragraph breaks -> a spoken pause
+    .replace(/\n/g, " ")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
 /** Enqueue a phrase. Plays after any in-flight speech finishes. */
 export function speak(text: string, opts?: { skipChirp?: boolean; lang?: SpeakLang }) {
   try {
     if (typeof window === "undefined") return;
     if (!window.speechSynthesis) return;
-    queue.push({ text, skipChirp: opts?.skipChirp, lang: opts?.lang });
+    const clean = stripMarkdownForSpeech(text);
+    if (!clean) return;
+    queue.push({ text: clean, skipChirp: opts?.skipChirp, lang: opts?.lang });
     // If synth is already busy from a previous call, just queue and wait.
     if (window.speechSynthesis.speaking || pumping) return;
     pump();
