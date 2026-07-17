@@ -625,6 +625,12 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
             );
           } else {
             toolCallLog.push({ name: "classifier_none", args: { requested, via: "groq" } });
+            // Also logged on the "none" branch (the common case — most
+            // turns aren't UI commands) so System Logs shows Groq was
+            // actually hit every turn, not only on the rare UI-action hits.
+            await logEvent("info", "orchestrator", "classifier fallback via groq: none", {
+              run_id: runId,
+            } as Json);
           }
           classifiedByGroq = true;
         } catch (err) {
