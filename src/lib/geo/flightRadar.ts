@@ -1,26 +1,12 @@
 // Real ADS-B aircraft near the observer, via OpenSky Network's free,
-// keyless "all state vectors" endpoint. Replaces the radar's previous
-// contacts (system_events, plotted with a hash-derived angle) with actual
-// aircraft positions — real bearing/distance computed from lat/lon, not a
-// stand-in for anything.
-import type { RadarContact } from "@/components/jarvis/TacticalRadar";
+// keyless "all state vectors" endpoint. Returns raw coordinates for
+// plotting on a real map (TacticalMap.tsx) — no radar-specific angle/
+// distance projection needed once the display is an actual map.
 
 export const RADAR_RANGE_KM = 150;
 
 function toRad(d: number) {
   return (d * Math.PI) / 180;
-}
-function toDeg(r: number) {
-  return (r * 180) / Math.PI;
-}
-
-export function bearingDeg(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const phi1 = toRad(lat1);
-  const phi2 = toRad(lat2);
-  const dLambda = toRad(lon2 - lon1);
-  const y = Math.sin(dLambda) * Math.cos(phi2);
-  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLambda);
-  return (toDeg(Math.atan2(y, x)) + 360) % 360;
 }
 
 export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -33,8 +19,21 @@ export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: numb
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+export type Aircraft = {
+  id: string;
+  lat: number;
+  lon: number;
+  headingDeg: number;
+  altitudeM: number;
+  speedKmh: number | null;
+  callsign: string;
+  originCountry: string;
+  distanceKm: number;
+};
+
 // OpenSky returns each aircraft as a positional array, not an object —
 // index meanings per https://openskynetwork.github.io/opensky-api/rest.html
+// Verified field-by-field against a live response before writing this.
 type OpenSkyState = [
   string, // 0 icao24
   string | null, // 1 callsign
@@ -46,7 +45,7 @@ type OpenSkyState = [
   number | null, // 7 baro_altitude (m)
   boolean, // 8 on_ground
   number | null, // 9 velocity (m/s)
-  number | null, // 10 true_track (deg)
+  number | null, // 10 true_track (deg, 0 = north)
   number | null, // 11 vertical_rate
   number[] | null, // 12 sensors
   number | null, // 13 geo_altitude (m)
@@ -55,16 +54,10 @@ type OpenSkyState = [
   number, // 16 position_source
 ];
 
-function altitudeColor(altitudeM: number): string {
-  if (altitudeM < 3000) return "var(--warning)";
-  if (altitudeM < 9000) return "var(--primary)";
-  return "var(--success)";
-}
-
-export async function fetchNearbyFlights(lat: number, lon: number): Promise<RadarContact[]> {
-  // Bounding box padded past RADAR_RANGE_KM so edge-of-range aircraft
-  // aren't clipped by the box being square while the radar is circular.
-  // 1 degree latitude ≈ 111km; longitude degrees shrink with cos(latitude).
+export async function fetchNearbyFlights(lat: number, lon: number): Promise<Aircraft[]> {
+  // Bounding box padded past RADAR_RANGE_KM so a circular-range filter
+  // below still has full coverage near the edges. 1 degree latitude ≈
+  // 111km; longitude degrees shrink with cos(latitude).
   const dLat = (RADAR_RANGE_KM * 1.3) / 111;
   const dLon = dLat / Math.max(0.2, Math.cos(toRad(lat)));
   const params = new URLSearchParams({
@@ -84,7 +77,7 @@ export async function fetchNearbyFlights(lat: number, lon: number): Promise<Rada
 
   return states
     .filter((s) => !s[8] && s[5] != null && s[6] != null) // airborne, has a position
-    .map((s): RadarContact => {
+    .map((s): Aircraft => {
       const [
         icao24,
         callsignRaw,
@@ -96,22 +89,24 @@ export async function fetchNearbyFlights(lat: number, lon: number): Promise<Rada
         baroAlt,
         ,
         velocity,
-        ,
+        trueTrack,
         ,
         ,
         geoAlt,
       ] = s;
-      const km = haversineKm(lat, lon, flat as number, flon as number);
-      const altitude = geoAlt ?? baroAlt ?? 0;
-      const callsign = (callsignRaw ?? "").trim() || icao24.toUpperCase();
-      const speedKmh = velocity != null ? Math.round(velocity * 3.6) : null;
       return {
         id: icao24,
-        angleDeg: bearingDeg(lat, lon, flat as number, flon as number),
-        distance: Math.min(1, km / RADAR_RANGE_KM),
-        color: altitudeColor(altitude),
-        label: `${callsign} · ${Math.round(altitude)}m · ${speedKmh != null ? `${speedKmh}km/h` : "speed n/a"} · ${originCountry}`,
+        lat: flat as number,
+        lon: flon as number,
+        headingDeg: trueTrack ?? 0,
+        altitudeM: geoAlt ?? baroAlt ?? 0,
+        speedKmh: velocity != null ? Math.round(velocity * 3.6) : null,
+        callsign: (callsignRaw ?? "").trim() || icao24.toUpperCase(),
+        originCountry,
+        distanceKm: haversineKm(lat, lon, flat as number, flon as number),
       };
     })
-    .slice(0, 40);
+    .filter((a) => a.distanceKm <= RADAR_RANGE_KM)
+    .sort((a, b) => a.distanceKm - b.distanceKm)
+    .slice(0, 60);
 }
