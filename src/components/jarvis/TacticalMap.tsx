@@ -76,7 +76,14 @@ export function TacticalMap({
         zoom: 9,
         zoomControl: false,
         attributionControl: true,
+        // Page scroll passing over the map would otherwise get hijacked
+        // as a zoom gesture (a well-known Leaflet footgun on scrollable
+        // pages) — click to focus before scroll-zoom engages. Pinch and
+        // double-click zoom still work immediately, unaffected.
+        scrollWheelZoom: false,
       });
+      map.on("click", () => map.scrollWheelZoom.enable());
+      containerRef.current.addEventListener("mouseleave", () => map.scrollWheelZoom.disable());
       L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
         attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
         subdomains: "abcd",
@@ -95,16 +102,21 @@ export function TacticalMap({
   }, []);
 
   // Re-center on the real fix once it's known; keep the home marker synced.
+  // `lat`/`lon` only ever change once in practice (FALLBACK → the real
+  // geolocation result), so always recentering here — not just on first
+  // marker creation — is what makes the view actually follow the real fix
+  // once it arrives, instead of leaving the viewport stuck on FALLBACK
+  // while only the marker silently jumps to the real location.
   useEffect(() => {
     const L = leafletRef.current;
     const map = mapRef.current;
     if (!L || !map) return;
     if (!homeMarkerRef.current) {
       homeMarkerRef.current = L.marker([lat, lon], { icon: homeIcon(L) }).addTo(map);
-      map.setView([lat, lon], 9);
     } else {
       homeMarkerRef.current.setLatLng([lat, lon]);
     }
+    map.setView([lat, lon], 9);
   }, [lat, lon, ready]);
 
   // Leaflet needs an explicit nudge if its container's size changed after
