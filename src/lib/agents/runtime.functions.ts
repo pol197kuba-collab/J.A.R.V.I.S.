@@ -488,6 +488,50 @@ export const getActiveConversation = createServerFn({ method: "GET" })
   });
 
 // ---------------------------------------------------------------------------
+// clearConversation — usuwa wiadomości aktywnego wątku PO STRONIE SERWERA.
+// Bez tego przycisk "CLEAR" w ChatPanel czyścił tylko lokalny stan/
+// localStorage, a efekt synchronizacji w getActiveConversation (montowanie
+// komponentu = ponowne wczytanie wątku z serwera) po prostu odtwarzał starą
+// historię przy najbliższej zmianie zakładki/przeładowaniu strony.
+// ---------------------------------------------------------------------------
+
+const ClearConversationInput = z.object({ agentSlug: z.string().min(1).max(64) });
+
+export const clearConversation = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => ClearConversationInput.parse(input))
+  .handler(async ({ data, context }): Promise<{ ok: true }> => {
+    const { supabase, userId } = context;
+
+    const { data: agent } = await supabase
+      .from("agents")
+      .select("id")
+      .eq("owner_id", userId)
+      .eq("slug", data.agentSlug)
+      .maybeSingle();
+    if (!agent) return { ok: true };
+
+    const { data: conv } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("agent_id", agent.id)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!conv) return { ok: true };
+
+    const { error } = await supabase
+      .from("messages")
+      .delete()
+      .eq("conversation_id", conv.id)
+      .eq("user_id", userId);
+    if (error) throw new Error(error.message);
+
+    return { ok: true };
+  });
+
+// ---------------------------------------------------------------------------
 // setActiveAgent — zapamiętuje wybranego agenta na koncie (user_settings),
 // nie w localStorage przeglądarki, żeby przełączenie urządzenia zachowywało
 // ten sam wybór.

@@ -10,6 +10,7 @@ import {
   listAgents,
   runAgent,
   getActiveConversation,
+  clearConversation,
   setActiveAgent as setActiveAgentFn,
   getActiveAgentSlug,
 } from "@/lib/agents/runtime.functions";
@@ -89,6 +90,7 @@ export function ChatPanel() {
   const runAgentFn = useServerFn(runAgent);
   const fetchAgents = useServerFn(listAgents);
   const fetchConversation = useServerFn(getActiveConversation);
+  const clearConversationFn = useServerFn(clearConversation);
   const persistActiveAgent = useServerFn(setActiveAgentFn);
   const fetchActiveAgentSlug = useServerFn(getActiveAgentSlug);
   const noticeShownRef = useRef(false);
@@ -301,6 +303,9 @@ export function ChatPanel() {
               onClick={() => {
                 setMessages([]);
                 saveHistory([]);
+                clearConversationFn({ data: { agentSlug: activeAgent.slug } }).catch(() => {
+                  /* lokalny widok już wyczyszczony — serwer dogoni przy następnej sesji */
+                });
               }}
               className="font-display text-[9px] uppercase tracking-[0.28em] text-muted-foreground transition hover:text-destructive"
             >
