@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ChatPanel } from "@/components/jarvis/ChatPanel";
-import { SystemStatsStrip } from "@/components/jarvis/SystemStatsStrip";
+import { AgentFlowTree } from "@/components/jarvis/AgentFlowTree";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { WeatherTelemetry } from "@/components/jarvis/WeatherTelemetry";
 import { NotesWidget } from "@/components/jarvis/NotesWidget";
@@ -66,11 +66,7 @@ function Index() {
         </div>
       </HudPanel>
 
-      <HudPanel index={1} title="TELEMETRY // CORE METRICS" tone="quiet" className="p-4 landscape:max-md:p-2">
-        <div className="pt-3 landscape:max-md:pt-1">
-          <SystemStatsStrip />
-        </div>
-      </HudPanel>
+      <AgentFlowTree index={1} />
 
       <HudPanel index={2} title="CONVERSATION STREAM" className="flex flex-col">
         <ChatPanel />
