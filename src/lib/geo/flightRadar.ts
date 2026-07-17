@@ -66,8 +66,15 @@ export async function fetchNearbyFlights(lat: number, lon: number): Promise<Airc
     lamax: String(lat + dLat),
     lomax: String(lon + dLon),
   });
+  // 10s wasn't enough in production and was aborting every single poll
+  // (confirmed via the system_events error this timeout itself logs) even
+  // though a direct request to OpenSky from an ordinary host responds in
+  // under 2s — the deployed server's network path to OpenSky is evidently
+  // much slower than that (e.g. Cloudflare Workers' egress), not OpenSky
+  // itself being slow. Raised with real headroom rather than nudging it
+  // up by a few seconds and hoping.
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 10_000);
+  const timer = setTimeout(() => ctrl.abort(), 25_000);
   const res = await fetch(`https://opensky-network.org/api/states/all?${params}`, {
     signal: ctrl.signal,
   }).finally(() => clearTimeout(timer));
