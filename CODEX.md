@@ -145,6 +145,20 @@ Concretely, this means:
   pull a fresh data snapshot (agents, tools, agent_tools, user_settings —
   excluding `user_secrets` and conversational tables) rather than relying on
   migrations or memory of past sessions.
+- **The drift runs the other way too, and it's the one that actually bit
+  us:** a migration file merged into git is **not** applied to the live
+  database automatically. This project applies SQL migrations manually —
+  the user pastes the migration's SQL into the Supabase SQL editor
+  themselves; nothing in the GitHub → Lovable pipeline runs it on merge.
+  Confirmed 2026-07-16: `20260716150000_guardian_agent.sql` merged
+  cleanly, but the `guardian` agent didn't exist live, the chat agent
+  selector and Agent Hub didn't show it, and the Orchestrator's live
+  roster genuinely didn't include it (so it couldn't delegate, and
+  improvised opening System Logs instead when asked to consult it).
+  **Whenever a migration is added, paste its full SQL directly into the
+  chat reply** (not just "I added a migration file") so the user can copy
+  it straight into Supabase — don't assume merging the PR was the last
+  step.
 
 ## Agent registry (live, as of 2026-07-16)
 
