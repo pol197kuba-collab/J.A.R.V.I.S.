@@ -55,23 +55,31 @@ const FALLBACK: Fix = {
 // traffic). Only starts once a real fix is locked — the FALLBACK
 // coordinates shouldn't trigger a flight query for Warsaw before we
 // actually know where the user is.
-function useFlightContacts(lat: number, lon: number, enabled: boolean): Aircraft[] {
+function useFlightContacts(
+  lat: number,
+  lon: number,
+  enabled: boolean,
+): { aircraft: Aircraft[]; error: boolean } {
   const fetchFlights = useServerFn(fetchNearbyFlightsFn);
-  const { data } = useQuery({
+  const { data, error } = useQuery({
     queryKey: ["flight-radar", lat.toFixed(2), lon.toFixed(2)],
     queryFn: () => fetchFlights({ data: { lat, lon } }),
     enabled,
     staleTime: 25_000,
     refetchInterval: 30_000,
   });
-  return data ?? [];
+  return { aircraft: data ?? [], error: !!error };
 }
 
 function SituationRoomPage() {
   const [fix, setFix] = useState<Fix>(FALLBACK);
   const [status, setStatus] = useState<Status>("acquiring");
   const [bootProgress, setBootProgress] = useState(0);
-  const contacts = useFlightContacts(fix.lat, fix.lon, status !== "acquiring");
+  const { aircraft: contacts, error: flightError } = useFlightContacts(
+    fix.lat,
+    fix.lon,
+    status !== "acquiring",
+  );
 
   // Boot / acquisition sequence — runs once
   useEffect(() => {
@@ -177,8 +185,17 @@ function SituationRoomPage() {
               {(Math.abs(fix.lat * 100) | 0).toString(16).toUpperCase().padStart(3, "0")}-
               {(Math.abs(fix.lon * 100) | 0).toString(16).toUpperCase().padStart(3, "0")}
             </div>
-            <div className="absolute right-3 top-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
-              AIRCRAFT: {contacts.length}
+            <div
+              className="absolute right-3 top-3 font-display text-[9px] uppercase tracking-[0.25em]"
+              style={{
+                color: flightError
+                  ? "var(--destructive)"
+                  : "color-mix(in oklab, var(--primary) 70%, transparent)",
+              }}
+            >
+              {flightError
+                ? "AIRCRAFT: UPLINK ERROR — SEE SYSTEM LOGS"
+                : `AIRCRAFT: ${contacts.length}`}
             </div>
             <div className="absolute left-3 bottom-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
               GRID: MAP // MODE: ADS-B // RANGE: 150KM
