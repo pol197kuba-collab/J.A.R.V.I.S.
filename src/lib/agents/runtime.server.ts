@@ -48,6 +48,32 @@ const UI_ACTION_TOOL_NAME = "perform_ui_action";
 // a legitimate way to say "this message isn't a UI action at all".
 const UI_ACTIONS_WITH_NONE = [...UI_ACTIONS, "none"] as const;
 
+// The classifier fallback pass only exists because the main turn's own text
+// reply is already known to be unreliable here — it's whatever the model
+// said WITHOUT successfully calling perform_ui_action (often a narration of
+// a failed delegate_to_agent guess or a confused non-answer). Once the
+// fallback finds a real action, overwrite that text with a clean confirmation
+// instead of leaving the confused main-turn reply in the chat bubble.
+const UI_ACTION_CONFIRMATIONS: Record<UiAction, string> = {
+  open_dashboard: "Otwieram pulpit główny.",
+  open_fuel: "Otwieram moduł paliwa.",
+  open_calculator: "Otwieram kalkulator.",
+  open_jobfit: "Otwieram JobFit.",
+  open_telemetry: "Otwieram telemetrię.",
+  open_menu: "Otwieram menu.",
+  close_menu: "Zamykam menu.",
+  system_check: "Wykonuję kontrolę systemu.",
+  sleep: "Przechodzę w tryb uśpienia.",
+  shutdown: "Wyłączam system.",
+  reboot: "Restartuję system.",
+  open_agents: "Otwieram centrum agentów.",
+  open_settings: "Otwieram ustawienia.",
+  open_logs: "Otwieram dziennik systemowy.",
+  open_tasks: "Otwieram zadania.",
+  open_subsystems: "Otwieram podsystemy.",
+  vision_scan: "Uruchamiam skan wizyjny.",
+};
+
 const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 const DEFAULT_SYSTEM_PROMPT = `${JARVIS_PERSONA}
@@ -613,6 +639,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           );
           if (requested !== "none" && (UI_ACTIONS as readonly string[]).includes(requested)) {
             uiAction = requested as UiAction;
+            finalText = UI_ACTION_CONFIRMATIONS[uiAction];
             toolCallLog.push({
               name: UI_ACTION_TOOL_NAME,
               args: { action: requested, via: "classifier_fallback_groq" },
@@ -713,6 +740,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
               );
               if (requested !== "none" && (UI_ACTIONS as readonly string[]).includes(requested)) {
                 uiAction = requested as UiAction;
+                finalText = UI_ACTION_CONFIRMATIONS[uiAction];
                 toolCallLog.push({
                   name: UI_ACTION_TOOL_NAME,
                   args: { action: requested, via: "classifier_fallback" },
