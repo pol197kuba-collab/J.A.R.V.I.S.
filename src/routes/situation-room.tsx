@@ -1,12 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { TacticalMap } from "@/components/jarvis/TacticalMap";
 import { WeatherTelemetry } from "@/components/jarvis/WeatherTelemetry";
 import { GithubActivityPulse } from "@/components/jarvis/GithubActivityPulse";
 import { SystemPulseStream } from "@/components/jarvis/SystemPulseStream";
-import { fetchNearbyFlights, type Aircraft } from "@/lib/geo/flightRadar";
+import { fetchNearbyFlightsFn } from "@/lib/geo/flightRadar.functions";
+import type { Aircraft } from "@/lib/geo/flightRadar";
 
 export const Route = createFileRoute("/situation-room")({
   head: () => ({
@@ -47,13 +49,17 @@ const FALLBACK: Fix = {
 };
 
 // Real ADS-B aircraft near the observer (OpenSky Network, free/keyless).
-// Only starts once a real fix is locked — the FALLBACK coordinates
-// shouldn't trigger a flight query for Warsaw before we actually know
-// where the user is.
+// Routed through a server function — OpenSky doesn't send CORS headers
+// for third-party origins, so calling it directly from the browser is
+// silently blocked (always reads as "0 aircraft" regardless of real
+// traffic). Only starts once a real fix is locked — the FALLBACK
+// coordinates shouldn't trigger a flight query for Warsaw before we
+// actually know where the user is.
 function useFlightContacts(lat: number, lon: number, enabled: boolean): Aircraft[] {
+  const fetchFlights = useServerFn(fetchNearbyFlightsFn);
   const { data } = useQuery({
     queryKey: ["flight-radar", lat.toFixed(2), lon.toFixed(2)],
-    queryFn: () => fetchNearbyFlights(lat, lon),
+    queryFn: () => fetchFlights({ data: { lat, lon } }),
     enabled,
     staleTime: 25_000,
     refetchInterval: 30_000,

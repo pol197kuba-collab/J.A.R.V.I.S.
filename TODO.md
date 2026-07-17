@@ -384,12 +384,15 @@ from the rest of the HUD — not a quick add-on).
 
 ### Second follow-up (2026-07-17): "still looks like a radar, no aircraft visible, I want a real map I can pan/zoom"
 
-Screenshot showed `AIRCRAFT: 0` — the OpenSky integration was actually
-working correctly (genuinely nothing in range at that moment over Zduńska
-Wola), but the empty stylized SVG radar read as "broken" rather than
-"empty", and it wasn't pannable/zoomable at all. Replaced the SVG radar
-outright with a real Leaflet map (dark CARTO tiles) instead of layering
-fake data on top of it:
+Screenshot showed `AIRCRAFT: 0` — assumed at the time to be the OpenSky
+integration working correctly (genuinely nothing in range over Zduńska
+Wola). **That assumption turned out to be wrong** — see the third
+follow-up below, where it's actually a CORS bug that made the count
+permanently 0 in any real browser. At this point in the timeline the
+empty stylized SVG radar read as "broken" rather than "empty" regardless,
+and it wasn't pannable/zoomable at all, so it got replaced outright with
+a real Leaflet map (dark CARTO tiles) instead of layering fake data on
+top of it:
 
 - **`src/components/jarvis/TacticalMap.tsx`** — vanilla Leaflet (no
   react-leaflet needed; `leaflet` was already a dependency, unused, and
@@ -426,6 +429,57 @@ A real precipitation weather radar overlay (RainViewer tiles on this same
 map) is now a much smaller add-on than originally scoped, since the real
 map/Leaflet groundwork is already in place — worth revisiting sooner than
 "separate big project" implied earlier.
+
+### Third follow-up (2026-07-17): map showed pure black, then two real bugs found live
+
+First report: map area was solid black. Root cause (verified, not
+guessed): `.geo-map`'s CSS filter was written to invert **light**
+OpenStreetMap tiles into a dark HUD look; `TacticalMap` uses CARTO's
+`dark_all` tiles, which are already dark, so the same filter crushed them
+to near-black. Downloaded a real CARTO tile and rendered it through both
+the old and new filter via a local Playwright page (no network needed) —
+old = solid black, new (`saturate(1.3) hue-rotate(170deg)`, no
+brightness/contrast reduction) = clearly visible. Fixed in `styles.css`.
+
+Second report, after the fix: map itself was visible but zoomed out to a
+whole-world view, and `AIRCRAFT: 0` again. Two separate real bugs, not
+one:
+
+1. **CORS** — OpenSky Network's REST API doesn't send an
+   `Access-Control-Allow-Origin` header for third-party origins (checked
+   live: `curl -D -` shows `access-control-allow-origin:
+   https://opensky-network.org` — literally only its own domain). A
+   browser silently blocks the response no matter what, in every real
+   deployment — this was never actually working from the browser, and
+   the earlier "genuinely 0 aircraft nearby" read of the first screenshot
+   (above) was wrong. The original `curl`-based verification during
+   development didn't catch this because `curl` doesn't enforce CORS at
+   all — it's purely a browser mechanism. Fixed by routing through a new
+   `src/lib/geo/flightRadar.functions.ts` server function
+   (`fetchNearbyFlightsFn`, same `requireSupabaseAuth` pattern as every
+   other server function in this app) — server-to-server calls have no
+   CORS restriction. `situation-room.tsx` now calls it via `useServerFn`.
+2. **World-zoom** — near-certainly Leaflet's default `scrollWheelZoom`
+   hijacking normal page-scroll as a zoom gesture the moment the cursor
+   passes over the map (a well-known Leaflet footgun on scrollable
+   pages). Fixed with the standard "click to activate scroll-zoom"
+   pattern (`scrollWheelZoom: false` at init, enabled on click, disabled
+   on mouse-leave) — pinch and double-click zoom are unaffected. Also
+   fixed a related latent bug while in this code: the home-marker effect
+   only called `map.setView(...)` on first marker creation, so if the
+   real geolocation fix arrived after Leaflet had already centered on the
+   `FALLBACK` coordinates, the marker would silently jump to the real
+   position but the viewport would stay put — now every `lat`/`lon`
+   change recenters the view too.
+
+Could not verify the CORS fix end-to-end in this sandbox — server
+function RPC calls don't execute here regardless of auth (an established,
+unrelated sandbox limitation from earlier in this project) — verified
+instead that the build/typecheck/lint are clean and that the map still
+mounts without errors. The `curl`-based CORS header check is real,
+independent evidence the fix addresses the actual cause; genuine
+confirmation that `AIRCRAFT` now shows nonzero counts needs a live check
+by the user once deployed.
 
 ## 8. [F] Concierge agent (calendar / email) — new agent proposal
 

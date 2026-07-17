@@ -339,6 +339,30 @@ instead of by a documentation audit next time.
   tile overlay (RainViewer) on this same map is now a much smaller
   add-on than originally scoped, since the map/Leaflet groundwork already
   exists.
+- **Milestone 8.3 (2026-07-17)** — two more real bugs from live testing.
+  (1) Map showed pure black: the `.geo-map` filter was built to invert
+  *light* OSM tiles, crushed CARTO's already-dark tiles to near-black —
+  verified by rendering a real downloaded tile through both filters via a
+  local Playwright page, not guessed. Fixed with a light-touch tint
+  (`saturate(1.3) hue-rotate(170deg)`, no darkening). (2) Map fixed but
+  `AIRCRAFT: 0` persisted and the view was zoomed to whole-world: OpenSky
+  Network doesn't send CORS headers for third-party origins (`curl -D -`
+  confirms `access-control-allow-origin: https://opensky-network.org`
+  only) — every browser call was silently blocked, so the "genuinely 0
+  aircraft" read logged in Milestone 8.1/8.2 was wrong; it never worked
+  from a browser at all. `curl`-based dev verification missed this since
+  curl doesn't enforce CORS. Fixed by moving the OpenSky call behind a
+  server function (`src/lib/geo/flightRadar.functions.ts`,
+  `fetchNearbyFlightsFn`) — server-to-server has no CORS restriction,
+  same pattern as every other external-API call in this app. The
+  world-zoom was Leaflet's default `scrollWheelZoom` hijacking normal
+  page-scroll; fixed with the standard click-to-activate-scroll-zoom
+  pattern, plus made the home-marker effect always recenter the view on
+  `lat`/`lon` change (previously only did so on first marker creation).
+  Could not verify the CORS fix end-to-end in-sandbox (server-function
+  RPC never executes here, an established unrelated limitation) — the
+  `curl` header check is independent evidence of the actual cause;
+  genuine confirmation needs a live check post-deploy.
 
 Beyond the Marketer prompt-only agent, the HUD already has ~30 components
 including boot sequence, voice, system logs, sub-systems, and (since
