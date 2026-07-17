@@ -1,8 +1,14 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { HudPanel } from "./HudPanel";
 import { getAgentFlow, type FlowRun } from "@/lib/agents/flow.functions";
+
+// How long a fully-settled interaction stays highlighted before the tree
+// fades back to full standby. Without this, the last-ever completed run
+// stays "lit up" forever (even across app restarts), reading as if that
+// agent were still working.
+const HIGHLIGHT_EXPIRY_MS = 10_000;
 
 const STATUS_COLOR: Record<string, string> = {
   running: "var(--primary)",
@@ -110,7 +116,20 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
   // highlighted path to a different interaction mid-delegation.
   const pinnedRootId = useRef<string | null>(null);
 
+  // Forces the expiry check below to re-evaluate on a clock even when the
+  // polled data hasn't changed (react-query keeps the same array reference
+  // via structural sharing when a 3s refetch returns identical rows).
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 2000);
+    return () => clearInterval(id);
+  }, []);
+
   const activeBySlug = useMemo(() => {
+    // Referenced only to satisfy the exhaustive-deps lint — its sole job is
+    // forcing this memo to re-run periodically so HIGHLIGHT_EXPIRY_MS is
+    // actually re-checked against the clock, not just when `runs` changes.
+    void tick;
     const map = new Map<string, FlowRun>();
     if (runs.length === 0) return map;
     const byId = new Map(runs.map((r) => [r.id, r]));
@@ -134,15 +153,35 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
         ? pinned
         : newestRoot;
     if (!root) return map;
-    pinnedRootId.current = root.id;
 
+    const subtree: FlowRun[] = [];
     const visit = (run: FlowRun) => {
-      map.set(run.agentSlug, run);
+      subtree.push(run);
       for (const child of byParent.get(run.id) ?? []) visit(child);
     };
     visit(root);
+
+    // Fade the whole interaction back to standby once every run in it has
+    // settled (nothing still "running") and the most recent finish was
+    // more than HIGHLIGHT_EXPIRY_MS ago.
+    const stillRunning = subtree.some((r) => r.status === "running");
+    if (!stillRunning) {
+      const lastFinishedAt = subtree.reduce<number>((max, r) => {
+        const t = r.finishedAt ? new Date(r.finishedAt).getTime() : 0;
+        return Math.max(max, t);
+      }, 0);
+      if (lastFinishedAt > 0 && Date.now() - lastFinishedAt > HIGHLIGHT_EXPIRY_MS) {
+        pinnedRootId.current = null;
+        return map;
+      }
+    }
+
+    pinnedRootId.current = root.id;
+    for (const run of subtree) map.set(run.agentSlug, run);
     return map;
-  }, [runs]);
+    // `tick` is intentionally in the deps below purely to force periodic
+    // re-evaluation of the expiry check on a clock, independent of `runs`.
+  }, [runs, tick]);
 
   const orchestrator = agents.find((a) => a.slug === "orchestrator");
   const teammates = agents.filter((a) => a.slug !== "orchestrator");

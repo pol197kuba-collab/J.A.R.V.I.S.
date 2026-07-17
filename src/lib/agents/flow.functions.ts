@@ -23,6 +23,7 @@ export type FlowRun = {
   toolCalls: string[];
   latencyMs: number | null;
   createdAt: string;
+  finishedAt: string | null;
 };
 
 export type FlowResult = { agents: FlowAgent[]; runs: FlowRun[] };
@@ -41,7 +42,7 @@ export const getAgentFlow = createServerFn({ method: "GET" })
 
     const { data: runs, error } = await supabase
       .from("agent_runs")
-      .select("id, agent_id, parent_run_id, status, output, latency_ms, created_at")
+      .select("id, agent_id, parent_run_id, status, output, latency_ms, created_at, finished_at")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(40);
@@ -77,6 +78,7 @@ export const getAgentFlow = createServerFn({ method: "GET" })
             .filter((name) => name !== "delegate_to_agent" && !name.startsWith("classifier_")),
           latencyMs: r.latency_ms,
           createdAt: r.created_at,
+          finishedAt: r.finished_at,
         };
       }),
     };
