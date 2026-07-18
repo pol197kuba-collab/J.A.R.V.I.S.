@@ -1,14 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { HudPanel } from "@/components/jarvis/HudPanel";
-import { TacticalMap } from "@/components/jarvis/TacticalMap";
+import { TacticalMap, type FlightStatus } from "@/components/jarvis/TacticalMap";
 import { WeatherTelemetry } from "@/components/jarvis/WeatherTelemetry";
 import { GithubActivityPulse } from "@/components/jarvis/GithubActivityPulse";
 import { SystemPulseStream } from "@/components/jarvis/SystemPulseStream";
-import { fetchNearbyFlightsFn } from "@/lib/geo/flightRadar.functions";
-import type { Aircraft } from "@/lib/geo/flightRadar";
 
 export const Route = createFileRoute("/situation-room")({
   head: () => ({
@@ -48,47 +44,16 @@ const FALLBACK: Fix = {
   heading: null,
 };
 
-// Real ADS-B aircraft near the observer (OpenSky Network, free/keyless).
-// Routed through a server function — OpenSky doesn't send CORS headers
-// for third-party origins, so calling it directly from the browser is
-// silently blocked (always reads as "0 aircraft" regardless of real
-// traffic). Only starts once a real fix is locked — the FALLBACK
-// coordinates shouldn't trigger a flight query for Warsaw before we
-// actually know where the user is.
-function useFlightContacts(
-  lat: number,
-  lon: number,
-  enabled: boolean,
-): { aircraft: Aircraft[]; error: boolean } {
-  const fetchFlights = useServerFn(fetchNearbyFlightsFn);
-  const { data, error } = useQuery({
-    queryKey: ["flight-radar", lat.toFixed(2), lon.toFixed(2)],
-    queryFn: () => fetchFlights({ data: { lat, lon } }),
-    enabled,
-    // OpenSky's anonymous tier is capped at 400 requests/day (confirmed
-    // via its x-rate-limit-remaining response header) — a 30s interval
-    // could burn through that in ~3 hours of one continuously open tab.
-    // 90s keeps the radar feeling live without risking the quota running
-    // out mid-session.
-    staleTime: 85_000,
-    refetchInterval: 90_000,
-    // A transient origin hiccup (e.g. HTTP 522 — Cloudflare couldn't
-    // reach OpenSky's server in time, seen live) shouldn't flash an error
-    // banner for one bad poll; retry a couple of times before giving up.
-    retry: 2,
-  });
-  return { aircraft: data ?? [], error: !!error };
-}
-
 function SituationRoomPage() {
   const [fix, setFix] = useState<Fix>(FALLBACK);
   const [status, setStatus] = useState<Status>("acquiring");
   const [bootProgress, setBootProgress] = useState(0);
-  const { aircraft: contacts, error: flightError } = useFlightContacts(
-    fix.lat,
-    fix.lon,
-    status !== "acquiring",
-  );
+  // Aircraft now load based on the map's own current viewport (real ADS-B
+  // via OpenSky, owned by TacticalMap since it owns the Leaflet instance
+  // the viewport comes from) — like a real flight tracker, not a fixed
+  // radius around "home". This just reflects that status back into the
+  // HUD readout above the map.
+  const [flightStatus, setFlightStatus] = useState<FlightStatus>({ kind: "ok", count: 0 });
 
   // Boot / acquisition sequence — runs once
   useEffect(() => {
@@ -184,7 +149,12 @@ function SituationRoomPage() {
         className="flex flex-col"
       >
         <div className="relative h-[55vh] overflow-hidden bg-black landscape:max-md:h-[50vh]">
-          <TacticalMap lat={fix.lat} lon={fix.lon} active={!isLoading} aircraft={contacts} />
+          <TacticalMap
+            lat={fix.lat}
+            lon={fix.lon}
+            active={!isLoading}
+            onStatusChange={setFlightStatus}
+          />
           {isLoading ? <AcquireOverlay progress={bootProgress} /> : null}
 
           <div className="pointer-events-none absolute inset-0">
@@ -197,17 +167,22 @@ function SituationRoomPage() {
             <div
               className="absolute right-3 top-3 font-display text-[9px] uppercase tracking-[0.25em]"
               style={{
-                color: flightError
-                  ? "var(--destructive)"
-                  : "color-mix(in oklab, var(--primary) 70%, transparent)",
+                color:
+                  flightStatus.kind === "error"
+                    ? "var(--destructive)"
+                    : flightStatus.kind === "zoom_in"
+                      ? "var(--warning)"
+                      : "color-mix(in oklab, var(--primary) 70%, transparent)",
               }}
             >
-              {flightError
+              {flightStatus.kind === "error"
                 ? "AIRCRAFT: UPLINK ERROR — SEE SYSTEM LOGS"
-                : `AIRCRAFT: ${contacts.length}`}
+                : flightStatus.kind === "zoom_in"
+                  ? "AIRCRAFT: ZOOM IN TO LOAD"
+                  : `AIRCRAFT: ${flightStatus.count}`}
             </div>
             <div className="absolute left-3 bottom-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
-              GRID: MAP // MODE: ADS-B // RANGE: 150KM
+              GRID: MAP // MODE: ADS-B // SCOPE: VIEWPORT
             </div>
             <div className="absolute right-3 bottom-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
               {status === "locked"

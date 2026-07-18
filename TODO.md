@@ -481,6 +481,64 @@ independent evidence the fix addresses the actual cause; genuine
 confirmation that `AIRCRAFT` now shows nonzero counts needs a live check
 by the user once deployed.
 
+### Fourth follow-up (2026-07-17/18): two more real errors read straight from live System Logs, then a real design gap
+
+The error-surfacing added above paid off immediately — every subsequent
+round was diagnosed from the actual logged error instead of another
+guess:
+
+1. **`The operation was aborted`** — this codebase's own 10s
+   `AbortController` timeout firing on every single poll. A direct `curl`
+   to the same OpenSky endpoint responded in under 2s from this sandbox,
+   so the deployed server's network path to OpenSky (most likely
+   Cloudflare Workers egress, given this app's build target) is evidently
+   much slower than that. Raised to 25s with real headroom.
+2. **`opensky_http_522`** — Cloudflare's own "couldn't reach the origin
+   in time" status. 5/5 fresh `curl` requests immediately after all
+   succeeded in under 1s each, and OpenSky's response headers include
+   `x-rate-limit-remaining` confirming the anonymous tier is capped at
+   400 requests/day — confirming this was a transient origin hiccup, not
+   a persistent outage, but also surfacing a real latent risk: the 30s
+   poll interval could exhaust that daily quota in ~3 hours of one
+   continuously open tab. Added `retry: 2` (so one bad poll doesn't flash
+   an error) and raised the interval to 90s.
+
+Then a live report that wasn't a bug at all: user zoomed out to see the
+whole world and panned around looking for aircraft, found none anywhere.
+Root design gap: aircraft were only ever fetched within a fixed 150km
+radius of the user's own position, regardless of where the map was
+panned/zoomed to — so exploring elsewhere on the map could never show
+anything, by construction. Interviewed on the fix: rebuilt as a real
+Flightradar24-style viewport-driven tracker instead of a fixed-radius one.
+
+- `flightRadar.ts` reworked: `fetchFlightsInBounds(bounds)` takes an
+  explicit `{lamin, lomin, lamax, lomax}` box (Leaflet's own
+  `map.getBounds()`) instead of computing one from a lat/lon + fixed
+  radius. Returns a `FlightQueryResult` discriminated union (`{ok:true,
+  aircraft}` vs `{ok:false, reason:"area_too_large"}`) instead of always
+  throwing, so "you're zoomed out too far" reads as a distinct, expected
+  state rather than an error.
+- `MAX_QUERY_SPAN_DEG = 15` caps the queryable area — refuses to fetch
+  (returns the `area_too_large` result) above that span instead of ever
+  sending a near-whole-world query to OpenSky, protecting the 400/day
+  anonymous quota from being blown by one zoomed-all-the-way-out request.
+- `TacticalMap.tsx` now owns the fetch itself (via `moveend`/init
+  Leaflet listeners updating a `bounds` state, driving the query) since
+  it's the one holding the Leaflet instance the viewport comes from —
+  reports status back to `situation-room.tsx` via an `onStatusChange`
+  callback (`{kind:"ok"|"error"|"zoom_in", ...}`) rather than the parent
+  owning a now-meaningless fixed lat/lon query.
+- HUD readout shows a distinct amber "AIRCRAFT: ZOOM IN TO LOAD" for the
+  `zoom_in` state, separate from the red "UPLINK ERROR" state — genuinely
+  different situations, no longer conflated.
+
+Verified in this sandbox via a live Playwright render simulating a mouse
+drag to pan the map (triggering the new `moveend` bounds-update path) —
+no crash, no new hydration/SSR errors beyond the pre-existing unrelated
+one, layout and HUD overlays intact. Could not verify real aircraft
+appear (same RPC-doesn't-execute-here sandbox limitation as before) —
+needs a live check once deployed.
+
 ## 8. [F] Concierge agent (calendar / email) — new agent proposal
 
 Cheap to add: prompt-only persona like Marketer, no new architecture,
