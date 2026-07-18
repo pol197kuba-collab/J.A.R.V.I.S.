@@ -1,20 +1,31 @@
 import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import type * as LeafletNS from "leaflet";
-import type { Aircraft } from "@/lib/geo/flightRadar";
+import { fetchFlightsInBoundsFn } from "@/lib/geo/flightRadar.functions";
+import type { Bounds } from "@/lib/geo/flightRadar";
 
 // Real, pannable/zoomable map (vanilla Leaflet — already a dependency,
 // previously unused; styles.css already has a `.geo-map` dark/cyan tile
 // filter prepared for exactly this). Replaces the old stylized SVG radar
 // per direct feedback: a fixed sweep animation with no aircraft in range
 // just reads as "broken", not "empty" — a real map makes an empty result
-// legible (you can see there's genuinely nothing nearby) and is honestly
-// more useful than a radar metaphor for data that isn't actually radar.
+// legible.
+//
+// Aircraft load based on the map's own current viewport (like a real
+// flight tracker), not a fixed radius around the user's position — panning
+// or zooming the map actually loads whatever's airborne wherever you're
+// looking. Query is capped to a maximum span (see MAX_QUERY_SPAN_DEG in
+// flightRadar.ts) so zooming all the way out to "whole world" doesn't
+// burn through OpenSky's daily anonymous quota in one request.
 //
 // Leaflet touches `window` at module-load time, which crashes this app's
 // SSR (every route is server-rendered) if imported statically — must be
 // loaded dynamically, client-side only, inside an effect. Only *type*
 // imports are allowed at the top level (erased at compile time, so they
 // never reach the SSR bundle).
+
+export type FlightStatus = { kind: "ok"; count: number } | { kind: "error" } | { kind: "zoom_in" };
 
 function altitudeColor(altitudeM: number): string {
   if (altitudeM < 3000) return "var(--warning)";
@@ -45,13 +56,13 @@ function homeIcon(L: typeof LeafletNS): LeafletNS.DivIcon {
 export function TacticalMap({
   lat,
   lon,
-  aircraft,
   active,
+  onStatusChange,
 }: {
   lat: number;
   lon: number;
-  aircraft: Aircraft[];
   active: boolean;
+  onStatusChange?: (status: FlightStatus) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const leafletRef = useRef<typeof LeafletNS | null>(null);
@@ -61,6 +72,7 @@ export function TacticalMap({
   // Bumps once Leaflet has finished loading, so the other effects (which
   // depend on leafletRef/mapRef being populated) re-run and pick it up.
   const [ready, setReady] = useState(false);
+  const [bounds, setBounds] = useState<Bounds | null>(null);
 
   // Load Leaflet + init the map. Client-only by construction (dynamic
   // import inside an effect never runs during SSR).
@@ -91,6 +103,19 @@ export function TacticalMap({
       }).addTo(map);
       aircraftLayerRef.current = L.layerGroup().addTo(map);
       mapRef.current = map;
+
+      const updateBounds = () => {
+        const b = map.getBounds();
+        setBounds({
+          lamin: b.getSouth(),
+          lomin: b.getWest(),
+          lamax: b.getNorth(),
+          lomax: b.getEast(),
+        });
+      };
+      map.on("moveend", updateBounds);
+      updateBounds();
+
       setReady(true);
     });
     return () => {
@@ -128,13 +153,42 @@ export function TacticalMap({
     return () => clearTimeout(t);
   }, [active, ready]);
 
+  // Aircraft for the current viewport.
+  const fetchFlights = useServerFn(fetchFlightsInBoundsFn);
+  const boundsKey = bounds
+    ? `${bounds.lamin.toFixed(1)},${bounds.lomin.toFixed(1)},${bounds.lamax.toFixed(1)},${bounds.lomax.toFixed(1)}`
+    : null;
+  const { data: result, error } = useQuery({
+    queryKey: ["flight-radar", boundsKey],
+    queryFn: () => fetchFlights({ data: bounds! }),
+    enabled: !!bounds && active,
+    staleTime: 85_000,
+    refetchInterval: 90_000,
+    // A transient origin hiccup (e.g. HTTP 522 — Cloudflare couldn't reach
+    // OpenSky's server in time, seen live) shouldn't flash an error for
+    // one bad poll; retry a couple of times before giving up.
+    retry: 2,
+  });
+
+  useEffect(() => {
+    if (!onStatusChange) return;
+    if (error) onStatusChange({ kind: "error" });
+    else if (result && !result.ok) onStatusChange({ kind: "zoom_in" });
+    else if (result?.ok) onStatusChange({ kind: "ok", count: result.aircraft.length });
+    // onStatusChange intentionally omitted: callers pass an inline setter,
+    // and re-running this effect on every parent render (rather than only
+    // when the actual query result changes) would be harmless but wasteful.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result, error]);
+
   // Aircraft markers.
   useEffect(() => {
     const L = leafletRef.current;
     const layer = aircraftLayerRef.current;
     if (!L || !layer) return;
     layer.clearLayers();
-    for (const a of aircraft) {
+    if (!result?.ok) return;
+    for (const a of result.aircraft) {
       const color = altitudeColor(a.altitudeM);
       L.marker([a.lat, a.lon], { icon: aircraftIcon(L, a.headingDeg, color) })
         .bindTooltip(
@@ -142,7 +196,7 @@ export function TacticalMap({
         )
         .addTo(layer);
     }
-  }, [aircraft, ready]);
+  }, [result]);
 
   return <div ref={containerRef} className="geo-map absolute inset-0" />;
 }

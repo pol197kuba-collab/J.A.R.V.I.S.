@@ -9,17 +9,22 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import type { Json } from "@/integrations/supabase/types";
-import { fetchNearbyFlights, type Aircraft } from "./flightRadar";
+import { fetchFlightsInBounds, type FlightQueryResult } from "./flightRadar";
 
-const Input = z.object({ lat: z.number(), lon: z.number() });
+const Input = z.object({
+  lamin: z.number(),
+  lomin: z.number(),
+  lamax: z.number(),
+  lomax: z.number(),
+});
 
-export const fetchNearbyFlightsFn = createServerFn({ method: "GET" })
+export const fetchFlightsInBoundsFn = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => Input.parse(input))
-  .handler(async ({ data, context }): Promise<Aircraft[]> => {
+  .handler(async ({ data, context }): Promise<FlightQueryResult> => {
     const { supabase, userId } = context;
     try {
-      return await fetchNearbyFlights(data.lat, data.lon);
+      return await fetchFlightsInBounds(data);
     } catch (err) {
       // Logged to system_events (not just thrown) so a failure here is
       // diagnosable from System Logs without needing browser devtools —
@@ -31,7 +36,7 @@ export const fetchNearbyFlightsFn = createServerFn({ method: "GET" })
         level: "error",
         source: "flight-radar",
         message: `OpenSky fetch failed: ${msg}`,
-        meta: { lat: data.lat, lon: data.lon } as Json,
+        meta: data as Json,
       });
       throw err;
     }

@@ -363,16 +363,33 @@ instead of by a documentation audit next time.
   RPC never executes here, an established unrelated limitation) — the
   `curl` header check is independent evidence of the actual cause;
   genuine confirmation needs a live check post-deploy.
+- **Milestone 8.4 (2026-07-17/18)** — the error-surfacing from 8.3 paid
+  off immediately: two more real failures (`AbortController` 10s timeout
+  firing on every poll — raised to 25s with headroom after confirming
+  OpenSky itself responds in under 2s; then a transient Cloudflare 522,
+  resolved with `retry: 2` plus a 90s poll interval after `curl` revealed
+  OpenSky's anonymous tier is hard-capped at 400 requests/day via its
+  `x-rate-limit-remaining` header) were each read straight from the exact
+  logged error instead of guessed. Then a real *design* gap, not a bug:
+  aircraft only ever loaded within a fixed 150km radius of the user's own
+  position, so panning/zooming the map elsewhere (which is what the user
+  was actually doing, looking for traffic) could never show anything.
+  Rebuilt as a viewport-driven tracker (Flightradar24-style):
+  `fetchFlightsInBounds` takes Leaflet's own `getBounds()` box directly;
+  `TacticalMap.tsx` now owns the fetch (via `moveend`), reporting a
+  `{ok|error|zoom_in}` status back to the route via a callback;
+  `MAX_QUERY_SPAN_DEG = 15` refuses to query above that span (an amber
+  "ZOOM IN TO LOAD" state, distinct from the red error state) so a
+  whole-world zoom-out can't blow the daily quota in one request.
 
 Beyond the Marketer prompt-only agent, the HUD already has ~30 components
 including boot sequence, voice, system logs, sub-systems, and (since
-Milestone 8.2) a **`situation-room` route** — real browser Geolocation, a
+Milestone 8.4) a **`situation-room` route** — real browser Geolocation, a
 real pannable/zoomable Leaflet map (`TacticalMap.tsx`) plotting real
-ADS-B contacts, and real telemetry (GitHub Events API, Open-Meteo). Treat
-the frontend as further along than the backend/agent layer — new agent
-work should
-assume a fairly complete
-HUD shell already exists to plug into.
+ADS-B contacts loaded for whatever's currently in view, and real
+telemetry (GitHub Events API, Open-Meteo). Treat the frontend as further
+along than the backend/agent layer — new agent work should assume a
+fairly complete HUD shell already exists to plug into.
 
 ### Arc Core reactor components (consolidated 2026-07-14)
 
