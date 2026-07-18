@@ -65,8 +65,17 @@ function useFlightContacts(
     queryKey: ["flight-radar", lat.toFixed(2), lon.toFixed(2)],
     queryFn: () => fetchFlights({ data: { lat, lon } }),
     enabled,
-    staleTime: 25_000,
-    refetchInterval: 30_000,
+    // OpenSky's anonymous tier is capped at 400 requests/day (confirmed
+    // via its x-rate-limit-remaining response header) — a 30s interval
+    // could burn through that in ~3 hours of one continuously open tab.
+    // 90s keeps the radar feeling live without risking the quota running
+    // out mid-session.
+    staleTime: 85_000,
+    refetchInterval: 90_000,
+    // A transient origin hiccup (e.g. HTTP 522 — Cloudflare couldn't
+    // reach OpenSky's server in time, seen live) shouldn't flash an error
+    // banner for one bad poll; retry a couple of times before giving up.
+    retry: 2,
   });
   return { aircraft: data ?? [], error: !!error };
 }
