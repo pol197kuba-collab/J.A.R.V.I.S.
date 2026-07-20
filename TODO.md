@@ -568,6 +568,39 @@ the user's position, ~1s response, richer fields than OpenSky).
   upstream API itself was verified live this time, which the original
   OpenSky round never managed from a browser-equivalent path.
 
+### Sixth follow-up (2026-07-20): still 0 aircraft — adsb.lol was rate-limiting
+
+Live report, same day: System Pulse now full of `FLIGHT DATA FETCH FAILED:
+ADSB_HTTP_429` instead of the old 522. Diagnosis followed the same pattern
+as every round before it: 6/6 rapid requests to the exact same adsb.lol
+endpoint from an ordinary host here never hit a rate limit at all, so the
+429 is specific to the deployed server's egress path — Cloudflare Workers
+shares its IP pool across many tenants' traffic, and adsb.lol's own docs
+describe its limits as "dynamic based on environment load" rather than a
+fixed per-caller quota, so this isn't necessarily even *our* request rate
+tripping it.
+
+Root decision: stop chasing single points of failure one at a time. Added
+real **automatic failover between two independent free ADS-B mirrors**
+(adsb.lol, then airplanes.live) — same shape as the existing Gemini/Groq
+failover elsewhere in this codebase (item 5). Verified airplanes.live live
+first: identical `{ac: [...]}` readsb-derived response shape, same field
+names, same 250nm point-radius query cap — confirmed field-by-field before
+wiring it in, not assumed from the family resemblance. `fetchFlightsInBounds`
+now tries providers in order per request and returns whichever answers.
+
+Could not get real dependencies installed in this sandbox this round
+(`bun install` repeatedly failed with `ConnectionClosed` mid-download on
+unrelated packages, and the sandbox container itself restarted multiple
+times mid-install — sandbox network/infra flakiness, not a code issue) —
+full `tsc --noEmit`/`vite build` unavailable. Verified instead via an
+`esbuild` transpile + `node --check` syntax pass on the touched file
+(clean, no errors) and by re-reading the diff directly against both
+providers' live-confirmed response shapes. **Needs the normal
+tsc/eslint/build gate run once dependencies install cleanly**, and a live
+check once deployed to confirm `AIRCRAFT` is finally nonzero — this file
+will need another follow-up entry here if it isn't.
+
 ## 8. [F] Concierge agent (calendar / email) — new agent proposal
 
 Cheap to add: prompt-only persona like Marketer, no new architecture,
