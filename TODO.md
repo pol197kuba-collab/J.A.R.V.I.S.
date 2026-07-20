@@ -621,14 +621,42 @@ OAuth-backed tools via the existing tool-registry pattern
   always wins). Wire it up as a real fallback once multi-provider routing
   lands, or delete it.
 
-## 11. [W] Producer agent — document/presentation generation (pptx/docx/pdf)
+## 11. [W] Researcher agent — deep multi-step web research
+
+Formalizes the idea already noted in `CODEX.md` as the queued second-
+wow-gadget slot (previously only mentioned there, not tracked here as its
+own item — gap caught 2026-07-20). Complements Marketer (which is
+marketing-copy-focused, single-shot) with genuine multi-step research:
+follow-up searches, cross-checking sources, synthesizing findings —
+reuses the existing `web_search`/`fetch_url` tools already bound to the
+Orchestrator, no new tool plumbing required, just a new agent + persona
+plus (optionally) a few more search/fetch round-trips per turn than
+Marketer typically needs.
+
+Scoped to land **after RAG/Analityk (item 6)** — grounding research
+against the user's own documents, not just live web search, is what
+makes this genuinely differentiated rather than "Marketer but wordier."
+Comes **before Producer (item 12)**: the flagship demo for both agents is
+"zrób mi prezentację w nowoczesnym stylu na temat X" — Researcher gathers
+and structures the content, Producer compiles it into the actual file.
+Orchestrator delegates content-gathering to Researcher, then delegation
+to Producer, all via the existing `delegate_to_agent` +
+`agent_runs.parent_run_id` chain (proven since Strażnik) — visible live
+in Agent Flow Tree with zero new orchestration work.
+
+Wow potential: a live "research trace" panel while it runs — sources
+being fetched/read/synthesized in real time, in the same spirit as Agent
+Flow Tree's travelling-dot delegation animation, which already proved
+that kind of live-process visualization reads well in this HUD.
+
+## 12. [W] Producer agent — document/presentation generation (pptx/docx/pdf)
 
 Content-agnostic "compiler" agent, deliberately not bolted onto Marketer:
 generating a file is a generic capability, not a marketing specialization,
 and this app's agent philosophy keeps each agent single-purpose (Guardian
 = monitoring, Marketer = copywriting). Enables the pipeline discussed
 2026-07-20: Orchestrator delegates content-gathering (Marketer and/or
-Researcher, see below) → delegates assembly to Producer. No new
+Researcher, item 11) → delegates assembly to Producer. No new
 orchestration needed — `delegate_to_agent` + `agent_runs.parent_run_id`
 (proven working since Strażnik) already supports exactly this chain, and
 it renders live in Agent Flow Tree for free.
@@ -649,12 +677,12 @@ the same JSON tool-call channel. Needs Supabase Storage (a bucket +
 signed URLs) to persist the generated file and hand back a download link
 in chat instead.
 
-Pairs naturally with a **Researcher** agent (deep multi-step web research,
-noted in `CODEX.md` as the queued second-wow-gadget idea, not yet a
-formal item in this file) for the "zrób mi prezentację o X" demo:
-Researcher gathers content, Producer compiles it. Doesn't strictly
-require Researcher to exist first — could ship standalone and take input
-from Marketer or directly from the Orchestrator's own turn.
+Ordered after Researcher (item 11) per the "zrób mi prezentację o X" demo
+logic: Researcher gathers content, Producer compiles it. Doesn't
+strictly *require* Researcher to exist first at a technical level — could
+ship standalone and take input from Marketer or directly from the
+Orchestrator's own turn — but the intended flagship demo needs both, so
+build order follows that.
 
 ---
 
