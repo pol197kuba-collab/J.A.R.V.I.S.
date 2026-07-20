@@ -9,6 +9,19 @@
 > Cadence: don't ship two [F]s or two [W]s back to back — alternate, so we
 > keep building the "operating system" half while still shipping things
 > worth showing off (Vision Scanner is the bar for [W]).
+>
+> **Build-order override (2026-07-20):** items are numbered by when they
+> were added/shipped, not strict build order — build **6 → 11 → 12**
+> before **8 → 9 → 10**. RAG/Analityk (6), Researcher (11), and Producer
+> (12) form one connected pipeline (the flagship "zrób mi prezentację o
+> X" demo: RAG grounds Researcher, Researcher feeds Producer), so 11+12
+> are treated as **one combined wow milestone**, a deliberate, explicit
+> exception to the alternation cadence above rather than an oversight —
+> shipping them apart would delay the actual payoff for no technical
+> reason, since Concierge/calendar-tools/cleanup (8-10) have no
+> dependency on this arc either way. Section numbers themselves are left
+> unchanged (already referenced in pushed commit messages) — only the
+> build order is reprioritized here, not the file's physical layout.
 
 ## 1. [UI] Dashboard redesign — holo-panels with depth — **shipped 2026-07-16, confirmed working**
 
