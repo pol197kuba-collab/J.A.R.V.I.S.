@@ -1,10 +1,9 @@
-// OpenSky Network's REST API doesn't send an Access-Control-Allow-Origin
-// header for third-party origins (verified live: it only allows
-// opensky-network.org itself), so a browser fetch is silently blocked by
-// CORS no matter what — curl-based verification during development missed
-// this because curl doesn't enforce CORS at all (it's a browser-only
-// mechanism). Routing through a server function sidesteps it entirely:
-// server-to-server requests have no CORS restriction.
+// Flight data goes through a server function rather than a browser fetch:
+// originally forced by OpenSky's CORS policy (it only allowed its own
+// origin), and kept after the switch to adsb.lol on purpose — server-side
+// fetching is immune to any provider's CORS choices, keeps the provider
+// swappable without re-testing browser behavior, and is what lets failures
+// land in system_events where System Logs can show them.
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
@@ -35,7 +34,7 @@ export const fetchFlightsInBoundsFn = createServerFn({ method: "GET" })
         owner_id: userId,
         level: "error",
         source: "flight-radar",
-        message: `OpenSky fetch failed: ${msg}`,
+        message: `Flight data fetch failed: ${msg}`,
         meta: data as Json,
       });
       throw err;

@@ -539,6 +539,35 @@ one, layout and HUD overlays intact. Could not verify real aircraft
 appear (same RPC-doesn't-execute-here sandbox limitation as before) —
 needs a live check once deployed.
 
+### Fifth follow-up (2026-07-20): still 0 aircraft — OpenSky dropped for adsb.lol
+
+Live report: System Pulse full of `OPENSKY FETCH FAILED: OPENSKY_HTTP_522`
+on every poll — no longer transient. Diagnosis: the same endpoint answered
+200 in ~0.5s, 5/5 attempts, from an ordinary host at the same moment, so
+OpenSky itself was fine — the 522 (Cloudflare edge unable to reach
+OpenSky's origin) hit only the deployed server's egress path
+(Cloudflare-to-Cloudflare). Not fixable from our side by any amount of
+timeout/retry tuning, so the provider was swapped: **adsb.lol** (free,
+keyless community readsb API — verified live: 42 aircraft within 100nm of
+the user's position, ~1s response, richer fields than OpenSky).
+
+- `flightRadar.ts` rewritten for adsb.lol's `v2/point/{lat}/{lon}/{nm}`
+  (point + radius, max 250nm — no bbox endpoint): queries the circle
+  circumscribing the viewport, then trims the result back to the exact
+  bounds. `MAX_QUERY_SPAN_DEG` lowered 15 → 8 accordingly (250nm covers
+  ~8° span at mid-latitudes) — the "zoom in to load" UX is unchanged.
+  Units converted at the boundary (feet→m, knots→km/h); field mapping
+  verified against a live response, not assumed. `Aircraft.originCountry`
+  (OpenSky-only) replaced with `registration`/`typeCode` — the map tooltip
+  now shows airframe type + registration instead of country.
+- Server-function route kept deliberately even though CORS was the
+  original reason: provider stays swappable, failures keep landing in
+  `system_events` (which is exactly how this bug was diagnosed).
+- Same sandbox limitation as every round: server-function RPC doesn't
+  execute here, so end-to-end needs a live check after deploy — but the
+  upstream API itself was verified live this time, which the original
+  OpenSky round never managed from a browser-equivalent path.
+
 ## 8. [F] Concierge agent (calendar / email) — new agent proposal
 
 Cheap to add: prompt-only persona like Marketer, no new architecture,

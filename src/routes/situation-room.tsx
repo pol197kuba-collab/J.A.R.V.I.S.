@@ -49,7 +49,7 @@ function SituationRoomPage() {
   const [status, setStatus] = useState<Status>("acquiring");
   const [bootProgress, setBootProgress] = useState(0);
   // Aircraft now load based on the map's own current viewport (real ADS-B
-  // via OpenSky, owned by TacticalMap since it owns the Leaflet instance
+  // via adsb.lol, owned by TacticalMap since it owns the Leaflet instance
   // the viewport comes from) — like a real flight tracker, not a fixed
   // radius around "home". This just reflects that status back into the
   // HUD readout above the map.

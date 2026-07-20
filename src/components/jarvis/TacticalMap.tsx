@@ -16,8 +16,9 @@ import type { Bounds } from "@/lib/geo/flightRadar";
 // flight tracker), not a fixed radius around the user's position — panning
 // or zooming the map actually loads whatever's airborne wherever you're
 // looking. Query is capped to a maximum span (see MAX_QUERY_SPAN_DEG in
-// flightRadar.ts) so zooming all the way out to "whole world" doesn't
-// burn through OpenSky's daily anonymous quota in one request.
+// flightRadar.ts) — beyond it the provider's point+radius query can't
+// cover the whole viewport, so the HUD asks to zoom in instead of
+// silently showing only the center of the view.
 //
 // Leaflet touches `window` at module-load time, which crashes this app's
 // SSR (every route is server-rendered) if imported statically — must be
@@ -164,9 +165,8 @@ export function TacticalMap({
     enabled: !!bounds && active,
     staleTime: 85_000,
     refetchInterval: 90_000,
-    // A transient origin hiccup (e.g. HTTP 522 — Cloudflare couldn't reach
-    // OpenSky's server in time, seen live) shouldn't flash an error for
-    // one bad poll; retry a couple of times before giving up.
+    // A transient upstream hiccup shouldn't flash an error for one bad
+    // poll; retry a couple of times before giving up.
     retry: 2,
   });
 
@@ -192,7 +192,14 @@ export function TacticalMap({
       const color = altitudeColor(a.altitudeM);
       L.marker([a.lat, a.lon], { icon: aircraftIcon(L, a.headingDeg, color) })
         .bindTooltip(
-          `${a.callsign} · ${Math.round(a.altitudeM)}m · ${a.speedKmh != null ? `${a.speedKmh}km/h` : "speed n/a"} · ${a.originCountry}`,
+          [
+            a.callsign,
+            `${Math.round(a.altitudeM)}m`,
+            a.speedKmh != null ? `${a.speedKmh}km/h` : "speed n/a",
+            [a.typeCode, a.registration].filter(Boolean).join(" "),
+          ]
+            .filter(Boolean)
+            .join(" · "),
         )
         .addTo(layer);
     }
