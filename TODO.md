@@ -621,6 +621,41 @@ OAuth-backed tools via the existing tool-registry pattern
   always wins). Wire it up as a real fallback once multi-provider routing
   lands, or delete it.
 
+## 11. [W] Producer agent — document/presentation generation (pptx/docx/pdf)
+
+Content-agnostic "compiler" agent, deliberately not bolted onto Marketer:
+generating a file is a generic capability, not a marketing specialization,
+and this app's agent philosophy keeps each agent single-purpose (Guardian
+= monitoring, Marketer = copywriting). Enables the pipeline discussed
+2026-07-20: Orchestrator delegates content-gathering (Marketer and/or
+Researcher, see below) → delegates assembly to Producer. No new
+orchestration needed — `delegate_to_agent` + `agent_runs.parent_run_id`
+(proven working since Strażnik) already supports exactly this chain, and
+it renders live in Agent Flow Tree for free.
+
+Scope, per explicit decision: **one agent, all three formats** — pptx,
+docx, and pdf, not a single-format MVP. TypeScript-first per this repo's
+established rule (no Python service unless something genuinely requires
+it): `pptxgenjs` (pptx), `docx` (Word), `pdf-lib` (PDF) — all pure-JS, no
+native dependencies, runnable inside the existing Supabase Edge Function
+runtime. Three format-specific tools bound to the agent (or one
+`generate_document` tool taking a `format` param) — decide at build time
+based on how different the input shapes end up being once actually
+building this.
+
+**The one genuinely new architectural piece**: no tool in this app has
+ever produced a file before — every tool so far returns text/data through
+the same JSON tool-call channel. Needs Supabase Storage (a bucket +
+signed URLs) to persist the generated file and hand back a download link
+in chat instead.
+
+Pairs naturally with a **Researcher** agent (deep multi-step web research,
+noted in `CODEX.md` as the queued second-wow-gadget idea, not yet a
+formal item in this file) for the "zrób mi prezentację o X" demo:
+Researcher gathers content, Producer compiles it. Doesn't strictly
+require Researcher to exist first — could ship standalone and take input
+from Marketer or directly from the Orchestrator's own turn.
+
 ---
 
 ## Long-shot / not scheduled
