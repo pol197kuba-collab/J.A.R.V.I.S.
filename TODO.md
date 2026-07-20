@@ -308,7 +308,7 @@ service unless a specific capability genuinely can't be done in JS. Still
 valuable, just heavier (new pipeline, not reused data) than Strażnik — goes
 after it rather than first, per the reordering above.
 
-## 7. [W] Situation Room — **shipped 2026-07-17**
+## 7. [W] Situation Room — **shipped 2026-07-17, flight radar confirmed live 2026-07-20**
 
 Merged `geo-tracking`, `WeatherTelemetry`, `GithubActivityPulse` and
 `ThreatStream` into one unified radar command panel at `/situation-room`
@@ -597,9 +597,11 @@ full `tsc --noEmit`/`vite build` unavailable. Verified instead via an
 `esbuild` transpile + `node --check` syntax pass on the touched file
 (clean, no errors) and by re-reading the diff directly against both
 providers' live-confirmed response shapes. **Needs the normal
-tsc/eslint/build gate run once dependencies install cleanly**, and a live
-check once deployed to confirm `AIRCRAFT` is finally nonzero — this file
-will need another follow-up entry here if it isn't.
+tsc/eslint/build gate run once dependencies install cleanly**.
+
+**Confirmed live 2026-07-20**: `AIRCRAFT` now shows real nonzero counts on
+the deployed map after this fix — closes out the whole flight-radar arc
+that started at item 7's second follow-up.
 
 ## 8. [F] Concierge agent (calendar / email) — new agent proposal
 
