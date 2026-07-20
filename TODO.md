@@ -665,3 +665,40 @@ from Marketer or directly from the Orchestrator's own turn.
   `device_commands`) before either feature is attemptable at all. Don't
   start this without deciding on the bridge first — see `CODEX.md`
   Architecture constraints.
+
+- **Developer agent — dispatch to a Claude Code Routine** (discussed
+  2026-07-20). Explicitly *after* Producer, not before — noted here so the
+  idea isn't lost, not queued as a numbered item yet.
+
+  Real mechanism, not speculative: Claude Code Routines support an **API
+  trigger** — `POST https://api.anthropic.com/v1/claude_code/routines/{id}/fire`
+  with a bearer token — which starts a full, isolated Claude Code cloud
+  session (real shell, real repo creation/push, real test execution) and
+  returns `{session_id, session_url}` immediately. This is the realistic
+  path for "write me a new app, test it, fix bugs" — JARVIS itself never
+  gets code/filesystem access (keeps the rule already established for
+  Guardian and every other in-app agent intact), it only dispatches to a
+  fully separate Anthropic-managed sandbox.
+
+  Shape, if/when picked up: one new tool (`dispatch_build_task` or
+  similar) — a single authenticated `fetch`, same complexity class as the
+  existing `flightRadar.functions.ts` server function. Bearer token stored
+  via the same BYOK pattern as the Groq key (`user_secrets`). Requires a
+  **one-time manual setup outside this codebase**: create the Routine
+  itself at `claude.ai/code/routines` with a self-contained prompt (can't
+  be authored dynamically by JARVIS), add its API trigger, generate the
+  token. JARVIS's tool call only ever supplies the `text` field — the
+  actual task spec — per dispatch.
+
+  Real constraints to design around, not glossed over:
+  - **Experimental/beta** (`experimental-cc-routine-2026-04-01` header) —
+    request/response shape and limits may change.
+  - **Draws down the user's own Claude subscription usage** (daily
+    routine-run cap), not a separate free/metered API budget like Groq —
+    a real cost consideration, not "free infrastructure."
+  - **Fire-and-forget, not synchronous** — the `/fire` call returns a
+    session URL immediately; there's no confirmed API to poll/read the
+    finished result back into JARVIS's own chat. First version means
+    JARVIS hands back a link and the user opens/reviews/tests it
+    themselves — "JARVIS watches it finish and reports back" is not
+    currently buildable without a further, unconfirmed capability.
