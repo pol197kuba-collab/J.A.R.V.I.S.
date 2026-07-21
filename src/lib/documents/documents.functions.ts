@@ -23,6 +23,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import type { Json } from "@/integrations/supabase/types";
 import { logServerError, logServerWarn } from "@/lib/system/logServerError";
+import { CHUNK_SIZE_CHARS, CHUNK_OVERLAP_CHARS, chunkText, sanitizeFilename } from "./chunking";
 // tools.server.ts is a .server.ts module — this file is a *.functions.ts
 // file, which ships to the client bundle (see client.server.ts's own
 // comment on this). Load it dynamically inside the handler, same pattern
@@ -36,12 +37,6 @@ type AllowedExtension = (typeof ALLOWED_EXTENSIONS)[number];
 // Deliberately small; the real gate is MAX_CHUNKS_PER_DOCUMENT below, since
 // bytes don't map 1:1 to extractable characters (especially for PDF).
 export const MAX_FILE_SIZE_BYTES = 3 * 1024 * 1024; // 3 MB
-
-// Chunking: paragraph-aware, ~1200 chars per chunk with 150 chars of
-// overlap so a fact split across a chunk boundary is still findable from
-// either side.
-const CHUNK_SIZE_CHARS = 1200;
-const CHUNK_OVERLAP_CHARS = 150;
 
 // Hard cap on chunks processed per document. Chosen conservatively: even
 // in the pathological worst case (every embedding call individually
@@ -61,53 +56,6 @@ function extensionOf(filename: string): string {
 
 function isAllowedExtension(ext: string): ext is AllowedExtension {
   return (ALLOWED_EXTENSIONS as readonly string[]).includes(ext);
-}
-
-function sanitizeFilename(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "file";
-}
-
-// Paragraph-aware chunker: fills chunks up to CHUNK_SIZE_CHARS from whole
-// paragraphs, carrying the tail of the previous chunk forward as overlap.
-// A single paragraph larger than the chunk size is hard-sliced with the
-// same overlap rather than left oversized.
-function chunkText(text: string, chunkSize: number, overlap: number): string[] {
-  const clean = text.replace(/\r\n/g, "\n").trim();
-  if (!clean) return [];
-  const paragraphs = clean
-    .split(/\n{2,}/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-
-  const chunks: string[] = [];
-  let current = "";
-  const pushCurrent = () => {
-    if (current.trim()) chunks.push(current.trim());
-    current = "";
-  };
-
-  for (const para of paragraphs) {
-    if (para.length > chunkSize) {
-      pushCurrent();
-      let start = 0;
-      while (start < para.length) {
-        const end = Math.min(start + chunkSize, para.length);
-        chunks.push(para.slice(start, end));
-        if (end === para.length) break;
-        start = end - overlap;
-      }
-      continue;
-    }
-    if (current.length + para.length + 2 > chunkSize) {
-      pushCurrent();
-      const tail = chunks[chunks.length - 1]?.slice(-overlap) ?? "";
-      current = tail ? `${tail}\n\n${para}` : para;
-    } else {
-      current = current ? `${current}\n\n${para}` : para;
-    }
-  }
-  pushCurrent();
-  return chunks;
 }
 
 async function extractPdfText(bytes: Uint8Array): Promise<string> {

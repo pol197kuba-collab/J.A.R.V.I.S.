@@ -165,7 +165,7 @@ const MAX_FETCH_BYTES = 12_000;
 // point it at cloud metadata endpoints or other internal services. Block
 // loopback/private/link-local targets, resolving hostnames first so a
 // public domain that merely points at an internal IP is caught too.
-function isPrivateIp(ip: string): boolean {
+export function isPrivateIp(ip: string): boolean {
   const version = isIP(ip);
   if (version === 4) {
     const [a, b] = ip.split(".").map(Number);
@@ -186,7 +186,7 @@ function isPrivateIp(ip: string): boolean {
   return true; // not a literal IP — caller should have resolved it first
 }
 
-async function isBlockedTarget(hostname: string): Promise<boolean> {
+export async function isBlockedTarget(hostname: string): Promise<boolean> {
   const lower = hostname.toLowerCase();
   if (
     lower === "localhost" ||
