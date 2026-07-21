@@ -739,6 +739,43 @@ first try):
 uploaded document now correctly delegates and answers from the document
 content, no stray UI-action hijack. Closes out this item.
 
+### Second follow-up (2026-07-21): same class of bug recurred with a new phrasing
+
+User reported (with a screenshot) that "Uruchom wszystkich agentów jako
+demonstrację możliwości" made the Orchestrator call `perform_ui_action`
+(`open_agents` → "Otwieram centrum agentów.") instead of doing anything
+with the agents; rephrasing to "Uzyj wszysykich agentow, zademonstruj ich
+możliwości" worked correctly (delegated to Marketer). Same root cause as
+the first follow-up above, different trigger phrase — the fix shipped
+then only added one more hardcoded example (document-content questions),
+so it didn't generalize to this new phrasing, which matched `open_agents`
+by literal keyword overlap ("agentów" ≈ "centrum agentów").
+
+Rather than bolt on a third one-off example, replaced the narrow
+document-content example with a **general disambiguation principle** in
+`runtime.server.ts`'s delegation guidance: the mere presence of the word
+"agent"/"agenci"/"agentów" in a request does not imply the navigational
+`open_agents` action — that only applies when the user wants to see/open
+the agents *screen*. If the user wants agents to actually **do**
+something (demonstrate capabilities, use them, complete a task), that's
+`delegate_to_agent`, never `perform_ui_action`, regardless of which UI
+action name happens to share a keyword with the request. Also added the
+reverse cross-reference to the (deliberately aggressive)
+`uiActionInstructions` block so it explicitly yields to delegation when
+both are available, and added guidance that a request for "all/multiple
+agents" should result in delegating to several teammates in the same
+turn (the tool loop already supports up to 12 iterations) rather than
+delegating to one and calling it "a good start."
+
+**Could not be tested live in this sandbox** (no working dev server or
+Supabase connection here — same standing limitation as every prompt-only
+change in this project) — verified via `esbuild`/`node --check` and
+careful reading of the full resulting prompt text only. **Needs live
+re-confirmation**, ideally with both the exact phrase that failed
+("Uruchom wszystkich agentów...") and a couple of unrelated phrasings, to
+check whether the general principle actually generalizes this time
+rather than needing a fourth one-off patch.
+
 ## 7. [W] Situation Room — **shipped 2026-07-17, flight radar confirmed live 2026-07-20**
 
 Merged `geo-tracking`, `WeatherTelemetry`, `GithubActivityPulse` and
