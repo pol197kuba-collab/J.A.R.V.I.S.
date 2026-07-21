@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { HudPanel } from "./HudPanel";
-import { getAgentFlow, type FlowRun } from "@/lib/agents/flow.functions";
+import { getAgentFlow, type FlowDelegation, type FlowRun, type FlowToolCall } from "@/lib/agents/flow.functions";
+import { describeToolCall } from "./toolDescriptions";
 
 // How long a fully-settled interaction stays highlighted before the tree
 // fades back to full standby. Without this, the last-ever completed run
@@ -22,19 +23,44 @@ function statusColor(status: string): string {
   return STATUS_COLOR[status] ?? STATUS_COLOR.pending;
 }
 
-function ToolChips({ calls }: { calls: string[] }) {
+// The most recent tool call is what the agent is doing right now (or just
+// finished, one poll's worth of lag behind) — `output.tool_calls` is now
+// written incrementally by runOrchestrator after every iteration, not only
+// once at the very end, so this is real live progress, not a guess.
+function currentActionLine(run: FlowRun): string | null {
+  if (run.toolCalls.length === 0) return null;
+  const last = run.toolCalls[run.toolCalls.length - 1];
+  return describeToolCall(last.name, last.args);
+}
+
+function ToolChips({ calls }: { calls: FlowToolCall[] }) {
   if (calls.length === 0) return null;
   return (
-    <div className="mt-1.5 flex flex-wrap justify-center gap-1">
-      {calls.map((name, i) => (
-        <span
-          key={`${name}-${i}`}
-          className="animate-flow-node-in rounded-full border border-primary/20 bg-[color:var(--surface-1)] px-1.5 py-0.5 font-display text-[7px] uppercase tracking-[0.18em] text-primary/70"
-        >
-          {name.replace(/^tool\./, "").replace(/_/g, " ")}
-        </span>
-      ))}
+    <div className="mt-1.5 flex max-w-[220px] flex-wrap justify-center gap-1">
+      {calls.map((call, i) => {
+        const label = describeToolCall(call.name, call.args);
+        return (
+          <span
+            key={`${call.name}-${i}`}
+            title={label}
+            className="animate-flow-node-in max-w-[150px] truncate rounded-full border border-primary/20 bg-[color:var(--surface-1)] px-1.5 py-0.5 font-display text-[7px] uppercase tracking-[0.15em] text-primary/70"
+          >
+            {label}
+          </span>
+        );
+      })}
     </div>
+  );
+}
+
+function DelegationLabel({ delegation }: { delegation: FlowDelegation }) {
+  return (
+    <span
+      title={delegation.task}
+      className="animate-flow-node-in mb-1 max-w-[150px] truncate rounded border border-primary/25 bg-[color:var(--surface-1)]/80 px-1.5 py-0.5 font-display text-[7px] uppercase tracking-[0.1em] text-primary/80"
+    >
+      ▸ {delegation.task}
+    </span>
   );
 }
 
@@ -42,6 +68,16 @@ function FlowNodeTile({ name, run }: { name: string; run?: FlowRun }) {
   const active = !!run;
   const color = active ? statusColor(run.status) : IDLE_COLOR;
   const running = run?.status === "running";
+  const liveLine = running && run ? currentActionLine(run) : null;
+  const statusLine = liveLine
+    ? liveLine
+    : running
+      ? "myśli…"
+      : active && run.latencyMs != null
+        ? `${run.latencyMs}ms`
+        : active
+          ? run.status
+          : "standby";
   return (
     <div
       className="flex min-w-[112px] flex-col items-center gap-1 rounded-lg border px-3 py-2 backdrop-blur transition-all duration-500"
@@ -67,14 +103,11 @@ function FlowNodeTile({ name, run }: { name: string; run?: FlowRun }) {
           {name}
         </span>
       </div>
-      <span className="font-display text-[8px] uppercase tracking-[0.15em] text-muted-foreground">
-        {running
-          ? "processing…"
-          : active && run.latencyMs != null
-            ? `${run.latencyMs}ms`
-            : active
-              ? run.status
-              : "standby"}
+      <span
+        title={liveLine ?? undefined}
+        className="max-w-[150px] truncate font-display text-[8px] uppercase tracking-[0.15em] text-muted-foreground"
+      >
+        {statusLine}
       </span>
     </div>
   );
@@ -183,6 +216,18 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
     // re-evaluation of the expiry check on a clock, independent of `runs`.
   }, [runs, tick]);
 
+  // Finds a delegation targeting `slug` from any currently-active run, not
+  // just the Orchestrator's — today only the Orchestrator can delegate, but
+  // this stays correct without changes if that ever stops being true for a
+  // future agent.
+  const delegationTo = (slug: string): FlowDelegation | undefined => {
+    for (const run of activeBySlug.values()) {
+      const found = run.delegations.find((d) => d.toSlug === slug);
+      if (found) return found;
+    }
+    return undefined;
+  };
+
   const orchestrator = agents.find((a) => a.slug === "orchestrator");
   const teammates = agents.filter((a) => a.slug !== "orchestrator");
   const anyTeammateActive = teammates.some((t) => activeBySlug.has(t.slug));
@@ -228,9 +273,11 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
                 >
                   {teammates.map((t) => {
                     const run = activeBySlug.get(t.slug);
+                    const delegation = run ? delegationTo(t.slug) : undefined;
                     return (
                       <div key={t.slug} className="flex flex-col items-center">
                         <FlowStem active={!!run} />
+                        {delegation && <DelegationLabel delegation={delegation} />}
                         <FlowNodeTile name={t.name} run={run} />
                         {run && <ToolChips calls={run.toolCalls} />}
                       </div>

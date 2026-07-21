@@ -302,6 +302,67 @@ Verified in this sandbox: synthetic data with `finished_at` 15s in the
 past renders the entire tree as standby (all three nodes dimmed),
 confirming the expiry path.
 
+### Third follow-up (2026-07-21): live per-tool-call detail + delegation labels
+
+Requested after using it a while: prettier, more elaborate, and — the
+real ask — actually show what an agent is *doing* (Orchestrator's current
+action, what it delegated and to whom, what Analityk's doing), with the
+description logic scaling automatically as Researcher/Producer and their
+tools land later.
+
+Real architectural constraint found before writing anything: `agent_runs.
+output.tool_calls` was written exactly once, in bulk, at the very end of
+`runOrchestrator` — so the tree could show "running" (pulsing) but
+literally nothing about what was happening until the whole run finished.
+"What is it doing right now" was structurally impossible with the old
+write pattern, not just a missing frontend feature.
+
+Shipped, in two tiers as scoped with the user (Poziom 1 + 2):
+
+- **`runtime.server.ts`**: `agent_runs.output` now patched after *every*
+  iteration's tool calls (not only in the final update), `status` staying
+  `"running"` throughout — the tree can now show genuine live,
+  blow-by-blow progress via its existing 3s poll, not just the complete
+  picture after the fact.
+- **`flow.functions.ts`**: `FlowRun.toolCalls` now carries each call's
+  `args`, not just its `name` (the args were already being logged server-
+  side, just never exposed to this endpoint). Added `FlowRun.delegations`,
+  extracted separately from `delegate_to_agent` calls (`{toSlug, task}`)
+  specifically so the delegated task text can render on the edge to the
+  child agent rather than as just another generic tool chip on the parent.
+- **`src/components/jarvis/toolDescriptions.ts`** (new) — a small,
+  intentionally-flat `tool name -> human description` registry
+  (`describeToolCall`), the mechanism that keeps this scaling with future
+  agents: Researcher/Producer's new tools need exactly one line added
+  here, nothing else in the tree changes. Unknown/future tools fall back
+  to a plain `⚙️ {name}` chip rather than breaking or looking empty.
+- **`AgentFlowTree.tsx`**: a running node's status line now shows the
+  live description of its most recent tool call (e.g. "🔍 szuka w
+  dokumentach: „co jest w umowie"") instead of a static "processing…";
+  falls back to a new "myśli…" state specifically for the gap before the
+  first tool call lands (previously indistinguishable from "doing
+  something"). `ToolChips` now render rich per-call descriptions instead
+  of raw tool names. A new `DelegationLabel` renders the delegated task
+  text on the stem above whichever teammate it was sent to, sourced by
+  scanning all currently-active runs for a `delegation.toSlug` match
+  (not hardcoded to the Orchestrator specifically, so this stays correct
+  without changes if a future agent ever gains delegation ability too).
+
+Deliberately not built this round (scoped out, see "Poziom 3" discussion):
+a bigger visual overhaul (radial hub layout, per-node click-to-expand
+run history) — the user confirmed starting with the live-data plumbing
+(Poziom 1+2) first; the purely-visual polish is a fast follow whenever
+picked back up, since the tree's structure/rendering shape doesn't need
+to change to add it.
+
+Verified via `esbuild` transpile + `node --check` on all 4 touched files
+(clean) — same standing sandbox limitation as every round in this
+project (`bun install` never fully completes here), so no full
+`tsc`/`eslint`/`vite build` this round. **Needs a live check**: confirm
+the tree now shows a live tool-by-tool trail while an agent is mid-run
+(not just after it finishes), and that a delegation label appears above
+Analityk/Marketer/Strażnik showing the actual delegated task text.
+
 ## 4. [UI] Schema Explorer (`/schema`) — **shipped 2026-07-17, live, confirmed working**
 
 Admin-only HUD module to browse the live database topology: tables,
