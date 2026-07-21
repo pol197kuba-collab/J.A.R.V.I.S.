@@ -28,10 +28,6 @@ export function PhaseController() {
   const isPublicRoute =
     pathname === "/reset-password" || pathname.startsWith("/.lovable/oauth/");
 
-  if (isPublicRoute) {
-    return <Outlet />;
-  }
-
   // Listen for auth state changes: if user signs out anywhere, drop to boot.
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange((event) => {
@@ -85,6 +81,16 @@ export function PhaseController() {
     if (phase === "dashboard_active") audio.startHum();
     else audio.stopHum();
   }, [phase]);
+
+  // Public routes bypass the whole phase machine. This early return MUST sit
+  // below every hook above: hooks have to run in the same order on every
+  // render, and a pre-hook return would crash React ("rendered fewer hooks
+  // than expected") the moment navigation crosses the public/app boundary.
+  // The effects above are all safe no-ops on public routes — each one gates
+  // on phase or events internally.
+  if (isPublicRoute) {
+    return <Outlet />;
+  }
 
   const showDashboardShell =
     phase === "transition_to_dashboard" ||
