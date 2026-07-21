@@ -181,5 +181,7 @@ export function speakCancel() {
       window.dispatchEvent(new CustomEvent(SPEAK_EVENT, { detail: false }));
     }
     window.speechSynthesis?.cancel();
-  } catch {}
+  } catch {
+    /* ignore */
+  }
 }

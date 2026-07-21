@@ -49,7 +49,9 @@ export function releaseMic() {
     try {
       shared.source.disconnect();
       shared.analyser.disconnect();
-    } catch {}
+    } catch {
+      /* ignore */
+    }
     shared.stream.getTracks().forEach((t) => t.stop());
     shared = null;
   }
