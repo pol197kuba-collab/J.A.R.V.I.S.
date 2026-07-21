@@ -57,11 +57,19 @@ export const getAgentFlow = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<FlowResult> => {
     const { supabase, userId } = context;
 
+    // Secondary sort on `slug` is a deterministic tiebreaker: Postgres does
+    // not guarantee stable ordering across repeated queries when
+    // `created_at` values are equal or very close (plausible here since
+    // each agent is seeded by its own migration inside a single
+    // transaction) — without it, the teammate order could silently flip
+    // between this widget's 3s polls, making nodes swap positions and
+    // animate across each other via the CSS position transition.
     const { data: agentRows } = await supabase
       .from("agents")
       .select("id, slug, name, is_enabled")
       .eq("owner_id", userId)
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: true })
+      .order("slug", { ascending: true });
     const agentById = new Map((agentRows ?? []).map((a) => [a.id, a]));
 
     const { data: runs, error } = await supabase

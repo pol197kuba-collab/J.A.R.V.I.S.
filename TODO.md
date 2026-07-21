@@ -776,6 +776,52 @@ re-confirmation**, ideally with both the exact phrase that failed
 check whether the general principle actually generalizes this time
 rather than needing a fourth one-off patch.
 
+### Third follow-up (2026-07-21): teammate nodes swapping position mid-render
+
+User reported (two screenshots) that after delegating to a single named
+agent ("Odpal analityka" — this itself worked correctly: the flow tree
+showed a real `delegate_to_agent(analityk, "Rozpocznij pracę")` call, the
+vague reply is just a consequence of the vague instruction, not a bug),
+the Agent Flow Tree showed Strażnik and Analityk rendered almost directly
+on top of each other, and Analityk visibly "suddenly changed position."
+
+Re-derived the layout math for the exact 3-teammate case shown (Marketer/
+Strażnik/Analityk, desktop) — the formula gives well-separated positions
+with real margin, matching the harness verified in the previous round.
+A *static* render should not look like this, which pointed at something
+non-deterministic between polls (the tree refetches every 3s) rather
+than the geometry formula itself.
+
+**Root cause**: `getAgentFlow`'s roster query
+(`src/lib/agents/flow.functions.ts`) ordered agents only by
+`created_at`, with no tiebreaker. Guardian and Analityk are each seeded
+by their own migration, and if a migration inserts its agent row inside
+a single transaction, Postgres's `now()` is frozen for that whole
+transaction — so ties are plausible, and even where they aren't,
+Postgres does not guarantee stable repeat-query ordering without a fully
+deterministic `ORDER BY`. Since the tree's `teammates` array is built
+directly from this query's row order and positions are assigned purely
+by array index, any reordering between polls reshuffles which screen
+position each agent occupies — and because node position changes are
+CSS-transitioned (`transition-all duration-500`), a reorder animates as
+nodes visibly sliding across each other, exactly matching "the dot goes
+to Marketer" and "Analityk suddenly changes position."
+
+Fixed by adding a deterministic secondary sort key (`.order("slug", {
+ascending: true })` after the existing `created_at` order) to both
+`getAgentFlow`'s roster query and `listAgents`' roster query
+(`runtime.functions.ts`, same instability risk for the Agent Hub grid,
+fixed proactively for consistency even though not the one reported).
+With a fully deterministic order, the teammate array — and therefore
+every node's screen position — can no longer change between polls for
+an unchanged agent roster.
+
+Verified via `esbuild`/`node --check` on both touched files (clean).
+**Could not reproduce or verify the fix live** in this sandbox (no
+working dev server/Supabase connection) — needs live re-confirmation
+that node positions now stay put across the 3s poll cycle instead of
+swapping.
+
 ## 7. [W] Situation Room — **shipped 2026-07-17, flight radar confirmed live 2026-07-20**
 
 Merged `geo-tracking`, `WeatherTelemetry`, `GithubActivityPulse` and
