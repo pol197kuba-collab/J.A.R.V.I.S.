@@ -8,6 +8,11 @@
 // recently) alongside the recent run history (so the client can highlight
 // whichever slice of that roster is part of the current/most recent
 // interaction).
+//
+// `output.tool_calls` is now written incrementally by runOrchestrator
+// (after every iteration's tool calls, not just once at the very end), so
+// a `running` row here can carry real, live progress — not just "started,
+// no detail yet" — the frontend just needs to keep polling.
 
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
@@ -15,19 +20,37 @@ import { logServerError } from "@/lib/system/logServerError";
 
 export type FlowAgent = { slug: string; name: string };
 
+export type FlowToolCall = {
+  name: string;
+  args: Record<string, unknown>;
+};
+
+export type FlowDelegation = {
+  toSlug: string;
+  task: string;
+};
+
 export type FlowRun = {
   id: string;
   agentSlug: string;
   agentName: string;
   parentRunId: string | null;
   status: string;
-  toolCalls: string[];
+  /** The agent's own tool work — excludes delegate_to_agent (see
+   *  `delegations` below) and the internal UI-action classifier pass. */
+  toolCalls: FlowToolCall[];
+  /** Extracted separately from toolCalls so the client can render the
+   *  delegated task text on the edge to the child agent, rather than as
+   *  just another generic tool chip on the parent. */
+  delegations: FlowDelegation[];
   latencyMs: number | null;
   createdAt: string;
   finishedAt: string | null;
 };
 
 export type FlowResult = { agents: FlowAgent[]; runs: FlowRun[] };
+
+type RawToolCall = { name: string; args?: Record<string, unknown> };
 
 export const getAgentFlow = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -58,28 +81,36 @@ export const getAgentFlow = createServerFn({ method: "GET" })
         .map((a) => ({ slug: a.slug, name: a.name })),
       runs: (runs ?? []).map((r) => {
         const agent = agentById.get(r.agent_id);
-        const output = (r.output ?? {}) as { tool_calls?: Array<{ name: string }> };
+        const output = (r.output ?? {}) as { tool_calls?: RawToolCall[] };
+        const rawCalls = output.tool_calls ?? [];
+
+        // classifier_* entries are runOrchestrator's internal UI-action
+        // classification pass (runtime.server.ts, "Fallback classifier
+        // pass"), not a tool the agent chose to use — it runs on every
+        // turn that doesn't already call perform_ui_action and logs its
+        // outcome (classifier_none, classifier_no_function_call, etc.)
+        // into the same tool_calls array. perform_ui_action itself stays
+        // visible — that one IS a real action taken.
+        const toolCalls: FlowToolCall[] = rawCalls
+          .filter((t) => t.name !== "delegate_to_agent" && !t.name.startsWith("classifier_"))
+          .map((t) => ({ name: t.name, args: t.args ?? {} }));
+
+        const delegations: FlowDelegation[] = rawCalls
+          .filter((t) => t.name === "delegate_to_agent")
+          .map((t) => ({
+            toSlug: String(t.args?.slug ?? ""),
+            task: String(t.args?.task ?? ""),
+          }))
+          .filter((d) => d.toSlug);
+
         return {
           id: r.id,
           agentSlug: agent?.slug ?? "unknown",
           agentName: agent?.name ?? "Unknown",
           parentRunId: r.parent_run_id,
           status: r.status,
-          // Two kinds of noise filtered out:
-          // - delegate_to_agent hops are already represented structurally
-          //   via parentRunId — listing it again as a tool chip would be
-          //   noise.
-          // - classifier_* entries are runOrchestrator's internal
-          //   UI-action classification pass (runtime.server.ts, "Fallback
-          //   classifier pass"), not a tool the agent chose to use — it
-          //   runs on every turn that doesn't already call
-          //   perform_ui_action and logs its outcome (classifier_none,
-          //   classifier_no_function_call, etc.) into the same tool_calls
-          //   array. perform_ui_action itself stays visible — that one IS
-          //   a real action taken.
-          toolCalls: (output.tool_calls ?? [])
-            .map((t) => t.name)
-            .filter((name) => name !== "delegate_to_agent" && !name.startsWith("classifier_")),
+          toolCalls,
+          delegations,
           latencyMs: r.latency_ms,
           createdAt: r.created_at,
           finishedAt: r.finished_at,

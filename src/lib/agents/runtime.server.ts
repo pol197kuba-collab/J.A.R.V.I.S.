@@ -572,6 +572,19 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       }
       contents.push({ role: "function", parts: responseParts });
 
+      // Incremental visibility for the Agent Flow Tree: previously
+      // `output.tool_calls` was only ever written once, in bulk, in the
+      // final update below — so the tree could show "running" (pulsing)
+      // but nothing about what was actually happening until the whole run
+      // finished. Patching it after every iteration's tool calls lets the
+      // tree render live, blow-by-blow progress instead of only the
+      // complete picture after the fact. `status` stays "running" — only
+      // the final update below sets it to "done"/"error".
+      await supabase
+        .from("agent_runs")
+        .update({ output: { tool_calls: toolCallLog } as Json })
+        .eq("id", runId);
+
       if (iter === maxToolIterations - 1) {
         // Force a final text reply on the next (skipped) turn by breaking here
         // but we already broke out via loop bound. If we get here we still
