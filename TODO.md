@@ -879,6 +879,46 @@ refresh (giving the deploy time to land), it's a real remaining bug and
 needs the actual live `agents` row `created_at` values inspected next;
 if it's gone, it was deploy lag.
 
+### Fifth follow-up (2026-07-21): stopped patching system_check by text, removed it by construction
+
+The Guardian/`system_check` collision survived the previous fix: user
+asked "Zapytaj strażnika czy wszystko działa poprawnie" (explicitly
+naming Strażnik!) and still got the canned "Wykonuję kontrolę systemu."
+with no real content. That's the fourth distinct phrasing (after "co
+jest w dokumencie", "uruchom wszystkich agentów", "wykonaj kontrolę
+systemu") to defeat a textual carve-out added specifically for the
+previous one — a real pattern: the aggressive, unconditional "always
+call perform_ui_action, match by meaning" instruction reliably out-argues
+any textual exception, regardless of how it's worded or how obviously
+the user named a specific agent.
+
+Stopped trying to win that wording race. `system_check` is a hardcoded,
+zero-content decorative line that predates Guardian and duplicates
+nothing Guardian can't already do better (for real). Once Guardian is on
+the roster, the decorative option is strictly redundant *and actively
+harmful* — a fake "all good" is worse than useless when a genuine
+diagnostic exists one delegation away. Instead of one more instruction,
+removed `system_check` from the *declared* action enum outright whenever
+an enabled `guardian` teammate exists (`src/lib/agents/runtime.server.ts`,
+computed once as `effectiveUiActions`/`effectiveUiActionsWithNone` and
+threaded into all three places the enum is declared: the main
+`perform_ui_action` tool, and both the Groq and Gemini classifier
+fallback passes). With the option gone from the schema, the model has no
+way to select it — the collision is now impossible by construction,
+matching how the Agent Flow Tree geometry bug was fixed earlier in this
+session (structural fix over repeated prompt tuning). Every other UI
+action (navigation, sleep/shutdown/reboot, etc.) is untouched — this
+only ever removes the one redundant action, and only when its
+non-redundant replacement is actually available.
+
+Verified via `esbuild`/`node --check` (clean). **Needs live
+re-confirmation** — same standing limitation as every prompt/runtime
+change this session (no working dev server/Supabase connection here):
+confirm that asking Guardian (by name or by intent) to check the system
+now actually delegates and returns real findings instead of the canned
+line, across a few different phrasings this time, not just the one
+that was just reported.
+
 ## 7. [W] Situation Room — **shipped 2026-07-17, flight radar confirmed live 2026-07-20**
 
 Merged `geo-tracking`, `WeatherTelemetry`, `GithubActivityPulse` and
