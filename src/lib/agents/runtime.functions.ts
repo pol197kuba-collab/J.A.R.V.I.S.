@@ -440,7 +440,8 @@ export const listAgents = createServerFn({ method: "GET" })
       .from("agents")
       .select("id, slug, name, role, description, model, status, is_enabled")
       .eq("owner_id", userId)
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: true })
+      .order("slug", { ascending: true });
     if (error) throw new Error(error.message);
     if (!agents || agents.length === 0) return [];
 
