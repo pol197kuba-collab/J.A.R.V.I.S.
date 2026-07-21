@@ -312,7 +312,7 @@ which is the cheapest possible outcome, not a regression back to Gemini.
 Confirmed live: `classifier fallback via groq: none` appears reliably for
 ordinary chat messages after a Groq key is linked.
 
-## 6. [F] RAG over personal documents (= Analityk) — **built 2026-07-20, needs live verification**
+## 6. [F] RAG over personal documents (= Analityk) — **shipped 2026-07-20/21, confirmed working live**
 
 Built per the build-order override above (6 → 11 → 12 ahead of Concierge).
 Scope decided 2026-07-20 before writing any code: v1 covers **.txt/.md +
@@ -384,19 +384,52 @@ fails explicitly (`documents.status = 'error'`, human-readable message)
 rather than silently processing only part of it. Raise the caps once real
 processing latency is observed live — deliberately not guessed upfront.
 
-**Not verified live in this sandbox** (same standing limitation as every
-migration-touching change in this project): no live Supabase connection
-here, `bun install` repeatedly failed to fully complete (network/proxy
-flakiness in this sandbox, unrelated to this code), so no full
-`tsc`/`vite build` this round — verified instead via `esbuild` transpile +
-`node --check` on every touched file (clean) and careful manual review
-against the exact patterns confirmed live in the codebase map. **Needs,
-in order**: (1) the two migrations pasted into the Supabase SQL editor —
-git merge alone does not apply them, this is the exact mistake that made
-Guardian invisible for a while; (2) a real `tsc`/`eslint`/`vite build`
-pass once dependencies install cleanly; (3) a live upload of a real .txt
-and a real PDF, confirming Analityk actually answers a question grounded
-in the uploaded content via `search_documents`.
+Could not run a full `tsc`/`eslint`/`vite build` in the sandbox this was
+built in (persistent `bun install` network/proxy flakiness, unrelated to
+this code) — shipped on `esbuild` transpile + `node --check` on every
+touched file plus manual review, same standing limitation as every
+migration-touching change in this project.
+
+### Follow-up (2026-07-21): two real bugs found live, both fixed same day
+
+Both migrations were pasted into the Supabase SQL editor and the
+`analityk` agent appeared correctly everywhere with zero frontend changes,
+exactly as the pre-build codebase map predicted. Live testing then
+surfaced two **separate** Orchestrator bugs — not anything wrong with the
+document pipeline itself (upload → processing → `ready` worked correctly
+first try):
+
+1. **Delegation lost to the UI-action instinct.** Asking "co jest w
+   dokumencie 1.pdf" made the Orchestrator call `perform_ui_action`
+   (opening System Logs, then the fuel/telemetry panel on a retry)
+   instead of delegating to Analityk. Root cause: `perform_ui_action`'s
+   own instructions are deliberately aggressive ("match by MEANING, never
+   refuse") to fight a base-model habit of falsely claiming no UI access
+   — but the delegation guidance next to it only ever had one example
+   (marketing → marketer), so the brand-new `analityk` target had nothing
+   anchoring it and lost to the louder instruction. Fixed: added an
+   explicit `analityk` example plus a direct rule ("a question about the
+   CONTENT of something is not a UI command") to the delegation guidance
+   in `runtime.server.ts`.
+2. **A second, independent bug survived fix #1**: the Orchestrator now
+   correctly delegated (confirmed in the Agent Ops live feed:
+   `DELEGATING → ANALITYK`) and got a real answer — but a *separate*
+   fallback classifier pass (a second Groq/Gemini call with no
+   conversation history, only ever meant to catch "the model declared a
+   tool but talked its way out of using it") still ran afterward, since
+   its guard only checked `!uiAction`, not whether any OTHER tool had
+   already run. It misclassified the bare text as a UI command and
+   overwrote the correct delegated answer. Fixed: widened the guard to
+   `!uiAction && toolCallLog.length === 0` — `toolCallLog` is pushed to
+   unconditionally for every tool call including `delegate_to_agent`, so
+   this reliably skips the classifier whenever the model already took
+   real action, without needing to special-case delegation specifically.
+   Ordinary chit-chat (no tool call) is unaffected — classifier still
+   correctly says "none" for those.
+
+**Confirmed live 2026-07-21** by the user: asking Analityk about an
+uploaded document now correctly delegates and answers from the document
+content, no stray UI-action hijack. Closes out this item.
 
 ## 7. [W] Situation Room — **shipped 2026-07-17, flight radar confirmed live 2026-07-20**
 
