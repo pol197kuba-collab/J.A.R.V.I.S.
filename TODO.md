@@ -358,10 +358,78 @@ to change to add it.
 Verified via `esbuild` transpile + `node --check` on all 4 touched files
 (clean) — same standing sandbox limitation as every round in this
 project (`bun install` never fully completes here), so no full
-`tsc`/`eslint`/`vite build` this round. **Needs a live check**: confirm
-the tree now shows a live tool-by-tool trail while an agent is mid-run
-(not just after it finishes), and that a delegation label appears above
-Analityk/Marketer/Strażnik showing the actual delegated task text.
+`tsc`/`eslint`/`vite build` this round.
+
+**Confirmed live 2026-07-21** by the user — live per-tool-call trail and
+delegation labels both working as intended.
+
+### Fourth follow-up (2026-07-21): "Poziom 3" — radial hub layout + click-to-expand history
+
+Requested next: make the tree prettier/more elaborate, specifically a
+real hub-and-spoke layout (Orchestrator central, teammates radiating
+around it) rather than the flat vertical-stem-plus-row layout, plus a
+way to see an agent's recent run history. Interviewed on the hub-layout
+approach before writing code — chose the fuller radial redesign
+(trig-positioned nodes on an arc) over a cheaper "just make the
+Orchestrator tile bigger" option, understanding it's more engineering.
+
+**A real geometry bug was caught and fixed before shipping, not after**:
+the first version's arc-width/radius/tile-size constants looked
+reasonable on paper but numerically overlapped starting at 4 teammates
+(verified with a standalone Python trig script, not by guessing) —
+adjacent node centers ended up closer together than the tiles are wide.
+Re-derived working constants via the same script (searched a grid of
+arc-half-angle/radius/tile-width parameters for one that keeps every
+adjacent-node chord distance ≥8% wider than the tile at that size,
+through 8 teammates) before writing the final component. This directly
+serves the "logika rozwija się z kolejnymi agentami" requirement — the
+geometry was verified to hold as Researcher/Producer/Concierge get added,
+not just eyeballed for today's 3 teammates.
+
+Shipped, `src/components/jarvis/AgentFlowTree.tsx` fully restructured:
+- Orchestrator centered near the top of a fixed-height container, visibly
+  larger tile (`emphasis` styling — bigger padding/font/dot/glow).
+  Teammates positioned via trig on an arc below it (`FlowSpoke` renders
+  each connection as a div rotated to the right angle, with the existing
+  `animate-flow-dot-travel` dot reused as-is inside it — the dot's local
+  `top:0%→100%` animation automatically follows whatever angle its parent
+  is rotated to, no new keyframe needed).
+- **Explicit, reasoned deviation from a literal full 360° circle**: a
+  true full-circle hub would force this compact "quiet"-tone HUD panel
+  much taller than every other panel in the dashboard grid (needs room
+  for nodes above/beside the hub too, not just below). Used a widening
+  arc (50°–85° half-angle) below the hub instead — same "hub with
+  radiating spokes" read, without breaking the dashboard's panel rhythm.
+  Radius and teammate tile width both scale with roster size per the
+  verified geometry above (fixed through 3 teammates, then radius grows/
+  tile shrinks together), and mobile applies one flat 0.75 scale factor
+  to both so the verified chord/tile-width ratio holds there too.
+- **Delegation label placement also adapted, reasoned explicitly**: the
+  original plan was a label following the travelling dot on each spoke,
+  but at arbitrary fan angles there's no single "above the node" position
+  that reads naturally for every teammate (a teammate positioned to the
+  side doesn't have text "above" it read sensibly). Moved instead to a
+  small list under the hub itself ("▸ deleguje do X: „task"") — reads
+  naturally regardless of how many teammates or what angles they're at.
+- **Click-to-expand run history** (new `RunHistoryPanel`): clicking any
+  tile (now a real `<button>`) toggles a panel below the tree showing
+  that agent's last 6 runs — status dot, a one-line summary (delegated
+  task if it delegated, otherwise its last tool-call description), and
+  latency/status. Pure client-side filter over the `runs` array the tree
+  already fetches every 3s — no new data plumbing, no new server load.
+
+**Could not visually verify this round** — same standing sandbox
+limitation noted throughout this project (`vite.config.ts` depends on
+private `@lovable.dev/*` build packages only resolvable inside the
+Lovable-connected environment, and `bun install` never fully completes
+here either) — this is a bigger risk than usual to ship unverified given
+it's a real layout/geometry change, so the numeric verification above was
+done specifically to compensate for not being able to see it render.
+Verified via `esbuild`/`node --check` (clean) and careful manual review,
+not a live screenshot. **Needs a live check**: confirm nodes don't
+overlap at the current 3-teammate roster, the arc reads as a sensible
+"hub" shape (not cramped or lopsided), and clicking a tile actually shows
+its recent-run history.
 
 ## 4. [UI] Schema Explorer (`/schema`) — **shipped 2026-07-17, live, confirmed working**
 
