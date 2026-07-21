@@ -201,9 +201,10 @@ Verified via `esbuild` transpile + `node --check` on all 12 touched files
 (clean) — same standing sandbox limitation as every round in this
 project, `bun install` never fully completed here (persistent tarball
 `ConnectionClosed` errors), so no full `tsc`/`eslint`/`vite build` this
-round either. **Needs a live check**: trigger a few of these failure
-paths for real (e.g. temporarily break a Gemini key, delete a document)
-and confirm Strażnik's `guardian_scan_errors` actually surfaces them.
+round either.
+
+**Confirmed live 2026-07-21** by the user — shipped as PR #36, working.
+
 
 ## 3. [W] Agent Flow Tree — **shipped 2026-07-16, superseding Situation Room**
 
