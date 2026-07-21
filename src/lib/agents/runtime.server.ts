@@ -146,6 +146,15 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     parentRunId = null,
   } = args;
 
+  // Delegated sub-runs (delegate_to_agent hops) never face the user: their
+  // "input" is the parent's task text and their output goes back to the
+  // parent, not to chat/voice. UI control is therefore meaningless there —
+  // the perform_ui_action tool, its system-prompt pitch AND the fallback
+  // classifier are all skipped, so a delegated Marketer/Analityk run can't
+  // log a spurious "steruje interfejsem" entry or have its real answer
+  // overwritten by a misclassified navigation confirmation.
+  const isDelegatedRun = delegationDepth > 0 || parentRunId != null;
+
   // 1. Resolve agent (fallback: orchestrator).
   const { data: agent, error: agentErr } = await supabase
     .from("agents")
@@ -232,12 +241,17 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     ? `${JARVIS_PERSONA}\n\n${agentSpecific}`
     : DEFAULT_SYSTEM_PROMPT;
 
-  // Always appended, regardless of whether the agent has a custom
-  // system_prompt override — otherwise agents like Marketer never learn
-  // they have this capability at all. Explicitly forbids the "I don't have
-  // UI access" refusal pattern, which is a strong default behaviour in base
-  // model training and tends to override a merely-declared tool otherwise.
-  const uiActionInstructions = `\n\nDOSTĘP DO INTERFEJSU: Masz REALNĄ możliwość sterowania interfejsem JARVIS HUD poprzez narzędzie ${UI_ACTION_TOOL_NAME}. Gdy użytkownik prosi o otwarcie, zamknięcie, przełączenie widoku, restart, uśpienie lub wyłączenie systemu — NIGDY nie odmawiaj i NIE twierdź, że nie masz dostępu do interfejsu. Zawsze wywołaj ${UI_ACTION_TOOL_NAME} z właściwą wartością "action", nawet jeśli polecenie jest sformułowane luźno lub pośrednio (np. "przełącz mnie na X", "pokaż mi Y", "zamknij to", "wróć do głównego ekranu"). Dopiero gdy żadna z dostępnych akcji faktycznie nie pasuje do prośby, wyjaśnij czego brakuje — nigdy nie zgaduj, że nie masz takiej mocy. WYJĄTEK: to narzędzie służy WYŁĄCZNIE do nawigacji/sterowania samym interfejsem — jeśli masz też dostęp do delegate_to_agent i użytkownik prosi o realne WYKONANIE zadania (nie tylko obejrzenie ekranu), użyj delegate_to_agent zamiast tego, nawet jeśli w poleceniu pada słowo pasujące z nazwy jednej z akcji (np. "agent").`;
+  // Appended for every user-facing run, regardless of whether the agent has
+  // a custom system_prompt override — otherwise agents like Marketer never
+  // learn they have this capability at all. Explicitly forbids the "I don't
+  // have UI access" refusal pattern, which is a strong default behaviour in
+  // base model training and tends to override a merely-declared tool
+  // otherwise. Delegated sub-runs get an empty string instead: the tool is
+  // not declared for them (see isDelegatedRun), and advertising a power the
+  // request doesn't carry only invites phantom tool calls.
+  const uiActionInstructions = isDelegatedRun
+    ? ""
+    : `\n\nDOSTĘP DO INTERFEJSU: Masz REALNĄ możliwość sterowania interfejsem JARVIS HUD poprzez narzędzie ${UI_ACTION_TOOL_NAME}. Gdy użytkownik prosi o otwarcie, zamknięcie, przełączenie widoku, restart, uśpienie lub wyłączenie systemu — NIGDY nie odmawiaj i NIE twierdź, że nie masz dostępu do interfejsu. Zawsze wywołaj ${UI_ACTION_TOOL_NAME} z właściwą wartością "action", nawet jeśli polecenie jest sformułowane luźno lub pośrednio (np. "przełącz mnie na X", "pokaż mi Y", "zamknij to", "wróć do głównego ekranu"). Dopiero gdy żadna z dostępnych akcji faktycznie nie pasuje do prośby, wyjaśnij czego brakuje — nigdy nie zgaduj, że nie masz takiej mocy. WYJĄTEK: to narzędzie służy WYŁĄCZNIE do nawigacji/sterowania samym interfejsem — jeśli masz też dostęp do delegate_to_agent i użytkownik prosi o realne WYKONANIE zadania (nie tylko obejrzenie ekranu), użyj delegate_to_agent zamiast tego, nawet jeśli w poleceniu pada słowo pasujące z nazwy jednej z akcji (np. "agent").`;
 
   // Gemini has no notion of "now" — without this it guesses a plausible date
   // from training data (observed: computing "za tydzień" as mid-2024). Always
@@ -355,24 +369,27 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     const toolDeclarations = enabledTools.map((t) => t.declaration);
 
     // UI action tool — available to any agent that might face the user
-    // directly in chat/voice (not gated behind delegation), so switching the
-    // active agent in ChatPanel doesn't lose navigation ability.
-    toolDeclarations.push({
-      name: UI_ACTION_TOOL_NAME,
-      description:
-        "Wykonaj akcję w interfejsie JARVIS HUD (nawigacja między ekranami, tryb systemowy). Użyj, gdy użytkownik prosi o otwarcie/zamknięcie czegoś w aplikacji lub zmianę stanu systemu — dopasuj po ZNACZENIU polecenia, niezależnie od dokładnych słów użytkownika.",
-      parameters: {
-        type: "object",
-        properties: {
-          action: {
-            type: "string",
-            enum: effectiveUiActions,
-            description: "Konkretna akcja do wykonania w interfejsie.",
+    // directly in chat/voice, so switching the active agent in ChatPanel
+    // doesn't lose navigation ability. Deliberately NOT declared for
+    // delegated sub-runs: they never face the user (see isDelegatedRun).
+    if (!isDelegatedRun) {
+      toolDeclarations.push({
+        name: UI_ACTION_TOOL_NAME,
+        description:
+          "Wykonaj akcję w interfejsie JARVIS HUD (nawigacja między ekranami, tryb systemowy). Użyj, gdy użytkownik prosi o otwarcie/zamknięcie czegoś w aplikacji lub zmianę stanu systemu — dopasuj po ZNACZENIU polecenia, niezależnie od dokładnych słów użytkownika.",
+        parameters: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: effectiveUiActions,
+              description: "Konkretna akcja do wykonania w interfejsie.",
+            },
           },
+          required: ["action"],
         },
-        required: ["action"],
-      },
-    });
+      });
+    }
 
     // Orchestrator always gets an in-memory delegate tool, even without a DB
     // row, so it can hand off to teammates without a migration. Guard against
@@ -636,7 +653,13 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // purpose is catching "the model declared a tool but talked its way out
     // of using ANY of them" — if a tool already ran, that failure mode by
     // definition didn't happen, so re-classifying can only do harm here.
-    if (!uiAction && toolCallLog.length === 0) {
+    //
+    // Never runs for delegated sub-runs: their input is the parent's task
+    // text, not a user utterance, and the tool wasn't even declared for
+    // them. Classifying task text without context is exactly how delegated
+    // Marketer/Analityk runs ended up with phantom open_dashboard entries
+    // (their real answers overwritten by a navigation confirmation).
+    if (!isDelegatedRun && !uiAction && toolCallLog.length === 0) {
       await logEvent("info", "orchestrator", "classifier fallback: block entered", {
         run_id: runId,
       } as Json);
