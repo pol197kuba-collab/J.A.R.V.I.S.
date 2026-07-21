@@ -17,11 +17,7 @@ type FsDocument = Document & {
 export function isFullscreen(): boolean {
   if (typeof document === "undefined") return false;
   const d = document as FsDocument;
-  return Boolean(
-    document.fullscreenElement ||
-      d.webkitFullscreenElement ||
-      d.msFullscreenElement,
-  );
+  return Boolean(document.fullscreenElement || d.webkitFullscreenElement || d.msFullscreenElement);
 }
 
 export async function requestAppFullscreen(): Promise<void> {

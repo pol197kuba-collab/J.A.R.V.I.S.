@@ -152,8 +152,7 @@ export function VisionScanner() {
               step: caps.zoom.step && caps.zoom.step > 0 ? caps.zoom.step : 0.1,
             });
             const rawCur = (track?.getSettings?.() as { zoom?: number } | undefined)?.zoom;
-            const cur =
-              typeof rawCur === "number" && rawCur >= min && rawCur <= max ? rawCur : min;
+            const cur = typeof rawCur === "number" && rawCur >= min && rawCur <= max ? rawCur : min;
             // Inverted mapping: fraction 0 → max (widest), 1 → min (tightest).
             const frac = (max - cur) / (max - min);
             setBaselineFraction(frac);
@@ -171,9 +170,17 @@ export function VisionScanner() {
         setState("ready");
       } catch (err: unknown) {
         const name = (err as { name?: string })?.name ?? "";
-        if (name === "NotAllowedError" || name === "SecurityError" || name === "PermissionDeniedError") {
+        if (
+          name === "NotAllowedError" ||
+          name === "SecurityError" ||
+          name === "PermissionDeniedError"
+        ) {
           setState("denied");
-        } else if (name === "NotFoundError" || name === "OverconstrainedError" || name === "DevicesNotFoundError") {
+        } else if (
+          name === "NotFoundError" ||
+          name === "OverconstrainedError" ||
+          name === "DevicesNotFoundError"
+        ) {
           setState("unavailable");
         } else {
           setState("unavailable");
@@ -200,11 +207,7 @@ export function VisionScanner() {
       if (document.visibilityState === "hidden") {
         stopStream();
       } else if (document.visibilityState === "visible" && !streamRef.current) {
-        void start(
-          activeDeviceId
-            ? { deviceId: activeDeviceId }
-            : { facingMode },
-        );
+        void start(activeDeviceId ? { deviceId: activeDeviceId } : { facingMode });
       }
     };
     document.addEventListener("visibilitychange", onVis);
@@ -323,31 +326,28 @@ export function VisionScanner() {
     setZoomFraction(baselineFraction);
   };
 
-  const tryTapFocus = useCallback(
-    async (nx: number, ny: number) => {
-      const track = streamRef.current?.getVideoTracks?.()[0];
-      if (!track) return;
-      try {
-        const caps = (track.getCapabilities?.() ?? {}) as ExtendedCapabilities;
-        const modes = caps.focusMode ?? [];
-        const wantsMode = modes.includes("single-shot")
-          ? "single-shot"
-          : modes.includes("manual")
-            ? "manual"
-            : null;
-        if (wantsMode && caps.pointsOfInterest !== undefined) {
-          const c: ExtendedConstraint = {
-            focusMode: wantsMode,
-            pointsOfInterest: [{ x: nx, y: ny }],
-          };
-          await track.applyConstraints({ advanced: [c] } as MediaTrackConstraints);
-        }
-      } catch {
-        // ignore — visual pulse still shown
+  const tryTapFocus = useCallback(async (nx: number, ny: number) => {
+    const track = streamRef.current?.getVideoTracks?.()[0];
+    if (!track) return;
+    try {
+      const caps = (track.getCapabilities?.() ?? {}) as ExtendedCapabilities;
+      const modes = caps.focusMode ?? [];
+      const wantsMode = modes.includes("single-shot")
+        ? "single-shot"
+        : modes.includes("manual")
+          ? "manual"
+          : null;
+      if (wantsMode && caps.pointsOfInterest !== undefined) {
+        const c: ExtendedConstraint = {
+          focusMode: wantsMode,
+          pointsOfInterest: [{ x: nx, y: ny }],
+        };
+        await track.applyConstraints({ advanced: [c] } as MediaTrackConstraints);
       }
-    },
-    [],
-  );
+    } catch {
+      // ignore — visual pulse still shown
+    }
+  }, []);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (state !== "ready") return;
@@ -550,7 +550,11 @@ export function VisionScanner() {
 
   return (
     <div className="flex h-full min-h-0 w-full max-w-full flex-col gap-3 overflow-hidden p-3 landscape:max-md:gap-2 landscape:max-md:p-2">
-      <HudPanel index={0} title="OPTICAL FEED // LIVE" className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <HudPanel
+        index={0}
+        title="OPTICAL FEED // LIVE"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+      >
         <div className="relative mx-auto w-full min-w-0 portrait:flex portrait:min-h-0 portrait:flex-1">
           <div
             onPointerDown={handlePointerDown}
@@ -593,9 +597,28 @@ export function VisionScanner() {
 
             {/* Center crosshair */}
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <svg viewBox="0 0 100 100" className="h-24 w-24 text-primary/70" style={{ filter: "drop-shadow(0 0 4px currentColor)" }}>
-                <circle cx="50" cy="50" r="18" fill="none" stroke="currentColor" strokeWidth="0.6" />
-                <circle cx="50" cy="50" r="10" fill="none" stroke="currentColor" strokeWidth="0.4" strokeDasharray="1.4 1.6" />
+              <svg
+                viewBox="0 0 100 100"
+                className="h-24 w-24 text-primary/70"
+                style={{ filter: "drop-shadow(0 0 4px currentColor)" }}
+              >
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="18"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="0.6"
+                />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="10"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="0.4"
+                  strokeDasharray="1.4 1.6"
+                />
                 <line x1="50" y1="26" x2="50" y2="36" stroke="currentColor" strokeWidth="0.5" />
                 <line x1="50" y1="64" x2="50" y2="74" stroke="currentColor" strokeWidth="0.5" />
                 <line x1="26" y1="50" x2="36" y2="50" stroke="currentColor" strokeWidth="0.5" />
@@ -608,8 +631,7 @@ export function VisionScanner() {
               <div
                 className="pointer-events-none absolute inset-x-0 h-[2px] animate-vision-scan"
                 style={{
-                  background:
-                    "linear-gradient(90deg, transparent, var(--primary), transparent)",
+                  background: "linear-gradient(90deg, transparent, var(--primary), transparent)",
                   boxShadow: "0 0 12px var(--primary), 0 0 28px var(--primary)",
                 }}
               />
@@ -618,7 +640,11 @@ export function VisionScanner() {
             {/* Corner readouts */}
             <div className="pointer-events-none absolute left-2 top-2 font-display text-[9px] uppercase tracking-[0.3em] text-primary/80">
               OPTIC:{" "}
-              <span className={state === "ready" ? "text-[color:var(--success)]" : "text-[color:var(--warning)]"}>
+              <span
+                className={
+                  state === "ready" ? "text-[color:var(--success)]" : "text-[color:var(--warning)]"
+                }
+              >
                 {state === "ready" ? "● LIVE" : state === "loading" ? "○ BOOT" : "● OFFLINE"}
               </span>
             </div>

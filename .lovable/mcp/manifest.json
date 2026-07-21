@@ -5,9 +5,7 @@
   "auth": {
     "type": "oauth",
     "issuer": "https://myjynbqzlovanoarppyt.supabase.co/auth/v1",
-    "accepted_audiences": [
-      "authenticated"
-    ]
+    "accepted_audiences": ["authenticated"]
   },
   "mcp": {
     "server": {
@@ -32,12 +30,7 @@
             "status": {
               "description": "Optional status filter.",
               "type": "string",
-              "enum": [
-                "todo",
-                "in_progress",
-                "done",
-                "cancelled"
-              ]
+              "enum": ["todo", "in_progress", "done", "cancelled"]
             },
             "limit": {
               "description": "Max rows (default 25).",
@@ -89,9 +82,7 @@
               }
             }
           },
-          "required": [
-            "title"
-          ]
+          "required": ["title"]
         },
         "outputSchema": null
       },
@@ -152,9 +143,7 @@
               }
             }
           },
-          "required": [
-            "title"
-          ]
+          "required": ["title"]
         },
         "outputSchema": null
       },

@@ -61,10 +61,7 @@ function loadHistory(): ChatBusMessage[] {
 
 function saveHistory(items: ChatBusMessage[]) {
   try {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(items.slice(-MAX_HISTORY)),
-    );
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items.slice(-MAX_HISTORY)));
   } catch {
     /* ignore */
   }
@@ -109,7 +106,9 @@ export function ChatPanel() {
     setConversationId(null); // nowy agent → efekt niżej wczyta jego własny wątek
     try {
       window.localStorage.setItem(ACTIVE_AGENT_LS_KEY, JSON.stringify(next));
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     persistActiveAgent({ data: { agentSlug: found.slug } }).catch(() => {
       /* najwyżej nie zsynchronizuje się na inne urządzenie — nie blokujemy UI */
     });
@@ -133,10 +132,16 @@ export function ChatPanel() {
     fetchActiveAgentSlug()
       .then((res) => {
         if (cancelled || !res.agentSlug) return;
-        setActiveAgent((prev) => (prev.slug === res.agentSlug ? prev : { slug: res.agentSlug, name: res.agentSlug }));
+        setActiveAgent((prev) =>
+          prev.slug === res.agentSlug ? prev : { slug: res.agentSlug, name: res.agentSlug },
+        );
       })
-      .catch(() => { /* zostań przy lokalnym wyborze */ });
-    return () => { cancelled = true; };
+      .catch(() => {
+        /* zostań przy lokalnym wyborze */
+      });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -167,7 +172,9 @@ export function ChatPanel() {
       .catch(() => {
         /* offline / błąd sieci — zostań przy lokalnym cache, nic nie psuj */
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [activeAgent.slug]);
 
   // Słuchaj na zmianę agenta z Agent Hub (przycisk LAUNCH)
@@ -274,8 +281,14 @@ export function ChatPanel() {
       <div className="flex items-center justify-between border-b border-primary/15 bg-gradient-to-b from-primary/[0.04] to-transparent px-4 py-2.5">
         <div className="flex items-center gap-2">
           <span className="relative flex h-2 w-2">
-            <span className="absolute inset-0 animate-ping rounded-full" style={{ backgroundColor: "var(--success)", opacity: 0.5 }} />
-            <span className="relative h-2 w-2 rounded-full" style={{ backgroundColor: "var(--success)", boxShadow: "0 0 8px var(--success)" }} />
+            <span
+              className="absolute inset-0 animate-ping rounded-full"
+              style={{ backgroundColor: "var(--success)", opacity: 0.5 }}
+            />
+            <span
+              className="relative h-2 w-2 rounded-full"
+              style={{ backgroundColor: "var(--success)", boxShadow: "0 0 8px var(--success)" }}
+            />
           </span>
           <span className="font-display text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
             ACTIVE AGENT //
@@ -290,7 +303,11 @@ export function ChatPanel() {
               ? agents
               : [{ slug: activeAgent.slug, name: activeAgent.name, isEnabled: true }]
             ).map((a) => (
-              <option key={a.slug} value={a.slug} disabled={"isEnabled" in a ? !a.isEnabled : false}>
+              <option
+                key={a.slug}
+                value={a.slug}
+                disabled={"isEnabled" in a ? !a.isEnabled : false}
+              >
                 {a.name.toUpperCase()}
               </option>
             ))}
@@ -347,7 +364,8 @@ export function ChatPanel() {
                     agenta stare odpowiedzi zachowały swojego autora. */}
                 {m.role === "jarvis"
                   ? `${(m.agentName ?? activeAgent.name).toUpperCase()} //`
-                  : "USER //"} {m.time}
+                  : "USER //"}{" "}
+                {m.time}
               </p>
               <div
                 className={cn(

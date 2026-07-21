@@ -13,15 +13,18 @@ const ICONS: Record<SubSystemId, typeof Fuel> = {
 
 const MODULE_PROMPT: Record<SubSystemId, { prompt: string; hint: string }> = {
   "fuel-monitor": {
-    prompt: "The user just opened the Fuel Monitor module from the dashboard. Comment briefly and professionally. Action must be \"none\".",
+    prompt:
+      'The user just opened the Fuel Monitor module from the dashboard. Comment briefly and professionally. Action must be "none".',
     hint: "fuel",
   },
   "rto-calculator": {
-    prompt: "The user just opened the RTO (Return To Office) calculator module. Comment briefly. Action must be \"none\".",
+    prompt:
+      'The user just opened the RTO (Return To Office) calculator module. Comment briefly. Action must be "none".',
     hint: "rto",
   },
   "jobfit-ai": {
-    prompt: "The user just launched the JobFit AI resume optimiser module. Comment briefly. Action must be \"none\".",
+    prompt:
+      'The user just launched the JobFit AI resume optimiser module. Comment briefly. Action must be "none".',
     hint: "jobfit",
   },
 };
@@ -38,7 +41,11 @@ export function SubSystemGrid({
   const lastClickRef = useRef<Map<SubSystemId, number>>(new Map());
   return (
     <div className="space-y-6 p-6 landscape:max-md:space-y-2 landscape:max-md:p-2">
-      <HudPanel index={0} title="SUB-SYSTEMS // EXTERNAL MODULES" className="p-5 landscape:max-md:p-2">
+      <HudPanel
+        index={0}
+        title="SUB-SYSTEMS // EXTERNAL MODULES"
+        className="p-5 landscape:max-md:p-2"
+      >
         <div className="flex flex-wrap items-end justify-between gap-2 pt-3 landscape:max-md:pt-1">
           <h1 className="font-display text-2xl font-bold tracking-[0.18em] text-foreground landscape:max-md:text-xs landscape:max-md:tracking-[0.12em]">
             EXTERNAL MODULE PORTAL
@@ -63,13 +70,18 @@ export function SubSystemGrid({
               <div className="flex flex-col gap-5 p-5 landscape:max-md:gap-2 landscape:max-md:p-2">
                 <div className="flex items-start gap-3 landscape:max-md:gap-2">
                   <div className="border border-primary/40 p-2 shadow-[var(--glow-primary)] landscape:max-md:p-1">
-                    <Icon className="icon-neon h-6 w-6 text-primary landscape:max-md:h-4 landscape:max-md:w-4" strokeWidth={1.5} />
+                    <Icon
+                      className="icon-neon h-6 w-6 text-primary landscape:max-md:h-4 landscape:max-md:w-4"
+                      strokeWidth={1.5}
+                    />
                   </div>
                   <div className="space-y-1">
                     <p className="font-display text-[10px] uppercase tracking-[0.3em] text-primary/70 landscape:max-md:text-[8px] landscape:max-md:tracking-[0.18em]">
                       {mod.sysRef}
                     </p>
-                    <p className="text-xs text-muted-foreground landscape:max-md:hidden">{mod.description}</p>
+                    <p className="text-xs text-muted-foreground landscape:max-md:hidden">
+                      {mod.description}
+                    </p>
                   </div>
                 </div>
 
@@ -95,7 +107,11 @@ export function SubSystemGrid({
                     if (now - last < 3000) return;
                     lastClickRef.current.set(mod.id, now);
                     const m = MODULE_PROMPT[mod.id];
-                    void speakJarvis({ prompt: m.prompt, fallbackKind: "module", fallbackHint: m.hint });
+                    void speakJarvis({
+                      prompt: m.prompt,
+                      fallbackKind: "module",
+                      fallbackHint: m.hint,
+                    });
                     onInitialize(mod.id);
                   }}
                   className="group relative mt-2 flex items-center justify-center gap-2 border border-primary/60 bg-primary/10 px-4 py-2.5 font-display text-[11px] uppercase tracking-[0.35em] text-primary transition hover:bg-primary/20 disabled:opacity-40 landscape:max-md:mt-0 landscape:max-md:px-2 landscape:max-md:py-1 landscape:max-md:text-[8px] landscape:max-md:tracking-[0.18em]"

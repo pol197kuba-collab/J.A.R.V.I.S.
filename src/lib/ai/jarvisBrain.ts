@@ -269,9 +269,14 @@ export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
         return { action: (result.action ?? "none") as JarvisAction, speech: result.output };
       }
       console.warn("[brain] server runtime returned error", result.error);
-      void logClientEvent("warn", "jarvis_brain_client", `server runtime returned error: ${result.error ?? "unknown"}`, {
-        status: result.status,
-      });
+      void logClientEvent(
+        "warn",
+        "jarvis_brain_client",
+        `server runtime returned error: ${result.error ?? "unknown"}`,
+        {
+          status: result.status,
+        },
+      );
       // fall through to client-side path
     } catch (err) {
       reportOutcome("error");
@@ -364,7 +369,11 @@ export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
     const trimmed = text.trim();
     if (trimmed.length > 0) {
       console.warn("[brain] parse failed, using raw text", trimmed.slice(0, 200));
-      void logClientEvent("warn", "jarvis_brain_client", "gemini reply wasn't valid JSON, used raw text");
+      void logClientEvent(
+        "warn",
+        "jarvis_brain_client",
+        "gemini reply wasn't valid JSON, used raw text",
+      );
       return { action: "none", speech: trimmed };
     }
     return fb();

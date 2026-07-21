@@ -33,8 +33,7 @@ export function HudPanel({
   const { transition } = useRouteTransition();
   const { phase } = usePhase();
 
-  const materializing =
-    transition === "materialize" || phase === "transition_to_dashboard";
+  const materializing = transition === "materialize" || phase === "transition_to_dashboard";
   const dematerializing = phase === "shutdown";
 
   const seed = tagSeed ?? index * 9173 + 31;

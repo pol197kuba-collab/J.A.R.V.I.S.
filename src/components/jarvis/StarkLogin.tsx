@@ -88,8 +88,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
     grant();
   }
 
-  const title =
-    mode === "forgot" ? "RECOVER CIPHER" : "SECURE LOGIN";
+  const title = mode === "forgot" ? "RECOVER CIPHER" : "SECURE LOGIN";
 
   return (
     <div className="fixed inset-0 z-[100] flex h-[100dvh] w-full items-center justify-center overflow-y-auto bg-black text-primary">
@@ -104,7 +103,12 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
         }}
       />
 
-      <div className={cn("relative z-10 flex max-h-[100dvh] w-full flex-col items-center gap-1 px-3 sm:gap-2 short:max-h-none short:flex-row short:justify-center short:gap-6 short:py-2", leaving && "animate-screen-fracture")}>
+      <div
+        className={cn(
+          "relative z-10 flex max-h-[100dvh] w-full flex-col items-center gap-1 px-3 sm:gap-2 short:max-h-none short:flex-row short:justify-center short:gap-6 short:py-2",
+          leaving && "animate-screen-fracture",
+        )}
+      >
         {/* Raised reactor */}
         <div className="-mb-10 max-md:-mb-6 landscape:max-md:-mb-6 short:mb-0 short:shrink-0">
           <ArcReactorTriangle raised />
@@ -198,7 +202,9 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
             <>
               <div className="flex items-center gap-2">
                 <span className="h-px flex-1 bg-primary/20" />
-                <span className="font-display text-[9px] uppercase tracking-widest text-muted-foreground">or</span>
+                <span className="font-display text-[9px] uppercase tracking-widest text-muted-foreground">
+                  or
+                </span>
                 <span className="h-px flex-1 bg-primary/20" />
               </div>
               <button
@@ -216,7 +222,11 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
             {mode === "signin" ? (
               <button
                 type="button"
-                onClick={() => { setMode("forgot"); setError(null); setInfo(null); }}
+                onClick={() => {
+                  setMode("forgot");
+                  setError(null);
+                  setInfo(null);
+                }}
                 className="font-display ml-auto uppercase tracking-widest text-muted-foreground hover:text-primary"
               >
                 Forgot cipher?
@@ -224,7 +234,11 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
             ) : (
               <button
                 type="button"
-                onClick={() => { setMode("signin"); setError(null); setInfo(null); }}
+                onClick={() => {
+                  setMode("signin");
+                  setError(null);
+                  setInfo(null);
+                }}
                 className="font-display uppercase tracking-widest text-primary/80 hover:text-primary"
               >
                 ← Back to sign in

@@ -2,7 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { HudPanel } from "./HudPanel";
-import { getAgentFlow, type FlowDelegation, type FlowRun, type FlowToolCall } from "@/lib/agents/flow.functions";
+import {
+  getAgentFlow,
+  type FlowDelegation,
+  type FlowRun,
+  type FlowToolCall,
+} from "@/lib/agents/flow.functions";
 import { describeToolCall } from "./toolDescriptions";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -83,7 +88,15 @@ function ReactorBadge({ size, color, active }: { size: number; color: string; ac
           filter: active ? `drop-shadow(0 0 ${Math.max(3, size * 0.1)}px ${color})` : undefined,
         }}
       >
-        <circle cx="50" cy="50" r="46" fill="none" stroke="currentColor" strokeWidth="1" opacity="0.4" />
+        <circle
+          cx="50"
+          cy="50"
+          r="46"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1"
+          opacity="0.4"
+        />
         <circle
           cx="50"
           cy="50"
@@ -144,7 +157,12 @@ function FlowSpoke({
   return (
     <div
       className="absolute left-1/2 origin-top"
-      style={{ width: 2, height: length, top, transform: `translateX(-1px) rotate(${angleDeg}deg)` }}
+      style={{
+        width: 2,
+        height: length,
+        top,
+        transform: `translateX(-1px) rotate(${angleDeg}deg)`,
+      }}
     >
       <div
         className="h-full w-full"
@@ -191,7 +209,11 @@ function FlowNode({
           ? run.status
           : "standby";
   return (
-    <button type="button" onClick={onClick} className="flex flex-col items-center gap-1 bg-transparent">
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex flex-col items-center gap-1 bg-transparent"
+    >
       <div
         className="flex items-center justify-center rounded-full transition-all duration-500"
         style={{
@@ -250,7 +272,10 @@ function RunHistoryPanel({ agentName, runs }: { agentName: string; runs: FlowRun
               className="h-1.5 w-1.5 shrink-0 rounded-full"
               style={{ backgroundColor: statusColor(r.status) }}
             />
-            <span className="min-w-0 flex-1 truncate text-left font-mono text-[9px] text-muted-foreground" title={summary}>
+            <span
+              className="min-w-0 flex-1 truncate text-left font-mono text-[9px] text-muted-foreground"
+              title={summary}
+            >
               {summary}
             </span>
             <span className="shrink-0 font-display text-[8px] uppercase tracking-[0.1em] text-muted-foreground/70">
@@ -440,7 +465,10 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
         </div>
       ) : (
         <>
-          <div className="relative mx-auto w-full max-w-[440px]" style={{ height: containerHeight }}>
+          <div
+            className="relative mx-auto w-full max-w-[440px]"
+            style={{ height: containerHeight }}
+          >
             {teammates.map((t, i) => {
               const { dx, dy } = teammatePositions[i];
               const dist = Math.hypot(dx, dy);
@@ -455,13 +483,18 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
                 />
               );
             })}
-            <div className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2" style={{ top: anchorY }}>
+            <div
+              className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2"
+              style={{ top: anchorY }}
+            >
               <FlowNode
                 name={orchestrator.name}
                 run={orchestratorRun}
                 badgeSize={orchRadius * 2}
                 selected={selectedSlug === "orchestrator"}
-                onClick={() => setSelectedSlug((s) => (s === "orchestrator" ? null : "orchestrator"))}
+                onClick={() =>
+                  setSelectedSlug((s) => (s === "orchestrator" ? null : "orchestrator"))
+                }
               />
             </div>
             {teammates.map((t, i) => {

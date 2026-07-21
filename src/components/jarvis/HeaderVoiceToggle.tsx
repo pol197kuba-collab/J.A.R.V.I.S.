@@ -52,10 +52,7 @@ export function HeaderVoiceToggle() {
       {[0, 1, 2, 3, 4].map((i) => (
         <span
           key={i}
-          className={cn(
-            "w-[2px] bg-current",
-            live ? "animate-voice-wave" : "h-1",
-          )}
+          className={cn("w-[2px] bg-current", live ? "animate-voice-wave" : "h-1")}
           style={live ? { animationDelay: `${i * 80}ms` } : undefined}
         />
       ))}

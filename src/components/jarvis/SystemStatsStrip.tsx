@@ -35,7 +35,12 @@ function push(arr: number[], v: number) {
 export function SystemStatsStrip() {
   const [fps, setFps] = useState<Metric>({ label: "FPS", value: "—", trend: [], pct: 0 });
   const [mem, setMem] = useState<Metric>({ label: "MEM", value: "—", trend: [], pct: 0 });
-  const [cpu, setCpu] = useState<Metric>({ label: "CPU // THREADS", value: "—", trend: [], pct: 0 });
+  const [cpu, setCpu] = useState<Metric>({
+    label: "CPU // THREADS",
+    value: "—",
+    trend: [],
+    pct: 0,
+  });
   const [net, setNet] = useState<Metric>({ label: "NET", value: "—", trend: [], pct: 0 });
 
   // FPS loop — only samples while the tab is actually in the foreground;
@@ -163,7 +168,10 @@ export function SystemStatsStrip() {
                 <span
                   key={i}
                   className="flex-1 rounded-sm bg-primary/60"
-                  style={{ height: `${Math.max(8, (v / max) * 100)}%`, boxShadow: "0 0 8px var(--primary)" }}
+                  style={{
+                    height: `${Math.max(8, (v / max) * 100)}%`,
+                    boxShadow: "0 0 8px var(--primary)",
+                  }}
                 />
               ))}
             </div>

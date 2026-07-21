@@ -23,13 +23,22 @@ const levelColor: Record<string, string> = {
 
 function formatTs(iso: string) {
   const d = new Date(iso);
-  return d.toLocaleTimeString(undefined, { hour12: false }) +
-    "." + String(d.getMilliseconds()).padStart(3, "0");
+  return (
+    d.toLocaleTimeString(undefined, { hour12: false }) +
+    "." +
+    String(d.getMilliseconds()).padStart(3, "0")
+  );
 }
 
 function SystemLogs() {
   const fetchEvents = useServerFn(listSystemEvents);
-  const { data: events = [], isLoading, error, refetch, isFetching } = useQuery({
+  const {
+    data: events = [],
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
     queryKey: ["system_events", "list"],
     queryFn: () => fetchEvents({ data: { limit: 200 } }),
     refetchInterval: 4000,

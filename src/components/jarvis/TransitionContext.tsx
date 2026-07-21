@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 
 export type RouteTransition = "idle" | "dematerialize" | "scan" | "materialize";
@@ -43,12 +51,8 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
           setTransition("scan");
         }, 550),
       );
-      timers.current.push(
-        setTimeout(() => setTransition("materialize"), 1000),
-      );
-      timers.current.push(
-        setTimeout(() => setTransition("idle"), 1850),
-      );
+      timers.current.push(setTimeout(() => setTransition("materialize"), 1000));
+      timers.current.push(setTimeout(() => setTransition("idle"), 1850));
     },
     [transition, pathname, router],
   );

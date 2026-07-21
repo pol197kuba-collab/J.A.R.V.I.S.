@@ -14,10 +14,7 @@ export function CommandDirectory({ index = 99 }: { index?: number }) {
     const term = q.trim().toLowerCase();
     if (!term) return COMMAND_DIRECTORY;
     return COMMAND_DIRECTORY.filter((c) =>
-      [c.action, c.label, c.description, ...c.phrases]
-        .join(" ")
-        .toLowerCase()
-        .includes(term),
+      [c.action, c.label, c.description, ...c.phrases].join(" ").toLowerCase().includes(term),
     );
   }, [q]);
 

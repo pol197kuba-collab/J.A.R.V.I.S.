@@ -76,7 +76,7 @@ class Engine {
     if (!this.ctx) {
       const Ctx =
         (window.AudioContext as typeof AudioContext) ||
-        ((window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!Ctx) return null;
       this.ctx = new Ctx();
       this.master = this.ctx.createGain();

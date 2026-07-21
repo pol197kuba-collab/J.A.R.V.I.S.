@@ -20,7 +20,7 @@ local bridge process) before they're possible at all — see
   knowledge. One clear responsibility per component.
 - **Simple today, scalable tomorrow.** Small iterations, no premature
   infrastructure — but never make a decision that blocks future evolution.
-  Test: *"Will this still be a good decision at 100+ agents?"*
+  Test: _"Will this still be a good decision at 100+ agents?"_
 - **Modular monolith**, not microservices, unless there's a compelling
   reason. Typical domains: Core, Agents, Tasks, Memory, Tools, Orchestrator.
 - **Agents are software components, not prompts.** Identity, role, tools,
@@ -47,6 +47,7 @@ Where we already match or lead, and where their feature list points at a
 real next step for **our** architecture:
 
 ### Already have (and in some cases ahead)
+
 - AI Memory — `remember`/`recall`, pgvector semantic search (Milestone 2).
 - Tool-calling agent — 11 tools, multi-step reasoning (web search, notes,
   tasks, memory, all CRUD).
@@ -56,6 +57,7 @@ real next step for **our** architecture:
 - Web dashboard — the HUD itself; already ~30 components deep.
 
 ### Natural next steps (fit our stack directly)
+
 1. **Multi-provider AI routing — increment 1 shipped, see Milestone 7.**
    Gemini is still the primary reasoning engine for every agent's main
    conversation and every tool (`tools.server.ts` — `web_search` grounding,
@@ -81,9 +83,10 @@ real next step for **our** architecture:
    picking one manually.
 
 ### Long-shot — needs a new architectural piece first
+
 - **Local/desktop automation** (launch apps, organize files, browser
   automation, OS-level control) and **local AI via Ollama** both require
-  code running *on the user's machine*, which a browser tab and a Supabase
+  code running _on the user's machine_, which a browser tab and a Supabase
   Edge Function cannot do. This is the same shape as the previously-scoped
   "Tier 3 — device bridge" (smart-home/Tapo), generalized: a small local
   companion process that authenticates to the user's account and executes
@@ -95,6 +98,7 @@ real next step for **our** architecture:
 
 Product shape is a **hosted web app**, not an Electron/native desktop app.
 Concretely, this means:
+
 - No filesystem access, no launching local processes, no local Ollama —
   anything requiring code on the user's machine needs the bridge concept
   above, not a browser API.
@@ -166,11 +170,11 @@ Concretely, this means:
 
 ## Agent registry (live, as of 2026-07-16)
 
-| slug | status | model | tools bound | notes |
-|---|---|---|---|---|
-| `orchestrator` | enabled | gemini-2.5-flash | 11 tools (web_search, fetch_url, save_note, list_notes, delete_note, remember, recall, create_task, list_tasks, update_task, delete_task) | Default agent, auto-seeded per user via `handle_new_user()`. `config.system_prompt` empty — uses code-level `DEFAULT_SYSTEM_PROMPT` as-is. |
-| `marketer` | enabled | gemini-2.5-flash | web_search | Created via app UI (not a migration). Fixed 2026-07-10: `config.system_prompt` now contains **only** the Marketer specialization, no identity/language text — that comes exclusively from `persona.ts`. This is the pattern to follow for every future agent. |
-| `guardian` (Strażnik) | enabled | gemini-2.5-flash | 3 tools (guardian_scan_errors, guardian_run_stats, guardian_check_delegation) | Added 2026-07-16 via migration (`20260716150000_guardian_agent.sql`) for every existing + future user — the "seed through a migration, not the UI" lesson from `marketer` applied. Read-only system-health monitoring + active smoke-tests over `event_log`/`agent_runs`. Explicitly **no** code/filesystem access and **no** UI/voice test automation — see TODO.md for why that's out of scope for any in-app agent. |
+| slug                  | status  | model            | tools bound                                                                                                                               | notes                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| --------------------- | ------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `orchestrator`        | enabled | gemini-2.5-flash | 11 tools (web_search, fetch_url, save_note, list_notes, delete_note, remember, recall, create_task, list_tasks, update_task, delete_task) | Default agent, auto-seeded per user via `handle_new_user()`. `config.system_prompt` empty — uses code-level `DEFAULT_SYSTEM_PROMPT` as-is.                                                                                                                                                                                                                                                                             |
+| `marketer`            | enabled | gemini-2.5-flash | web_search                                                                                                                                | Created via app UI (not a migration). Fixed 2026-07-10: `config.system_prompt` now contains **only** the Marketer specialization, no identity/language text — that comes exclusively from `persona.ts`. This is the pattern to follow for every future agent.                                                                                                                                                          |
+| `guardian` (Strażnik) | enabled | gemini-2.5-flash | 3 tools (guardian_scan_errors, guardian_run_stats, guardian_check_delegation)                                                             | Added 2026-07-16 via migration (`20260716150000_guardian_agent.sql`) for every existing + future user — the "seed through a migration, not the UI" lesson from `marketer` applied. Read-only system-health monitoring + active smoke-tests over `event_log`/`agent_runs`. Explicitly **no** code/filesystem access and **no** UI/voice test automation — see TODO.md for why that's out of scope for any in-app agent. |
 
 `delegate_to_agent` tool-calling exists in `runtime.server.ts` and was
 **verified end-to-end 2026-07-10** (orchestrator run `eb968ad8` →
@@ -249,7 +253,7 @@ instead of by a documentation audit next time.
   `20260717103728_e976ee53-...sql` adds
   `public.get_public_schema_snapshot()`, a `SECURITY DEFINER` function
   (queries `pg_class`/`pg_attribute`/`pg_constraint`/`pg_policies`/
-  `pg_type`, gated by `has_role(auth.uid(), 'admin')` *inside* the
+  `pg_type`, gated by `has_role(auth.uid(), 'admin')` _inside_ the
   function body, `RAISE EXCEPTION` on failure) called via
   `supabase.rpc(...)` from `src/lib/schema/schema.functions.ts` — the
   exact pattern predicted, consistent with `has_role`/`handle_new_user`.
@@ -341,7 +345,7 @@ instead of by a documentation audit next time.
   exists.
 - **Milestone 8.3 (2026-07-17)** — two more real bugs from live testing.
   (1) Map showed pure black: the `.geo-map` filter was built to invert
-  *light* OSM tiles, crushed CARTO's already-dark tiles to near-black —
+  _light_ OSM tiles, crushed CARTO's already-dark tiles to near-black —
   verified by rendering a real downloaded tile through both filters via a
   local Playwright page, not guessed. Fixed with a light-touch tint
   (`saturate(1.3) hue-rotate(170deg)`, no darkening). (2) Map fixed but
@@ -370,7 +374,7 @@ instead of by a documentation audit next time.
   resolved with `retry: 2` plus a 90s poll interval after `curl` revealed
   OpenSky's anonymous tier is hard-capped at 400 requests/day via its
   `x-rate-limit-remaining` header) were each read straight from the exact
-  logged error instead of guessed. Then a real *design* gap, not a bug:
+  logged error instead of guessed. Then a real _design_ gap, not a bug:
   aircraft only ever loaded within a fixed 150km radius of the user's own
   position, so panning/zooming the map elsewhere (which is what the user
   was actually doing, looking for traffic) could never show anything.
@@ -442,6 +446,7 @@ third consumer shows up, extend the hook instead.
 
 Two new agent ideas beyond the original 3-phase plan, tentatively queued
 in `TODO.md`:
+
 - **Concierge** (calendar/email) — cheap, prompt-only like Marketer, paired
   with the calendar/email OAuth tools item.
 - Second wow-gadget slot may eventually want a **Researcher**-style agent
@@ -459,7 +464,7 @@ update `TODO.md` as items ship instead of duplicating a list here.
 ### 2026-07-16 frontend note
 
 The last Lovable-driven visual pass (`.lovable/plan.md`, "Premium AI OS
-Visual Refresh — v2") was scoped as *styling-only*: rounded corners, soft
+Visual Refresh — v2") was scoped as _styling-only_: rounded corners, soft
 glow, a decorative background layer — it explicitly kept every panel's
 existing box composition untouched ("Zero moved/renamed/removed
 features"). That is why it read as "just rounded corners" rather than the

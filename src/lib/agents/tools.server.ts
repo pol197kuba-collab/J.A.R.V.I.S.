@@ -646,9 +646,14 @@ const recall: Tool = {
           // degrading to keyword-only with zero trace was exactly the kind
           // of "something's wrong and Guardian has no idea" gap this pass
           // exists to close.
-          await ctx.logEvent("warn", "tool.recall", `match_memories RPC failed: ${semErr.message}`, {
-            query: rawQuery,
-          } as Json);
+          await ctx.logEvent(
+            "warn",
+            "tool.recall",
+            `match_memories RPC failed: ${semErr.message}`,
+            {
+              query: rawQuery,
+            } as Json,
+          );
         }
       }
     }
@@ -1133,9 +1138,7 @@ const listDocumentsTool: Tool = {
     const limit = clampInt(args.limit, 1, 50, 20);
     const { data, error } = await ctx.supabase
       .from("documents")
-      .select(
-        "id, filename, mime_type, status, char_count, chunk_count, error_message, created_at",
-      )
+      .select("id, filename, mime_type, status, char_count, chunk_count, error_message, created_at")
       .eq("user_id", ctx.userId)
       .order("created_at", { ascending: false })
       .limit(limit);

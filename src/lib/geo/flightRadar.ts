@@ -34,7 +34,8 @@ export type Aircraft = {
 };
 
 export type FlightQueryResult =
-  { ok: true; aircraft: Aircraft[] } | { ok: false; reason: "area_too_large" };
+  | { ok: true; aircraft: Aircraft[] }
+  | { ok: false; reason: "area_too_large" };
 
 // Both mirrors are point + radius (max 250 nautical miles), not a
 // bounding box — the viewport is covered by querying the circle that
@@ -112,7 +113,7 @@ export async function fetchFlightsInBounds(bounds: Bounds): Promise<FlightQueryR
   const clat = (bounds.lamin + bounds.lamax) / 2;
   // Leaflet can report longitudes beyond ±180 after panning across the
   // dateline; the API wants a normalized one.
-  const clon = ((((bounds.lomin + bounds.lomax) / 2 + 540) % 360) + 360) % 360 - 180;
+  const clon = (((((bounds.lomin + bounds.lomax) / 2 + 540) % 360) + 360) % 360) - 180;
   const cornerKm = haversineKm(clat, clon, bounds.lamax, bounds.lomax);
   const radiusNm = Math.min(MAX_RADIUS_NM, Math.max(10, Math.ceil(cornerKm / KM_PER_NM)));
 

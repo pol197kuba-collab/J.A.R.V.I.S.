@@ -3,13 +3,7 @@ import type { SubSystem } from "@/data/subSystems";
 import { MiniArcReactor } from "@/components/jarvis/MiniArcReactor";
 import { audio } from "@/lib/audio/AudioEngine";
 
-export function ModuleFrame({
-  mod,
-  onTerminate,
-}: {
-  mod: SubSystem;
-  onTerminate: () => void;
-}) {
+export function ModuleFrame({ mod, onTerminate }: { mod: SubSystem; onTerminate: () => void }) {
   return (
     <div className="absolute inset-0 z-30 flex max-h-full w-full flex-col overflow-hidden bg-black animate-hud-tile-in landscape:max-md:fixed landscape:max-md:z-[100] landscape:max-md:h-[calc(100vh-2rem)]">
       {/* Top HUD bar */}

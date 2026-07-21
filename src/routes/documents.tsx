@@ -120,7 +120,9 @@ function DocumentsPage() {
       if (!result.ok) {
         toast.error(`Przetwarzanie nieudane: ${result.reason}`);
       } else {
-        toast.success(`Gotowe — ${result.chunkCount} fragmentów, ${result.embeddedCount} zaindeksowanych`);
+        toast.success(
+          `Gotowe — ${result.chunkCount} fragmentów, ${result.embeddedCount} zaindeksowanych`,
+        );
       }
       invalidate();
     } catch (err) {
@@ -202,7 +204,10 @@ function DocumentsPage() {
                 <div className="min-w-0">
                   <p className="truncate text-foreground">{d.filename}</p>
                   {d.status === "error" && d.error_message && (
-                    <p className="mt-0.5 truncate text-[11px]" style={{ color: "var(--destructive)" }}>
+                    <p
+                      className="mt-0.5 truncate text-[11px]"
+                      style={{ color: "var(--destructive)" }}
+                    >
                       {d.error_message}
                     </p>
                   )}

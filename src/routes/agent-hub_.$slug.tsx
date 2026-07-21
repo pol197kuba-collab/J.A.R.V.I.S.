@@ -5,12 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ChevronDown, ChevronRight } from "lucide-react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { AgentReactorSigil } from "@/components/jarvis/AgentReactorSigil";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   clearAgentConversations,
   getAgentDetail,
@@ -64,11 +59,7 @@ function AgentConsole() {
   const resetStats = useServerFn(resetAgentStats);
   const clearConvs = useServerFn(clearAgentConversations);
 
-  const {
-    data,
-    isLoading,
-    error,
-  } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ["agent", slug],
     queryFn: () => fetchDetail({ data: { slug } }),
     refetchInterval: 5000,
@@ -129,7 +120,10 @@ function AgentConsole() {
     return (
       <div className="space-y-6 p-6">
         <HudPanel index={0} className="p-5">
-          <p className="font-display text-xs uppercase tracking-widest" style={{ color: "var(--destructive)" }}>
+          <p
+            className="font-display text-xs uppercase tracking-widest"
+            style={{ color: "var(--destructive)" }}
+          >
             ✕ AGENT UNREACHABLE — {error instanceof Error ? error.message : "unknown"}
           </p>
           <button
@@ -192,7 +186,10 @@ function AgentConsole() {
                 <span>tokens out · {runDetail.tokensOut ?? "—"}</span>
               </div>
               {runDetail.error && (
-                <pre className="max-h-40 overflow-auto border border-destructive/50 bg-destructive/10 p-2 font-mono text-[11px]" style={{ color: "var(--destructive)" }}>
+                <pre
+                  className="max-h-40 overflow-auto border border-destructive/50 bg-destructive/10 p-2 font-mono text-[11px]"
+                  style={{ color: "var(--destructive)" }}
+                >
                   {runDetail.error}
                 </pre>
               )}
@@ -232,7 +229,9 @@ function Header({ data, onBack }: { data: AgentDetail; onBack: () => void }) {
           <p className="font-display text-[10px] uppercase tracking-[0.4em] text-primary/80">
             SUBSYSTEM // AGENT CONSOLE
           </p>
-          <h1 className="font-display text-2xl font-bold tracking-[0.18em] md:text-3xl">{a.name}</h1>
+          <h1 className="font-display text-2xl font-bold tracking-[0.18em] md:text-3xl">
+            {a.name}
+          </h1>
           <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
             {a.role ?? "unassigned"} · slug {a.slug}
           </p>
@@ -244,7 +243,9 @@ function Header({ data, onBack }: { data: AgentDetail; onBack: () => void }) {
           <div className="flex flex-wrap justify-center gap-2 pt-2 md:justify-start">
             <StatusPill
               label={a.isEnabled ? status : "disabled"}
-              color={a.isEnabled ? statusColor[status] ?? "var(--primary)" : "var(--muted-foreground)"}
+              color={
+                a.isEnabled ? (statusColor[status] ?? "var(--primary)") : "var(--muted-foreground)"
+              }
             />
             <StatusPill label={`model · ${data.effectiveModel}`} color="var(--primary)" />
             <StatusPill label={`uptime · ${uptimeDays}d`} color="var(--muted-foreground)" />
@@ -285,10 +286,24 @@ function TelemetryPanel({ data }: { data: AgentDetail }) {
         <Metric label="RUNS · 24H" value={s.runs24h.toString()} sub={`${s.runsErr24h} err`} />
         <Metric label="RUNS · 7D" value={s.runs7d.toString()} />
         <Metric label="SUCCESS RATE" value={successPct} />
-        <Metric label="AVG LATENCY" value={s.avgLatencyMs === null ? "—" : `${s.avgLatencyMs} ms`} />
-        <Metric label="P95 LATENCY" value={s.p95LatencyMs === null ? "—" : `${s.p95LatencyMs} ms`} />
-        <Metric label="TOKENS IN · TOTAL" value={s.tokensInTotal.toLocaleString()} sub={`${s.tokensIn24h} · 24h`} />
-        <Metric label="TOKENS OUT · TOTAL" value={s.tokensOutTotal.toLocaleString()} sub={`${s.tokensOut24h} · 24h`} />
+        <Metric
+          label="AVG LATENCY"
+          value={s.avgLatencyMs === null ? "—" : `${s.avgLatencyMs} ms`}
+        />
+        <Metric
+          label="P95 LATENCY"
+          value={s.p95LatencyMs === null ? "—" : `${s.p95LatencyMs} ms`}
+        />
+        <Metric
+          label="TOKENS IN · TOTAL"
+          value={s.tokensInTotal.toLocaleString()}
+          sub={`${s.tokensIn24h} · 24h`}
+        />
+        <Metric
+          label="TOKENS OUT · TOTAL"
+          value={s.tokensOutTotal.toLocaleString()}
+          sub={`${s.tokensOut24h} · 24h`}
+        />
       </div>
       <div className="mt-6 border-t border-primary/20 pt-4">
         <p className="font-display mb-2 text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
@@ -346,7 +361,10 @@ function LiveRunsPanel({
     <HudPanel index={2} title="ACTIVITY // RUN STREAM" className="p-5">
       {data.activeRuns.length > 0 && (
         <div className="mt-3 space-y-1">
-          <p className="font-display text-[10px] uppercase tracking-[0.3em]" style={{ color: "var(--primary)" }}>
+          <p
+            className="font-display text-[10px] uppercase tracking-[0.3em]"
+            style={{ color: "var(--primary)" }}
+          >
             ● {data.activeRuns.length} ACTIVE
           </p>
           {data.activeRuns.map((r) => (
@@ -381,7 +399,8 @@ function LiveRunsPanel({
                 {inputPreview(r.input)}
               </span>
               <span className="font-mono shrink-0 text-[10px] text-muted-foreground">
-                {r.latencyMs ? `${r.latencyMs}ms` : "—"} · {new Date(r.createdAt).toLocaleTimeString()}
+                {r.latencyMs ? `${r.latencyMs}ms` : "—"} ·{" "}
+                {new Date(r.createdAt).toLocaleTimeString()}
               </span>
             </button>
           ))}
@@ -397,11 +416,15 @@ function ActiveRow({ run }: { run: AgentRunRecord }) {
     const t = setInterval(() => tick((n) => n + 1), 1000);
     return () => clearInterval(t);
   }, []);
-  const startMs = run.startedAt ? new Date(run.startedAt).getTime() : new Date(run.createdAt).getTime();
+  const startMs = run.startedAt
+    ? new Date(run.startedAt).getTime()
+    : new Date(run.createdAt).getTime();
   const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
   return (
     <div className="flex items-center justify-between gap-3 border border-primary/25 bg-primary/5 px-3 py-2">
-      <span className="font-mono min-w-0 flex-1 text-[11px] text-foreground truncate">{inputPreview(run.input)}</span>
+      <span className="font-mono min-w-0 flex-1 text-[11px] text-foreground truncate">
+        {inputPreview(run.input)}
+      </span>
       <span className="font-mono shrink-0 text-[10px] text-primary">▸ {elapsed}s</span>
     </div>
   );
@@ -460,9 +483,7 @@ function ToolsPanel({
                     </span>
                   )}
                 </p>
-                {t.description && (
-                  <p className="text-xs text-muted-foreground">{t.description}</p>
-                )}
+                {t.description && <p className="text-xs text-muted-foreground">{t.description}</p>}
                 <p className="font-mono mt-1 text-[10px] text-muted-foreground/70">
                   usage · {u24} · 24h / {u7d} · 7d
                 </p>
@@ -577,8 +598,7 @@ function SettingsPanel({
   const currentModel = a.model ?? data.effectiveModel;
 
   const savePartial = (patch: SettingsPatch) => onSave(patch);
-  const saveBehaviour = (patch: Partial<AgentBehaviourConfig>) =>
-    onSave({ behaviour: patch });
+  const saveBehaviour = (patch: Partial<AgentBehaviourConfig>) => onSave({ behaviour: patch });
 
   return (
     <HudPanel index={5} title="AGENT SETTINGS // BEHAVIOUR" className="p-5">
@@ -624,9 +644,7 @@ function SettingsPanel({
             </div>
             <button
               type="button"
-              onClick={() =>
-                savePartial({ model: modelInherit ? DEFAULT_GEMINI_MODEL : null })
-              }
+              onClick={() => savePartial({ model: modelInherit ? DEFAULT_GEMINI_MODEL : null })}
               className="font-display border border-primary/60 px-3 py-1 text-[10px] uppercase tracking-widest"
               style={{ color: modelInherit ? "var(--success)" : "var(--muted-foreground)" }}
             >
@@ -716,13 +734,7 @@ function SettingsPanel({
                     : "var(--muted-foreground)",
             }}
           >
-            {error
-              ? `✕ ${error}`
-              : saving
-                ? "◐ SAVING…"
-                : savedAt
-                  ? "✓ SAVED"
-                  : "○ IDLE"}
+            {error ? `✕ ${error}` : saving ? "◐ SAVING…" : savedAt ? "✓ SAVED" : "○ IDLE"}
           </p>
         </div>
       </div>

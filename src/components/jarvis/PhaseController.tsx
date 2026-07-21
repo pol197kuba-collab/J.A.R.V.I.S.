@@ -25,8 +25,7 @@ export function PhaseController() {
   const navigate = useNavigate();
   const [phase, setPhase] = useState<AppPhase>("booting");
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const isPublicRoute =
-    pathname === "/reset-password" || pathname.startsWith("/.lovable/oauth/");
+  const isPublicRoute = pathname === "/reset-password" || pathname.startsWith("/.lovable/oauth/");
 
   // Listen for auth state changes: if user signs out anywhere, drop to boot.
   useEffect(() => {
@@ -93,19 +92,13 @@ export function PhaseController() {
   }
 
   const showDashboardShell =
-    phase === "transition_to_dashboard" ||
-    phase === "dashboard_active" ||
-    phase === "shutdown";
+    phase === "transition_to_dashboard" || phase === "dashboard_active" || phase === "shutdown";
 
   return (
     <OrientationGate exemptPaths={["/vision"]}>
       <PhaseContext.Provider value={{ phase, setPhase }}>
         {phase === "booting" && (
-          <BootSequence
-            key="engage"
-            mode="engage"
-            onEngage={() => setPhase("login_screen")}
-          />
+          <BootSequence key="engage" mode="engage" onEngage={() => setPhase("login_screen")} />
         )}
         {phase === "login_screen" && (
           <StarkLogin
@@ -127,10 +120,7 @@ export function PhaseController() {
           <TransitionProvider>
             <SidebarProvider defaultOpen={false}>
               <VoiceCommandProvider>
-                <DashboardShell
-                  phase={phase}
-                  onShutdown={() => setPhase("shutdown")}
-                />
+                <DashboardShell phase={phase} onShutdown={() => setPhase("shutdown")} />
               </VoiceCommandProvider>
             </SidebarProvider>
           </TransitionProvider>

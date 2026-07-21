@@ -39,7 +39,11 @@ export function ActiveTasksWidget() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   {t.status === "warning" && (
-                    <AlertTriangle strokeWidth={1.5} className="h-3 w-3" style={{ color: "var(--warning)" }} />
+                    <AlertTriangle
+                      strokeWidth={1.5}
+                      className="h-3 w-3"
+                      style={{ color: "var(--warning)" }}
+                    />
                   )}
                   <span
                     className="h-2 w-2 animate-blink rounded-full"

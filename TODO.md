@@ -33,8 +33,9 @@ box composition identical ("Zero moved/renamed/removed features"). Rounding
 corners on the same uniform boxes was never going to read as "depth."
 
 Implemented: `HudPanel` now takes a `tone` prop (`"elevated" | "quiet"`).
+
 - **Elevated** (hero "COMMAND // OVERVIEW", "CONVERSATION STREAM") keeps
-  full glass/glow lift, and its corner brackets now sit *outside* the
+  full glass/glow lift, and its corner brackets now sit _outside_ the
   rounded edge (`-5px`, was `4px` inset) instead of drawn inside — reads as
   floating instrumentation, not a frame on the border.
 - **Quiet** (telemetry strip, notes, tasks, agent ops, weather, github)
@@ -134,6 +135,7 @@ logging only — adding more `info`-level success logs wouldn't even be
 visible to Guardian's own scan, so none were added.
 
 Shipped:
+
 - `src/lib/system/logServerError.ts` — shared, non-generic helper
   (`logServerError`/`logServerWarn`) for server-function error branches.
   Deliberately not a `.handler()`-wrapping HOC — this project's
@@ -185,7 +187,7 @@ Shipped:
   status reads, `getUserSettings`.
 - `notes.functions.ts`, `tasks.functions.ts`, `flow.functions.ts`,
   `schema.functions.ts`: every function given the same `logServerError`
-  treatment — these had zero logging of any kind before (the *tool*
+  treatment — these had zero logging of any kind before (the _tool_
   versions of note/task CRUD already logged; the manual-UI-CRUD versions,
   used by the `/tasks`/`/notes` widgets directly, did not).
 
@@ -205,10 +207,9 @@ round either.
 
 **Confirmed live 2026-07-21** by the user — shipped as PR #36, working.
 
-
 ## 3. [W] Agent Flow Tree — **shipped 2026-07-16, superseding Situation Room**
 
-User feedback after using Strażnik: no way to *see* delegation happening —
+User feedback after using Strażnik: no way to _see_ delegation happening —
 which agent got a request, whether it called a tool, when it handed back
 to the Orchestrator. Requested a live "inverted family tree" — Orchestrator
 at the top, branching down to whichever agent it delegates to, tool calls
@@ -228,6 +229,7 @@ already records every tool (including `delegate_to_agent`) a run invoked.
 The whole tree builds from one existing table.
 
 Shipped:
+
 - `src/lib/agents/flow.functions.ts` — `getAgentFlow`, reads recent
   `agent_runs` + `agents`, returns a flat list the client groups into a
   tree (topmost ancestor of the most recent run = "current interaction").
@@ -242,7 +244,7 @@ Shipped:
 
 Verified structurally (tree-building + visual render, including the
 pulsing/travelling-dot states) via a temporary local-only dev server in
-this sandbox with synthetic data — the usual blocker applies to the *real*
+this sandbox with synthetic data — the usual blocker applies to the _real_
 data path: no live Supabase session here to confirm `getAgentFlow` against
 actual `agent_runs`. Confirm live: ask the Orchestrator to delegate to
 Strażnik (as already tested) and watch this widget while it happens.
@@ -305,7 +307,7 @@ confirming the expiry path.
 ### Third follow-up (2026-07-21): live per-tool-call detail + delegation labels
 
 Requested after using it a while: prettier, more elaborate, and — the
-real ask — actually show what an agent is *doing* (Orchestrator's current
+real ask — actually show what an agent is _doing_ (Orchestrator's current
 action, what it delegated and to whom, what Analityk's doing), with the
 description logic scaling automatically as Researcher/Producer and their
 tools land later.
@@ -319,7 +321,7 @@ write pattern, not just a missing frontend feature.
 
 Shipped, in two tiers as scoped with the user (Poziom 1 + 2):
 
-- **`runtime.server.ts`**: `agent_runs.output` now patched after *every*
+- **`runtime.server.ts`**: `agent_runs.output` now patched after _every_
   iteration's tool calls (not only in the final update), `status` staying
   `"running"` throughout — the tree can now show genuine live,
   blow-by-blow progress via its existing 3s poll, not just the complete
@@ -387,6 +389,7 @@ geometry was verified to hold as Researcher/Producer/Concierge get added,
 not just eyeballed for today's 3 teammates.
 
 Shipped, `src/components/jarvis/AgentFlowTree.tsx` fully restructured:
+
 - Orchestrator centered near the top of a fixed-height container, visibly
   larger tile (`emphasis` styling — bigger padding/font/dot/glow).
   Teammates positioned via trig on an arc below it (`FlowSpoke` renders
@@ -443,7 +446,7 @@ graphics rather than reskinned boxes.
 re-tuning constants**: the shipped Poziom-3 layout used pure circular
 trig — every teammate at the same radius from the hub, only the angle
 varying (`dx = r·sin(θ)`, `dy = r·cos(θ)`). My prior numeric verification
-before shipping only checked adjacent-node *chord* distance, never
+before shipping only checked adjacent-node _chord_ distance, never
 vertical clearance from the hub itself. At wide angles (needed for
 horizontal separation as roster size grows, capped at 85°) `cos(θ)→0`,
 so `dy→0` too — outer teammates ended up almost level with the hub
@@ -559,6 +562,7 @@ replacing Gemini-exclusive capabilities (`web_search`'s Google Search
 grounding, `remember`/`recall` embeddings — both stay Gemini-only).
 
 Shipped:
+
 - Migration `20260717120000_groq_api_key.sql` — `user_secrets.groq_api_key`
   (same BYOK pattern as Gemini). Settings → "Groq // Free Fallback Engine"
   panel to paste a free console.groq.com key (no card required).
@@ -570,7 +574,7 @@ Shipped:
   ordering — documented invariant, not a guess).
 - **Classifier fallback pass now runs on Groq first.** This was the actual
   token-efficiency win: every turn that doesn't call `perform_ui_action`
-  was silently making a *second* full paid Gemini call just to force a
+  was silently making a _second_ full paid Gemini call just to force a
   yes/no "is this a UI command" decision. That's now a free, near-instant
   Groq call (`llama-3.1-8b-instant`), with the original Gemini path kept
   intact as the fallback if no Groq key is set or Groq errors — zero
@@ -653,6 +657,7 @@ function body — this app's server-function runtime has no existing
 multipart/base64 handling and introducing one wasn't worth it for v1).
 
 Shipped:
+
 - `supabase/migrations/20260720120000_documents_rag.sql` — schema +
   Storage bucket/policies + `match_document_chunks`.
 - `supabase/migrations/20260720120500_analityk_agent.sql` — seeds
@@ -687,7 +692,7 @@ discriminated result): `MAX_FILE_SIZE_BYTES = 3MB`,
 `MAX_CHUNKS_PER_DOCUMENT = 40` — chosen tight on purpose, since this
 environment's server-function execution budget is a real, previously-
 confirmed constraint (flightRadar needed its timeout raised 10s → 25s for
-a *single* external call). A document that would exceed the chunk cap
+a _single_ external call). A document that would exceed the chunk cap
 fails explicitly (`documents.status = 'error'`, human-readable message)
 rather than silently processing only part of it. Raise the caps once real
 processing latency is observed live — deliberately not guessed upfront.
@@ -721,7 +726,7 @@ first try):
    in `runtime.server.ts`.
 2. **A second, independent bug survived fix #1**: the Orchestrator now
    correctly delegated (confirmed in the Agent Ops live feed:
-   `DELEGATING → ANALITYK`) and got a real answer — but a *separate*
+   `DELEGATING → ANALITYK`) and got a real answer — but a _separate_
    fallback classifier pass (a second Groq/Gemini call with no
    conversation history, only ever meant to catch "the model declared a
    tool but talked its way out of using it") still ran afterward, since
@@ -756,7 +761,7 @@ document-content example with a **general disambiguation principle** in
 `runtime.server.ts`'s delegation guidance: the mere presence of the word
 "agent"/"agenci"/"agentów" in a request does not imply the navigational
 `open_agents` action — that only applies when the user wants to see/open
-the agents *screen*. If the user wants agents to actually **do**
+the agents _screen_. If the user wants agents to actually **do**
 something (demonstrate capabilities, use them, complete a task), that's
 `delegate_to_agent`, never `perform_ui_action`, regardless of which UI
 action name happens to share a keyword with the request. Also added the
@@ -788,7 +793,7 @@ on top of each other, and Analityk visibly "suddenly changed position."
 Re-derived the layout math for the exact 3-teammate case shown (Marketer/
 Strażnik/Analityk, desktop) — the formula gives well-separated positions
 with real margin, matching the harness verified in the previous round.
-A *static* render should not look like this, which pointed at something
+A _static_ render should not look like this, which pointed at something
 non-deterministic between polls (the tree refetches every 3s) rather
 than the geometry formula itself.
 
@@ -841,7 +846,7 @@ guessed):**
    than composing with it — so on both of its call sites
    (`MiniArcReactor.tsx`'s core dot and the new `ReactorBadge` in
    `AgentFlowTree.tsx`, both centered via `-translate-x-1/2
-   -translate-y-1/2`), the moment `animate-pulse-core` starts, the
+-translate-y-1/2`), the moment `animate-pulse-core` starts, the
    centering translate is wiped and the dot snaps off-center by half its
    own size. This bug predates this session's work (it was already latent
    in `MiniArcReactor`, just not noticeable there — a 6px dot is off by
@@ -870,7 +875,7 @@ reported in the same batch of screenshots as everything else, right
 after the ordering fix (previous follow-up) had just merged; the
 reactor-badge visuals in that same screenshot already reflect the
 earlier PR #40 redesign, so deploys ARE landing, but there's no way from
-here to confirm whether *this specific* screenshot was taken before or
+here to confirm whether _this specific_ screenshot was taken before or
 after the ordering fix actually redeployed. Re-checked the geometry math
 again for the exact 3-teammate case shown and it's still clean given a
 stable order, so no separate geometry bug was found. **Needs a live
@@ -895,10 +900,10 @@ the user named a specific agent.
 Stopped trying to win that wording race. `system_check` is a hardcoded,
 zero-content decorative line that predates Guardian and duplicates
 nothing Guardian can't already do better (for real). Once Guardian is on
-the roster, the decorative option is strictly redundant *and actively
-harmful* — a fake "all good" is worse than useless when a genuine
+the roster, the decorative option is strictly redundant _and actively
+harmful_ — a fake "all good" is worse than useless when a genuine
 diagnostic exists one delegation away. Instead of one more instruction,
-removed `system_check` from the *declared* action enum outright whenever
+removed `system_check` from the _declared_ action enum outright whenever
 an enabled `guardian` teammate exists (`src/lib/agents/runtime.server.ts`,
 computed once as `effectiveUiActions`/`effectiveUiActionsWithNone` and
 threaded into all three places the enum is declared: the main
@@ -944,7 +949,7 @@ Confirmed and fixed for real this time: `ToolChips` used a fixed
 `max-w-[180px]` container centered on its own node, but adjacent
 teammates are only ~76px apart at the current roster size (3) — so a
 node's chip row could spill ~90px each side, well past a neighbor's
-center. Capped chip width to a fraction of the *actual* computed
+center. Capped chip width to a fraction of the _actual_ computed
 inter-node `spacing` instead of a hardcoded constant, so it scales down
 automatically as more teammates are added and can't structurally reach a
 neighbor's column. Also added a small height buffer to `containerHeight`
@@ -1072,7 +1077,7 @@ top of it:
   moment it was statically imported — confirmed via a live sandbox dev
   server run, not assumed. Fixed by making the import client-only: a
   dynamic `import("leaflet")` inside a `useEffect`, keeping only `import
-  type * as LeafletNS from "leaflet"` at the top level (type-only imports
+type * as LeafletNS from "leaflet"` at the top level (type-only imports
   are erased at compile time, so they never reach the SSR bundle). Fixed
   and reverified — the crash was gone and the map rendered correctly
   (confirmed home marker at the mocked coordinates, HUD text overlays
@@ -1111,7 +1116,7 @@ one:
 1. **CORS** — OpenSky Network's REST API doesn't send an
    `Access-Control-Allow-Origin` header for third-party origins (checked
    live: `curl -D -` shows `access-control-allow-origin:
-   https://opensky-network.org` — literally only its own domain). A
+https://opensky-network.org` — literally only its own domain). A
    browser silently blocks the response no matter what, in every real
    deployment — this was never actually working from the browser, and
    the earlier "genuinely 0 aircraft nearby" read of the first screenshot
@@ -1178,7 +1183,7 @@ Flightradar24-style viewport-driven tracker instead of a fixed-radius one.
   explicit `{lamin, lomin, lamax, lomax}` box (Leaflet's own
   `map.getBounds()`) instead of computing one from a lat/lon + fixed
   radius. Returns a `FlightQueryResult` discriminated union (`{ok:true,
-  aircraft}` vs `{ok:false, reason:"area_too_large"}`) instead of always
+aircraft}` vs `{ok:false, reason:"area_too_large"}`) instead of always
   throwing, so "you're zoomed out too far" reads as a distinct, expected
   state rather than an error.
 - `MAX_QUERY_SPAN_DEG = 15` caps the queryable area — refuses to fetch
@@ -1240,7 +1245,7 @@ endpoint from an ordinary host here never hit a rate limit at all, so the
 429 is specific to the deployed server's egress path — Cloudflare Workers
 shares its IP pool across many tenants' traffic, and adsb.lol's own docs
 describe its limits as "dynamic based on environment load" rather than a
-fixed per-caller quota, so this isn't necessarily even *our* request rate
+fixed per-caller quota, so this isn't necessarily even _our_ request rate
 tripping it.
 
 Root decision: stop chasing single points of failure one at a time. Added
@@ -1342,7 +1347,7 @@ in chat instead.
 
 Ordered after Researcher (item 11) per the "zrób mi prezentację o X" demo
 logic: Researcher gathers content, Producer compiles it. Doesn't
-strictly *require* Researcher to exist first at a technical level — could
+strictly _require_ Researcher to exist first at a technical level — could
 ship standalone and take input from Marketer or directly from the
 Orchestrator's own turn — but the intended flagship demo needs both, so
 build order follows that.
@@ -1358,7 +1363,7 @@ build order follows that.
   Architecture constraints.
 
 - **Developer agent — dispatch to a Claude Code Routine** (discussed
-  2026-07-20). Explicitly *after* Producer, not before — noted here so the
+  2026-07-20). Explicitly _after_ Producer, not before — noted here so the
   idea isn't lost, not queued as a numbered item yet.
 
   Real mechanism, not speculative: Claude Code Routines support an **API

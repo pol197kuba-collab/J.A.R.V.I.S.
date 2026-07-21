@@ -53,8 +53,7 @@ export function NotesWidget({ index = 0 }: { index?: number }) {
   });
 
   const updateMut = useMutation({
-    mutationFn: (input: { id: string; title: string; body: string }) =>
-      update({ data: input }),
+    mutationFn: (input: { id: string; title: string; body: string }) => update({ data: input }),
     onSuccess: () => {
       setEditingId(null);
       qc.invalidateQueries({ queryKey: ["notes", "list"] });
@@ -124,7 +123,8 @@ export function NotesWidget({ index = 0 }: { index?: number }) {
         <div className="flex flex-col items-center gap-2 py-6 text-center text-muted-foreground">
           <StickyNote className="h-6 w-6 opacity-40" strokeWidth={1.5} />
           <p className="text-xs">
-            No notes yet. Ask J.A.R.V.I.S. to save one, or use <span className="text-primary">NEW</span>.
+            No notes yet. Ask J.A.R.V.I.S. to save one, or use{" "}
+            <span className="text-primary">NEW</span>.
           </p>
         </div>
       )}
@@ -172,51 +172,57 @@ export function NotesWidget({ index = 0 }: { index?: number }) {
               </div>
             ) : (
               <>
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <h3 className="font-display truncate text-xs font-semibold uppercase tracking-widest text-foreground">
-                  {n.title}
-                </h3>
-                <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-                  {new Date(n.createdAt).toLocaleString()} · {n.source}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2 opacity-0 transition group-hover:opacity-100">
-                <button
-                  type="button"
-                  onClick={() => startEdit(n.id, n.title, n.body)}
-                  aria-label="Edit note"
-                >
-                  <Pencil className="h-3.5 w-3.5 text-muted-foreground hover:text-primary" strokeWidth={1.5} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (window.confirm(`Delete note "${n.title}"?`)) deleteMut.mutate(n.id);
-                  }}
-                  aria-label="Delete note"
-                >
-                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" strokeWidth={1.5} />
-                </button>
-              </div>
-            </div>
-            {n.body && (
-              <p className="mt-2 whitespace-pre-wrap break-words text-xs text-foreground/90">
-                {n.body}
-              </p>
-            )}
-            {n.tags.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {n.tags.map((t) => (
-                  <span
-                    key={t}
-                    className="border border-primary/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-widest text-primary/80"
-                  >
-                    #{t}
-                  </span>
-                ))}
-              </div>
-            )}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-display truncate text-xs font-semibold uppercase tracking-widest text-foreground">
+                      {n.title}
+                    </h3>
+                    <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                      {new Date(n.createdAt).toLocaleString()} · {n.source}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2 opacity-0 transition group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(n.id, n.title, n.body)}
+                      aria-label="Edit note"
+                    >
+                      <Pencil
+                        className="h-3.5 w-3.5 text-muted-foreground hover:text-primary"
+                        strokeWidth={1.5}
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm(`Delete note "${n.title}"?`)) deleteMut.mutate(n.id);
+                      }}
+                      aria-label="Delete note"
+                    >
+                      <Trash2
+                        className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive"
+                        strokeWidth={1.5}
+                      />
+                    </button>
+                  </div>
+                </div>
+                {n.body && (
+                  <p className="mt-2 whitespace-pre-wrap break-words text-xs text-foreground/90">
+                    {n.body}
+                  </p>
+                )}
+                {n.tags.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {n.tags.map((t) => (
+                      <span
+                        key={t}
+                        className="border border-primary/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-widest text-primary/80"
+                      >
+                        #{t}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </>
             )}
           </article>

@@ -11,9 +11,15 @@ export const Route = createFileRoute("/sub-systems")({
   head: () => ({
     meta: [
       { title: "JARVIS // Sub-Systems" },
-      { name: "description", content: "Stark sub-systems portal — secure containerised access to external modules." },
+      {
+        name: "description",
+        content: "Stark sub-systems portal — secure containerised access to external modules.",
+      },
       { property: "og:title", content: "JARVIS // Sub-Systems" },
-      { property: "og:description", content: "Stark sub-systems portal — secure containerised access to external modules." },
+      {
+        property: "og:description",
+        content: "Stark sub-systems portal — secure containerised access to external modules.",
+      },
     ],
   }),
   component: SubSystemsPage,
@@ -56,9 +62,7 @@ function SubSystemsPage() {
         </div>
       )}
 
-      {state === "loading" && mod && (
-        <ModuleLoader mod={mod} onReady={() => setState("active")} />
-      )}
+      {state === "loading" && mod && <ModuleLoader mod={mod} onReady={() => setState("active")} />}
 
       {(state === "active" || state === "terminating") && mod && (
         <ModuleFrame mod={mod} onTerminate={() => setState("terminating")} />
