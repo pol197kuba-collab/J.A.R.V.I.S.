@@ -312,14 +312,91 @@ which is the cheapest possible outcome, not a regression back to Gemini.
 Confirmed live: `classifier fallback via groq: none` appears reliably for
 ordinary chat messages after a Groq key is linked.
 
-## 6. [F] RAG over personal documents (= Analityk, deprioritized not dropped)
+## 6. [F] RAG over personal documents (= Analityk) — **built 2026-07-20, needs live verification**
 
-Extend the proven `memories`/`match_memories` pgvector pattern to a
-`documents`/`document_chunks` schema + upload/chunking Edge Function +
-`search_documents` tool. TypeScript-first (`xlsx`/`papaparse`) — no Python
-service unless a specific capability genuinely can't be done in JS. Still
-valuable, just heavier (new pipeline, not reused data) than Strażnik — goes
-after it rather than first, per the reordering above.
+Built per the build-order override above (6 → 11 → 12 ahead of Concierge).
+Scope decided 2026-07-20 before writing any code: v1 covers **.txt/.md +
+PDF only** (xlsx/csv deferred — no `papaparse`/`xlsx` needed yet), and
+document management lives on its own **new `/documents` route** rather
+than inside the per-agent console, since documents are a user-wide
+resource, not agent-specific.
+
+Extends the proven `memories`/`match_memories` pgvector pattern exactly:
+`documents`/`document_chunks` tables (same `vector(768)`/HNSW shape),
+`match_document_chunks` RPC (`SECURITY INVOKER` + `auth.uid()` filter,
+identical to `match_memories`). Confirmed via a full codebase map before
+writing anything (Agent Hub, the chat agent selector, and Agent Flow Tree
+all read the `agents`/`agent_tools` tables live — a new `analityk` row
+needs **zero frontend code changes** to appear in any of them; the
+per-agent tool-toggle console at `/agent-hub/:slug` already accepts an
+arbitrary slug, so Analityk's tools are toggleable there with no new UI
+either). Voice/text reachability matches Guardian's existing model exactly
+— always reachable via Orchestrator delegation, or by switching the active
+agent in Agent Hub for direct text chat; there is no per-agent voice
+target and building one was out of scope here.
+
+**First use of Supabase Storage in this codebase** — no prior upload
+precedent existed, so this shipped the whole pattern from scratch: a
+private `documents` bucket, storage policies scoping every object path to
+`${user_id}/...`, and a deliberately simple flow (client uploads bytes
+directly to Storage under its own session, a server function only ever
+handles metadata/extraction/embedding, never raw bytes over a server
+function body — this app's server-function runtime has no existing
+multipart/base64 handling and introducing one wasn't worth it for v1).
+
+Shipped:
+- `supabase/migrations/20260720120000_documents_rag.sql` — schema +
+  Storage bucket/policies + `match_document_chunks`.
+- `supabase/migrations/20260720120500_analityk_agent.sql` — seeds
+  `list_documents`/`search_documents` tools, creates the `analityk` agent
+  for every existing user (same 4-part shape as Guardian's migration),
+  redeclares `handle_new_user()` for future users.
+- `src/lib/agents/tools.server.ts` — `list_documents`, `search_documents`
+  (same best-effort semantic-then-keyword-fallback shape as `recall`, two
+  plain queries instead of an embedded join per this file's own existing
+  discipline against hand-maintained embedded-relation types). `embedText`/
+  `toVectorLiteral` exported for reuse (were private to this file before).
+- `src/lib/documents/documents.functions.ts` — `createDocumentFn` (reserves
+  a `documents` row + storage path), `processDocumentFn` (download →
+  extract text [`unpdf` for PDF, chosen specifically because it targets
+  edge/serverless runtimes with no native deps — matches this app's
+  observed Cloudflare-Workers-shaped deployment] → paragraph-aware chunk →
+  batch-embed → store), `listDocumentsFn`, `deleteDocumentFn`.
+  **A real bug caught before shipping**: `tools.server.ts` is a
+  `.server.ts` module; this file is a `.functions.ts` file, which — per
+  `client.server.ts`'s own header comment — ships to the client bundle.
+  A top-level `import { embedText } from ".../tools.server"` would have
+  been exactly the unsafe pattern that comment warns against. Fixed to a
+  dynamic `import()` inside the handler, matching the precedent already
+  set by `runtime.functions.ts` doing the same for `runtime.server.ts`.
+- `src/routes/documents.tsx` — upload (direct-to-Storage client upload,
+  same HUD grid-list style as `tasks.tsx`), status list (uploading →
+  processing → ready/error), delete. Sidebar entry added.
+
+**Conservative caps, explicit and documented rather than silently
+truncating** (same design language as flightRadar's `area_too_large`
+discriminated result): `MAX_FILE_SIZE_BYTES = 3MB`,
+`MAX_CHUNKS_PER_DOCUMENT = 40` — chosen tight on purpose, since this
+environment's server-function execution budget is a real, previously-
+confirmed constraint (flightRadar needed its timeout raised 10s → 25s for
+a *single* external call). A document that would exceed the chunk cap
+fails explicitly (`documents.status = 'error'`, human-readable message)
+rather than silently processing only part of it. Raise the caps once real
+processing latency is observed live — deliberately not guessed upfront.
+
+**Not verified live in this sandbox** (same standing limitation as every
+migration-touching change in this project): no live Supabase connection
+here, `bun install` repeatedly failed to fully complete (network/proxy
+flakiness in this sandbox, unrelated to this code), so no full
+`tsc`/`vite build` this round — verified instead via `esbuild` transpile +
+`node --check` on every touched file (clean) and careful manual review
+against the exact patterns confirmed live in the codebase map. **Needs,
+in order**: (1) the two migrations pasted into the Supabase SQL editor —
+git merge alone does not apply them, this is the exact mistake that made
+Guardian invisible for a while; (2) a real `tsc`/`eslint`/`vite build`
+pass once dependencies install cleanly; (3) a live upload of a real .txt
+and a real PDF, confirming Analityk actually answers a question grounded
+in the uploaded content via `search_documents`.
 
 ## 7. [W] Situation Room — **shipped 2026-07-17, flight radar confirmed live 2026-07-20**
 

@@ -417,7 +417,7 @@ const EMBED_MODEL = "gemini-embedding-001";
 // response) returns null so the caller falls back to keyword search instead
 // of failing the whole tool. `taskType` steers Gemini to produce embeddings
 // tuned for either the stored document or the search query.
-async function embedText(
+export async function embedText(
   text: string,
   apiKey: string,
   taskType: "RETRIEVAL_DOCUMENT" | "RETRIEVAL_QUERY",
@@ -456,7 +456,7 @@ async function embedText(
 
 // supabase-js serialises a vector column value as a JSON-array string, e.g.
 // "[0.12,-0.03,…]". Kept as a tiny helper so remember/recall agree on format.
-const toVectorLiteral = (values: number[]): string => JSON.stringify(values);
+export const toVectorLiteral = (values: number[]): string => JSON.stringify(values);
 
 const remember: Tool = {
   declaration: {
@@ -1061,6 +1061,137 @@ const checkDelegation: Tool = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Analityk tools — RAG over public.documents / public.document_chunks
+// ---------------------------------------------------------------------------
+
+const listDocumentsTool: Tool = {
+  declaration: {
+    name: "list_documents",
+    description:
+      "List the documents the user has uploaded for analysis, with processing status and chunk count. Use to check what's available before searching, or to answer 'what documents do I have'.",
+    parameters: {
+      type: "object",
+      properties: {
+        limit: { type: "integer", description: "Max results (default 20, max 50)." },
+      },
+    },
+  },
+  async execute(args, ctx) {
+    const limit = clampInt(args.limit, 1, 50, 20);
+    const { data, error } = await ctx.supabase
+      .from("documents")
+      .select(
+        "id, filename, mime_type, status, char_count, chunk_count, error_message, created_at",
+      )
+      .eq("user_id", ctx.userId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) return { error: error.message };
+    return { count: data?.length ?? 0, documents: data ?? [] };
+  },
+};
+
+const searchDocumentsTool: Tool = {
+  declaration: {
+    name: "search_documents",
+    description:
+      "Semantic search over the content of the user's uploaded documents (RAG). Use whenever the user asks a question that could be answered from a document they've uploaded. Returns the most relevant chunks with their source filename — always cite which document an answer came from.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "What to search for, in natural language." },
+        limit: { type: "integer", description: "Max chunks to return (default 6, max 20)." },
+      },
+      required: ["query"],
+    },
+  },
+  async execute(args, ctx) {
+    const query = String(args.query ?? "").trim();
+    if (!query) return { error: "empty_query" };
+    const limit = clampInt(args.limit, 1, 20, 6);
+
+    type Hit = {
+      chunk_id: string;
+      document_id: string;
+      filename: string;
+      chunk_index: number;
+      content: string;
+      similarity?: number;
+    };
+    const merged: Hit[] = [];
+    const seen = new Set<string>();
+    const push = (rows: Hit[] | null | undefined) => {
+      for (const r of rows ?? []) {
+        if (seen.has(r.chunk_id)) continue;
+        seen.add(r.chunk_id);
+        merged.push(r);
+      }
+    };
+
+    // 1. Semantic pass — same best-effort shape as `recall`: embed the
+    //    query, skip silently (fall through to keyword pass) on any
+    //    failure (no key, quota, network).
+    let semanticUsed = false;
+    const queryEmbedding = await embedText(query, ctx.apiKey, "RETRIEVAL_QUERY");
+    if (queryEmbedding) {
+      const { data: sem, error: semErr } = await ctx.supabase.rpc("match_document_chunks", {
+        query_embedding: toVectorLiteral(queryEmbedding),
+        match_count: limit,
+      });
+      if (!semErr) {
+        semanticUsed = true;
+        push(sem as Hit[] | null);
+      }
+    }
+
+    // 2. Keyword fallback/backfill — ILIKE on chunk content, always runs so
+    //    a missing/failed embedding still returns something useful instead
+    //    of a hard error. Two simple queries (chunks, then a filename
+    //    lookup) rather than an embedded join — same discipline as
+    //    `getEnabledToolsForAgent` below, avoiding a hand-maintained
+    //    embedded-relation type that could drift from the generated schema.
+    if (merged.length < limit) {
+      const kwQuery = sanitizeForOrFilter(query);
+      if (kwQuery) {
+        const { data: kw } = await ctx.supabase
+          .from("document_chunks")
+          .select("id, document_id, chunk_index, content")
+          .eq("user_id", ctx.userId)
+          .ilike("content", `%${kwQuery}%`)
+          .limit(limit - merged.length);
+        const rows = kw ?? [];
+        if (rows.length > 0) {
+          const docIds = [...new Set(rows.map((r) => r.document_id))];
+          const { data: docs } = await ctx.supabase
+            .from("documents")
+            .select("id, filename")
+            .in("id", docIds);
+          const filenameById = new Map((docs ?? []).map((d) => [d.id, d.filename]));
+          push(
+            rows.map((r) => ({
+              chunk_id: r.id,
+              document_id: r.document_id,
+              filename: filenameById.get(r.document_id) ?? "unknown",
+              chunk_index: r.chunk_index,
+              content: r.content,
+            })),
+          );
+        }
+      }
+    }
+
+    const results = merged.slice(0, limit);
+    await ctx.logEvent(
+      "info",
+      "tool.search_documents",
+      `${query} → ${results.length} hits${semanticUsed ? " (semantic)" : ""}`,
+      { query, hits: results.length, semantic: semanticUsed } as Json,
+    );
+    return { count: results.length, chunks: results };
+  },
+};
+
 // Full catalog of tool *implementations* known to this codebase. This array
 // is the only place `execute` logic lives — it never shrinks based on DB
 // state, so a disabled tool's code stays available (just unreachable via the
@@ -1081,6 +1212,8 @@ export const ALL_TOOLS: Tool[] = [
   scanErrors,
   runStats,
   checkDelegation,
+  listDocumentsTool,
+  searchDocumentsTool,
 ];
 
 export function getToolByName(name: string): Tool | undefined {

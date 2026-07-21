@@ -10,6 +10,7 @@ import {
   Eye,
   ListChecks,
   Database,
+  FileText,
 } from "lucide-react";
 import {
   Sidebar,
@@ -41,6 +42,7 @@ const items = [
   { title: "Vision", url: "/vision", icon: Eye },
   { title: "System Logs", url: "/system-logs", icon: Terminal },
   { title: "Schema", url: "/schema", icon: Database },
+  { title: "Documents", url: "/documents", icon: FileText },
   { title: "Settings", url: "/settings", icon: SettingsIcon },
 ] as const;
 
