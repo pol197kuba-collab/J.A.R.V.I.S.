@@ -17,12 +17,16 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { logServerError } from "@/lib/system/logServerError";
+import type { Json } from "@/integrations/supabase/types";
 
 export type FlowAgent = { slug: string; name: string };
 
 export type FlowToolCall = {
   name: string;
-  args: Record<string, unknown>;
+  // Json (not Record<string, unknown>) so the server-fn result passes
+  // TanStack Start's serializability validation — `unknown` fails it, which
+  // collapsed getAgentFlow's inferred return type to {} for every consumer.
+  args: Record<string, Json>;
 };
 
 export type FlowDelegation = {
@@ -50,7 +54,7 @@ export type FlowRun = {
 
 export type FlowResult = { agents: FlowAgent[]; runs: FlowRun[] };
 
-type RawToolCall = { name: string; args?: Record<string, unknown> };
+type RawToolCall = { name: string; args?: Record<string, Json> };
 
 export const getAgentFlow = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])

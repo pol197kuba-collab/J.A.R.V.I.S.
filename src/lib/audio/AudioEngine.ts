@@ -289,7 +289,9 @@ class Engine {
             o1.stop();
             o2.stop();
             lfo.stop();
-          } catch {}
+          } catch {
+            /* ignore */
+          }
         }, 700);
       },
     };

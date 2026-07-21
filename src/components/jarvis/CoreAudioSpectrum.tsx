@@ -42,7 +42,7 @@ export function CoreAudioSpectrum({ active }: { active: boolean }) {
     }
 
     const BARS = 72;
-    let t0 = performance.now();
+    const t0 = performance.now();
     const draw = (t: number) => {
       const ctx = cvs.getContext("2d");
       if (!ctx) return;

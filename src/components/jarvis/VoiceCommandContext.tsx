@@ -715,7 +715,9 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
         rec.onend = null;
         rec.onresult = null;
         rec.stop();
-      } catch {}
+      } catch {
+        /* ignore */
+      }
       recRef.current = null;
       setListening(false);
     };
