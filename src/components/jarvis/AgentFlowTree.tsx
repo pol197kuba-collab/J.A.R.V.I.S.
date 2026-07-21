@@ -35,17 +35,26 @@ function currentActionLine(run: FlowRun): string | null {
   return describeToolCall(last.name, last.args);
 }
 
-function ToolChips({ calls }: { calls: FlowToolCall[] }) {
+// `maxWidth` is derived from the actual horizontal gap between this node
+// and its neighbors (`spacing` in the main component), NOT a fixed
+// constant — a hardcoded 180px container centered on a node whose
+// neighbors sit only ~76px away (the common case at today's roster size)
+// structurally spills chip content into the neighbor's own label column.
+// Capping to a safe fraction of the real gap keeps chips inside this
+// node's own "lane" regardless of how tight the layout gets as more
+// teammates are added.
+function ToolChips({ calls, maxWidth }: { calls: FlowToolCall[]; maxWidth: number }) {
   if (calls.length === 0) return null;
   return (
-    <div className="mt-1 flex max-w-[180px] flex-wrap justify-center gap-1">
+    <div className="mt-1 flex flex-wrap justify-center gap-1" style={{ maxWidth }}>
       {calls.map((call, i) => {
         const label = describeToolCall(call.name, call.args);
         return (
           <span
             key={`${call.name}-${i}`}
             title={label}
-            className="animate-flow-node-in max-w-[130px] truncate rounded-full border border-primary/20 bg-[color:var(--surface-1)] px-1.5 py-0.5 font-display text-[7px] uppercase tracking-[0.15em] text-primary/70"
+            className="animate-flow-node-in truncate rounded-full border border-primary/20 bg-[color:var(--surface-1)] px-1.5 py-0.5 font-display text-[7px] uppercase tracking-[0.15em] text-primary/70"
+            style={{ maxWidth }}
           >
             {label}
           </span>
@@ -387,7 +396,17 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
   });
   const anchorY = orchRadius + 14 * mobileScale;
   const maxDy = teammatePositions.reduce((m, p) => Math.max(m, p.dy), 0);
-  const containerHeight = anchorY + maxDy + (isMobile ? 46 : 54);
+  // +26 reserves room for an active node's ToolChips row so it doesn't get
+  // clipped against the panel's own bottom edge — chips are optional
+  // (only render for a node with tool calls), so this is a flat buffer
+  // rather than something computed per-render.
+  const containerHeight = anchorY + maxDy + (isMobile ? 46 : 54) + 26;
+  // See the ToolChips definition above: without this, a node's chip row
+  // (previously a fixed 180px, centered on that node) spills into a
+  // neighbor's label column whenever neighbors sit closer together than
+  // ~180px apart — true today at n=3 (spacing is 76px). Scales down
+  // automatically as the roster grows and nodes pack tighter.
+  const chipsMaxWidth = n > 1 ? Math.max(60, Math.min(180, spacing * 0.85)) : 180;
 
   const selectedRuns = useMemo(
     () => (selectedSlug ? runs.filter((r) => r.agentSlug === selectedSlug) : []),
@@ -461,7 +480,7 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
                     selected={selectedSlug === t.slug}
                     onClick={() => setSelectedSlug((s) => (s === t.slug ? null : t.slug))}
                   />
-                  {run && <ToolChips calls={run.toolCalls} />}
+                  {run && <ToolChips calls={run.toolCalls} maxWidth={chipsMaxWidth} />}
                 </div>
               );
             })}
