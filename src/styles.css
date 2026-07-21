@@ -191,9 +191,16 @@
   }
 }
 
+/* Both current users (MiniArcReactor, AgentFlowTree's ReactorBadge) apply
+   this to an element centered via `left-1/2 top-1/2 -translate-x-1/2
+   -translate-y-1/2` — the translate(-50%,-50%) has to be repeated in every
+   keyframe step, because an animated `transform` fully replaces the
+   element's static transform for as long as the animation runs, rather
+   than composing with it. Without it, the dot snaps off-center (by half
+   its own size) the instant the animation starts. */
 @keyframes pulse-core {
-  0%, 100% { transform: scale(1); opacity: 0.95; filter: brightness(1); }
-  50% { transform: scale(1.06); opacity: 1; filter: brightness(1.25); }
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.95; filter: brightness(1); }
+  50% { transform: translate(-50%, -50%) scale(1.06); opacity: 1; filter: brightness(1.25); }
 }
 /* Agent Flow Tree — nodes/chips fade+grow in as delegation branches appear */
 @keyframes flow-node-in {

@@ -822,6 +822,63 @@ working dev server/Supabase connection) — needs live re-confirmation
 that node positions now stay put across the 3s poll cycle instead of
 swapping.
 
+### Fourth follow-up (2026-07-21): mini-arc core CSS bug + system_check shadowing Guardian
+
+User reported three things at once right after the previous fix went out:
+Strażnik/Analityk still overlapping in the flow tree, the ReactorBadge's
+pulsing core dot visibly shifting position while a node is active
+("mini arc core przesuwa się podczas ładowania"), and asking Strażnik to
+"wykonaj kontrolę systemu" getting only a generic "wykonuję kontrolę" with
+no real findings.
+
+**Confirmed and fixed, both real, root-caused from source (not
+guessed):**
+
+1. **Core-dot shift — a genuine, previously-dormant CSS bug.** The shared
+   `pulse-core` keyframe (`src/styles.css`) animated `transform: scale(...)`
+   directly. A CSS animation's declared `transform` fully replaces the
+   element's static `transform` for the animation's whole duration rather
+   than composing with it — so on both of its call sites
+   (`MiniArcReactor.tsx`'s core dot and the new `ReactorBadge` in
+   `AgentFlowTree.tsx`, both centered via `-translate-x-1/2
+   -translate-y-1/2`), the moment `animate-pulse-core` starts, the
+   centering translate is wiped and the dot snaps off-center by half its
+   own size. This bug predates this session's work (it was already latent
+   in `MiniArcReactor`, just not noticeable there — a 6px dot is off by
+   only ~1.5px) — the new `ReactorBadge` just made it visible for the
+   first time, on a bigger/more-scrutinized dot. Fixed by baking
+   `translate(-50%, -50%)` into every keyframe step so the animation no
+   longer discards it.
+2. **`system_check` UI action shadowing Guardian's real diagnostics.**
+   `system_check` (`VoiceCommandContext.tsx`) is a purely decorative,
+   hardcoded line ("Wszystkie systemy sprawne... Temperatura rdzenia
+   nominalna") with zero real content — it predates Guardian and was
+   never wired to it. Guardian's actual tools (`guardian_scan_errors`,
+   `guardian_run_stats`, `guardian_check_delegation`) DO produce a real
+   report, but "wykonaj kontrolę systemu" matches `system_check`'s own
+   trigger phrase almost exactly, so the Orchestrator kept calling the
+   decorative action instead of delegating — same root cause as the two
+   `open_agents`/`perform_ui_action` bugs above, different collision.
+   Added an explicit rule to the delegation guidance in
+   `runtime.server.ts`: when guardian is on the roster and the user asks
+   for a system check/status/health report, always delegate to guardian
+   instead of firing `system_check`.
+
+**Not independently re-verified this round — deployment timing is the
+prime suspect, not a remaining code bug:** the flow-tree overlap was
+reported in the same batch of screenshots as everything else, right
+after the ordering fix (previous follow-up) had just merged; the
+reactor-badge visuals in that same screenshot already reflect the
+earlier PR #40 redesign, so deploys ARE landing, but there's no way from
+here to confirm whether *this specific* screenshot was taken before or
+after the ordering fix actually redeployed. Re-checked the geometry math
+again for the exact 3-teammate case shown and it's still clean given a
+stable order, so no separate geometry bug was found. **Needs a live
+re-check specifically for this**: if the overlap persists after a hard
+refresh (giving the deploy time to land), it's a real remaining bug and
+needs the actual live `agents` row `created_at` values inspected next;
+if it's gone, it was deploy lag.
+
 ## 7. [W] Situation Room — **shipped 2026-07-17, flight radar confirmed live 2026-07-20**
 
 Merged `geo-tracking`, `WeatherTelemetry`, `GithubActivityPulse` and
