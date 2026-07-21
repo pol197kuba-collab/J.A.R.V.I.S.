@@ -191,6 +191,27 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     .eq("owner_id", userId)
     .order("created_at", { ascending: true });
   const teammates = (roster ?? []).filter((r) => r.slug !== agent.slug);
+
+  // `system_check` is a purely decorative UI action (a hardcoded "wszystko
+  // sprawne" line, zero real content) that predates Guardian and was never
+  // wired to it. Three rounds of prompt-only carve-outs for this exact
+  // collision (open_agents wording, then system_check wording, then this)
+  // each got defeated by a new phrasing — the aggressive "always call
+  // perform_ui_action" instruction reliably out-argues a textual exception
+  // no matter how it's worded. Once Guardian can actually answer this for
+  // real, the decorative option is strictly redundant AND actively
+  // misleading (a fake "all good" beats a real diagnostic), so it's
+  // removed from the declared enum outright whenever an enabled Guardian
+  // exists — the model then has no way to select it, by construction,
+  // rather than one more instruction to hopefully win a wording race.
+  const hasEnabledGuardian = teammates.some((t) => t.slug === "guardian" && t.is_enabled);
+  const effectiveUiActions: string[] = hasEnabledGuardian
+    ? UI_ACTIONS.filter((a) => a !== "system_check")
+    : [...UI_ACTIONS];
+  const effectiveUiActionsWithNone: string[] = hasEnabledGuardian
+    ? UI_ACTIONS_WITH_NONE.filter((a) => a !== "system_check")
+    : [...UI_ACTIONS_WITH_NONE];
+
   const rosterBlock =
     teammates.length > 0
       ? `\n\nTEAM ROSTER — inne agenty w systemie (nie odmawiaj ich istnienia):\n` +
@@ -345,7 +366,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         properties: {
           action: {
             type: "string",
-            enum: UI_ACTIONS as unknown as string[],
+            enum: effectiveUiActions,
             description: "Konkretna akcja do wykonania w interfejsie.",
           },
         },
@@ -631,7 +652,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           properties: {
             action: {
               type: "string",
-              enum: UI_ACTIONS_WITH_NONE as unknown as string[],
+              enum: effectiveUiActionsWithNone,
               description: 'Dokładnie jedna wartość — konkretna akcja albo "none".',
             },
           },
@@ -720,7 +741,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
                           properties: {
                             action: {
                               type: "string",
-                              enum: UI_ACTIONS_WITH_NONE as unknown as string[],
+                              enum: effectiveUiActionsWithNone,
                               description: 'Dokładnie jedna wartość — konkretna akcja albo "none".',
                             },
                           },
