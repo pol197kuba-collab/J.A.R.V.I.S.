@@ -203,7 +203,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           )
           .join("\n") +
         (agent.slug === "orchestrator"
-          ? `\n\nJako Orchestrator MOŻESZ delegować zadanie do wybranego kolegi używając narzędzia delegate_to_agent(slug, task). Rób to, kiedy zadanie pasuje wyraźnie do specjalizacji innego agenta (np. copy / marketing → marketer). Zwracaj użytkownikowi krótkie streszczenie odpowiedzi delegowanego agenta w swoim głosie.`
+          ? `\n\nJako Orchestrator MOŻESZ delegować zadanie do wybranego kolegi używając narzędzia delegate_to_agent(slug, task). Rób to, kiedy zadanie pasuje wyraźnie do specjalizacji innego agenta (np. copy / marketing → marketer; pytanie o treść/zawartość przesłanego dokumentu lub pliku → analityk). WAŻNE: pytanie o TREŚĆ czegoś (np. "co jest w dokumencie X", "co zawiera plik Y") to pytanie merytoryczne, NIE polecenie sterowania interfejsem — w takiej sytuacji NIE wywołuj ${UI_ACTION_TOOL_NAME}, tylko deleguj do analityk. Zwracaj użytkownikowi krótkie streszczenie odpowiedzi delegowanego agenta w swoim głosie.`
           : "")
       : "";
 
