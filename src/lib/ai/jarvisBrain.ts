@@ -9,6 +9,7 @@
 
 import { JARVIS_PERSONA } from "./persona";
 import { setAgentBusy, reportOutcome } from "./agentActivity";
+import { logClientEvent } from "@/lib/system/logClientEvent";
 
 const MODELS = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"];
 const endpointFor = (model: string) =>
@@ -268,10 +269,15 @@ export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
         return { action: (result.action ?? "none") as JarvisAction, speech: result.output };
       }
       console.warn("[brain] server runtime returned error", result.error);
+      void logClientEvent("warn", "jarvis_brain_client", `server runtime returned error: ${result.error ?? "unknown"}`, {
+        status: result.status,
+      });
       // fall through to client-side path
     } catch (err) {
       reportOutcome("error");
+      const msg = err instanceof Error ? err.message : String(err);
       console.warn("[brain] server runtime exception", err);
+      void logClientEvent("error", "jarvis_brain_client", `server runtime exception: ${msg}`);
       // fall through to client-side path
     }
   }
@@ -325,13 +331,27 @@ export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
       // 4xx (bad key, invalid request) — no point retrying.
       const bodyText = await res.text().catch(() => "");
       console.warn("[brain] gemini failed", res.status, bodyText.slice(0, 400));
+      void logClientEvent(
+        "error",
+        "jarvis_brain_client",
+        `gemini ${model} failed with ${res.status}: ${bodyText.slice(0, 300)}`,
+        { model, status: res.status },
+      );
       return fb();
     }
-    if (!res) return fb();
+    if (!res) {
+      void logClientEvent(
+        "error",
+        "jarvis_brain_client",
+        `all models exhausted (network errors / 5xx / rate limit): ${MODELS.join(", ")}`,
+      );
+      return fb();
+    }
     const data = await res.json();
     const text: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) {
       console.warn("[brain] gemini empty candidate", JSON.stringify(data).slice(0, 400));
+      void logClientEvent("warn", "jarvis_brain_client", "gemini returned an empty candidate");
       return fb();
     }
     const parsed = tryParseJson(text);
@@ -344,11 +364,14 @@ export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
     const trimmed = text.trim();
     if (trimmed.length > 0) {
       console.warn("[brain] parse failed, using raw text", trimmed.slice(0, 200));
+      void logClientEvent("warn", "jarvis_brain_client", "gemini reply wasn't valid JSON, used raw text");
       return { action: "none", speech: trimmed };
     }
     return fb();
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
     console.warn("[brain] gemini exception", err);
+    void logClientEvent("error", "jarvis_brain_client", `gemini call exception: ${msg}`);
     return fb();
   }
 }

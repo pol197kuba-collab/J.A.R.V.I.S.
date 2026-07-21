@@ -6,8 +6,9 @@
 
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import type { Database } from "@/integrations/supabase/types";
+import type { Database, Json } from "@/integrations/supabase/types";
 import { z } from "zod";
+import { logServerError } from "@/lib/system/logServerError";
 
 export type TaskStatus = "todo" | "in_progress" | "done" | "cancelled";
 
@@ -91,7 +92,10 @@ export const listTasks = createServerFn({ method: "GET" })
           });
 
     const { data: rows, error } = await q.limit(200);
-    if (error) throw new Error(error.message);
+    if (error) {
+      await logServerError(supabase, userId, "tasks.list", error);
+      throw new Error(error.message);
+    }
     return ((rows as Row[] | null) ?? []).map(mapRow);
   });
 
@@ -122,7 +126,10 @@ export const createTask = createServerFn({ method: "POST" })
       })
       .select(SELECT)
       .single();
-    if (error) throw new Error(error.message);
+    if (error) {
+      await logServerError(supabase, userId, "tasks.create", error, { title: data.title } as Json);
+      throw new Error(error.message);
+    }
     return mapRow(row as Row);
   });
 
@@ -157,7 +164,10 @@ export const updateTask = createServerFn({ method: "POST" })
       .eq("id", data.id)
       .select(SELECT)
       .single();
-    if (error) throw new Error(error.message);
+    if (error) {
+      await logServerError(supabase, userId, "tasks.update", error, { task_id: data.id } as Json);
+      throw new Error(error.message);
+    }
     return mapRow(row as Row);
   });
 
@@ -169,6 +179,9 @@ export const deleteTask = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { error } = await supabase.from("tasks").delete().eq("user_id", userId).eq("id", data.id);
-    if (error) throw new Error(error.message);
+    if (error) {
+      await logServerError(supabase, userId, "tasks.delete", error, { task_id: data.id } as Json);
+      throw new Error(error.message);
+    }
     return { ok: true as const };
   });

@@ -17,6 +17,7 @@ import { askJarvis, hasGeminiKey, type JarvisAction } from "@/lib/ai/jarvisBrain
 import { emitChat, getRecentHistory } from "@/lib/ai/chatBus";
 import { matchesReboot } from "@/lib/ai/rebootPhrases";
 import { getUserSettings } from "@/lib/agents/runtime.functions";
+import { logClientEvent } from "@/lib/system/logClientEvent";
 
 type Ctx = {
   enabled: boolean;
@@ -595,6 +596,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
     if (!enabled) return;
     if (!Ctor) {
       console.warn("[voice] SpeechRecognition not supported in this browser");
+      void logClientEvent("warn", "voice", "SpeechRecognition not supported in this browser");
       return;
     }
     let stopped = false;
@@ -690,6 +692,11 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
     rec.onstart = () => console.log("=== STT ENGINE STARTED ===");
     rec.onerror = (err) => {
       console.error("=== STT ENGINE ERROR ===", err);
+      void logClientEvent(
+        "error",
+        "voice",
+        `speech recognition engine error: ${err instanceof Error ? err.message : String(err)}`,
+      );
       // browser may auto-stop; onend handles restart
     };
     try {

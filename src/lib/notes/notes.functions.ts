@@ -5,6 +5,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
+import type { Json } from "@/integrations/supabase/types";
+import { logServerError } from "@/lib/system/logServerError";
 
 export type Note = {
   id: string;
@@ -26,7 +28,10 @@ export const listNotes = createServerFn({ method: "GET" })
       .eq("owner_id", userId)
       .order("created_at", { ascending: false })
       .limit(50);
-    if (error) throw new Error(error.message);
+    if (error) {
+      await logServerError(supabase, userId, "notes.list", error);
+      throw new Error(error.message);
+    }
     return (data ?? []).map((n) => ({
       id: n.id,
       title: n.title,
@@ -60,7 +65,10 @@ export const createNote = createServerFn({ method: "POST" })
       })
       .select("id, title, body, tags, source, created_at, updated_at")
       .single();
-    if (error) throw new Error(error.message);
+    if (error) {
+      await logServerError(supabase, userId, "notes.create", error, { title: data.title } as Json);
+      throw new Error(error.message);
+    }
     return {
       id: row.id,
       title: row.title,
@@ -84,7 +92,10 @@ export const deleteNote = createServerFn({ method: "POST" })
       .delete()
       .eq("owner_id", userId)
       .eq("id", data.id);
-    if (error) throw new Error(error.message);
+    if (error) {
+      await logServerError(supabase, userId, "notes.delete", error, { note_id: data.id } as Json);
+      throw new Error(error.message);
+    }
     return { ok: true as const };
   });
 
@@ -113,7 +124,10 @@ export const updateNote = createServerFn({ method: "POST" })
       .eq("id", data.id)
       .select("id, title, body, tags, source, created_at, updated_at")
       .single();
-    if (error) throw new Error(error.message);
+    if (error) {
+      await logServerError(supabase, userId, "notes.update", error, { note_id: data.id } as Json);
+      throw new Error(error.message);
+    }
     return {
       id: row.id,
       title: row.title,

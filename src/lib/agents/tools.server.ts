@@ -272,7 +272,9 @@ const fetchUrl: Tool = {
       } as Json);
       return { url, status: res.status, text, truncated: stripped.length > MAX_FETCH_BYTES };
     } catch (err) {
-      return { error: err instanceof Error ? err.message : String(err) };
+      const message = err instanceof Error ? err.message : String(err);
+      await ctx.logEvent("error", "tool.fetch_url", `${url}: ${message}`, { url } as Json);
+      return { error: message };
     }
   },
 };
@@ -322,7 +324,10 @@ const saveNote: Tool = {
       })
       .select("id")
       .single();
-    if (error) return { error: error.message };
+    if (error) {
+      await ctx.logEvent("error", "tool.save_note", error.message, { title } as Json);
+      return { error: error.message };
+    }
     await ctx.logEvent("info", "tool.save_note", `note saved: ${title}`, {
       note_id: data.id,
       title,
@@ -359,7 +364,10 @@ const listNotesTool: Tool = {
       q = q.or(`title.ilike.%${query}%,body.ilike.%${query}%`);
     }
     const { data, error } = await q.order("created_at", { ascending: false }).limit(limit);
-    if (error) return { error: error.message };
+    if (error) {
+      await ctx.logEvent("error", "tool.list_notes", error.message, { query } as Json);
+      return { error: error.message };
+    }
     return { count: data?.length ?? 0, notes: data ?? [] };
   },
 };
@@ -387,7 +395,10 @@ const deleteNote: Tool = {
       .eq("owner_id", ctx.userId)
       .select("id, title")
       .maybeSingle();
-    if (error) return { error: error.message };
+    if (error) {
+      await ctx.logEvent("error", "tool.delete_note", error.message, { id } as Json);
+      return { error: error.message };
+    }
     if (!data) return { error: "note_not_found" };
     await ctx.logEvent("info", "tool.delete_note", `note deleted: ${data.title}`, {
       note_id: data.id,
@@ -518,7 +529,10 @@ const remember: Tool = {
           .from("memories")
           .update({ value, tags, importance, source: "orchestrator", ...embeddingPatch })
           .eq("id", existing.id);
-        if (error) return { error: error.message };
+        if (error) {
+          await ctx.logEvent("error", "tool.remember", error.message, { key } as Json);
+          return { error: error.message };
+        }
         await ctx.logEvent("info", "tool.remember", `updated memory: ${key}`, {
           memory_id: existing.id,
           key,
@@ -543,7 +557,10 @@ const remember: Tool = {
       })
       .select("id")
       .single();
-    if (error) return { error: error.message };
+    if (error) {
+      await ctx.logEvent("error", "tool.remember", error.message, { key } as Json);
+      return { error: error.message };
+    }
     await ctx.logEvent("info", "tool.remember", `saved memory${key ? `: ${key}` : ""}`, {
       memory_id: data.id,
       key,
@@ -624,6 +641,14 @@ const recall: Tool = {
         if (!semErr) {
           semanticUsed = true;
           push(sem as Hit[] | null);
+        } else {
+          // Previously swallowed entirely — semantic search silently
+          // degrading to keyword-only with zero trace was exactly the kind
+          // of "something's wrong and Guardian has no idea" gap this pass
+          // exists to close.
+          await ctx.logEvent("warn", "tool.recall", `match_memories RPC failed: ${semErr.message}`, {
+            query: rawQuery,
+          } as Json);
         }
       }
     }
@@ -646,7 +671,10 @@ const recall: Tool = {
       .order("importance", { ascending: false })
       .order("updated_at", { ascending: false })
       .limit(limit);
-    if (error && merged.length === 0) return { error: error.message };
+    if (error) {
+      await ctx.logEvent("error", "tool.recall", error.message, { query: rawQuery } as Json);
+      if (merged.length === 0) return { error: error.message };
+    }
     push(kw as Hit[] | null);
 
     const results = merged.slice(0, limit);
@@ -734,7 +762,10 @@ const createTask: Tool = {
       })
       .select("id, title, status, priority")
       .single();
-    if (error) return { error: error.message };
+    if (error) {
+      await ctx.logEvent("error", "tool.create_task", error.message, { title } as Json);
+      return { error: error.message };
+    }
     await ctx.logEvent("info", "tool.create_task", `task created: ${title}`, {
       task_id: data.id,
       assignee,
@@ -787,7 +818,10 @@ const listTasks: Tool = {
       .order("priority", { ascending: true })
       .order("created_at", { ascending: true })
       .limit(limit);
-    if (error) return { error: error.message };
+    if (error) {
+      await ctx.logEvent("error", "tool.list_tasks", error.message, { status, assignee } as Json);
+      return { error: error.message };
+    }
     return { count: data?.length ?? 0, tasks: data ?? [] };
   },
 };
@@ -838,7 +872,10 @@ const updateTask: Tool = {
       .eq("user_id", ctx.userId)
       .select("id, title, status, priority")
       .maybeSingle();
-    if (error) return { error: error.message };
+    if (error) {
+      await ctx.logEvent("error", "tool.update_task", error.message, { id } as Json);
+      return { error: error.message };
+    }
     if (!data) return { error: "task_not_found" };
     await ctx.logEvent("info", "tool.update_task", `task updated: ${data.title} → ${data.status}`, {
       task_id: data.id,
@@ -871,7 +908,10 @@ const deleteTask: Tool = {
       .eq("user_id", ctx.userId)
       .select("id, title")
       .maybeSingle();
-    if (error) return { error: error.message };
+    if (error) {
+      await ctx.logEvent("error", "tool.delete_task", error.message, { id } as Json);
+      return { error: error.message };
+    }
     if (!data) return { error: "task_not_found" };
     await ctx.logEvent("info", "tool.delete_task", `task deleted: ${data.title}`, {
       task_id: data.id,
@@ -923,7 +963,10 @@ const scanErrors: Tool = {
       .gte("created_at", since)
       .order("created_at", { ascending: false })
       .limit(limit);
-    if (eventsErr) return { error: eventsErr.message };
+    if (eventsErr) {
+      await ctx.logEvent("error", "tool.guardian_scan_errors", eventsErr.message);
+      return { error: eventsErr.message };
+    }
 
     const { data: runs, error: runsErr } = await ctx.supabase
       .from("agent_runs")
@@ -933,7 +976,10 @@ const scanErrors: Tool = {
       .gte("created_at", since)
       .order("created_at", { ascending: false })
       .limit(limit);
-    if (runsErr) return { error: runsErr.message };
+    if (runsErr) {
+      await ctx.logEvent("error", "tool.guardian_scan_errors", runsErr.message);
+      return { error: runsErr.message };
+    }
 
     return {
       window_hours: hours,
@@ -969,7 +1015,10 @@ const runStats: Tool = {
       .select("agent_id, status, latency_ms")
       .eq("user_id", ctx.userId)
       .gte("created_at", since);
-    if (error) return { error: error.message };
+    if (error) {
+      await ctx.logEvent("error", "tool.guardian_run_stats", error.message);
+      return { error: error.message };
+    }
 
     const { data: agentRows } = await ctx.supabase
       .from("agents")
@@ -1048,7 +1097,10 @@ const checkDelegation: Tool = {
       .in("agent_id", nonOrchestratorIds)
       .order("created_at", { ascending: false })
       .limit(limit);
-    if (error) return { error: error.message };
+    if (error) {
+      await ctx.logEvent("error", "tool.guardian_check_delegation", error.message);
+      return { error: error.message };
+    }
 
     const checked = runs?.length ?? 0;
     const unlinked = (runs ?? []).filter((r) => !r.parent_run_id);
@@ -1087,7 +1139,10 @@ const listDocumentsTool: Tool = {
       .eq("user_id", ctx.userId)
       .order("created_at", { ascending: false })
       .limit(limit);
-    if (error) return { error: error.message };
+    if (error) {
+      await ctx.logEvent("error", "tool.list_documents", error.message);
+      return { error: error.message };
+    }
     return { count: data?.length ?? 0, documents: data ?? [] };
   },
 };
@@ -1142,6 +1197,13 @@ const searchDocumentsTool: Tool = {
       if (!semErr) {
         semanticUsed = true;
         push(sem as Hit[] | null);
+      } else {
+        await ctx.logEvent(
+          "warn",
+          "tool.search_documents",
+          `match_document_chunks RPC failed: ${semErr.message}`,
+          { query } as Json,
+        );
       }
     }
 

@@ -111,6 +111,100 @@ dead schema left over from the initial migration. Fixed to query
 `system_events`; caught while building item 3 below, which needed to know
 exactly where run/tool telemetry actually lives.
 
+### Second follow-up (2026-07-21): logging coverage audit — Strażnik was mostly blind
+
+User's framing, verbatim reasoning: before giving Strażnik more analysis
+tools, the actual bottleneck was that most of the app never wrote to
+`system_events` in the first place — no data to analyze regardless of how
+good the analysis gets. Full audit done before touching any code (see the
+Explore agent's report from this session): of 24 `*.functions.ts` server
+functions, only 3 logged anything on failure, and of 16 agent tools in
+`tools.server.ts`, only `web_search` had full success+failure coverage.
+Two zones were confirmed **architecturally incapable** of ever reaching
+`system_events`: `jarvisBrain.ts`'s client-only Gemini fallback path (no
+Supabase client ever constructed in that branch) and the entire voice
+layer (`VoiceCommandContext.tsx`/`speak.ts`, console-only by construction).
+
+Key finding that shaped the whole fix: `guardian_scan_errors` already
+scans `system_events` with `level IN ('warn','error')` and **no `source`
+filter** — meaning it needed zero code changes to benefit from more
+logging elsewhere. The entire fix is "close the write gaps," not "build
+Guardian new tools." This also fixed scope down to error/warn-level
+logging only — adding more `info`-level success logs wouldn't even be
+visible to Guardian's own scan, so none were added.
+
+Shipped:
+- `src/lib/system/logServerError.ts` — shared, non-generic helper
+  (`logServerError`/`logServerWarn`) for server-function error branches.
+  Deliberately not a `.handler()`-wrapping HOC — this project's
+  `createServerFn().middleware().inputValidator().handler()` type
+  inference is finicky enough that a generic wrapper risked breaking it
+  in ways unverifiable without a working `tsc` in this sandbox. Explicit
+  call sites are more repetitive but safe.
+- `src/lib/system/logClientEvent.ts` — client-side counterpart wired
+  through the existing (previously **zero callers anywhere in the app**)
+  `emitSystemEvent` server function. Best-effort/swallows its own
+  failures, since a logging call must never break the flow it describes.
+- `tools.server.ts`: error-path logging added to every write tool that
+  previously logged success only (`fetch_url`, `save_note`, `list_notes`,
+  `delete_note`, `remember`, `create_task`, `list_tasks`, `update_task`,
+  `delete_task`, `list_documents`), plus the 3 `guardian_*` tools' own
+  query failures (previously silent — ironic gap: if Guardian's own
+  health-check broke, nothing recorded that). Also stopped `recall` and
+  `search_documents` from silently swallowing a failed semantic RPC call
+  (`match_memories`/`match_document_chunks` erroring used to vanish with
+  zero trace, silently degrading to keyword-only search) — now a `warn`.
+- `documents.functions.ts`: `createDocumentFn`/`listDocumentsFn` error
+  logging added; `processDocumentFn` now warns when a document processes
+  with `0/N` chunks embedded (total semantic-search degradation for that
+  document — e.g. an expired Gemini key — previously left zero trace
+  anywhere except an unlogged `embeddedCount` field returned to the
+  client). **Real bug fix, not just an observability gap**:
+  `deleteDocumentFn`'s Storage removal error was previously not even
+  checked (result discarded outright) — now checked and logged as a warn
+  (DB row delete still proceeds either way — an orphaned Storage object
+  is a smaller problem than a document stuck because Storage hiccupped).
+- `jarvisBrain.ts`: `logClientEvent` wired into every real failure point
+  in the client-fallback path (all-models-exhausted, 4xx, empty
+  candidate, JSON-parse-failed-used-raw-text, exception) and into the
+  server-runtime-failed-so-falling-back-to-client path, previously
+  `console.warn` only.
+- `VoiceCommandContext.tsx`/`speak.ts`: genuine failures only — STT
+  engine error, `SpeechRecognition` unsupported, TTS engine error (not
+  `interrupted`/`canceled`, which are normal e.g. on `speakCancel()`),
+  TTS start exception. Deliberately did **not** log the noise-filter/
+  wake-word/echo-guard/throttle rejections audited alongside these — that
+  is normal, expected, high-frequency filtering behaviour, not a failure,
+  and logging it would just be noise Guardian has to scan past.
+- `runtime.functions.ts`: every remaining silent `throw` given a
+  `logServerError` call first — BYOK key save/delete (Gemini + Groq),
+  `updateUserSettings`, `setAgentToolEnabled`, `updateAgentSettings`'s
+  previously-silent error branches (it logged success only before),
+  `listAgentTools`, `listAgents`, `clearConversation`, `setActiveAgent`,
+  `getAgentDetail`, `clearAgentConversations`'s error branches, both key
+  status reads, `getUserSettings`.
+- `notes.functions.ts`, `tasks.functions.ts`, `flow.functions.ts`,
+  `schema.functions.ts`: every function given the same `logServerError`
+  treatment — these had zero logging of any kind before (the *tool*
+  versions of note/task CRUD already logged; the manual-UI-CRUD versions,
+  used by the `/tasks`/`/notes` widgets directly, did not).
+
+Explicitly left alone, on purpose: `GithubActivityPulse.tsx`'s empty
+`catch {}` is a pre-existing, comment-documented deliberate decision
+("decorative telemetry, not worth surfacing an error state for"), not a
+bug — didn't touch it. `WeatherTelemetry.tsx` already has a visible
+client-side error state and is low-stakes. flightRadar's `zoom_in`/
+`area_too_large` results are expected UX states (user zoomed out too
+far), not malfunctions — left unlogged.
+
+Verified via `esbuild` transpile + `node --check` on all 12 touched files
+(clean) — same standing sandbox limitation as every round in this
+project, `bun install` never fully completed here (persistent tarball
+`ConnectionClosed` errors), so no full `tsc`/`eslint`/`vite build` this
+round either. **Needs a live check**: trigger a few of these failure
+paths for real (e.g. temporarily break a Gemini key, delete a document)
+and confirm Strażnik's `guardian_scan_errors` actually surfaces them.
+
 ## 3. [W] Agent Flow Tree — **shipped 2026-07-16, superseding Situation Room**
 
 User feedback after using Strażnik: no way to *see* delegation happening —

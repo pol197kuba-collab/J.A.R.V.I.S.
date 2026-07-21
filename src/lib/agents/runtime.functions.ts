@@ -13,6 +13,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import type { Json } from "@/integrations/supabase/types";
 import { DEFAULT_GEMINI_MODEL } from "./models";
+import { logServerError } from "@/lib/system/logServerError";
 
 // Accept any Gemini model id — the enum used to be a small whitelist which
 // made every new Gemini release require a code change. The Google API itself
@@ -174,7 +175,10 @@ export const saveGeminiKey = createServerFn({ method: "POST" })
     const { error } = await supabase
       .from("user_secrets")
       .upsert({ owner_id: userId, gemini_api_key: data.key.trim() }, { onConflict: "owner_id" });
-    if (error) throw new Error(error.message);
+    if (error) {
+      await logServerError(supabase, userId, "settings.gemini_key", error);
+      throw new Error(error.message);
+    }
     return { ok: true as const };
   });
 
@@ -189,7 +193,10 @@ export const deleteGeminiKey = createServerFn({ method: "POST" })
       .from("user_secrets")
       .update({ gemini_api_key: null })
       .eq("owner_id", userId);
-    if (error) throw new Error(error.message);
+    if (error) {
+      await logServerError(supabase, userId, "settings.gemini_key", error);
+      throw new Error(error.message);
+    }
     return { ok: true as const };
   });
 
@@ -222,7 +229,10 @@ export const saveGroqKey = createServerFn({ method: "POST" })
     const { error } = await supabase
       .from("user_secrets")
       .upsert({ owner_id: userId, groq_api_key: data.key.trim() }, { onConflict: "owner_id" });
-    if (error) throw new Error(error.message);
+    if (error) {
+      await logServerError(supabase, userId, "settings.groq_key", error);
+      throw new Error(error.message);
+    }
     return { ok: true as const };
   });
 
@@ -234,7 +244,10 @@ export const deleteGroqKey = createServerFn({ method: "POST" })
       .from("user_secrets")
       .update({ groq_api_key: null })
       .eq("owner_id", userId);
-    if (error) throw new Error(error.message);
+    if (error) {
+      await logServerError(supabase, userId, "settings.groq_key", error);
+      throw new Error(error.message);
+    }
     return { ok: true as const };
   });
 
@@ -305,7 +318,10 @@ export const updateUserSettings = createServerFn({ method: "POST" })
       .upsert(patch, { onConflict: "owner_id" })
       .select("chat_routing, default_model, voice_language, wake_word_enabled")
       .single();
-    if (error) throw new Error(error.message);
+    if (error) {
+      await logServerError(supabase, userId, "settings.update", error);
+      throw new Error(error.message);
+    }
     return {
       chatRouting: row.chat_routing as "client" | "server",
       defaultModel: row.default_model,
@@ -388,7 +404,12 @@ export const setAgentToolEnabled = createServerFn({ method: "POST" })
       .eq("owner_id", userId)
       .eq("slug", data.agentSlug)
       .maybeSingle();
-    if (agentErr) throw new Error(agentErr.message);
+    if (agentErr) {
+      await logServerError(supabase, userId, "settings.agent_tool_toggle", agentErr, {
+        agent_slug: data.agentSlug,
+      } as Json);
+      throw new Error(agentErr.message);
+    }
     if (!agent) throw new Error(`Agent not found: ${data.agentSlug}`);
 
     const { error } = await supabase
@@ -397,7 +418,13 @@ export const setAgentToolEnabled = createServerFn({ method: "POST" })
         { agent_id: agent.id, tool_id: data.toolId, is_enabled: data.enabled },
         { onConflict: "agent_id,tool_id" },
       );
-    if (error) throw new Error(error.message);
+    if (error) {
+      await logServerError(supabase, userId, "settings.agent_tool_toggle", error, {
+        agent_slug: data.agentSlug,
+        tool_id: data.toolId,
+      } as Json);
+      throw new Error(error.message);
+    }
     return { ok: true };
   });
 
@@ -935,7 +962,10 @@ export const updateAgentSettings = createServerFn({ method: "POST" })
       .eq("owner_id", userId)
       .eq("slug", data.slug)
       .maybeSingle();
-    if (agentErr) throw new Error(agentErr.message);
+    if (agentErr) {
+      await logServerError(supabase, userId, data.slug, agentErr);
+      throw new Error(agentErr.message);
+    }
     if (!agentRow) throw new Error(`Agent not found: ${data.slug}`);
 
     const patch: Record<string, unknown> = {};
@@ -968,7 +998,10 @@ export const updateAgentSettings = createServerFn({ method: "POST" })
       .from("agents")
       .update(patch as never)
       .eq("id", agentRow.id);
-    if (error) throw new Error(error.message);
+    if (error) {
+      await logServerError(supabase, userId, data.slug, error);
+      throw new Error(error.message);
+    }
 
     await supabase.from("system_events").insert({
       owner_id: userId,

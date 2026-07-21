@@ -22,6 +22,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import type { Json } from "@/integrations/supabase/types";
+import { logServerError, logServerWarn } from "@/lib/system/logServerError";
 // tools.server.ts is a .server.ts module — this file is a *.functions.ts
 // file, which ships to the client bundle (see client.server.ts's own
 // comment on this). Load it dynamically inside the handler, same pattern
@@ -156,7 +157,10 @@ export const createDocumentFn = createServerFn({ method: "POST" })
       size_bytes: data.sizeBytes,
       status: "uploading",
     });
-    if (error) return { ok: false, reason: "db_error", message: error.message };
+    if (error) {
+      await logServerError(supabase, userId, "documents", error, { filename: data.filename } as Json);
+      return { ok: false, reason: "db_error", message: error.message };
+    }
 
     return { ok: true, documentId, storagePath, bucket: "documents" };
   });
@@ -264,6 +268,22 @@ export const processDocumentFn = createServerFn({ method: "POST" })
     if (insErr) return fail(`chunk storage failed: ${insErr.message}`);
 
     const embeddedCount = embeddings.filter(Boolean).length;
+    if (embeddedCount === 0 && chunks.length > 0) {
+      // The document still processes successfully (keyword-only search
+      // still works via search_documents' fallback pass), but total
+      // embedding failure across every single chunk is exactly the kind
+      // of silent degradation that used to leave zero trace anywhere —
+      // e.g. an expired/invalid Gemini key would quietly turn ALL
+      // semantic search (memories + documents) into keyword-only with
+      // nothing ever recording that it happened.
+      await logServerWarn(
+        supabase,
+        userId,
+        "documents",
+        `document processed but 0/${chunks.length} chunks embedded (${doc.filename}) — semantic search degraded to keyword-only, check the linked Gemini key`,
+        { document_id: doc.id } as Json,
+      );
+    }
     await supabase
       .from("documents")
       .update({
@@ -304,7 +324,10 @@ export const listDocumentsFn = createServerFn({ method: "GET" })
       )
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
+    if (error) {
+      await logServerError(supabase, userId, "documents", error);
+      throw new Error(error.message);
+    }
     return data ?? [];
   });
 
@@ -323,8 +346,30 @@ export const deleteDocumentFn = createServerFn({ method: "POST" })
       .maybeSingle();
     if (!doc) return { ok: false, reason: "not_found" };
 
-    await supabase.storage.from("documents").remove([doc.storage_path]);
+    // Previously ignored entirely — a failed Storage removal (RLS/path
+    // issue) left an orphaned file with zero trace while the DB row
+    // deletion proceeded regardless. Still proceed with the DB delete
+    // (an orphaned Storage object is recoverable manually; a document row
+    // stuck because Storage hiccupped is a worse user-facing outcome),
+    // but now at least log it so it's not invisible.
+    const { error: storageErr } = await supabase.storage
+      .from("documents")
+      .remove([doc.storage_path]);
+    if (storageErr) {
+      await logServerWarn(
+        supabase,
+        userId,
+        "documents",
+        `storage removal failed for ${doc.storage_path}: ${storageErr.message}`,
+      );
+    }
+
     const { error } = await supabase.from("documents").delete().eq("id", data.documentId);
-    if (error) return { ok: false, reason: error.message };
+    if (error) {
+      await logServerError(supabase, userId, "documents", error, {
+        document_id: data.documentId,
+      } as Json);
+      return { ok: false, reason: error.message };
+    }
     return { ok: true };
   });

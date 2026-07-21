@@ -5,6 +5,7 @@
 // NO experimental male-voice filtering (which was blocking playback
 // on some systems).
 import { audio } from "./AudioEngine";
+import { logClientEvent } from "@/lib/system/logClientEvent";
 
 const SPEAK_EVENT = "jarvis:speaking";
 let speakingCount = 0;
@@ -99,9 +100,19 @@ function pump() {
         setTimeout(pump, 60);
       };
       utter.onend = release;
-      utter.onerror = release;
+      utter.onerror = (e) => {
+        const reason = (e as SpeechSynthesisErrorEvent)?.error ?? "unknown";
+        // "interrupted"/"canceled" are normal (e.g. speakCancel() during
+        // playback), not real failures — only log genuine engine errors.
+        if (reason !== "interrupted" && reason !== "canceled") {
+          void logClientEvent("warn", "voice", `TTS engine error: ${reason}`);
+        }
+        release();
+      };
       synth.speak(utter);
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      void logClientEvent("error", "voice", `TTS start failed: ${msg}`);
       setSpeaking(false);
       pumping = false;
       setTimeout(pump, 60);
