@@ -22,7 +22,7 @@ import type { GeminiContent, GeminiPart } from "./providers/types";
 // trigger via the perform_ui_action tool. Must stay in sync with the
 // JarvisAction union in src/lib/ai/jarvisBrain.ts — single vocabulary shared
 // by voice, chat and the old client-side fallback path.
-const UI_ACTIONS = [
+export const UI_ACTIONS = [
   "open_dashboard",
   "open_fuel",
   "open_calculator",
@@ -54,7 +54,7 @@ const UI_ACTIONS_WITH_NONE = [...UI_ACTIONS, "none"] as const;
 // a failed delegate_to_agent guess or a confused non-answer). Once the
 // fallback finds a real action, overwrite that text with a clean confirmation
 // instead of leaving the confused main-turn reply in the chat bubble.
-const UI_ACTION_CONFIRMATIONS: Record<UiAction, string> = {
+export const UI_ACTION_CONFIRMATIONS: Record<UiAction, string> = {
   open_dashboard: "Otwieram pulpit główny.",
   open_fuel: "Otwieram moduł paliwa.",
   open_calculator: "Otwieram kalkulator.",

@@ -89,25 +89,32 @@ async function resolveConversationId(): Promise<string | null> {
   return id;
 }
 
-export type JarvisAction =
-  | "none"
-  | "open_dashboard"
-  | "open_fuel"
-  | "open_calculator"
-  | "open_jobfit"
-  | "open_telemetry"
-  | "open_menu"
-  | "close_menu"
-  | "system_check"
-  | "sleep"
-  | "shutdown"
-  | "reboot"
-  | "open_agents"
-  | "open_settings"
-  | "open_logs"
-  | "open_tasks"
-  | "open_subsystems"
-  | "vision_scan";
+// Runtime source of truth for the action vocabulary, so server-side mirrors
+// (UI_ACTIONS in runtime.server.ts) can be checked against it in tests
+// instead of drifting silently — that drift already shipped twice
+// (system_check shadowing Guardian, PRs #43/#44).
+export const JARVIS_ACTIONS = [
+  "none",
+  "open_dashboard",
+  "open_fuel",
+  "open_calculator",
+  "open_jobfit",
+  "open_telemetry",
+  "open_menu",
+  "close_menu",
+  "system_check",
+  "sleep",
+  "shutdown",
+  "reboot",
+  "open_agents",
+  "open_settings",
+  "open_logs",
+  "open_tasks",
+  "open_subsystems",
+  "vision_scan",
+] as const;
+
+export type JarvisAction = (typeof JARVIS_ACTIONS)[number];
 
 export type JarvisReply = { action: JarvisAction; speech: string };
 
@@ -206,7 +213,7 @@ export function fallbackFor(kind: string, hint?: string): JarvisReply {
   return { action: "none", speech: pick(FALLBACK_GENERIC) };
 }
 
-function tryParseJson(text: string): JarvisReply | null {
+export function tryParseJson(text: string): JarvisReply | null {
   // Strip code fences if the model wrapped its JSON.
   const cleaned = text
     .replace(/^\s*```(?:json)?/i, "")
