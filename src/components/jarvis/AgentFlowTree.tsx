@@ -4,6 +4,8 @@ import { useServerFn } from "@tanstack/react-start";
 import { HudPanel } from "./HudPanel";
 import { getAgentFlow, type FlowDelegation, type FlowRun, type FlowToolCall } from "@/lib/agents/flow.functions";
 import { describeToolCall } from "./toolDescriptions";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 
 // How long a fully-settled interaction stays highlighted before the tree
 // fades back to full standby. Without this, the last-ever completed run
@@ -53,18 +55,54 @@ function ToolChips({ calls }: { calls: FlowToolCall[] }) {
   );
 }
 
-function DelegationLabel({ delegation }: { delegation: FlowDelegation }) {
+// Radial layout: a rotated "spoke" div carries the connecting line + the
+// travelling dot in its own local coordinate space (so the dot's simple
+// top:0%->100% animation automatically follows whatever angle the spoke
+// is rotated to) — the destination TILE itself is a separate, independently
+// positioned element (computed via the same trig), not a child of the
+// rotated spoke, so its contents never rotate.
+function FlowSpoke({ angleDeg, length, active }: { angleDeg: number; length: number; active: boolean }) {
   return (
-    <span
-      title={delegation.task}
-      className="animate-flow-node-in mb-1 max-w-[150px] truncate rounded border border-primary/25 bg-[color:var(--surface-1)]/80 px-1.5 py-0.5 font-display text-[7px] uppercase tracking-[0.1em] text-primary/80"
+    <div
+      className="absolute left-1/2 top-0 origin-top"
+      style={{ width: 2, height: length, transform: `translateX(-1px) rotate(${angleDeg}deg)` }}
     >
-      ▸ {delegation.task}
-    </span>
+      <div
+        className="h-full w-full"
+        style={{
+          background: active
+            ? "linear-gradient(to bottom, color-mix(in oklab, var(--primary) 45%, transparent), color-mix(in oklab, var(--primary) 10%, transparent))"
+            : "color-mix(in oklab, var(--muted-foreground) 14%, transparent)",
+        }}
+      />
+      {active && (
+        <span
+          className="absolute left-1/2 h-1.5 w-1.5 -translate-x-1/2 animate-flow-dot-travel rounded-full"
+          style={{ backgroundColor: "var(--primary)", boxShadow: "0 0 6px var(--primary)" }}
+        />
+      )}
+    </div>
   );
 }
 
-function FlowNodeTile({ name, run }: { name: string; run?: FlowRun }) {
+function FlowNodeTile({
+  name,
+  run,
+  emphasis,
+  width,
+  selected,
+  onClick,
+}: {
+  name: string;
+  run?: FlowRun;
+  emphasis?: boolean;
+  /** Teammate tiles shrink as the roster grows (see arc geometry notes in
+   *  AgentFlowTree) to keep adjacent nodes from overlapping — the
+   *  Orchestrator's emphasis tile ignores this and stays fixed-size. */
+  width?: number;
+  selected?: boolean;
+  onClick?: () => void;
+}) {
   const active = !!run;
   const color = active ? statusColor(run.status) : IDLE_COLOR;
   const running = run?.status === "running";
@@ -79,16 +117,23 @@ function FlowNodeTile({ name, run }: { name: string; run?: FlowRun }) {
           ? run.status
           : "standby";
   return (
-    <div
-      className="flex min-w-[112px] flex-col items-center gap-1 rounded-lg border px-3 py-2 backdrop-blur transition-all duration-500"
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex flex-col items-center gap-1 rounded-lg border backdrop-blur transition-all duration-500",
+        emphasis ? "min-w-[132px] px-4 py-2.5" : "px-2.5 py-1.5",
+        selected && "ring-1 ring-primary/60",
+      )}
       style={{
+        minWidth: emphasis ? undefined : (width ?? 104),
         borderColor: `color-mix(in oklab, ${color} ${active ? 40 : 16}%, transparent)`,
         background: active
           ? "color-mix(in oklab, var(--surface-1) 92%, transparent)"
           : "color-mix(in oklab, var(--surface-1) 55%, transparent)",
         opacity: active ? 1 : 0.5,
         boxShadow: running
-          ? `0 0 0 1px color-mix(in oklab, ${color} 20%, transparent), 0 0 16px -2px color-mix(in oklab, ${color} 65%, transparent)`
+          ? `0 0 0 1px color-mix(in oklab, ${color} 20%, transparent), 0 0 ${emphasis ? 22 : 16}px -2px color-mix(in oklab, ${color} 65%, transparent)`
           : active
             ? `0 0 0 1px color-mix(in oklab, ${color} 12%, transparent)`
             : "none",
@@ -96,10 +141,15 @@ function FlowNodeTile({ name, run }: { name: string; run?: FlowRun }) {
     >
       <div className="flex items-center gap-1.5">
         <span
-          className={`h-1.5 w-1.5 rounded-full ${running ? "animate-pulse" : ""}`}
+          className={cn("rounded-full", running ? "animate-pulse" : "", emphasis ? "h-2 w-2" : "h-1.5 w-1.5")}
           style={{ backgroundColor: color, boxShadow: active ? `0 0 6px ${color}` : "none" }}
         />
-        <span className="font-display text-[10px] uppercase tracking-[0.2em] text-foreground/90">
+        <span
+          className={cn(
+            "font-display uppercase tracking-[0.2em] text-foreground/90",
+            emphasis ? "text-[12px]" : "text-[10px]",
+          )}
+        >
           {name}
         </span>
       </div>
@@ -109,26 +159,54 @@ function FlowNodeTile({ name, run }: { name: string; run?: FlowRun }) {
       >
         {statusLine}
       </span>
-    </div>
+    </button>
   );
 }
 
-function FlowStem({ active }: { active: boolean }) {
+// Recent-run history for whichever node is currently selected (click to
+// toggle) — pure client-side filter over the same `runs` array the tree
+// already fetches, so this costs nothing extra server-side.
+function RunHistoryPanel({ agentName, runs }: { agentName: string; runs: FlowRun[] }) {
+  if (runs.length === 0) {
+    return (
+      <p className="px-3 py-2 text-center font-display text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
+        ▸ brak zarejestrowanych uruchomień
+      </p>
+    );
+  }
   return (
-    <div
-      className="relative h-4 w-px"
-      style={{
-        background: active
-          ? "color-mix(in oklab, var(--primary) 40%, transparent)"
-          : "color-mix(in oklab, var(--muted-foreground) 16%, transparent)",
-      }}
-    >
-      {active && (
-        <span
-          className="absolute left-1/2 h-1.5 w-1.5 -translate-x-1/2 animate-flow-dot-travel rounded-full"
-          style={{ backgroundColor: "var(--primary)", boxShadow: "0 0 6px var(--primary)" }}
-        />
-      )}
+    <div className="max-h-[160px] space-y-1 overflow-y-auto px-2 py-2">
+      {runs.slice(0, 6).map((r) => {
+        const last = r.toolCalls[r.toolCalls.length - 1];
+        const delegation = r.delegations[0];
+        const summary = delegation
+          ? `▸ delegowane do ${delegation.toSlug}: „${delegation.task}"`
+          : last
+            ? describeToolCall(last.name, last.args)
+            : r.toolCalls.length === 0 && r.delegations.length === 0
+              ? "brak wywołań narzędzi"
+              : "";
+        return (
+          <div
+            key={r.id}
+            className="flex items-center justify-between gap-2 rounded border border-primary/10 bg-[color:var(--surface-1)]/60 px-2 py-1"
+          >
+            <span
+              className="h-1.5 w-1.5 shrink-0 rounded-full"
+              style={{ backgroundColor: statusColor(r.status) }}
+            />
+            <span className="min-w-0 flex-1 truncate text-left font-mono text-[9px] text-muted-foreground" title={summary}>
+              {summary}
+            </span>
+            <span className="shrink-0 font-display text-[8px] uppercase tracking-[0.1em] text-muted-foreground/70">
+              {r.latencyMs != null ? `${r.latencyMs}ms` : r.status}
+            </span>
+          </div>
+        );
+      })}
+      <p className="pt-1 text-center font-display text-[8px] uppercase tracking-[0.2em] text-muted-foreground/60">
+        {agentName} · ostatnie {Math.min(runs.length, 6)} uruchomień
+      </p>
     </div>
   );
 }
@@ -142,6 +220,7 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
   });
   const agents = data?.agents ?? [];
   const runs = useMemo(() => data?.runs ?? [], [data]);
+  const isMobile = useIsMobile();
 
   // Sticks with the currently displayed interaction across polls instead of
   // recomputing "latest" from scratch each time — a child run's own
@@ -157,6 +236,8 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
     const id = setInterval(() => setTick((t) => t + 1), 2000);
     return () => clearInterval(id);
   }, []);
+
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
 
   const activeBySlug = useMemo(() => {
     // Referenced only to satisfy the exhaustive-deps lint — its sole job is
@@ -216,22 +297,46 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
     // re-evaluation of the expiry check on a clock, independent of `runs`.
   }, [runs, tick]);
 
-  // Finds a delegation targeting `slug` from any currently-active run, not
-  // just the Orchestrator's — today only the Orchestrator can delegate, but
-  // this stays correct without changes if that ever stops being true for a
-  // future agent.
-  const delegationTo = (slug: string): FlowDelegation | undefined => {
-    for (const run of activeBySlug.values()) {
-      const found = run.delegations.find((d) => d.toSlug === slug);
-      if (found) return found;
-    }
-    return undefined;
-  };
+  // All delegations currently in flight/settled for the pinned interaction,
+  // shown as a small list under the hub rather than attached to individual
+  // spokes — at arbitrary fan angles there's no single "above the node"
+  // position that reads naturally for every teammate, but "under the agent
+  // that issued them" always does.
+  const activeDelegations = useMemo(() => {
+    const out: FlowDelegation[] = [];
+    for (const run of activeBySlug.values()) out.push(...run.delegations);
+    return out;
+  }, [activeBySlug]);
 
   const orchestrator = agents.find((a) => a.slug === "orchestrator");
   const teammates = agents.filter((a) => a.slug !== "orchestrator");
-  const anyTeammateActive = teammates.some((t) => activeBySlug.has(t.slug));
   const orchestratorRun = activeBySlug.get("orchestrator");
+
+  // Fan geometry: teammates arranged on an arc below the hub rather than a
+  // full circle — a true 360° layout would force this compact HUD panel
+  // much taller than the rest of the dashboard grid to have room for nodes
+  // above/beside the hub too. Radius, tile width and arc width all scale
+  // together as the roster grows (verified numerically for up to 8
+  // teammates — chord distance between adjacent nodes stays >=8% wider
+  // than the tile at that size, so future agents like Researcher/Producer
+  // spread out and shrink slightly rather than overlapping):
+  //   arc half-angle: 50° (1 teammate) growing to a cap of 85°
+  //   radius: fixed through 3 teammates, then grows with each extra one
+  //   tile width: fixed through 3 teammates, then shrinks with each extra
+  const mobileScale = isMobile ? 0.75 : 1;
+  const n = teammates.length;
+  const arcHalfDeg = Math.min(85, 50 + Math.max(0, n - 1) * 14);
+  const radius = (90 + Math.max(0, n - 3) * 20) * mobileScale;
+  const teammateTileWidth = Math.max(68, 104 - Math.max(0, n - 3) * 10) * mobileScale;
+  const anchorY = 36 * mobileScale;
+  const containerHeight = anchorY + radius + (isMobile ? 52 : 62);
+  const angleFor = (i: number) => (n <= 1 ? 0 : -arcHalfDeg + (2 * arcHalfDeg * i) / (n - 1));
+
+  const selectedRuns = useMemo(
+    () => (selectedSlug ? runs.filter((r) => r.agentSlug === selectedSlug) : []),
+    [runs, selectedSlug],
+  );
+  const selectedAgent = agents.find((a) => a.slug === selectedSlug);
 
   return (
     <HudPanel
@@ -251,44 +356,80 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
       }
       className="p-4 landscape:max-md:p-2"
     >
-      <div className="flex min-h-[120px] items-center justify-center overflow-x-auto py-4">
-        {!orchestrator ? (
+      {!orchestrator ? (
+        <div className="flex min-h-[120px] items-center justify-center">
           <p className="font-display text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
             ▸ Ładowanie zespołu agentów…
           </p>
-        ) : (
-          <div className="flex flex-col items-center">
-            <FlowNodeTile name={orchestrator.name} run={orchestratorRun} />
-            {orchestratorRun && <ToolChips calls={orchestratorRun.toolCalls} />}
-            {teammates.length > 0 && (
-              <>
-                <FlowStem active={anyTeammateActive} />
+        </div>
+      ) : (
+        <>
+          <div className="relative mx-auto w-full max-w-[420px]" style={{ height: containerHeight }}>
+            {teammates.map((t, i) => (
+              <FlowSpoke
+                key={`spoke-${t.slug}`}
+                angleDeg={angleFor(i)}
+                length={radius}
+                active={activeBySlug.has(t.slug)}
+              />
+            ))}
+            <div
+              className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2"
+              style={{ top: anchorY }}
+            >
+              <FlowNodeTile
+                name={orchestrator.name}
+                run={orchestratorRun}
+                emphasis
+                selected={selectedSlug === "orchestrator"}
+                onClick={() => setSelectedSlug((s) => (s === "orchestrator" ? null : "orchestrator"))}
+              />
+            </div>
+            {teammates.map((t, i) => {
+              const run = activeBySlug.get(t.slug);
+              const angleRad = (angleFor(i) * Math.PI) / 180;
+              const dx = radius * Math.sin(angleRad);
+              const dy = radius * Math.cos(angleRad);
+              return (
                 <div
-                  className="inline-flex items-start gap-6 border-t"
-                  style={{
-                    borderColor: anyTeammateActive
-                      ? "color-mix(in oklab, var(--primary) 30%, transparent)"
-                      : "color-mix(in oklab, var(--muted-foreground) 16%, transparent)",
-                  }}
+                  key={t.slug}
+                  className="absolute -translate-x-1/2 -translate-y-1/2"
+                  style={{ left: `calc(50% + ${dx}px)`, top: anchorY + dy }}
                 >
-                  {teammates.map((t) => {
-                    const run = activeBySlug.get(t.slug);
-                    const delegation = run ? delegationTo(t.slug) : undefined;
-                    return (
-                      <div key={t.slug} className="flex flex-col items-center">
-                        <FlowStem active={!!run} />
-                        {delegation && <DelegationLabel delegation={delegation} />}
-                        <FlowNodeTile name={t.name} run={run} />
-                        {run && <ToolChips calls={run.toolCalls} />}
-                      </div>
-                    );
-                  })}
+                  <FlowNodeTile
+                    name={t.name}
+                    run={run}
+                    width={teammateTileWidth}
+                    selected={selectedSlug === t.slug}
+                    onClick={() => setSelectedSlug((s) => (s === t.slug ? null : t.slug))}
+                  />
+                  {run && <ToolChips calls={run.toolCalls} />}
                 </div>
-              </>
-            )}
+              );
+            })}
           </div>
-        )}
-      </div>
+
+          {activeDelegations.length > 0 && (
+            <div className="mx-auto mt-1 flex max-w-[380px] flex-col items-center gap-1">
+              {activeDelegations.map((d, i) => (
+                <span
+                  key={`${d.toSlug}-${i}`}
+                  title={d.task}
+                  className="animate-flow-node-in max-w-full truncate font-display text-[8px] uppercase tracking-[0.12em] text-primary/80"
+                >
+                  ▸ deleguje do {d.toSlug}: „{d.task}"
+                </span>
+              ))}
+            </div>
+          )}
+
+          {selectedSlug && selectedAgent && (
+            <div className="mt-2 rounded-lg border border-primary/20 bg-[color:var(--surface-1)]/70">
+              <RunHistoryPanel agentName={selectedAgent.name} runs={selectedRuns} />
+            </div>
+          )}
+        </>
+      )}
     </HudPanel>
   );
 }
