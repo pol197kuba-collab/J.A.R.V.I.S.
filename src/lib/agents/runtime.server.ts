@@ -590,7 +590,19 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // action or explicitly say "none" — it can no longer just talk its way
     // out of using it. Best-effort: any failure here silently falls back to
     // the normal text-only reply the user already has.
-    if (!uiAction) {
+    //
+    // Also skipped whenever the main turn already made ANY real tool call
+    // (toolCallLog.length > 0) — not just perform_ui_action. Live-tested bug
+    // (2026-07-21): asking Analityk to summarize an uploaded document
+    // correctly delegated via delegate_to_agent and got a real answer, but
+    // this classifier still ran afterward (it only checked `!uiAction`),
+    // got the bare user text with no conversation context, misclassified a
+    // content question as a UI command, and overwrote the correct answer
+    // with a random screen-navigation action. The classifier's whole
+    // purpose is catching "the model declared a tool but talked its way out
+    // of using ANY of them" — if a tool already ran, that failure mode by
+    // definition didn't happen, so re-classifying can only do harm here.
+    if (!uiAction && toolCallLog.length === 0) {
       await logEvent("info", "orchestrator", "classifier fallback: block entered", {
         run_id: runId,
       } as Json);
