@@ -43,8 +43,7 @@ export function HudRouteTransition() {
           <div
             className="animate-hud-laser-scan absolute left-0 right-0 h-[2px]"
             style={{
-              background:
-                "linear-gradient(90deg, transparent, var(--primary), transparent)",
+              background: "linear-gradient(90deg, transparent, var(--primary), transparent)",
               boxShadow:
                 "0 0 24px var(--primary), 0 0 48px color-mix(in oklab, var(--primary) 60%, transparent)",
             }}
@@ -70,8 +69,7 @@ export function HudRouteTransition() {
 
       {/* Corner status during all phases */}
       <div className="absolute left-4 top-4 font-display text-[10px] uppercase tracking-[0.3em] text-primary/80">
-        ▸ TRANSITION:{" "}
-        <span className="text-primary">{transition.toUpperCase()}</span>
+        ▸ TRANSITION: <span className="text-primary">{transition.toUpperCase()}</span>
       </div>
       <div className="absolute right-4 top-4 font-display text-[10px] uppercase tracking-[0.3em] text-primary/80">
         LOCK ◂

@@ -1,15 +1,25 @@
 import { cn } from "@/lib/utils";
 
-export function ArcReactorTriangle({ className, raised }: { className?: string; raised?: boolean }) {
+export function ArcReactorTriangle({
+  className,
+  raised,
+}: {
+  className?: string;
+  raised?: boolean;
+}) {
   return (
     <div
       className={cn(
         "relative aspect-square w-[min(48vmin,360px)] max-md:w-[min(38vmin,220px)] transition-all duration-700 ease-out landscape:max-md:w-[45vh] short:w-[min(32vh,180px)]",
-        raised && "-translate-y-16 scale-75 max-md:-translate-y-8 landscape:max-md:-translate-y-8 short:translate-y-0 short:scale-100",
+        raised &&
+          "-translate-y-16 scale-75 max-md:-translate-y-8 landscape:max-md:-translate-y-8 short:translate-y-0 short:scale-100",
         className,
       )}
     >
-      <svg viewBox="0 0 200 200" className="absolute inset-0 h-full w-full text-primary animate-triangle-pulse">
+      <svg
+        viewBox="0 0 200 200"
+        className="absolute inset-0 h-full w-full text-primary animate-triangle-pulse"
+      >
         <defs>
           <radialGradient id="arc-core" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="oklch(0.98 0.05 215)" stopOpacity="1" />
@@ -18,8 +28,25 @@ export function ArcReactorTriangle({ className, raised }: { className?: string; 
             <stop offset="100%" stopColor="oklch(0.3 0.1 240)" stopOpacity="0" />
           </radialGradient>
         </defs>
-        <circle cx="100" cy="100" r="96" fill="none" stroke="currentColor" strokeWidth="0.6" opacity="0.4" />
-        <circle cx="100" cy="100" r="82" fill="none" stroke="currentColor" strokeWidth="0.6" strokeDasharray="3 4" opacity="0.6" />
+        <circle
+          cx="100"
+          cy="100"
+          r="96"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="0.6"
+          opacity="0.4"
+        />
+        <circle
+          cx="100"
+          cy="100"
+          r="82"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="0.6"
+          strokeDasharray="3 4"
+          opacity="0.6"
+        />
         <circle cx="100" cy="100" r="68" fill="url(#arc-core)" />
         {/* Triangular reactor segments */}
         <g

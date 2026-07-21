@@ -78,17 +78,34 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { title: "JARVIS // Personal AI Assistant" },
-      { name: "description", content: "Futuristic command dashboard for the JARVIS personal AI assistant." },
+      {
+        name: "description",
+        content: "Futuristic command dashboard for the JARVIS personal AI assistant.",
+      },
       { name: "author", content: "Stark Industries" },
       { property: "og:title", content: "JARVIS // Personal AI Assistant" },
-      { property: "og:description", content: "Futuristic command dashboard for the JARVIS personal AI assistant." },
+      {
+        property: "og:description",
+        content: "Futuristic command dashboard for the JARVIS personal AI assistant.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "JARVIS // Personal AI Assistant" },
-      { name: "twitter:description", content: "Futuristic command dashboard for the JARVIS personal AI assistant." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/6503842e-f43f-419f-8374-ce726827ba4a/id-preview-56423660--59d189e1-e5ff-41bc-92f0-be5cbcc5bbb6.lovable.app-1782398182412.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/6503842e-f43f-419f-8374-ce726827ba4a/id-preview-56423660--59d189e1-e5ff-41bc-92f0-be5cbcc5bbb6.lovable.app-1782398182412.png" },
+      {
+        name: "twitter:description",
+        content: "Futuristic command dashboard for the JARVIS personal AI assistant.",
+      },
+      {
+        property: "og:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/6503842e-f43f-419f-8374-ce726827ba4a/id-preview-56423660--59d189e1-e5ff-41bc-92f0-be5cbcc5bbb6.lovable.app-1782398182412.png",
+      },
+      {
+        name: "twitter:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/6503842e-f43f-419f-8374-ce726827ba4a/id-preview-56423660--59d189e1-e5ff-41bc-92f0-be5cbcc5bbb6.lovable.app-1782398182412.png",
+      },
       { name: "theme-color", content: "#000000" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },

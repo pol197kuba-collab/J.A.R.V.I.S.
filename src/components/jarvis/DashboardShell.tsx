@@ -10,17 +10,10 @@ import { useRouteTransition } from "@/components/jarvis/TransitionContext";
 import { useSidebar } from "@/components/ui/sidebar";
 import { audio } from "@/lib/audio/AudioEngine";
 import { HeaderVoiceToggle } from "@/components/jarvis/HeaderVoiceToggle";
-import {
-  ArkRebootProvider,
-  useArkReboot,
-} from "@/components/jarvis/ArkRebootContext";
+import { ArkRebootProvider, useArkReboot } from "@/components/jarvis/ArkRebootContext";
 import { ArkRebootOverlay } from "@/components/jarvis/ArkRebootOverlay";
 import { RebootButton } from "@/components/jarvis/RebootButton";
-import {
-  isFullscreen,
-  onFullscreenChange,
-  toggleAppFullscreen,
-} from "@/lib/fullscreen";
+import { isFullscreen, onFullscreenChange, toggleAppFullscreen } from "@/lib/fullscreen";
 import type { AppPhase } from "@/components/jarvis/PhaseContext";
 
 /**
@@ -28,13 +21,7 @@ import type { AppPhase } from "@/components/jarvis/PhaseContext";
  * (sidebar + HUD header + route outlet + transition overlay).
  * Split out of __root.tsx for clarity.
  */
-export function DashboardShell({
-  phase,
-  onShutdown,
-}: {
-  phase: AppPhase;
-  onShutdown: () => void;
-}) {
+export function DashboardShell({ phase, onShutdown }: { phase: AppPhase; onShutdown: () => void }) {
   return (
     <ArkRebootProvider>
       <DashboardShellInner phase={phase} onShutdown={onShutdown} />
@@ -42,13 +29,7 @@ export function DashboardShell({
   );
 }
 
-function DashboardShellInner({
-  phase,
-  onShutdown,
-}: {
-  phase: AppPhase;
-  onShutdown: () => void;
-}) {
+function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdown: () => void }) {
   const { transition } = useRouteTransition();
   const { setOpen, setOpenMobile, isMobile } = useSidebar();
   const { isDiagnosticRunning } = useArkReboot();
@@ -63,8 +44,7 @@ function DashboardShellInner({
       else setOpen(detail === "open");
     }
     window.addEventListener("jarvis:sidebar", onSidebarCmd as EventListener);
-    return () =>
-      window.removeEventListener("jarvis:sidebar", onSidebarCmd as EventListener);
+    return () => window.removeEventListener("jarvis:sidebar", onSidebarCmd as EventListener);
   }, [isMobile, setOpen, setOpenMobile]);
 
   return (

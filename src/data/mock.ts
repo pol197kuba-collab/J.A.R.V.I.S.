@@ -6,11 +6,36 @@ export type ChatMessage = {
 };
 
 export const initialMessages: ChatMessage[] = [
-  { id: "1", role: "jarvis", time: "21:42:01", text: "Good evening, sir. All systems are nominal. Shall I prepare your daily briefing?" },
-  { id: "2", role: "user", time: "21:42:18", text: "Yes, and pull the latest activity from the lab." },
-  { id: "3", role: "jarvis", time: "21:42:19", text: "Compiling now. I have flagged three anomalies in the arc reactor telemetry that warrant your attention." },
-  { id: "4", role: "user", time: "21:43:05", text: "Schedule a meeting with Pepper for tomorrow at 9." },
-  { id: "5", role: "jarvis", time: "21:43:06", text: "Confirmed. Calendar updated. I have also rerouted your 10 AM call to make room." },
+  {
+    id: "1",
+    role: "jarvis",
+    time: "21:42:01",
+    text: "Good evening, sir. All systems are nominal. Shall I prepare your daily briefing?",
+  },
+  {
+    id: "2",
+    role: "user",
+    time: "21:42:18",
+    text: "Yes, and pull the latest activity from the lab.",
+  },
+  {
+    id: "3",
+    role: "jarvis",
+    time: "21:42:19",
+    text: "Compiling now. I have flagged three anomalies in the arc reactor telemetry that warrant your attention.",
+  },
+  {
+    id: "4",
+    role: "user",
+    time: "21:43:05",
+    text: "Schedule a meeting with Pepper for tomorrow at 9.",
+  },
+  {
+    id: "5",
+    role: "jarvis",
+    time: "21:43:06",
+    text: "Confirmed. Calendar updated. I have also rerouted your 10 AM call to make room.",
+  },
 ];
 
 export const jarvisReplies = [
@@ -31,11 +56,46 @@ export type ActiveTask = {
 };
 
 export const activeTasks: ActiveTask[] = [
-  { id: "t1", title: "Generating quarterly intelligence report", subsystem: "Analytics", progress: 72, status: "running", elapsed: "00:04:21" },
-  { id: "t2", title: "Monitoring Discord — Stark Industries", subsystem: "Comms", progress: 100, status: "running", elapsed: "12:47:09" },
-  { id: "t3", title: "Indexing private repository", subsystem: "CodeSync", progress: 48, status: "running", elapsed: "00:01:55" },
-  { id: "t4", title: "Calendar synchronization", subsystem: "Scheduler", progress: 35, status: "queued", elapsed: "00:00:12" },
-  { id: "t5", title: "Perimeter threat scan", subsystem: "Security", progress: 88, status: "warning", elapsed: "00:00:48" },
+  {
+    id: "t1",
+    title: "Generating quarterly intelligence report",
+    subsystem: "Analytics",
+    progress: 72,
+    status: "running",
+    elapsed: "00:04:21",
+  },
+  {
+    id: "t2",
+    title: "Monitoring Discord — Stark Industries",
+    subsystem: "Comms",
+    progress: 100,
+    status: "running",
+    elapsed: "12:47:09",
+  },
+  {
+    id: "t3",
+    title: "Indexing private repository",
+    subsystem: "CodeSync",
+    progress: 48,
+    status: "running",
+    elapsed: "00:01:55",
+  },
+  {
+    id: "t4",
+    title: "Calendar synchronization",
+    subsystem: "Scheduler",
+    progress: 35,
+    status: "queued",
+    elapsed: "00:00:12",
+  },
+  {
+    id: "t5",
+    title: "Perimeter threat scan",
+    subsystem: "Security",
+    progress: 88,
+    status: "warning",
+    elapsed: "00:00:48",
+  },
 ];
 
 export const systemStats = [
@@ -46,11 +106,31 @@ export const systemStats = [
 ];
 
 export const systemLogs = [
-  { ts: "21:43:06", level: "INFO", source: "scheduler", msg: "Meeting created: Pepper Potts @ 09:00" },
-  { ts: "21:42:55", level: "WARN", source: "security", msg: "Unusual login attempt from 10.0.0.42 — challenged" },
+  {
+    ts: "21:43:06",
+    level: "INFO",
+    source: "scheduler",
+    msg: "Meeting created: Pepper Potts @ 09:00",
+  },
+  {
+    ts: "21:42:55",
+    level: "WARN",
+    source: "security",
+    msg: "Unusual login attempt from 10.0.0.42 — challenged",
+  },
   { ts: "21:42:30", level: "INFO", source: "analytics", msg: "Report job queued (id=rpt_8821)" },
-  { ts: "21:41:12", level: "INFO", source: "comms", msg: "Discord channel #lab synced (412 new messages)" },
-  { ts: "21:40:01", level: "ERROR", source: "codesync", msg: "Repository fetch timeout — retrying" },
+  {
+    ts: "21:41:12",
+    level: "INFO",
+    source: "comms",
+    msg: "Discord channel #lab synced (412 new messages)",
+  },
+  {
+    ts: "21:40:01",
+    level: "ERROR",
+    source: "codesync",
+    msg: "Repository fetch timeout — retrying",
+  },
   { ts: "21:38:47", level: "INFO", source: "core", msg: "Voice interface calibration complete" },
   { ts: "21:35:22", level: "INFO", source: "core", msg: "System boot sequence finished in 2.41s" },
 ];

@@ -4,8 +4,7 @@ import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 
 export function VocalOverrideSwitch() {
-  const { enabled, supported, listening, lastTranscript, setEnabled } =
-    useVoiceCommands();
+  const { enabled, supported, listening, lastTranscript, setEnabled } = useVoiceCommands();
 
   return (
     <div className="flex items-center gap-3 border border-primary/30 bg-black/60 px-3 py-1.5 landscape:max-md:px-2 landscape:max-md:py-1">

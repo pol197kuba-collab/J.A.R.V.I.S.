@@ -18,13 +18,7 @@ function buildLogLines(mod: SubSystem) {
   ];
 }
 
-export function ModuleLoader({
-  mod,
-  onReady,
-}: {
-  mod: SubSystem;
-  onReady: () => void;
-}) {
+export function ModuleLoader({ mod, onReady }: { mod: SubSystem; onReady: () => void }) {
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [iris, setIris] = useState(false);
@@ -39,17 +33,20 @@ export function ModuleLoader({
 
     STEPS.forEach((p, i) => {
       timers.push(
-        setTimeout(() => {
-          setProgress(p);
-          setLogs((cur) => [...cur, allLogs[i] ?? allLogs[allLogs.length - 1]]);
-          audio.playClick();
-          if (p >= 100 && !ready.current) {
-            ready.current = true;
-            audio.playAccessGranted();
-            setTimeout(() => setIris(true), 250);
-            setTimeout(() => onReady(), 900);
-          }
-        }, stepInterval * (i + 1)),
+        setTimeout(
+          () => {
+            setProgress(p);
+            setLogs((cur) => [...cur, allLogs[i] ?? allLogs[allLogs.length - 1]]);
+            audio.playClick();
+            if (p >= 100 && !ready.current) {
+              ready.current = true;
+              audio.playAccessGranted();
+              setTimeout(() => setIris(true), 250);
+              setTimeout(() => onReady(), 900);
+            }
+          },
+          stepInterval * (i + 1),
+        ),
       );
     });
 
@@ -182,7 +179,10 @@ export function ModuleLoader({
 
       {/* iris-open overlay */}
       {iris && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden>
+        <div
+          className="pointer-events-none absolute inset-0 flex items-center justify-center"
+          aria-hidden
+        >
           <div
             className="h-6 w-6 rounded-full bg-primary animate-iris-open"
             style={{ boxShadow: "0 0 60px var(--primary), 0 0 120px var(--primary)" }}

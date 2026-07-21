@@ -80,9 +80,7 @@ function looksLikeJsonEnvelope(text: string): boolean {
   return /"action"\s*:/.test(t) && /"speech"\s*:/.test(t);
 }
 
-export function getRecentHistory(
-  n = 10,
-): Array<{ role: "user" | "jarvis"; text: string }> {
+export function getRecentHistory(n = 10): Array<{ role: "user" | "jarvis"; text: string }> {
   if (typeof window === "undefined") return [];
   try {
     const raw = window.localStorage.getItem(HISTORY_KEY);

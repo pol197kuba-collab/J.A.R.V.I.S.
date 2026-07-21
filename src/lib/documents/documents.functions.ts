@@ -106,7 +106,9 @@ export const createDocumentFn = createServerFn({ method: "POST" })
       status: "uploading",
     });
     if (error) {
-      await logServerError(supabase, userId, "documents", error, { filename: data.filename } as Json);
+      await logServerError(supabase, userId, "documents", error, {
+        filename: data.filename,
+      } as Json);
       return { ok: false, reason: "db_error", message: error.message };
     }
 

@@ -67,7 +67,7 @@ export function CoreAudioSpectrum({ active }: { active: boolean }) {
           // Idle: gentle multi-sine pulse so the ring never looks dead
           v = 0.18 + 0.12 * (Math.sin(elapsed * 1.6 + i * 0.22) * 0.5 + 0.5);
         }
-        const len = (Math.min(w, h) * 0.085) + v * Math.min(w, h) * 0.16;
+        const len = Math.min(w, h) * 0.085 + v * Math.min(w, h) * 0.16;
         const a = (i / BARS) * Math.PI * 2 - Math.PI / 2;
         const x1 = cx + Math.cos(a) * baseR;
         const y1 = cy + Math.sin(a) * baseR;

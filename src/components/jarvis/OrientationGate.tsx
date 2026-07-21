@@ -32,9 +32,7 @@ export function OrientationGate({
     };
   }, []);
 
-  const exempt = exemptPaths.some(
-    (p) => pathname === p || pathname.startsWith(p + "/"),
-  );
+  const exempt = exemptPaths.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
   if (blocked && !exempt) return <PortraitBlock />;
   return <>{children}</>;
@@ -69,8 +67,7 @@ function PortraitBlock() {
         <span
           className="absolute inset-0 animate-ping rounded-full"
           style={{
-            background:
-              "radial-gradient(circle, oklch(0.7 0.24 35 / 0.6) 0%, transparent 70%)",
+            background: "radial-gradient(circle, oklch(0.7 0.24 35 / 0.6) 0%, transparent 70%)",
           }}
         />
         <AlertTriangle

@@ -31,7 +31,11 @@ function AgentHub() {
   const fetchAgents = useServerFn(listAgents);
   const { go, isTransitioning } = useHudNavigate();
 
-  const { data: agents = [], isLoading, error } = useQuery({
+  const {
+    data: agents = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["agents", "list"],
     queryFn: () => fetchAgents(),
     refetchInterval: 5000,
@@ -43,9 +47,7 @@ function AgentHub() {
     e.preventDefault();
     e.stopPropagation();
     localStorage.setItem(ACTIVE_AGENT_LS_KEY, JSON.stringify({ slug, name }));
-    window.dispatchEvent(
-      new CustomEvent("jarvis:agent-changed", { detail: { slug, name } }),
-    );
+    window.dispatchEvent(new CustomEvent("jarvis:agent-changed", { detail: { slug, name } }));
     audio.playClick();
     go("/");
   }
@@ -73,7 +75,10 @@ function AgentHub() {
       )}
       {error && (
         <HudPanel index={1} className="p-5">
-          <p className="font-display text-xs uppercase tracking-widest" style={{ color: "var(--destructive)" }}>
+          <p
+            className="font-display text-xs uppercase tracking-widest"
+            style={{ color: "var(--destructive)" }}
+          >
             ✕ REGISTRY UNREACHABLE — {error instanceof Error ? error.message : String(error)}
           </p>
         </HudPanel>

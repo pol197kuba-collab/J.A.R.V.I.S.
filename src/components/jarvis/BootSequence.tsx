@@ -76,8 +76,7 @@ export function BootSequence({
       <div
         className="pointer-events-none absolute inset-0"
         style={{
-          background:
-            "radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.95) 100%)",
+          background: "radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.95) 100%)",
         }}
       />
       <CornerTicks />
@@ -161,7 +160,11 @@ export function BootSequence({
               />
             </div>
             <p className="font-mono text-[8px] uppercase tracking-widest text-muted-foreground sm:text-[10px]">
-              {progress.toFixed(0)}% &nbsp;//&nbsp; <span className="hidden sm:inline">HANDSHAKE PROTOCOL · ARC-NET · BIOMETRIC LOCK</span><span className="sm:hidden">HANDSHAKE · ARC-NET</span>
+              {progress.toFixed(0)}% &nbsp;//&nbsp;{" "}
+              <span className="hidden sm:inline">
+                HANDSHAKE PROTOCOL · ARC-NET · BIOMETRIC LOCK
+              </span>
+              <span className="sm:hidden">HANDSHAKE · ARC-NET</span>
             </p>
           </div>
         </div>
@@ -170,26 +173,41 @@ export function BootSequence({
       {/* ============== STEP 2 ============== */}
       {step === 2 && (
         <div className="relative animate-fade-up flex aspect-square w-[min(70vmin,640px)] items-center justify-center">
-          <svg viewBox="0 0 400 400" className="absolute inset-0 h-full w-full text-primary animate-ring-spin" style={{ animationDuration: "20s" }}>
+          <svg
+            viewBox="0 0 400 400"
+            className="absolute inset-0 h-full w-full text-primary animate-ring-spin"
+            style={{ animationDuration: "20s" }}
+          >
             <g fill="none" stroke="currentColor" strokeWidth="0.8">
               <circle cx="200" cy="200" r="190" opacity="0.4" />
               <circle cx="200" cy="200" r="190" strokeDasharray="4 18" opacity="0.9" />
             </g>
           </svg>
-          <svg viewBox="0 0 400 400" className="absolute inset-8 h-[calc(100%-4rem)] w-[calc(100%-4rem)] text-accent animate-ring-spin-rev" style={{ animationDuration: "14s" }}>
+          <svg
+            viewBox="0 0 400 400"
+            className="absolute inset-8 h-[calc(100%-4rem)] w-[calc(100%-4rem)] text-accent animate-ring-spin-rev"
+            style={{ animationDuration: "14s" }}
+          >
             <g fill="none" stroke="currentColor" strokeWidth="0.8">
               <circle cx="200" cy="200" r="180" strokeDasharray="1 8" opacity="0.7" />
               <circle cx="200" cy="200" r="160" opacity="0.3" />
             </g>
           </svg>
-          <svg viewBox="0 0 400 400" className="absolute inset-20 h-[calc(100%-10rem)] w-[calc(100%-10rem)] text-primary animate-ring-spin" style={{ animationDuration: "9s" }}>
+          <svg
+            viewBox="0 0 400 400"
+            className="absolute inset-20 h-[calc(100%-10rem)] w-[calc(100%-10rem)] text-primary animate-ring-spin"
+            style={{ animationDuration: "9s" }}
+          >
             <g fill="none" stroke="currentColor" strokeWidth="1">
               <circle cx="200" cy="200" r="180" strokeDasharray="40 12 4 12" opacity="0.8" />
             </g>
           </svg>
 
           <div className="relative z-10 text-center">
-            <h1 className="font-display text-5xl font-bold tracking-[0.3em] text-foreground md:text-6xl" style={{ textShadow: "0 0 24px oklch(0.82 0.17 215 / 0.7)" }}>
+            <h1
+              className="font-display text-5xl font-bold tracking-[0.3em] text-foreground md:text-6xl"
+              style={{ textShadow: "0 0 24px oklch(0.82 0.17 215 / 0.7)" }}
+            >
               {JARVIS.slice(0, typed)}
               <span className="ml-1 inline-block h-[1em] w-[2px] translate-y-[0.15em] animate-blink bg-primary" />
             </h1>
@@ -204,7 +222,10 @@ export function BootSequence({
       {step === 3 && (
         <div className="relative flex h-full w-full flex-col items-center justify-center gap-4 px-6">
           {/* Background HUD text — placed behind, low z */}
-          <div aria-hidden className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center overflow-hidden">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center overflow-hidden"
+          >
             <p className="font-display select-none whitespace-nowrap text-[18vw] font-bold uppercase tracking-[0.3em] text-primary/[0.04]">
               JARVIS
             </p>
@@ -217,7 +238,10 @@ export function BootSequence({
             <ArcReactorTriangle />
           </div>
 
-          <div className="relative z-[60] flex flex-col items-center gap-3 animate-fade-up" style={{ animationDelay: "0.6s" }}>
+          <div
+            className="relative z-[60] flex flex-col items-center gap-3 animate-fade-up"
+            style={{ animationDelay: "0.6s" }}
+          >
             <p className="font-display text-[10px] uppercase tracking-[0.4em] text-[color:var(--warning)]">
               ⚠ Authorization required
             </p>

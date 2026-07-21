@@ -25,12 +25,7 @@ export function PhaseController() {
   const navigate = useNavigate();
   const [phase, setPhase] = useState<AppPhase>("booting");
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const isPublicRoute =
-    pathname === "/reset-password" || pathname.startsWith("/.lovable/oauth/");
-
-  if (isPublicRoute) {
-    return <Outlet />;
-  }
+  const isPublicRoute = pathname === "/reset-password" || pathname.startsWith("/.lovable/oauth/");
 
   // Listen for auth state changes: if user signs out anywhere, drop to boot.
   useEffect(() => {
@@ -86,20 +81,24 @@ export function PhaseController() {
     else audio.stopHum();
   }, [phase]);
 
+  // Public routes bypass the whole phase machine. This early return MUST sit
+  // below every hook above: hooks have to run in the same order on every
+  // render, and a pre-hook return would crash React ("rendered fewer hooks
+  // than expected") the moment navigation crosses the public/app boundary.
+  // The effects above are all safe no-ops on public routes — each one gates
+  // on phase or events internally.
+  if (isPublicRoute) {
+    return <Outlet />;
+  }
+
   const showDashboardShell =
-    phase === "transition_to_dashboard" ||
-    phase === "dashboard_active" ||
-    phase === "shutdown";
+    phase === "transition_to_dashboard" || phase === "dashboard_active" || phase === "shutdown";
 
   return (
     <OrientationGate exemptPaths={["/vision"]}>
       <PhaseContext.Provider value={{ phase, setPhase }}>
         {phase === "booting" && (
-          <BootSequence
-            key="engage"
-            mode="engage"
-            onEngage={() => setPhase("login_screen")}
-          />
+          <BootSequence key="engage" mode="engage" onEngage={() => setPhase("login_screen")} />
         )}
         {phase === "login_screen" && (
           <StarkLogin
@@ -121,10 +120,7 @@ export function PhaseController() {
           <TransitionProvider>
             <SidebarProvider defaultOpen={false}>
               <VoiceCommandProvider>
-                <DashboardShell
-                  phase={phase}
-                  onShutdown={() => setPhase("shutdown")}
-                />
+                <DashboardShell phase={phase} onShutdown={() => setPhase("shutdown")} />
               </VoiceCommandProvider>
             </SidebarProvider>
           </TransitionProvider>

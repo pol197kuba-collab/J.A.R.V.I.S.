@@ -2,13 +2,7 @@ import { Mic, MicOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { audio } from "@/lib/audio/AudioEngine";
 
-export function VoiceButton({
-  active,
-  onToggle,
-}: {
-  active: boolean;
-  onToggle: () => void;
-}) {
+export function VoiceButton({ active, onToggle }: { active: boolean; onToggle: () => void }) {
   return (
     <div className="flex flex-col items-center gap-4">
       <div className="relative">
@@ -33,7 +27,11 @@ export function VoiceButton({
             active && "border-primary bg-primary/20",
           )}
         >
-          {active ? <MicOff strokeWidth={1.5} className="h-7 w-7" /> : <Mic strokeWidth={1.5} className="h-7 w-7" />}
+          {active ? (
+            <MicOff strokeWidth={1.5} className="h-7 w-7" />
+          ) : (
+            <Mic strokeWidth={1.5} className="h-7 w-7" />
+          )}
         </button>
       </div>
 

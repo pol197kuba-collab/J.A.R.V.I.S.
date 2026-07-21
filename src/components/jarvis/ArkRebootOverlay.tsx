@@ -26,8 +26,7 @@ export function ArkRebootOverlay() {
         <p
           className="font-display text-2xl uppercase tracking-[0.4em] text-[oklch(0.95_0.18_75)]"
           style={{
-            textShadow:
-              "0 0 14px oklch(0.85 0.2 65 / 0.8), 0 0 32px oklch(0.85 0.2 65 / 0.5)",
+            textShadow: "0 0 14px oklch(0.85 0.2 65 / 0.8), 0 0 32px oklch(0.85 0.2 65 / 0.5)",
           }}
         >
           {current?.module ?? "INITIALIZING"}

@@ -10,7 +10,10 @@ export const Route = createFileRoute("/schema")({
   head: () => ({
     meta: [
       { title: "JARVIS // Schema Explorer" },
-      { name: "description", content: "Database topology — tables, columns, relations and access policies." },
+      {
+        name: "description",
+        content: "Database topology — tables, columns, relations and access policies.",
+      },
     ],
   }),
   component: SchemaExplorer,
@@ -126,20 +129,20 @@ function SchemaExplorer() {
           </HudPanel>
 
           <div className="space-y-6">
-            {active && (
-              <TableDetail
-                snapshot={data}
-                table={active}
-                onSelect={setSelected}
-              />
-            )}
+            {active && <TableDetail snapshot={data} table={active} onSelect={setSelected} />}
           </div>
         </div>
       )}
 
       {data && view === "graph" && (
         <HudPanel index={1} title="RELATION MAP" className="p-5">
-          <SchemaGraph snapshot={data} onSelect={(n) => { setSelected(n); setView("detail"); }} />
+          <SchemaGraph
+            snapshot={data}
+            onSelect={(n) => {
+              setSelected(n);
+              setView("detail");
+            }}
+          />
         </HudPanel>
       )}
 
@@ -200,7 +203,9 @@ function TableDetail({
               key={c.name}
               className="grid grid-cols-[minmax(140px,1.2fr)_minmax(160px,1.5fr)_80px_1fr] gap-3 border-b border-primary/10 px-3 py-1.5 font-mono text-xs last:border-0"
             >
-              <span className={cn("truncate", c.is_primary_key ? "text-primary" : "text-foreground")}>
+              <span
+                className={cn("truncate", c.is_primary_key ? "text-primary" : "text-foreground")}
+              >
                 {c.is_primary_key && <span className="mr-1 text-primary">◆</span>}
                 {c.name}
               </span>
@@ -266,7 +271,9 @@ function TableDetail({
                 <div className="flex flex-wrap items-center gap-2 font-display text-[10px] uppercase tracking-widest">
                   <span className="text-primary">{p.name}</span>
                   <span className="border border-primary/40 px-1 text-primary/80">{p.command}</span>
-                  <span className="text-muted-foreground">roles: {p.roles.join(", ") || "public"}</span>
+                  <span className="text-muted-foreground">
+                    roles: {p.roles.join(", ") || "public"}
+                  </span>
                 </div>
                 {p.using && (
                   <div className="mt-1 font-mono text-[11px] text-foreground/80">
@@ -319,7 +326,15 @@ function SchemaGraph({
     <div className="overflow-x-auto">
       <svg width={width} height={height} className="min-w-full">
         <defs>
-          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <marker
+            id="arrow"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto-start-reverse"
+          >
             <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--primary)" />
           </marker>
         </defs>

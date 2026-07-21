@@ -10,7 +10,9 @@ type OAuthAuthz = {
   scope?: string;
 };
 type OAuthApi = {
-  getAuthorizationDetails: (id: string) => Promise<{ data: OAuthAuthz | null; error: Error | null }>;
+  getAuthorizationDetails: (
+    id: string,
+  ) => Promise<{ data: OAuthAuthz | null; error: Error | null }>;
   approveAuthorization: (id: string) => Promise<{ data: OAuthAuthz | null; error: Error | null }>;
   denyAuthorization: (id: string) => Promise<{ data: OAuthAuthz | null; error: Error | null }>;
 };
@@ -62,7 +64,10 @@ function Consent() {
       setError(null);
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       setBusy(false);
-      if (error) { setError(error.message); return; }
+      if (error) {
+        setError(error.message);
+        return;
+      }
       window.location.reload();
     }
     return (
@@ -88,7 +93,11 @@ function Consent() {
             onChange={(e) => setPassword(e.target.value)}
             className="w-full border border-primary/40 bg-background px-3 py-2 font-mono text-sm"
           />
-          {error && <p className="text-sm" style={{ color: "var(--destructive)" }}>{error}</p>}
+          {error && (
+            <p className="text-sm" style={{ color: "var(--destructive)" }}>
+              {error}
+            </p>
+          )}
           <button
             type="submit"
             disabled={busy}
@@ -107,9 +116,17 @@ function Consent() {
     const { data: r, error } = approve
       ? await oauthApi().approveAuthorization(data.authorizationId)
       : await oauthApi().denyAuthorization(data.authorizationId);
-    if (error) { setBusy(false); setError(error.message); return; }
+    if (error) {
+      setBusy(false);
+      setError(error.message);
+      return;
+    }
     const target = r?.redirect_url ?? r?.redirect_to;
-    if (!target) { setBusy(false); setError("No redirect returned by the authorization server."); return; }
+    if (!target) {
+      setBusy(false);
+      setError("No redirect returned by the authorization server.");
+      return;
+    }
     window.location.href = target;
   }
 
@@ -122,9 +139,15 @@ function Consent() {
         notes, and inspect your agents.
       </p>
       {data.details?.scope && (
-        <p className="mt-2 font-mono text-xs text-muted-foreground/80">scope: {data.details.scope}</p>
+        <p className="mt-2 font-mono text-xs text-muted-foreground/80">
+          scope: {data.details.scope}
+        </p>
       )}
-      {error && <p className="mt-3 text-sm" style={{ color: "var(--destructive)" }}>{error}</p>}
+      {error && (
+        <p className="mt-3 text-sm" style={{ color: "var(--destructive)" }}>
+          {error}
+        </p>
+      )}
       <div className="mt-6 flex gap-3">
         <button
           disabled={busy}
