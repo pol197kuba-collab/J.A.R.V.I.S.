@@ -919,6 +919,58 @@ now actually delegates and returns real findings instead of the canned
 line, across a few different phrasings this time, not just the one
 that was just reported.
 
+**Confirmed live 2026-07-21**: user asked Guardian to check the system
+and got a real, substantive report ("system generalnie działa... 6%
+współczynnikiem błędów dla Orchestratora... Orchestrator wymaga
+kalibracji w konstrukcji wywołań narzędzi"), not the canned line — the
+enum-removal fix worked. This also validated that Guardian's diagnostic
+tools read genuinely real data: checked `runtime.server.ts` and
+confirmed there IS a real Gemini→Groq emergency failover for the main
+reasoning turn (not just the classifier pass, `catch (geminiErr)` block
+around line 441) that gets logged to `system_events` on both success and
+failure — so Guardian's report about Gemini overload causing occasional
+malformed `perform_ui_action`/`delegate_to_agent` calls from the Groq
+fallback is an accurate reading of real logs, not a hallucination. Left
+as-is for now (Guardian doing its job correctly is the win here) —
+whether to invest in hardening the Groq fallback path itself (stricter
+tool-call validation/retry) is a separate, open question for the user to
+prioritize, not something to unilaterally change.
+
+### Sixth follow-up (2026-07-21): tool chips spilling into the neighboring node's lane
+
+Same batch of feedback also showed an active node's tool-call chip
+("SKANUJE LOGI BŁĘDÓW") visibly overlapping the next node's label.
+Confirmed and fixed for real this time: `ToolChips` used a fixed
+`max-w-[180px]` container centered on its own node, but adjacent
+teammates are only ~76px apart at the current roster size (3) — so a
+node's chip row could spill ~90px each side, well past a neighbor's
+center. Capped chip width to a fraction of the *actual* computed
+inter-node `spacing` instead of a hardcoded constant, so it scales down
+automatically as more teammates are added and can't structurally reach a
+neighbor's column. Also added a small height buffer to `containerHeight`
+so an active node's chip row doesn't get clipped against the panel's own
+bottom edge.
+
+Also investigated a second thing from the same screenshot: what looked
+like two full `ReactorBadge` shapes stacked near Strażnik's slot (not
+chip pills — actual triangle-in-ring badges). Went as far as pixel-level
+forensics on the screenshot itself (color-threshold centroid detection
+via Python/PIL) to try to pin this down, and ruled out every code-level
+cause found by reading the source: not the `pulse-core` transform bug
+(already fixed), not a duplicate `<AgentFlowTree>` mount (only one call
+site, `routes/index.tsx`), not a key-based remount (`key={t.slug}` is
+stable), not `activeBySlug` producing two entries for one slug (it's a
+`Map`, physically can't), not a 4th/5th hidden agent (only 4 agent slugs
+exist across all migrations). **Could not reach a conclusive code-level
+diagnosis from screenshots alone** — this is being left open rather than
+guessed at with a 6th speculative patch, given three of the last five
+fixes in this arc were reactive one-off guesses that each got defeated.
+**Needs targeted live diagnostic info next**, ideally one of: whether it
+happens every time a node goes active or only sometimes, whether a hard
+refresh clears it instantly, or (most conclusive) a browser DevTools
+Elements-panel check for whether there are genuinely two DOM nodes at
+that moment.
+
 ## 7. [W] Situation Room — **shipped 2026-07-17, flight radar confirmed live 2026-07-20**
 
 Merged `geo-tracking`, `WeatherTelemetry`, `GithubActivityPulse` and
