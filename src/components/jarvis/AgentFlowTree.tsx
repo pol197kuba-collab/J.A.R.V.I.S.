@@ -38,14 +38,14 @@ function currentActionLine(run: FlowRun): string | null {
 function ToolChips({ calls }: { calls: FlowToolCall[] }) {
   if (calls.length === 0) return null;
   return (
-    <div className="mt-1.5 flex max-w-[220px] flex-wrap justify-center gap-1">
+    <div className="mt-1 flex max-w-[180px] flex-wrap justify-center gap-1">
       {calls.map((call, i) => {
         const label = describeToolCall(call.name, call.args);
         return (
           <span
             key={`${call.name}-${i}`}
             title={label}
-            className="animate-flow-node-in max-w-[150px] truncate rounded-full border border-primary/20 bg-[color:var(--surface-1)] px-1.5 py-0.5 font-display text-[7px] uppercase tracking-[0.15em] text-primary/70"
+            className="animate-flow-node-in max-w-[130px] truncate rounded-full border border-primary/20 bg-[color:var(--surface-1)] px-1.5 py-0.5 font-display text-[7px] uppercase tracking-[0.15em] text-primary/70"
           >
             {label}
           </span>
@@ -55,17 +55,87 @@ function ToolChips({ calls }: { calls: FlowToolCall[] }) {
   );
 }
 
-// Radial layout: a rotated "spoke" div carries the connecting line + the
-// travelling dot in its own local coordinate space (so the dot's simple
-// top:0%->100% animation automatically follows whatever angle the spoke
-// is rotated to) — the destination TILE itself is a separate, independently
-// positioned element (computed via the same trig), not a child of the
-// rotated spoke, so its contents never rotate.
-function FlowSpoke({ angleDeg, length, active }: { angleDeg: number; length: number; active: boolean }) {
+// Same SVG structure as MiniArcReactor.tsx (three rotating triangles, two
+// rings, pulsing core) — that component is hardcoded to `--primary` via
+// Tailwind's text-primary/bg-primary, which can't be retinted per node
+// status (green=done, red=error, grey=idle) without fragile CSS-variable
+// shadowing, so this is a small, purpose-built sibling with the same look
+// but color/size as explicit props. Reuses the exact same keyframes
+// (animate-mini-reactor-spin / animate-pulse-core) — no new CSS needed.
+function ReactorBadge({ size, color, active }: { size: number; color: string; active: boolean }) {
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }} aria-hidden>
+      <svg
+        viewBox="0 0 100 100"
+        className="animate-mini-reactor-spin absolute inset-0 h-full w-full"
+        style={{
+          color,
+          opacity: active ? 1 : 0.4,
+          filter: active ? `drop-shadow(0 0 ${Math.max(3, size * 0.1)}px ${color})` : undefined,
+        }}
+      >
+        <circle cx="50" cy="50" r="46" fill="none" stroke="currentColor" strokeWidth="1" opacity="0.4" />
+        <circle
+          cx="50"
+          cy="50"
+          r="38"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="0.8"
+          strokeDasharray="2 3"
+          opacity="0.7"
+        />
+        {[0, 120, 240].map((rot) => (
+          <g
+            key={rot}
+            transform={`rotate(${rot} 50 50)`}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinejoin="round"
+          >
+            <polygon points="50,18 70,55 30,55" />
+          </g>
+        ))}
+      </svg>
+      <div
+        className={cn(
+          "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full",
+          active && "animate-pulse-core",
+        )}
+        style={{
+          width: Math.max(4, size * 0.13),
+          height: Math.max(4, size * 0.13),
+          backgroundColor: color,
+          boxShadow: active ? `0 0 ${size * 0.18}px ${color}` : "none",
+        }}
+      />
+    </div>
+  );
+}
+
+// A straight connector between the hub and a node, rotated + scaled to
+// point exactly at wherever that node's independently-computed (dx, dy)
+// position ends up (see the layout notes in AgentFlowTree) — the
+// travelling dot's simple top:0%→100% animation lives in the connector's
+// own rotated local coordinate space, so it automatically follows
+// whatever angle/length the connector has without any per-node math of
+// its own.
+function FlowSpoke({
+  angleDeg,
+  length,
+  active,
+  top,
+}: {
+  angleDeg: number;
+  length: number;
+  active: boolean;
+  top: number;
+}) {
   return (
     <div
-      className="absolute left-1/2 top-0 origin-top"
-      style={{ width: 2, height: length, transform: `translateX(-1px) rotate(${angleDeg}deg)` }}
+      className="absolute left-1/2 origin-top"
+      style={{ width: 2, height: length, top, transform: `translateX(-1px) rotate(${angleDeg}deg)` }}
     >
       <div
         className="h-full w-full"
@@ -85,21 +155,16 @@ function FlowSpoke({ angleDeg, length, active }: { angleDeg: number; length: num
   );
 }
 
-function FlowNodeTile({
+function FlowNode({
   name,
   run,
-  emphasis,
-  width,
+  badgeSize,
   selected,
   onClick,
 }: {
   name: string;
   run?: FlowRun;
-  emphasis?: boolean;
-  /** Teammate tiles shrink as the roster grows (see arc geometry notes in
-   *  AgentFlowTree) to keep adjacent nodes from overlapping — the
-   *  Orchestrator's emphasis tile ignores this and stays fixed-size. */
-  width?: number;
+  badgeSize: number;
   selected?: boolean;
   onClick?: () => void;
 }) {
@@ -117,45 +182,26 @@ function FlowNodeTile({
           ? run.status
           : "standby";
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex flex-col items-center gap-1 rounded-lg border backdrop-blur transition-all duration-500",
-        emphasis ? "min-w-[132px] px-4 py-2.5" : "px-2.5 py-1.5",
-        selected && "ring-1 ring-primary/60",
-      )}
-      style={{
-        minWidth: emphasis ? undefined : (width ?? 104),
-        borderColor: `color-mix(in oklab, ${color} ${active ? 40 : 16}%, transparent)`,
-        background: active
-          ? "color-mix(in oklab, var(--surface-1) 92%, transparent)"
-          : "color-mix(in oklab, var(--surface-1) 55%, transparent)",
-        opacity: active ? 1 : 0.5,
-        boxShadow: running
-          ? `0 0 0 1px color-mix(in oklab, ${color} 20%, transparent), 0 0 ${emphasis ? 22 : 16}px -2px color-mix(in oklab, ${color} 65%, transparent)`
-          : active
-            ? `0 0 0 1px color-mix(in oklab, ${color} 12%, transparent)`
+    <button type="button" onClick={onClick} className="flex flex-col items-center gap-1 bg-transparent">
+      <div
+        className="flex items-center justify-center rounded-full transition-all duration-500"
+        style={{
+          boxShadow: selected
+            ? `0 0 0 2px color-mix(in oklab, var(--primary) 70%, transparent), 0 0 0 4px color-mix(in oklab, var(--surface-1) 92%, transparent)`
             : "none",
-      }}
-    >
-      <div className="flex items-center gap-1.5">
-        <span
-          className={cn("rounded-full", running ? "animate-pulse" : "", emphasis ? "h-2 w-2" : "h-1.5 w-1.5")}
-          style={{ backgroundColor: color, boxShadow: active ? `0 0 6px ${color}` : "none" }}
-        />
-        <span
-          className={cn(
-            "font-display uppercase tracking-[0.2em] text-foreground/90",
-            emphasis ? "text-[12px]" : "text-[10px]",
-          )}
-        >
-          {name}
-        </span>
+        }}
+      >
+        <ReactorBadge size={badgeSize} color={color} active={active} />
       </div>
       <span
+        className="max-w-[110px] truncate font-display uppercase tracking-[0.18em] text-foreground/90"
+        style={{ fontSize: badgeSize >= 60 ? 11 : 9 }}
+      >
+        {name}
+      </span>
+      <span
         title={liveLine ?? undefined}
-        className="max-w-[150px] truncate font-display text-[8px] uppercase tracking-[0.15em] text-muted-foreground"
+        className="max-w-[130px] truncate font-display text-[8px] uppercase tracking-[0.15em] text-muted-foreground"
       >
         {statusLine}
       </span>
@@ -299,7 +345,7 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
 
   // All delegations currently in flight/settled for the pinned interaction,
   // shown as a small list under the hub rather than attached to individual
-  // spokes — at arbitrary fan angles there's no single "above the node"
+  // spokes — at arbitrary fan positions there's no single "above the node"
   // position that reads naturally for every teammate, but "under the agent
   // that issued them" always does.
   const activeDelegations = useMemo(() => {
@@ -312,25 +358,36 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
   const teammates = agents.filter((a) => a.slug !== "orchestrator");
   const orchestratorRun = activeBySlug.get("orchestrator");
 
-  // Fan geometry: teammates arranged on an arc below the hub rather than a
-  // full circle — a true 360° layout would force this compact HUD panel
-  // much taller than the rest of the dashboard grid to have room for nodes
-  // above/beside the hub too. Radius, tile width and arc width all scale
-  // together as the roster grows (verified numerically for up to 8
-  // teammates — chord distance between adjacent nodes stays >=8% wider
-  // than the tile at that size, so future agents like Researcher/Producer
-  // spread out and shrink slightly rather than overlapping):
-  //   arc half-angle: 50° (1 teammate) growing to a cap of 85°
-  //   radius: fixed through 3 teammates, then grows with each extra one
-  //   tile width: fixed through 3 teammates, then shrinks with each extra
+  // Layout: horizontal spacing and vertical drop are computed independently
+  // of each other (NOT a shared radius/angle pair) — an earlier version
+  // used pure circular trig (shared radius, only angle varying), which
+  // looked fine on paper but broke live on a wide mobile viewport: at wide
+  // angles cos(angle) shrinks toward 0, so outer teammates barely dropped
+  // below the hub at all and visually rode up beside/onto it. Decoupling
+  // dx (horizontal spread, evenly spaced by construction — can never
+  // collide sideways) from dy (vertical drop, floored at
+  // hubRadius+nodeRadius+margin — can never ride up into the hub) makes
+  // both failure modes structurally impossible rather than something to
+  // keep re-tuning by eye. Verified numerically for up to 8 teammates
+  // with real margin (~20-30% headroom above the strict minimum) before
+  // shipping.
   const mobileScale = isMobile ? 0.75 : 1;
   const n = teammates.length;
-  const arcHalfDeg = Math.min(85, 50 + Math.max(0, n - 1) * 14);
-  const radius = (90 + Math.max(0, n - 3) * 20) * mobileScale;
-  const teammateTileWidth = Math.max(68, 104 - Math.max(0, n - 3) * 10) * mobileScale;
-  const anchorY = 36 * mobileScale;
-  const containerHeight = anchorY + radius + (isMobile ? 52 : 62);
-  const angleFor = (i: number) => (n <= 1 ? 0 : -arcHalfDeg + (2 * arcHalfDeg * i) / (n - 1));
+  const orchRadius = 40 * mobileScale;
+  const teammateRadius = Math.max(18, 28 - Math.max(0, n - 4) * 2) * mobileScale;
+  const spacing = (teammateRadius * 2 + 20) * 1; // teammateRadius already scaled
+  const baseDy = orchRadius + teammateRadius + 22 * mobileScale;
+  const bow = 22 * mobileScale;
+  const totalWidth = n > 1 ? spacing * (n - 1) : 0;
+  const teammatePositions = teammates.map((_t, i) => {
+    const dx = n > 1 ? -totalWidth / 2 + spacing * i : 0;
+    const norm = n > 1 && totalWidth > 0 ? dx / (totalWidth / 2) : 0;
+    const dy = baseDy + bow * norm * norm;
+    return { dx, dy };
+  });
+  const anchorY = orchRadius + 14 * mobileScale;
+  const maxDy = teammatePositions.reduce((m, p) => Math.max(m, p.dy), 0);
+  const containerHeight = anchorY + maxDy + (isMobile ? 46 : 54);
 
   const selectedRuns = useMemo(
     () => (selectedSlug ? runs.filter((r) => r.agentSlug === selectedSlug) : []),
@@ -364,42 +421,43 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
         </div>
       ) : (
         <>
-          <div className="relative mx-auto w-full max-w-[420px]" style={{ height: containerHeight }}>
-            {teammates.map((t, i) => (
-              <FlowSpoke
-                key={`spoke-${t.slug}`}
-                angleDeg={angleFor(i)}
-                length={radius}
-                active={activeBySlug.has(t.slug)}
-              />
-            ))}
-            <div
-              className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2"
-              style={{ top: anchorY }}
-            >
-              <FlowNodeTile
+          <div className="relative mx-auto w-full max-w-[440px]" style={{ height: containerHeight }}>
+            {teammates.map((t, i) => {
+              const { dx, dy } = teammatePositions[i];
+              const dist = Math.hypot(dx, dy);
+              const angleDeg = (Math.atan2(dx, dy) * 180) / Math.PI;
+              return (
+                <FlowSpoke
+                  key={`spoke-${t.slug}`}
+                  angleDeg={angleDeg}
+                  length={dist}
+                  active={activeBySlug.has(t.slug)}
+                  top={anchorY}
+                />
+              );
+            })}
+            <div className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2" style={{ top: anchorY }}>
+              <FlowNode
                 name={orchestrator.name}
                 run={orchestratorRun}
-                emphasis
+                badgeSize={orchRadius * 2}
                 selected={selectedSlug === "orchestrator"}
                 onClick={() => setSelectedSlug((s) => (s === "orchestrator" ? null : "orchestrator"))}
               />
             </div>
             {teammates.map((t, i) => {
               const run = activeBySlug.get(t.slug);
-              const angleRad = (angleFor(i) * Math.PI) / 180;
-              const dx = radius * Math.sin(angleRad);
-              const dy = radius * Math.cos(angleRad);
+              const { dx, dy } = teammatePositions[i];
               return (
                 <div
                   key={t.slug}
                   className="absolute -translate-x-1/2 -translate-y-1/2"
                   style={{ left: `calc(50% + ${dx}px)`, top: anchorY + dy }}
                 >
-                  <FlowNodeTile
+                  <FlowNode
                     name={t.name}
                     run={run}
-                    width={teammateTileWidth}
+                    badgeSize={teammateRadius * 2}
                     selected={selectedSlug === t.slug}
                     onClick={() => setSelectedSlug((s) => (s === t.slug ? null : t.slug))}
                   />

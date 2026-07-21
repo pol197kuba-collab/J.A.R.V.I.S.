@@ -431,6 +431,90 @@ overlap at the current 3-teammate roster, the arc reads as a sensible
 "hub" shape (not cramped or lopsided), and clicking a tile actually shows
 its recent-run history.
 
+### Fifth follow-up (2026-07-21): mobile overlap bugfix + reactor-badge redesign
+
+User confirmed Poziom 3 live, then reported (with a screenshot) a real bug
+on a mobile viewport: teammate nodes visibly overlapped each other and the
+hub. Separately, asked for a visual redesign — replace the rectangular
+tiles with something "computer-robotic", inviting genuinely different
+graphics rather than reskinned boxes.
+
+**Root cause of the overlap, found by re-deriving the geometry, not by
+re-tuning constants**: the shipped Poziom-3 layout used pure circular
+trig — every teammate at the same radius from the hub, only the angle
+varying (`dx = r·sin(θ)`, `dy = r·cos(θ)`). My prior numeric verification
+before shipping only checked adjacent-node *chord* distance, never
+vertical clearance from the hub itself. At wide angles (needed for
+horizontal separation as roster size grows, capped at 85°) `cos(θ)→0`,
+so `dy→0` too — outer teammates ended up almost level with the hub
+instead of below it, which is exactly the "riding up onto the hub"
+overlap the screenshot showed. This was a gap in my own verification
+method, not something the math check could have caught — it was checking
+one necessary condition (spacing between neighbors) while silently
+assuming a second, unchecked one (clearance from the hub) would hold.
+
+**Fix — decoupled the two axes so both failure modes become impossible by
+construction** instead of something to keep re-tuning by eye:
+horizontal spread (`dx`) is now evenly spaced across teammates
+independent of vertical position (can never collide sideways by
+construction), and vertical drop (`dy`) is floored at
+`hubRadius + nodeRadius + margin` for every teammate regardless of how
+far out it sits horizontally (can never ride up into the hub), with a
+small `bow` term added on top purely for a pleasant curved fan shape.
+Re-verified numerically through 8 teammates (both desktop and the
+0.75×-scaled mobile case) — this time checking hub-clearance and
+neighbor-spacing together, the exact miss from last time.
+
+Given a math-only check had just proven insufficient once already, went
+further this round: built a standalone HTML/JS harness reproducing the
+exact positioning formulas (not React — just plain divs/CSS, including
+the connector lines) for 5 scenarios (the exact reported bug case — 3
+teammates, mobile scale — plus 5-teammate and 1-teammate edge cases on
+both viewports), and drove it with Playwright (Python, using the
+pre-installed Chromium at `/opt/pw-browsers/chromium-1194/...` — `bun`
+can't install here but `pip install playwright` could, different
+registry) for an independent DOM `getBoundingClientRect()`-based overlap
+check plus an actual screenshot, rather than trusting my own JS math a
+second time. All 5 scenarios came back clean, and the screenshot
+confirmed nodes read as a sensible fan shape with no crowding.
+
+**A second real bug was caught by this same harness-building process**,
+this time in the connector lines rather than the node positions: the
+spoke `<div>` was anchored at `top: 0` of the container (the very top
+edge), but the hub's actual center sits at `top: anchorY` (54px on
+desktop, not 0) — so every line from hub to node would have rendered
+floating, offset from both endpoints by `anchorY` pixels, never actually
+touching the hub or the teammate it's supposed to connect. Fixed by
+passing `anchorY` into `FlowSpoke` as its `top` origin instead of
+hardcoding 0. Confirmed the fix visually — added spoke rendering to the
+same test harness and rechecked the screenshot; lines now originate
+exactly at the hub center and terminate exactly at each node.
+
+**Visual redesign** (the "coś komputerowo robotyczne" ask): replaced the
+old rectangular tile with a new `ReactorBadge` — a small SVG circular
+badge, structurally identical to the existing `MiniArcReactor` centerpiece
+(two rings + three rotating triangle polygons + a pulsing core dot) but
+with `color`/`size` as explicit props so it can be retinted per node
+status (grey=standby, blue=running, green=done, red=error) — something
+`MiniArcReactor` itself can't do, since it's hardcoded to `--primary`.
+Reuses the exact existing `animate-mini-reactor-spin`/`animate-pulse-core`
+keyframes — no new CSS. Every agent node in the tree is now a small
+"reactor" instead of a tile, which reads as coherent with the rest of the
+HUD's arc-reactor visual language rather than as a bolted-on new style.
+
+Also cleaned up the selection-ring styling while touching this file: an
+earlier version overrode Tailwind's internal `--tw-ring-color` CSS
+variable directly to retint a `ring-2` utility per-node — recognized as
+fragile (relying on an undocumented Tailwind internal), replaced with an
+explicit `boxShadow`-based ring instead.
+
+Verified via `esbuild`/`node --check` (clean) plus the Playwright-driven
+geometry/overlap/connector harness described above. **Still needs a live
+check on both viewports** — the user explicitly said they can't check
+desktop right now, so the desktop read is unverified beyond the numeric/
+simulated harness; mobile is where the original bug was reported, so that
+confirmation matters most and should come first when the user can test.
+
 ## 4. [UI] Schema Explorer (`/schema`) — **shipped 2026-07-17, live, confirmed working**
 
 Admin-only HUD module to browse the live database topology: tables,
