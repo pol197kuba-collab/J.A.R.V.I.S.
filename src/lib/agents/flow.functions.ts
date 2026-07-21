@@ -11,6 +11,7 @@
 
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { logServerError } from "@/lib/system/logServerError";
 
 export type FlowAgent = { slug: string; name: string };
 
@@ -46,7 +47,10 @@ export const getAgentFlow = createServerFn({ method: "GET" })
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(40);
-    if (error) throw new Error(error.message);
+    if (error) {
+      await logServerError(supabase, userId, "agent_flow", error);
+      throw new Error(error.message);
+    }
 
     return {
       agents: (agentRows ?? [])

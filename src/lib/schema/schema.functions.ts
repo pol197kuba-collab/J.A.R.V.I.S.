@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { logServerError } from "@/lib/system/logServerError";
 
 export type SchemaColumn = {
   name: string;
@@ -50,8 +51,11 @@ export type SchemaSnapshot = {
 export const getSchemaSnapshot = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<SchemaSnapshot> => {
-    const { supabase } = context;
+    const { supabase, userId } = context;
     const { data, error } = await supabase.rpc("get_public_schema_snapshot" as never);
-    if (error) throw new Error(error.message);
+    if (error) {
+      await logServerError(supabase, userId, "schema", error);
+      throw new Error(error.message);
+    }
     return data as unknown as SchemaSnapshot;
   });
