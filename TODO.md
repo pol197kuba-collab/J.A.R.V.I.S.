@@ -9,6 +9,19 @@
 > Cadence: don't ship two [F]s or two [W]s back to back — alternate, so we
 > keep building the "operating system" half while still shipping things
 > worth showing off (Vision Scanner is the bar for [W]).
+>
+> **Build-order override (2026-07-20):** items are numbered by when they
+> were added/shipped, not strict build order — build **6 → 11 → 12**
+> before **8 → 9 → 10**. RAG/Analityk (6), Researcher (11), and Producer
+> (12) form one connected pipeline (the flagship "zrób mi prezentację o
+> X" demo: RAG grounds Researcher, Researcher feeds Producer), so 11+12
+> are treated as **one combined wow milestone**, a deliberate, explicit
+> exception to the alternation cadence above rather than an oversight —
+> shipping them apart would delay the actual payoff for no technical
+> reason, since Concierge/calendar-tools/cleanup (8-10) have no
+> dependency on this arc either way. Section numbers themselves are left
+> unchanged (already referenced in pushed commit messages) — only the
+> build order is reprioritized here, not the file's physical layout.
 
 ## 1. [UI] Dashboard redesign — holo-panels with depth — **shipped 2026-07-16, confirmed working**
 
@@ -299,16 +312,93 @@ which is the cheapest possible outcome, not a regression back to Gemini.
 Confirmed live: `classifier fallback via groq: none` appears reliably for
 ordinary chat messages after a Groq key is linked.
 
-## 6. [F] RAG over personal documents (= Analityk, deprioritized not dropped)
+## 6. [F] RAG over personal documents (= Analityk) — **built 2026-07-20, needs live verification**
 
-Extend the proven `memories`/`match_memories` pgvector pattern to a
-`documents`/`document_chunks` schema + upload/chunking Edge Function +
-`search_documents` tool. TypeScript-first (`xlsx`/`papaparse`) — no Python
-service unless a specific capability genuinely can't be done in JS. Still
-valuable, just heavier (new pipeline, not reused data) than Strażnik — goes
-after it rather than first, per the reordering above.
+Built per the build-order override above (6 → 11 → 12 ahead of Concierge).
+Scope decided 2026-07-20 before writing any code: v1 covers **.txt/.md +
+PDF only** (xlsx/csv deferred — no `papaparse`/`xlsx` needed yet), and
+document management lives on its own **new `/documents` route** rather
+than inside the per-agent console, since documents are a user-wide
+resource, not agent-specific.
 
-## 7. [W] Situation Room — **shipped 2026-07-17**
+Extends the proven `memories`/`match_memories` pgvector pattern exactly:
+`documents`/`document_chunks` tables (same `vector(768)`/HNSW shape),
+`match_document_chunks` RPC (`SECURITY INVOKER` + `auth.uid()` filter,
+identical to `match_memories`). Confirmed via a full codebase map before
+writing anything (Agent Hub, the chat agent selector, and Agent Flow Tree
+all read the `agents`/`agent_tools` tables live — a new `analityk` row
+needs **zero frontend code changes** to appear in any of them; the
+per-agent tool-toggle console at `/agent-hub/:slug` already accepts an
+arbitrary slug, so Analityk's tools are toggleable there with no new UI
+either). Voice/text reachability matches Guardian's existing model exactly
+— always reachable via Orchestrator delegation, or by switching the active
+agent in Agent Hub for direct text chat; there is no per-agent voice
+target and building one was out of scope here.
+
+**First use of Supabase Storage in this codebase** — no prior upload
+precedent existed, so this shipped the whole pattern from scratch: a
+private `documents` bucket, storage policies scoping every object path to
+`${user_id}/...`, and a deliberately simple flow (client uploads bytes
+directly to Storage under its own session, a server function only ever
+handles metadata/extraction/embedding, never raw bytes over a server
+function body — this app's server-function runtime has no existing
+multipart/base64 handling and introducing one wasn't worth it for v1).
+
+Shipped:
+- `supabase/migrations/20260720120000_documents_rag.sql` — schema +
+  Storage bucket/policies + `match_document_chunks`.
+- `supabase/migrations/20260720120500_analityk_agent.sql` — seeds
+  `list_documents`/`search_documents` tools, creates the `analityk` agent
+  for every existing user (same 4-part shape as Guardian's migration),
+  redeclares `handle_new_user()` for future users.
+- `src/lib/agents/tools.server.ts` — `list_documents`, `search_documents`
+  (same best-effort semantic-then-keyword-fallback shape as `recall`, two
+  plain queries instead of an embedded join per this file's own existing
+  discipline against hand-maintained embedded-relation types). `embedText`/
+  `toVectorLiteral` exported for reuse (were private to this file before).
+- `src/lib/documents/documents.functions.ts` — `createDocumentFn` (reserves
+  a `documents` row + storage path), `processDocumentFn` (download →
+  extract text [`unpdf` for PDF, chosen specifically because it targets
+  edge/serverless runtimes with no native deps — matches this app's
+  observed Cloudflare-Workers-shaped deployment] → paragraph-aware chunk →
+  batch-embed → store), `listDocumentsFn`, `deleteDocumentFn`.
+  **A real bug caught before shipping**: `tools.server.ts` is a
+  `.server.ts` module; this file is a `.functions.ts` file, which — per
+  `client.server.ts`'s own header comment — ships to the client bundle.
+  A top-level `import { embedText } from ".../tools.server"` would have
+  been exactly the unsafe pattern that comment warns against. Fixed to a
+  dynamic `import()` inside the handler, matching the precedent already
+  set by `runtime.functions.ts` doing the same for `runtime.server.ts`.
+- `src/routes/documents.tsx` — upload (direct-to-Storage client upload,
+  same HUD grid-list style as `tasks.tsx`), status list (uploading →
+  processing → ready/error), delete. Sidebar entry added.
+
+**Conservative caps, explicit and documented rather than silently
+truncating** (same design language as flightRadar's `area_too_large`
+discriminated result): `MAX_FILE_SIZE_BYTES = 3MB`,
+`MAX_CHUNKS_PER_DOCUMENT = 40` — chosen tight on purpose, since this
+environment's server-function execution budget is a real, previously-
+confirmed constraint (flightRadar needed its timeout raised 10s → 25s for
+a *single* external call). A document that would exceed the chunk cap
+fails explicitly (`documents.status = 'error'`, human-readable message)
+rather than silently processing only part of it. Raise the caps once real
+processing latency is observed live — deliberately not guessed upfront.
+
+**Not verified live in this sandbox** (same standing limitation as every
+migration-touching change in this project): no live Supabase connection
+here, `bun install` repeatedly failed to fully complete (network/proxy
+flakiness in this sandbox, unrelated to this code), so no full
+`tsc`/`vite build` this round — verified instead via `esbuild` transpile +
+`node --check` on every touched file (clean) and careful manual review
+against the exact patterns confirmed live in the codebase map. **Needs,
+in order**: (1) the two migrations pasted into the Supabase SQL editor —
+git merge alone does not apply them, this is the exact mistake that made
+Guardian invisible for a while; (2) a real `tsc`/`eslint`/`vite build`
+pass once dependencies install cleanly; (3) a live upload of a real .txt
+and a real PDF, confirming Analityk actually answers a question grounded
+in the uploaded content via `search_documents`.
+
+## 7. [W] Situation Room — **shipped 2026-07-17, flight radar confirmed live 2026-07-20**
 
 Merged `geo-tracking`, `WeatherTelemetry`, `GithubActivityPulse` and
 `ThreatStream` into one unified radar command panel at `/situation-room`
@@ -568,6 +658,41 @@ the user's position, ~1s response, richer fields than OpenSky).
   upstream API itself was verified live this time, which the original
   OpenSky round never managed from a browser-equivalent path.
 
+### Sixth follow-up (2026-07-20): still 0 aircraft — adsb.lol was rate-limiting
+
+Live report, same day: System Pulse now full of `FLIGHT DATA FETCH FAILED:
+ADSB_HTTP_429` instead of the old 522. Diagnosis followed the same pattern
+as every round before it: 6/6 rapid requests to the exact same adsb.lol
+endpoint from an ordinary host here never hit a rate limit at all, so the
+429 is specific to the deployed server's egress path — Cloudflare Workers
+shares its IP pool across many tenants' traffic, and adsb.lol's own docs
+describe its limits as "dynamic based on environment load" rather than a
+fixed per-caller quota, so this isn't necessarily even *our* request rate
+tripping it.
+
+Root decision: stop chasing single points of failure one at a time. Added
+real **automatic failover between two independent free ADS-B mirrors**
+(adsb.lol, then airplanes.live) — same shape as the existing Gemini/Groq
+failover elsewhere in this codebase (item 5). Verified airplanes.live live
+first: identical `{ac: [...]}` readsb-derived response shape, same field
+names, same 250nm point-radius query cap — confirmed field-by-field before
+wiring it in, not assumed from the family resemblance. `fetchFlightsInBounds`
+now tries providers in order per request and returns whichever answers.
+
+Could not get real dependencies installed in this sandbox this round
+(`bun install` repeatedly failed with `ConnectionClosed` mid-download on
+unrelated packages, and the sandbox container itself restarted multiple
+times mid-install — sandbox network/infra flakiness, not a code issue) —
+full `tsc --noEmit`/`vite build` unavailable. Verified instead via an
+`esbuild` transpile + `node --check` syntax pass on the touched file
+(clean, no errors) and by re-reading the diff directly against both
+providers' live-confirmed response shapes. **Needs the normal
+tsc/eslint/build gate run once dependencies install cleanly**.
+
+**Confirmed live 2026-07-20**: `AIRCRAFT` now shows real nonzero counts on
+the deployed map after this fix — closes out the whole flight-radar arc
+that started at item 7's second follow-up.
+
 ## 8. [F] Concierge agent (calendar / email) — new agent proposal
 
 Cheap to add: prompt-only persona like Marketer, no new architecture,
@@ -586,6 +711,69 @@ OAuth-backed tools via the existing tool-registry pattern
   always wins). Wire it up as a real fallback once multi-provider routing
   lands, or delete it.
 
+## 11. [W] Researcher agent — deep multi-step web research
+
+Formalizes the idea already noted in `CODEX.md` as the queued second-
+wow-gadget slot (previously only mentioned there, not tracked here as its
+own item — gap caught 2026-07-20). Complements Marketer (which is
+marketing-copy-focused, single-shot) with genuine multi-step research:
+follow-up searches, cross-checking sources, synthesizing findings —
+reuses the existing `web_search`/`fetch_url` tools already bound to the
+Orchestrator, no new tool plumbing required, just a new agent + persona
+plus (optionally) a few more search/fetch round-trips per turn than
+Marketer typically needs.
+
+Scoped to land **after RAG/Analityk (item 6)** — grounding research
+against the user's own documents, not just live web search, is what
+makes this genuinely differentiated rather than "Marketer but wordier."
+Comes **before Producer (item 12)**: the flagship demo for both agents is
+"zrób mi prezentację w nowoczesnym stylu na temat X" — Researcher gathers
+and structures the content, Producer compiles it into the actual file.
+Orchestrator delegates content-gathering to Researcher, then delegation
+to Producer, all via the existing `delegate_to_agent` +
+`agent_runs.parent_run_id` chain (proven since Strażnik) — visible live
+in Agent Flow Tree with zero new orchestration work.
+
+Wow potential: a live "research trace" panel while it runs — sources
+being fetched/read/synthesized in real time, in the same spirit as Agent
+Flow Tree's travelling-dot delegation animation, which already proved
+that kind of live-process visualization reads well in this HUD.
+
+## 12. [W] Producer agent — document/presentation generation (pptx/docx/pdf)
+
+Content-agnostic "compiler" agent, deliberately not bolted onto Marketer:
+generating a file is a generic capability, not a marketing specialization,
+and this app's agent philosophy keeps each agent single-purpose (Guardian
+= monitoring, Marketer = copywriting). Enables the pipeline discussed
+2026-07-20: Orchestrator delegates content-gathering (Marketer and/or
+Researcher, item 11) → delegates assembly to Producer. No new
+orchestration needed — `delegate_to_agent` + `agent_runs.parent_run_id`
+(proven working since Strażnik) already supports exactly this chain, and
+it renders live in Agent Flow Tree for free.
+
+Scope, per explicit decision: **one agent, all three formats** — pptx,
+docx, and pdf, not a single-format MVP. TypeScript-first per this repo's
+established rule (no Python service unless something genuinely requires
+it): `pptxgenjs` (pptx), `docx` (Word), `pdf-lib` (PDF) — all pure-JS, no
+native dependencies, runnable inside the existing Supabase Edge Function
+runtime. Three format-specific tools bound to the agent (or one
+`generate_document` tool taking a `format` param) — decide at build time
+based on how different the input shapes end up being once actually
+building this.
+
+**The one genuinely new architectural piece**: no tool in this app has
+ever produced a file before — every tool so far returns text/data through
+the same JSON tool-call channel. Needs Supabase Storage (a bucket +
+signed URLs) to persist the generated file and hand back a download link
+in chat instead.
+
+Ordered after Researcher (item 11) per the "zrób mi prezentację o X" demo
+logic: Researcher gathers content, Producer compiles it. Doesn't
+strictly *require* Researcher to exist first at a technical level — could
+ship standalone and take input from Marketer or directly from the
+Orchestrator's own turn — but the intended flagship demo needs both, so
+build order follows that.
+
 ---
 
 ## Long-shot / not scheduled
@@ -595,3 +783,40 @@ OAuth-backed tools via the existing tool-registry pattern
   `device_commands`) before either feature is attemptable at all. Don't
   start this without deciding on the bridge first — see `CODEX.md`
   Architecture constraints.
+
+- **Developer agent — dispatch to a Claude Code Routine** (discussed
+  2026-07-20). Explicitly *after* Producer, not before — noted here so the
+  idea isn't lost, not queued as a numbered item yet.
+
+  Real mechanism, not speculative: Claude Code Routines support an **API
+  trigger** — `POST https://api.anthropic.com/v1/claude_code/routines/{id}/fire`
+  with a bearer token — which starts a full, isolated Claude Code cloud
+  session (real shell, real repo creation/push, real test execution) and
+  returns `{session_id, session_url}` immediately. This is the realistic
+  path for "write me a new app, test it, fix bugs" — JARVIS itself never
+  gets code/filesystem access (keeps the rule already established for
+  Guardian and every other in-app agent intact), it only dispatches to a
+  fully separate Anthropic-managed sandbox.
+
+  Shape, if/when picked up: one new tool (`dispatch_build_task` or
+  similar) — a single authenticated `fetch`, same complexity class as the
+  existing `flightRadar.functions.ts` server function. Bearer token stored
+  via the same BYOK pattern as the Groq key (`user_secrets`). Requires a
+  **one-time manual setup outside this codebase**: create the Routine
+  itself at `claude.ai/code/routines` with a self-contained prompt (can't
+  be authored dynamically by JARVIS), add its API trigger, generate the
+  token. JARVIS's tool call only ever supplies the `text` field — the
+  actual task spec — per dispatch.
+
+  Real constraints to design around, not glossed over:
+  - **Experimental/beta** (`experimental-cc-routine-2026-04-01` header) —
+    request/response shape and limits may change.
+  - **Draws down the user's own Claude subscription usage** (daily
+    routine-run cap), not a separate free/metered API budget like Groq —
+    a real cost consideration, not "free infrastructure."
+  - **Fire-and-forget, not synchronous** — the `/fire` call returns a
+    session URL immediately; there's no confirmed API to poll/read the
+    finished result back into JARVIS's own chat. First version means
+    JARVIS hands back a link and the user opens/reviews/tests it
+    themselves — "JARVIS watches it finish and reports back" is not
+    currently buildable without a further, unconfirmed capability.

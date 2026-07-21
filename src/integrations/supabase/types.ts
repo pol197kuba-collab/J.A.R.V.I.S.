@@ -304,6 +304,89 @@ export type Database = {
         }
         Relationships: []
       }
+      document_chunks: {
+        Row: {
+          chunk_index: number
+          content: string
+          created_at: string
+          document_id: string
+          embedding: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          chunk_index: number
+          content: string
+          created_at?: string
+          document_id: string
+          embedding?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          chunk_index?: number
+          content?: string
+          created_at?: string
+          document_id?: string
+          embedding?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_chunks_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      documents: {
+        Row: {
+          char_count: number | null
+          chunk_count: number | null
+          created_at: string
+          error_message: string | null
+          filename: string
+          id: string
+          mime_type: string
+          size_bytes: number
+          status: string
+          storage_path: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          char_count?: number | null
+          chunk_count?: number | null
+          created_at?: string
+          error_message?: string | null
+          filename: string
+          id?: string
+          mime_type: string
+          size_bytes: number
+          status?: string
+          storage_path: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          char_count?: number | null
+          chunk_count?: number | null
+          created_at?: string
+          error_message?: string | null
+          filename?: string
+          id?: string
+          mime_type?: string
+          size_bytes?: number
+          status?: string
+          storage_path?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       event_log: {
         Row: {
           created_at: string
@@ -707,6 +790,21 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      match_document_chunks: {
+        Args: {
+          match_count?: number
+          min_similarity?: number
+          query_embedding: string
+        }
+        Returns: {
+          chunk_id: string
+          chunk_index: number
+          content: string
+          document_id: string
+          filename: string
+          similarity: number
+        }[]
       }
       match_memories: {
         Args: {

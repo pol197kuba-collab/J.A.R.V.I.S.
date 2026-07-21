@@ -3,15 +3,21 @@
 // user — panning/zooming the map like a real flight tracker actually loads
 // aircraft wherever you're looking, not just near "home".
 //
-// Data source: adsb.lol's free, keyless community API. Previously OpenSky
-// Network — dropped after its API started returning persistent HTTP 522
-// to the deployed server's egress (Cloudflare edge unable to reach
-// OpenSky's origin — both sides sit behind Cloudflare) while the very same
-// endpoint answered 200 in ~0.5s from an ordinary host. Nothing on our
-// side (timeouts, retries) could fix a failure between their CDN and their
-// origin, so the provider had to change. adsb.lol serves the same ADS-B
-// state data with richer per-aircraft fields (registration, airframe type)
-// and no hard daily quota.
+// Data source: free, keyless community ADS-B mirrors (readsb-derived JSON
+// API, `{ac: [...]}` shape). Originally OpenSky Network — dropped after
+// its API started returning persistent HTTP 522 to the deployed server's
+// egress while the same endpoint answered 200 in ~0.5s from an ordinary
+// host (a Cloudflare-edge-to-OpenSky-origin path issue, not fixable from
+// our side). Replaced with adsb.lol, which then started returning
+// persistent HTTP 429 in production while the same endpoint, hit
+// repeatedly from an ordinary host, never rate-limited at all — adsb.lol
+// documents its limits as "dynamic based on environment load", and the
+// deployed server's egress (Cloudflare Workers) shares its IP pool with
+// many other tenants, so our own request rate isn't necessarily the
+// trigger. Rather than chase a third single point of failure, this now
+// tries two independent free mirrors (adsb.lol, then airplanes.live) and
+// uses whichever answers — the same automatic-failover shape already used
+// for the Gemini/Groq AI routing in this codebase.
 
 export type Bounds = { lamin: number; lomin: number; lamax: number; lomax: number };
 
@@ -30,7 +36,7 @@ export type Aircraft = {
 export type FlightQueryResult =
   { ok: true; aircraft: Aircraft[] } | { ok: false; reason: "area_too_large" };
 
-// adsb.lol queries are point + radius (max 250 nautical miles), not a
+// Both mirrors are point + radius (max 250 nautical miles), not a
 // bounding box — the viewport is covered by querying the circle that
 // circumscribes it and filtering the result back down to the box. 250nm
 // circumscribes roughly an 8°-span viewport at mid-latitudes, so beyond
@@ -39,12 +45,18 @@ export type FlightQueryResult =
 export const MAX_QUERY_SPAN_DEG = 8;
 const MAX_RADIUS_NM = 250;
 
-// Relevant subset of adsb.lol's per-aircraft object (readsb JSON shape).
-// Verified field-by-field against a live response before writing this:
-// altitudes in feet (alt_baro is the literal string "ground" when parked),
-// ground speed `gs` in knots, `track` in degrees clockwise from north,
-// `r` = registration, `t` = airframe type code. Position can be absent on
-// mlat/tisb-only contacts.
+// Tried in order per request; each is a fully independent free deployment
+// (different maintainers, different infra), so one being rate-limited or
+// down doesn't take the other with it. Confirmed live to share the exact
+// same response shape (both are readsb-derived JSON APIs).
+const PROVIDERS = ["https://api.adsb.lol/v2/point", "https://api.airplanes.live/v2/point"];
+
+// Relevant subset of the shared readsb-derived per-aircraft object.
+// Verified field-by-field against live responses from both providers
+// before writing this: altitudes in feet (alt_baro is the literal string
+// "ground" when parked), ground speed `gs` in knots, `track` in degrees
+// clockwise from north, `r` = registration, `t` = airframe type code.
+// Position can be absent on mlat/tisb-only contacts.
 type AdsbAircraft = {
   hex: string;
   flight?: string | null;
@@ -73,6 +85,23 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+async function fetchFromProvider(baseUrl: string, clat: number, clon: number, radiusNm: number) {
+  // 10s wasn't enough in production back on OpenSky and was aborting
+  // every poll — the deployed server's network egress is evidently much
+  // slower than an ordinary host's, so the generous timeout stays here
+  // for every provider.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 25_000);
+  try {
+    const res = await fetch(`${baseUrl}/${clat}/${clon}/${radiusNm}`, { signal: ctrl.signal });
+    if (!res.ok) throw new Error(`http_${res.status}`);
+    const data = (await res.json()) as { ac: AdsbAircraft[] | null };
+    return data.ac ?? [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function fetchFlightsInBounds(bounds: Bounds): Promise<FlightQueryResult> {
   const latSpan = bounds.lamax - bounds.lamin;
   const lonSpan = bounds.lomax - bounds.lomin;
@@ -87,18 +116,19 @@ export async function fetchFlightsInBounds(bounds: Bounds): Promise<FlightQueryR
   const cornerKm = haversineKm(clat, clon, bounds.lamax, bounds.lomax);
   const radiusNm = Math.min(MAX_RADIUS_NM, Math.max(10, Math.ceil(cornerKm / KM_PER_NM)));
 
-  // 10s wasn't enough in production back on OpenSky and was aborting every
-  // poll — the deployed server's network egress is evidently much slower
-  // than an ordinary host's, so the generous timeout stays with the new
-  // provider too.
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 25_000);
-  const res = await fetch(`https://api.adsb.lol/v2/point/${clat}/${clon}/${radiusNm}`, {
-    signal: ctrl.signal,
-  }).finally(() => clearTimeout(timer));
-  if (!res.ok) throw new Error(`adsb_http_${res.status}`);
-  const data = (await res.json()) as { ac: AdsbAircraft[] | null };
-  const contacts = data.ac ?? [];
+  let contacts: AdsbAircraft[] | null = null;
+  let lastErr: unknown;
+  for (const provider of PROVIDERS) {
+    try {
+      contacts = await fetchFromProvider(provider, clat, clon, radiusNm);
+      break;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (contacts === null) {
+    throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+  }
 
   const aircraft = contacts
     .filter(
