@@ -432,7 +432,22 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // generated pptx while the pdf's luckier copy worked).
     const attachments: Array<{ filename: string; url: string }> = [];
 
+    // Producer's whole job is to CALL generate_document — but live testing
+    // showed the model instead describing the presentation in prose and
+    // ending its (delegated) run with 0 tool calls, so the Orchestrator
+    // relayed a confident "plik gotowy" with no file and no link ever
+    // produced. Same lesson as the download-link saga: don't ask the model
+    // to reliably do the one thing it must — force it. Until generate_document
+    // has actually run once this turn, the producer's request pins Gemini to
+    // that function (functionCallingConfig mode ANY); afterwards it switches
+    // back to AUTO so the follow-up turn can produce the text summary.
+    const GENERATE_DOCUMENT_TOOL = "generate_document";
+    const isProducer =
+      agent.slug === "producer" && toolDeclarations.some((d) => d.name === GENERATE_DOCUMENT_TOOL);
+    let producerCalledGenerate = false;
+
     for (let iter = 0; iter < maxToolIterations; iter++) {
+      const forceGenerateDocument = isProducer && !producerCalledGenerate;
       let functionCalls: Array<{ name: string; args: Record<string, unknown> }>;
       let textOut: string;
       try {
@@ -452,6 +467,16 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
               // off in Settings) — omit the `tools` key entirely in that case.
               ...(toolDeclarations.length > 0
                 ? { tools: [{ functionDeclarations: toolDeclarations }] }
+                : {}),
+              ...(forceGenerateDocument
+                ? {
+                    toolConfig: {
+                      functionCallingConfig: {
+                        mode: "ANY",
+                        allowedFunctionNames: [GENERATE_DOCUMENT_TOOL],
+                      },
+                    },
+                  }
                 : {}),
               contents,
             }),
@@ -608,15 +633,17 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
               model,
               logEvent,
             });
-            if (
-              call.name === "generate_document" &&
-              response.ok === true &&
-              typeof response.download_url === "string"
-            ) {
-              attachments.push({
-                filename: typeof response.filename === "string" ? response.filename : "plik",
-                url: response.download_url,
-              });
+            if (call.name === GENERATE_DOCUMENT_TOOL) {
+              // Stop forcing after the first real attempt (success OR error),
+              // so a failing build can't pin the loop to retrying the tool
+              // for all remaining iterations — the model gets to report back.
+              producerCalledGenerate = true;
+              if (response.ok === true && typeof response.download_url === "string") {
+                attachments.push({
+                  filename: typeof response.filename === "string" ? response.filename : "plik",
+                  url: response.download_url,
+                });
+              }
             }
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
