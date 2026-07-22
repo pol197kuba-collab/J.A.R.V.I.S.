@@ -24,6 +24,11 @@ export const GEMINI_MODELS: GeminiModelOption[] = [
 
 export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 
+// Image generation (Producer slide graphics). Not in GEMINI_MODELS on
+// purpose — it's not a conversational model and shouldn't appear in the
+// Settings/Console dropdowns.
+export const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image";
+
 export const isKnownGeminiModel = (id: string): boolean => GEMINI_MODELS.some((m) => m.id === id);
 
 // Groq — free-tier only, used internally for the UI-action classifier pass

@@ -1445,6 +1445,39 @@ updates the producer prompt in DB + handle_new_user; needs the usual
 manual SQL paste). New regression test (runtime.attachments.test.ts).
 **Retest the flagship pptx demo after deploy + SQL.**
 
+### Third follow-up (2026-07-22, same day): link delivery verified live; wow pass stage 1 — AI slide graphics
+
+Retest confirmed the code-appended link works: the flagship pptx demo
+generated a 10-slide deck, downloaded and opened on a real phone. Two
+pieces of live feedback drove this pass:
+
+1. **Filenames**: `sanitizeFilename` turned Polish diacritics into "\_"
+   ("Przyszłość" → "Przysz_o\_\_"). New `slugifyFilename` transliterates
+   (NFD + manual ł/Ł) and slugs to lowercase-hyphens —
+   `samsung-s26-ultra-przyszlosc-mobilnej-innowacji.pptx`.
+2. **"Dość podstawowo — liczyłem na prezentację z grafikami"**: decision
+   (AskUserQuestion): BOTH AI-generated images and real web photos,
+   staged — AI first. Shipped stage 1: `generate_document` accepts
+   `hero_image_prompt` + per-section `image_prompt` (English, no-text
+   rule enforced by a shared style prefix so decks read as one designed
+   set); `generateDocImages` calls Gemini image generation
+   (`gemini-2.5-flash-image`, `models.ts`) on the user's own key —
+   parallel, 30s per-image timeout, hard cap 1 hero + 4 section images,
+   best-effort (a failed image = text-only slide, never a failed
+   document). pptx: hero as right-half cover with dark scrim on the
+   title slide, section images as right panels with accent keyline +
+   number-badge redesign; docx/pdf: hero banner under the title (real
+   dims via `pngDims`/pdf-lib, so aspect is preserved). Persona +
+   tool-schema migration `20260722210000_producer_image_prompts.sql`.
+
+Stage 2 (queued, not started): real web photos — researcher collects
+image URLs, producer fetches + embeds them alongside AI graphics.
+
+**Needs after deploy + SQL: live retest of the flagship demo** — check
+slide layout with images in PowerPoint/Google Slides and that image
+generation actually returns (first live use of the image model on this
+key; if it 404s, the model id in models.ts is the knob).
+
 Original scoping notes follow. Content-agnostic "compiler" agent, deliberately not bolted onto Marketer:
 generating a file is a generic capability, not a marketing specialization,
 and this app's agent philosophy keeps each agent single-purpose (Guardian

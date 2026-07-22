@@ -13,7 +13,7 @@
 // the actual glyphs, so they need none of this.
 
 import PptxGen from "pptxgenjs";
-import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
+import { AlignmentType, Document, HeadingLevel, ImageRun, Packer, Paragraph, TextRun } from "docx";
 // Deliberately the fully-bundled dist, NOT the bare "pdf-lib" entry. The
 // default multi-file es/ build imports bare `tslib` (v1 — no `exports` map,
 // UMD with dynamically-generated exports the SSR bundler's CJS interop can't
@@ -25,8 +25,8 @@ import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun } fro
 // pdf-lib-esm.d.ts.
 import { PDFDocument, PDFFont, PDFPage, rgb } from "pdf-lib/dist/pdf-lib.esm.js";
 import fontkit from "@pdf-lib/fontkit";
-import { sanitizeFilename } from "@/lib/documents/chunking";
 import { DOC_SANS_BOLD_B64, DOC_SANS_REGULAR_B64 } from "./producerFonts.server";
+import { DEFAULT_GEMINI_IMAGE_MODEL } from "./models";
 
 export const DOC_FORMATS = ["pptx", "docx", "pdf"] as const;
 export type DocFormat = (typeof DOC_FORMATS)[number];
@@ -35,6 +35,8 @@ export type DocSection = {
   heading: string;
   content?: string;
   bullets?: string[];
+  /** Optional English prompt for an AI-generated illustration on this slide/section. */
+  imagePrompt?: string;
 };
 
 export type DocSpec = {
@@ -43,6 +45,8 @@ export type DocSpec = {
   subtitle?: string;
   filename: string;
   sections: DocSection[];
+  /** Optional English prompt for the title-slide hero graphic. */
+  heroImagePrompt?: string;
 };
 
 export const CONTENT_TYPES: Record<DocFormat, string> = {
@@ -63,6 +67,31 @@ const MAX_BULLET_CHARS = 400;
 
 const clip = (v: unknown, max: number): string =>
   typeof v === "string" ? v.trim().slice(0, max) : "";
+
+const MAX_IMAGE_PROMPT_CHARS = 600;
+/** Hard cap on generated images per document: 1 hero + up to 4 section shots.
+ *  Generation runs in parallel, so the wall-clock cost is one image call,
+ *  but each is a paid request on the user's key — don't let a runaway model
+ *  order two dozen. */
+export const MAX_SECTION_IMAGES = 4;
+
+// Filename slug: the old path ran the title straight through
+// sanitizeFilename, which turned every Polish diacritic into "_" —
+// live feedback: "Przyszłość" became "Przysz_o__" in the chat link label.
+// Transliterate first (NFD strips combining accents; ł/Ł don't decompose so
+// they're mapped by hand), then slug to lowercase-hyphens.
+export function slugifyFilename(name: string): string {
+  const slug = name
+    .replace(/[łŁ]/g, (c) => (c === "ł" ? "l" : "L"))
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80)
+    .replace(/-+$/g, "");
+  return slug || "dokument";
+}
 
 export type NormalizeResult = { ok: true; spec: DocSpec } | { ok: false; error: string };
 
@@ -88,15 +117,25 @@ export function normalizeDocSpec(args: Record<string, unknown>): NormalizeResult
       .filter(Boolean)
       .slice(0, MAX_BULLETS_PER_SECTION);
     if (!heading && !content && bullets.length === 0) continue;
-    sections.push({ heading: heading || "—", content: content || undefined, bullets });
+    const imagePrompt = clip(s.image_prompt ?? s.imagePrompt, MAX_IMAGE_PROMPT_CHARS);
+    sections.push({
+      heading: heading || "—",
+      content: content || undefined,
+      bullets,
+      imagePrompt: imagePrompt || undefined,
+    });
   }
   if (sections.length === 0) {
     return { ok: false, error: "empty_sections: provide at least one section with real content" };
   }
 
   const requestedName = clip(args.filename, 120);
-  const base = sanitizeFilename((requestedName || title).replace(/\.(pptx|docx|pdf)$/i, ""));
+  const base = slugifyFilename((requestedName || title).replace(/\.(pptx|docx|pdf)$/i, ""));
   const subtitle = clip(args.subtitle, MAX_TITLE_CHARS);
+  const heroImagePrompt = clip(
+    (args as Record<string, unknown>).hero_image_prompt ?? args.heroImagePrompt,
+    MAX_IMAGE_PROMPT_CHARS,
+  );
 
   return {
     ok: true,
@@ -106,8 +145,127 @@ export function normalizeDocSpec(args: Record<string, unknown>): NormalizeResult
       subtitle: subtitle || undefined,
       filename: `${base}.${format}`,
       sections,
+      heroImagePrompt: heroImagePrompt || undefined,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// AI slide graphics — Gemini image generation on the user's own key
+// ---------------------------------------------------------------------------
+
+export type DocImage = { bytes: Uint8Array; mime: string };
+export type DocImages = { hero?: DocImage; sections: Map<number, DocImage> };
+
+// One consistent visual language across every generated deck, so slides read
+// as a designed set rather than random stock art. "No text" is load-bearing:
+// image models render garbled words otherwise.
+const IMAGE_STYLE_PREFIX =
+  "Premium technology presentation illustration, dark navy and cyan color palette, " +
+  "cinematic lighting, sleek modern aesthetic, high detail. Strictly no text, no words, " +
+  "no letters, no captions, no watermarks. ";
+
+async function generateOneImage(
+  prompt: string,
+  apiKey: string,
+  timeoutMs: number,
+): Promise<DocImage | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+        DEFAULT_GEMINI_IMAGE_MODEL,
+      )}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: IMAGE_STYLE_PREFIX + prompt }] }],
+          generationConfig: {
+            responseModalities: ["IMAGE"],
+            imageConfig: { aspectRatio: "16:9" },
+          },
+        }),
+      },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
+    }
+    const data = (await res.json()) as {
+      candidates?: Array<{
+        content?: { parts?: Array<{ inlineData?: { mimeType?: string; data?: string } }> };
+      }>;
+    };
+    const inline = (data.candidates?.[0]?.content?.parts ?? []).find((p) =>
+      p.inlineData?.mimeType?.startsWith("image/"),
+    )?.inlineData;
+    if (!inline?.data) return null;
+    return {
+      bytes: Uint8Array.from(atob(inline.data), (c) => c.charCodeAt(0)),
+      mime: inline.mimeType ?? "image/png",
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Generate the hero + section images declared in the spec's prompts.
+ *  Best-effort by design: any individual failure just means that slide
+ *  renders text-only — never fails the whole document. All images run in
+ *  parallel, so wall-clock cost ≈ one image call. */
+export async function generateDocImages(
+  spec: DocSpec,
+  apiKey: string,
+  onWarn?: (message: string) => Promise<void> | void,
+): Promise<DocImages> {
+  const jobs: Array<{ key: "hero" | number; prompt: string }> = [];
+  if (spec.heroImagePrompt) jobs.push({ key: "hero", prompt: spec.heroImagePrompt });
+  for (const [i, section] of spec.sections.entries()) {
+    if (section.imagePrompt) jobs.push({ key: i, prompt: section.imagePrompt });
+  }
+  const capped = jobs.slice(0, 1 + MAX_SECTION_IMAGES);
+
+  const images: DocImages = { sections: new Map() };
+  if (capped.length === 0) return images;
+
+  const results = await Promise.allSettled(
+    capped.map((job) => generateOneImage(job.prompt, apiKey, 30_000)),
+  );
+  for (const [i, result] of results.entries()) {
+    const job = capped[i];
+    if (result.status === "fulfilled" && result.value) {
+      if (job.key === "hero") images.hero = result.value;
+      else images.sections.set(job.key, result.value);
+    } else {
+      const reason =
+        result.status === "rejected"
+          ? result.reason instanceof Error
+            ? result.reason.message
+            : String(result.reason)
+          : "no image in response";
+      await onWarn?.(`image generation failed (${String(job.key)}): ${reason}`);
+    }
+  }
+  return images;
+}
+
+const NO_IMAGES: DocImages = { sections: new Map() };
+
+const toDataUri = (img: DocImage): string => {
+  let binary = "";
+  for (const b of img.bytes) binary += String.fromCharCode(b);
+  return `${img.mime};base64,${btoa(binary)}`;
+};
+
+/** PNG pixel dimensions from the IHDR chunk; null for non-PNG/garbage. */
+export function pngDims(bytes: Uint8Array): { width: number; height: number } | null {
+  if (bytes.length < 24) return null;
+  if (bytes[0] !== 0x89 || bytes[1] !== 0x50 || bytes[2] !== 0x4e || bytes[3] !== 0x47) return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
 }
 
 // ---------------------------------------------------------------------------
@@ -120,21 +278,42 @@ const ACCENT_HEX = "0891B2"; // cyan-600
 const DARK_HEX = "0F172A"; // slate-900
 const BODY_HEX = "334155"; // slate-700
 
-async function buildPptx(spec: DocSpec): Promise<Uint8Array> {
+async function buildPptx(spec: DocSpec, images: DocImages): Promise<Uint8Array> {
   const pres = new PptxGen();
   pres.defineLayout({ name: "WIDE", width: 13.33, height: 7.5 });
   pres.layout = "WIDE";
 
-  // Title slide — dark, accent bar, title + optional subtitle.
+  // Title slide — dark; with a hero image the right half becomes a
+  // full-bleed visual with a soft dark scrim so the accent bar + title
+  // always stay readable on the left.
   const title = pres.addSlide();
   title.background = { color: DARK_HEX };
+  const hasHero = !!images.hero;
+  if (images.hero) {
+    title.addImage({
+      data: toDataUri(images.hero),
+      x: 6.4,
+      y: 0,
+      w: 6.93,
+      h: 7.5,
+      sizing: { type: "cover", w: 6.93, h: 7.5 },
+    });
+    title.addShape("rect", {
+      x: 6.4,
+      y: 0,
+      w: 6.93,
+      h: 7.5,
+      fill: { color: DARK_HEX, transparency: 62 },
+    });
+  }
+  const titleWidth = hasHero ? 5.2 : 11.6;
   title.addShape("rect", { x: 0.9, y: 3.62, w: 1.6, h: 0.07, fill: { color: ACCENT_HEX } });
   title.addText(spec.title, {
     x: 0.85,
-    y: 2.2,
-    w: 11.6,
-    h: 1.3,
-    fontSize: 40,
+    y: 1.9,
+    w: titleWidth,
+    h: 1.6,
+    fontSize: hasHero ? 34 : 40,
     bold: true,
     color: "F8FAFC",
     valign: "bottom",
@@ -143,8 +322,8 @@ async function buildPptx(spec: DocSpec): Promise<Uint8Array> {
     title.addText(spec.subtitle, {
       x: 0.85,
       y: 3.85,
-      w: 11.6,
-      h: 0.8,
+      w: titleWidth,
+      h: 0.9,
       fontSize: 18,
       color: "94A3B8",
       valign: "top",
@@ -155,19 +334,26 @@ async function buildPptx(spec: DocSpec): Promise<Uint8Array> {
     const slide = pres.addSlide();
     slide.background = { color: "FFFFFF" };
     slide.addShape("rect", { x: 0, y: 0, w: 0.18, h: 7.5, fill: { color: ACCENT_HEX } });
+
+    const sectionImage = images.sections.get(i);
+    // Number badge — filled accent square with the slide number, anchoring
+    // the heading instead of a lone footer digit.
+    slide.addShape("rect", { x: 0.75, y: 0.55, w: 0.62, h: 0.62, fill: { color: ACCENT_HEX } });
     slide.addText(String(i + 1).padStart(2, "0"), {
-      x: 12.2,
-      y: 6.85,
-      w: 0.9,
-      h: 0.4,
-      fontSize: 12,
-      color: "94A3B8",
-      align: "right",
+      x: 0.75,
+      y: 0.55,
+      w: 0.62,
+      h: 0.62,
+      fontSize: 16,
+      bold: true,
+      color: "FFFFFF",
+      align: "center",
+      valign: "middle",
     });
     slide.addText(section.heading, {
-      x: 0.75,
+      x: 1.6,
       y: 0.45,
-      w: 11.9,
+      w: sectionImage ? 6.4 : 11.0,
       h: 0.9,
       fontSize: 28,
       bold: true,
@@ -175,6 +361,20 @@ async function buildPptx(spec: DocSpec): Promise<Uint8Array> {
       valign: "middle",
     });
 
+    if (sectionImage) {
+      // Image panel on the right with a thin accent keyline underneath it.
+      slide.addImage({
+        data: toDataUri(sectionImage),
+        x: 8.15,
+        y: 1.55,
+        w: 4.43,
+        h: 5.0,
+        sizing: { type: "cover", w: 4.43, h: 5.0 },
+      });
+      slide.addShape("rect", { x: 8.15, y: 6.62, w: 4.43, h: 0.06, fill: { color: ACCENT_HEX } });
+    }
+
+    const bodyWidth = sectionImage ? 6.9 : 11.7;
     const body: PptxGen.TextProps[] = [];
     if (section.content) {
       body.push({ text: section.content, options: { fontSize: 16, color: BODY_HEX } });
@@ -191,7 +391,7 @@ async function buildPptx(spec: DocSpec): Promise<Uint8Array> {
       });
     }
     if (body.length > 0) {
-      slide.addText(body, { x: 0.8, y: 1.55, w: 11.7, h: 5.4, valign: "top" });
+      slide.addText(body, { x: 0.8, y: 1.55, w: bodyWidth, h: 5.4, valign: "top" });
     }
   }
 
@@ -203,7 +403,7 @@ async function buildPptx(spec: DocSpec): Promise<Uint8Array> {
 // docx — docx
 // ---------------------------------------------------------------------------
 
-async function buildDocx(spec: DocSpec): Promise<Uint8Array> {
+async function buildDocx(spec: DocSpec, images: DocImages): Promise<Uint8Array> {
   const children: Paragraph[] = [
     new Paragraph({
       heading: HeadingLevel.TITLE,
@@ -216,6 +416,26 @@ async function buildDocx(spec: DocSpec): Promise<Uint8Array> {
       new Paragraph({
         spacing: { after: 240 },
         children: [new TextRun({ text: spec.subtitle, italics: true, color: "64748B" })],
+      }),
+    );
+  }
+  if (images.hero) {
+    // Full-width hero banner under the title. Word needs explicit pixel
+    // dimensions; read them from the PNG header when possible, otherwise
+    // assume the 16:9 we requested from the image model.
+    const dims = pngDims(images.hero.bytes);
+    const width = 624;
+    const height = dims ? Math.round((width * dims.height) / dims.width) : 351;
+    children.push(
+      new Paragraph({
+        spacing: { after: 240 },
+        children: [
+          new ImageRun({
+            data: images.hero.bytes,
+            type: images.hero.mime === "image/jpeg" ? "jpg" : "png",
+            transformation: { width, height },
+          }),
+        ],
       }),
     );
   }
@@ -292,7 +512,7 @@ export function wrapText(text: string, font: PDFFont, size: number, maxWidth: nu
 const A4: [number, number] = [595.28, 841.89];
 const PDF_MARGIN = 56;
 
-async function buildPdf(spec: DocSpec): Promise<Uint8Array> {
+async function buildPdf(spec: DocSpec, images: DocImages): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.registerFontkit(fontkit);
   doc.setTitle(spec.title);
@@ -345,6 +565,24 @@ async function buildPdf(spec: DocSpec): Promise<Uint8Array> {
   page.drawRectangle({ x: PDF_MARGIN, y: y - 3, width: 64, height: 3, color: accent });
   y -= 24;
 
+  if (images.hero) {
+    // Full-width hero banner under the title rule; pdf-lib reports real
+    // image dimensions, so the aspect ratio is always preserved.
+    try {
+      const img =
+        images.hero.mime === "image/jpeg"
+          ? await doc.embedJpg(images.hero.bytes)
+          : await doc.embedPng(images.hero.bytes);
+      const height = Math.min((maxWidth * img.height) / img.width, 300);
+      const width = (height * img.width) / img.height;
+      ensureRoom(height + 12);
+      page.drawImage(img, { x: PDF_MARGIN, y: y - height, width, height });
+      y -= height + 18;
+    } catch {
+      // Unsupported/corrupt image — the document is still worth producing.
+    }
+  }
+
   for (const section of spec.sections) {
     ensureRoom(60); // keep a heading from landing alone at the page bottom
     drawWrapped(section.heading, bold, 16, dark, 0, 4);
@@ -360,13 +598,16 @@ async function buildPdf(spec: DocSpec): Promise<Uint8Array> {
 
 // ---------------------------------------------------------------------------
 
-export async function buildDocument(spec: DocSpec): Promise<Uint8Array> {
+export async function buildDocument(
+  spec: DocSpec,
+  images: DocImages = NO_IMAGES,
+): Promise<Uint8Array> {
   switch (spec.format) {
     case "pptx":
-      return buildPptx(spec);
+      return buildPptx(spec, images);
     case "docx":
-      return buildDocx(spec);
+      return buildDocx(spec, images);
     case "pdf":
-      return buildPdf(spec);
+      return buildPdf(spec, images);
   }
 }

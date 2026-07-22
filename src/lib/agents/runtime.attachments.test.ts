@@ -125,6 +125,6 @@ describe("runOrchestrator — generate_document link delivery", () => {
     // The model's own prose survives, with the verbatim URL appended below it.
     expect(result.output).toContain(MODEL_REPLY);
     expect(result.output).toContain(`⬇ ${SIGNED_URL}`);
-    expect(result.attachments).toEqual([{ filename: "Raport.pdf", url: SIGNED_URL }]);
+    expect(result.attachments).toEqual([{ filename: "raport.pdf", url: SIGNED_URL }]);
   });
 });

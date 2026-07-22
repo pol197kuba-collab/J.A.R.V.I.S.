@@ -1275,7 +1275,7 @@ const generateDocumentTool: Tool = {
   declaration: {
     name: "generate_document",
     description:
-      "Generate a downloadable file — a presentation (pptx), a Word document (docx), or a PDF — from structured content, and return a download link. Call it ONCE with the complete, final content: a title and a list of sections, each with a heading plus paragraph text and/or bullet points. Write real content in the user's language, never placeholders.",
+      "Generate a downloadable file — a presentation (pptx), a Word document (docx), or a PDF — from structured content, and return a download link. Call it ONCE with the complete, final content: a title and a list of sections, each with a heading plus paragraph text and/or bullet points. Write real content in the user's language, never placeholders. For a visually rich result, also pass hero_image_prompt and per-section image_prompt fields — short vivid ENGLISH scene descriptions (no text in the image); the system generates those graphics with an AI image model and embeds them automatically.",
     parameters: {
       type: "object",
       properties: {
@@ -1289,6 +1289,11 @@ const generateDocumentTool: Tool = {
         filename: {
           type: "string",
           description: "Optional filename (without extension). Defaults to the title.",
+        },
+        hero_image_prompt: {
+          type: "string",
+          description:
+            "Optional ENGLISH prompt for an AI-generated hero graphic (title slide / document header). Describe a concrete scene or object, its mood and materials. Never ask for text in the image.",
         },
         sections: {
           type: "array",
@@ -1304,6 +1309,11 @@ const generateDocumentTool: Tool = {
                 items: { type: "string" },
                 description: "Bullet points for this section.",
               },
+              image_prompt: {
+                type: "string",
+                description:
+                  "Optional ENGLISH prompt for an AI-generated illustration on this slide/section (max 4 sections get one — pick the most important). Concrete scene, no text in the image.",
+              },
             },
             required: ["heading"],
           },
@@ -1313,7 +1323,8 @@ const generateDocumentTool: Tool = {
     },
   },
   async execute(args, ctx) {
-    const { normalizeDocSpec, buildDocument, CONTENT_TYPES } = await import("./producer.server");
+    const { normalizeDocSpec, buildDocument, generateDocImages, CONTENT_TYPES } =
+      await import("./producer.server");
     const normalized = normalizeDocSpec(args);
     if (!normalized.ok) {
       await ctx.logEvent("warn", "tool.generate_document", `rejected: ${normalized.error}`, {
@@ -1323,9 +1334,16 @@ const generateDocumentTool: Tool = {
     }
     const spec = normalized.spec;
 
+    // AI slide graphics — best-effort: every failure just means that slide
+    // renders text-only. Runs before the build so all formats can embed.
+    const images = await generateDocImages(spec, ctx.apiKey, (message) =>
+      ctx.logEvent("warn", "tool.generate_document", message, { run_id: ctx.runId } as Json),
+    );
+    const imagesGenerated = (images.hero ? 1 : 0) + images.sections.size;
+
     let bytes: Uint8Array;
     try {
-      bytes = await buildDocument(spec);
+      bytes = await buildDocument(spec, images);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await ctx.logEvent(
@@ -1367,14 +1385,15 @@ const generateDocumentTool: Tool = {
     await ctx.logEvent(
       "info",
       "tool.generate_document",
-      `${spec.format} generated: ${spec.filename} (${bytes.byteLength} bytes, ${spec.sections.length} sections)`,
-      { run_id: ctx.runId, path, size_bytes: bytes.byteLength } as Json,
+      `${spec.format} generated: ${spec.filename} (${bytes.byteLength} bytes, ${spec.sections.length} sections, ${imagesGenerated} images)`,
+      { run_id: ctx.runId, path, size_bytes: bytes.byteLength, images: imagesGenerated } as Json,
     );
     return {
       ok: true,
       format: spec.format,
       filename: spec.filename,
       sections: spec.sections.length,
+      images_generated: imagesGenerated,
       size_bytes: bytes.byteLength,
       download_url: signed.signedUrl,
       link_valid_days: 7,
