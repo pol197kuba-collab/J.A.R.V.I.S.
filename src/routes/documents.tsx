@@ -2,10 +2,11 @@ import { useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Trash2, Upload } from "lucide-react";
+import { Eye, FileText, Presentation, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { HudPanel } from "@/components/jarvis/HudPanel";
+import { GeneratedFilePreview } from "@/components/jarvis/GeneratedFilePreview";
 import { supabase } from "@/integrations/supabase/client";
 import {
   ALLOWED_EXTENSIONS,
@@ -16,6 +17,11 @@ import {
   processDocumentFn,
   type DocumentSummary,
 } from "@/lib/documents/documents.functions";
+import {
+  deleteGeneratedFileFn,
+  listGeneratedFilesFn,
+  type GeneratedFileSummary,
+} from "@/lib/documents/generated.functions";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/documents")({
@@ -44,6 +50,12 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const FORMAT_ICON: Record<string, typeof FileText> = {
+  pptx: Presentation,
+  docx: FileText,
+  pdf: FileText,
+};
+
 function DocumentsPage() {
   const qc = useQueryClient();
   const fetchDocuments = useServerFn(listDocumentsFn);
@@ -51,8 +63,12 @@ function DocumentsPage() {
   const process = useServerFn(processDocumentFn);
   const remove = useServerFn(deleteDocumentFn);
 
+  const fetchGenerated = useServerFn(listGeneratedFilesFn);
+  const removeGenerated = useServerFn(deleteGeneratedFileFn);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [preview, setPreview] = useState<GeneratedFileSummary | null>(null);
 
   const {
     data: documents = [],
@@ -68,6 +84,16 @@ function DocumentsPage() {
     refetchInterval: 3000,
   });
 
+  const {
+    data: generated = [],
+    isLoading: genLoading,
+    error: genError,
+  } = useQuery({
+    queryKey: ["generated-files"],
+    queryFn: () => fetchGenerated(),
+    refetchInterval: 5000,
+  });
+
   const invalidate = () => qc.invalidateQueries({ queryKey: ["documents"] });
 
   const deleteMut = useMutation({
@@ -75,6 +101,15 @@ function DocumentsPage() {
     onSuccess: () => {
       invalidate();
       toast.success("Dokument usunięty");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
+  });
+
+  const deleteGenMut = useMutation({
+    mutationFn: (id: string) => removeGenerated({ data: { fileId: id } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["generated-files"] });
+      toast.success("Plik usunięty");
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
   });
@@ -236,6 +271,92 @@ function DocumentsPage() {
           </div>
         </div>
       </HudPanel>
+
+      <HudPanel index={2} title="PRODUCER // GENERATED" className="overflow-hidden">
+        <div className="flex items-center justify-between px-4 pt-3">
+          <h2 className="font-display text-sm font-bold tracking-[0.18em] text-primary">
+            WYGENEROWANE PLIKI
+          </h2>
+          <span className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
+            {generated.length} FILES
+          </span>
+        </div>
+        <p className="px-4 pb-3 pt-1 text-[11px] text-muted-foreground">
+          Prezentacje, dokumenty i PDF-y stworzone przez agenta Producer. Kliknij, aby podejrzeć bez
+          pobierania.
+        </p>
+
+        {genLoading && <div className="px-4 py-3 text-muted-foreground">▸ loading…</div>}
+        {genError && (
+          <div className="px-4 py-3" style={{ color: "var(--destructive)" }}>
+            ✕ {genError instanceof Error ? genError.message : String(genError)}
+          </div>
+        )}
+        {!genLoading && !genError && generated.length === 0 && (
+          <div className="px-4 py-6 text-center text-muted-foreground">
+            ▸ brak plików. Poproś JARVIS-a, np. „zrób mi prezentację o…", aby Producer coś stworzył.
+          </div>
+        )}
+
+        {generated.length > 0 && (
+          <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+            {generated.map((f: GeneratedFileSummary) => {
+              const Icon = FORMAT_ICON[f.format] ?? FileText;
+              return (
+                <button
+                  type="button"
+                  key={f.id}
+                  onClick={() => setPreview(f)}
+                  className="group relative flex flex-col gap-2 rounded-lg border border-primary/20 bg-primary/[0.03] p-3 text-left transition hover:border-primary/50 hover:bg-primary/10"
+                >
+                  <div className="flex items-center gap-2">
+                    <Icon className="h-4 w-4 shrink-0 text-primary" strokeWidth={1.5} />
+                    <span className="font-display text-[10px] uppercase tracking-widest text-primary/80">
+                      {f.format}
+                    </span>
+                    <span className="ml-auto flex items-center gap-1 text-[10px] uppercase tracking-widest text-muted-foreground opacity-0 transition group-hover:opacity-100">
+                      <Eye className="h-3 w-3" strokeWidth={1.5} /> podgląd
+                    </span>
+                  </div>
+                  <p className="line-clamp-2 text-sm text-foreground">{f.title || f.filename}</p>
+                  <div className="mt-auto flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>
+                      {formatBytes(f.size_bytes)}
+                      {f.section_count != null ? ` · ${f.section_count} sekcji` : ""}
+                      {f.image_count ? ` · ${f.image_count} grafik` : ""}
+                    </span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      aria-label="Usuń plik"
+                      className="rounded p-1 text-muted-foreground transition hover:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`Usunąć plik "${f.filename}"?`))
+                          deleteGenMut.mutate(f.id);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.stopPropagation();
+                          if (window.confirm(`Usunąć plik "${f.filename}"?`))
+                            deleteGenMut.mutate(f.id);
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground/70">
+                    {new Date(f.created_at).toLocaleString()}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </HudPanel>
+
+      {preview && <GeneratedFilePreview file={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 }

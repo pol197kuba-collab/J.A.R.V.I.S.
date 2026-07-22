@@ -1382,6 +1382,56 @@ const generateDocumentTool: Tool = {
       return { error: `signed_url_failed: ${signErr?.message ?? "unknown"}` };
     }
 
+    // pptx has no in-browser renderer, so also render the SAME deck to PDF
+    // (identical builder + already-generated images, no extra image calls)
+    // and store it as the in-app preview. Best-effort: a failed preview just
+    // means the archive falls back to download-only for this file.
+    let previewPath: string | null = null;
+    if (spec.format === "pptx") {
+      try {
+        const previewBytes = await buildDocument({ ...spec, format: "pdf" }, images);
+        const pp = `${ctx.userId}/${crypto.randomUUID()}/preview.pdf`;
+        const { error: pErr } = await ctx.supabase.storage
+          .from("generated")
+          .upload(pp, previewBytes, { contentType: CONTENT_TYPES.pdf });
+        if (pErr) throw new Error(pErr.message);
+        previewPath = pp;
+      } catch (err) {
+        await ctx.logEvent(
+          "warn",
+          "tool.generate_document",
+          `pptx preview render failed: ${err instanceof Error ? err.message : String(err)}`,
+          { run_id: ctx.runId } as Json,
+        );
+      }
+    }
+
+    // Index the file so it shows up in the /documents "Generated" archive.
+    // Best-effort: a failed insert must not fail the whole generation — the
+    // chat download link (the primary delivery) already succeeded above.
+    const { error: idxErr } = await ctx.supabase.from("generated_files").insert({
+      user_id: ctx.userId,
+      filename: spec.filename,
+      format: spec.format,
+      storage_path: path,
+      preview_path: previewPath,
+      size_bytes: bytes.byteLength,
+      title: spec.title,
+      section_count: spec.sections.length,
+      image_count: imagesGenerated,
+      run_id: ctx.runId,
+    });
+    if (idxErr) {
+      await ctx.logEvent(
+        "warn",
+        "tool.generate_document",
+        `archive index failed: ${idxErr.message}`,
+        {
+          run_id: ctx.runId,
+        } as Json,
+      );
+    }
+
     await ctx.logEvent(
       "info",
       "tool.generate_document",

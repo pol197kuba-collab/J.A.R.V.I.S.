@@ -1499,7 +1499,38 @@ timeout 30s → 20s (all parallel) to keep the now-heavier tool inside the
 server-function budget. Regression test asserts the producer's first turn
 carries the mode-ANY toolConfig and the second turn drops it.
 
-**Needs another live retest of the flagship demo.**
+**Confirmed working live 2026-07-22** — flagship demo "zrób mi prezentację w nowoczesnym stylu o samsungu s26 ultra" produced a 7-slide deck with the hero image on the title slide, per-section AI graphics in the right panels, correct Polish text, slugified filename and a working download link. The whole Researcher + Producer wow milestone (items 11+12) is done.
+
+### Fifth follow-up (2026-07-22): Generated-files archive + in-app preview
+
+User ask: Producer files shouldn't be download-only — surface them in the
+Documents module (second panel) and let them open INSIDE JARVIS without
+downloading. Shipped:
+
+- Migration `20260722230000_generated_files.sql` — metadata table (owner
+  RLS, same shape as `documents`) indexing every Producer file. Bytes stay
+  in the `generated` bucket; the row adds title/format/size/section/image
+  counts + `preview_path`.
+- generate_document now (a) inserts a `generated_files` row and (b) for
+  pptx renders the SAME deck to PDF (identical builder + already-generated
+  images, no extra image calls) and stores it as `preview_path` — pptx has
+  no in-browser renderer, so the preview shows that PDF.
+- `generated.functions.ts` — list / sign-on-demand (30-min URLs, minted per
+  click, never stored) / delete (row + storage objects).
+- `/documents` second panel "PRODUCER // GENERATED" (card grid) +
+  `GeneratedFilePreview` modal: pdf & pptx(→pdf) in an <iframe>, docx
+  rendered client-side via `docx-preview` (bytes never leave the browser).
+  Download button re-signs with attachment disposition.
+
+Older files (generated before this migration) have no row and simply won't
+appear in the archive — the chat link from when they were made still works.
+**Needs the migration SQL pasted into Supabase + a live check of the panel
+and all three preview types.**
+
+### Stage 2 (queued, still open): real web photos in decks
+
+Researcher collects image URLs, Producer fetches + embeds them alongside
+the AI graphics. Not started.
 
 Original scoping notes follow. Content-agnostic "compiler" agent, deliberately not bolted onto Marketer:
 generating a file is a generic capability, not a marketing specialization,
