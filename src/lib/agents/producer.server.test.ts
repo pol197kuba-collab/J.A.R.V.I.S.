@@ -9,7 +9,33 @@
 //    "simplifies" the embedded font away, this is the test that catches it.
 
 import { describe, expect, it } from "vitest";
-import { buildDocument, normalizeDocSpec, type DocSpec } from "./producer.server";
+import {
+  buildDocument,
+  generateDocImages,
+  normalizeDocSpec,
+  pngDims,
+  slugifyFilename,
+  type DocImages,
+  type DocSpec,
+} from "./producer.server";
+import { vi, afterEach } from "vitest";
+
+// 1x1 opaque PNG — enough for every embed path (pptx data-URI, docx
+// ImageRun, pdf embedPng) without shipping a real asset into the test.
+const TINY_PNG = Uint8Array.from(
+  atob(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+  ),
+  (c) => c.charCodeAt(0),
+);
+const TINY_IMAGES: DocImages = {
+  hero: { bytes: TINY_PNG, mime: "image/png" },
+  sections: new Map([[0, { bytes: TINY_PNG, mime: "image/png" }]]),
+};
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const POLISH_SPEC: Omit<DocSpec, "format"> = {
   title: "Zażółć gęślą jaźń — raport",
@@ -34,7 +60,7 @@ describe("normalizeDocSpec", () => {
     });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect(res.spec.filename).toBe("Plan_kwartalny__Q3.pptx");
+    expect(res.spec.filename).toBe("plan-kwartalny-q3.pptx");
     expect(res.spec.sections).toHaveLength(1);
   });
 
@@ -73,7 +99,88 @@ describe("normalizeDocSpec", () => {
     });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect(res.spec.filename).toBe("m_j_raport.pdf");
+    expect(res.spec.filename).toBe("moj-raport.pdf");
+  });
+});
+
+describe("slugifyFilename", () => {
+  it("transliterates Polish diacritics instead of underscoring them", () => {
+    expect(slugifyFilename("Samsung S26 Ultra: Przyszłość Mobilnej Innowacji")).toBe(
+      "samsung-s26-ultra-przyszlosc-mobilnej-innowacji",
+    );
+    expect(slugifyFilename("Zażółć gęślą jaźń — ŁÓDŹ 2026")).toBe("zazolc-gesla-jazn-lodz-2026");
+  });
+
+  it("never returns an empty slug", () => {
+    expect(slugifyFilename("???")).toBe("dokument");
+  });
+});
+
+describe("image prompts", () => {
+  it("normalizeDocSpec picks up hero_image_prompt and per-section image_prompt", () => {
+    const res = normalizeDocSpec({
+      format: "pptx",
+      title: "t",
+      hero_image_prompt: "  sleek phone on dark glass  ",
+      sections: [{ heading: "h", content: "c", image_prompt: "macro camera lens" }],
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.spec.heroImagePrompt).toBe("sleek phone on dark glass");
+    expect(res.spec.sections[0].imagePrompt).toBe("macro camera lens");
+  });
+
+  it("generateDocImages parses inlineData and caps the number of calls at 1+4", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: "image/png",
+                    data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+      text: async () => "",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const spec: DocSpec = {
+      format: "pptx",
+      title: "t",
+      filename: "t.pptx",
+      heroImagePrompt: "hero",
+      sections: Array.from({ length: 8 }, (_, i) => ({
+        heading: `s${i}`,
+        content: "c",
+        imagePrompt: `img${i}`,
+      })),
+    };
+    const images = await generateDocImages(spec, "test-key");
+    expect(fetchMock).toHaveBeenCalledTimes(5); // 1 hero + 4 section cap
+    expect(images.hero?.mime).toBe("image/png");
+    expect(images.sections.size).toBe(4);
+    expect(pngDims(images.hero!.bytes)).toEqual({ width: 1, height: 1 });
+  });
+
+  it("generateDocImages is a no-op without prompts (no network)", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const images = await generateDocImages(
+      { format: "pdf", title: "t", filename: "t.pdf", sections: [{ heading: "h", content: "c" }] },
+      "test-key",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(images.hero).toBeUndefined();
+    expect(images.sections.size).toBe(0);
   });
 });
 
@@ -94,6 +201,13 @@ describe("buildDocument", () => {
     const bytes = await buildDocument({ ...POLISH_SPEC, format: "pdf" });
     expect(bytes.byteLength).toBeGreaterThan(1000);
     expect(String.fromCharCode(...bytes.slice(0, 5))).toBe("%PDF-");
+  });
+
+  it("embeds images in all three formats without throwing", async () => {
+    for (const format of ["pptx", "docx", "pdf"] as const) {
+      const bytes = await buildDocument({ ...POLISH_SPEC, format }, TINY_IMAGES);
+      expect(bytes.byteLength).toBeGreaterThan(1000);
+    }
   });
 
   it("paginates long content instead of overflowing one PDF page", async () => {
