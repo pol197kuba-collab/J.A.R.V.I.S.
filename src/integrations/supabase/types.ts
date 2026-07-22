@@ -381,6 +381,51 @@ export type Database = {
         };
         Relationships: [];
       };
+      generated_files: {
+        Row: {
+          created_at: string;
+          filename: string;
+          format: string;
+          id: string;
+          image_count: number | null;
+          preview_path: string | null;
+          run_id: string | null;
+          section_count: number | null;
+          size_bytes: number;
+          storage_path: string;
+          title: string | null;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          filename: string;
+          format: string;
+          id?: string;
+          image_count?: number | null;
+          preview_path?: string | null;
+          run_id?: string | null;
+          section_count?: number | null;
+          size_bytes: number;
+          storage_path: string;
+          title?: string | null;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          filename?: string;
+          format?: string;
+          id?: string;
+          image_count?: number | null;
+          preview_path?: string | null;
+          run_id?: string | null;
+          section_count?: number | null;
+          size_bytes?: number;
+          storage_path?: string;
+          title?: string | null;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       event_log: {
         Row: {
           created_at: string;
