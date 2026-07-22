@@ -1422,6 +1422,29 @@ output to `Packer.toArrayBuffer` (was `toBuffer`) — the deployed runtime
 isn't guaranteed to have Node's Buffer (nitro's default target here is
 cloudflare). **Needs a live retest of the flagship demo after deploy.**
 
+### Second follow-up (2026-07-22, same day): retest — PDF works end-to-end, pptx link broken by the model retyping the token
+
+Retest after the tslib fix deployed: "zrób PDF z pięcioma zasadami
+zdrowego snu" works fully — file generates, link opens, layout + Polish
+diacritics confirmed on a real phone screenshot. The flagship pptx demo
+generated the file too, but its download link failed with InvalidJWT
+"signature verification failed": the persona instructed the model to
+paste download_url VERBATIM, and an LLM retyping a ~300-char signed-URL
+token by hand reliably introduces typos (the pdf's copy was simply
+luckier). Same lesson class as the system_check saga: don't ask a model
+to do something a machine must do exactly.
+
+Fix — link delivery moved out of the model's hands entirely:
+`runtime.server.ts` captures `download_url` from the generate_document
+TOOL RESULT (not from any model prose), bubbles it up through
+`delegate_to_agent` sub-runs structurally (`AgentRunResult.attachments`),
+and appends `⬇ <url>` verbatim to the top-level reply by code.
+Personas/tool instruction now say the opposite of before: NEVER retype a
+download URL (migration `20260722190000_producer_no_manual_links.sql`
+updates the producer prompt in DB + handle_new_user; needs the usual
+manual SQL paste). New regression test (runtime.attachments.test.ts).
+**Retest the flagship pptx demo after deploy + SQL.**
+
 Original scoping notes follow. Content-agnostic "compiler" agent, deliberately not bolted onto Marketer:
 generating a file is a generic capability, not a marketing specialization,
 and this app's agent philosophy keeps each agent single-purpose (Guardian
