@@ -1348,9 +1348,51 @@ being fetched/read/synthesized in real time, in the same spirit as Agent
 Flow Tree's travelling-dot delegation animation, which already proved
 that kind of live-process visualization reads well in this HUD.
 
-## 12. [W] Producer agent — document/presentation generation (pptx/docx/pdf)
+## 12. [W] Producer agent — document/presentation generation (pptx/docx/pdf) — **shipped 2026-07-22, needs live verification**
 
-Content-agnostic "compiler" agent, deliberately not bolted onto Marketer:
+Shipped: migration `20260722160000_producer_agent.sql` + code. Decisions
+made at build time, as this section left open:
+
+- **One tool, not three** — `generate_document(format, title, subtitle?,
+filename?, sections[])`; the input shape (title + sections of
+  heading/content/bullets) turned out identical across all three formats,
+  so per-format tools would have been three copies of the same schema.
+- **Builders** in `src/lib/agents/producer.server.ts` (pure functions,
+  unit-tested — 9 new tests): pptxgenjs (16:9, dark title slide + accent
+  bar; one slide per section), docx (Title/Heading1 + bullets), pdf-lib
+  (A4, manual word-wrap + pagination). All pure JS, dynamically imported
+  so they only load when a document is actually generated.
+- **PDF + Polish diacritics trap**: pdf-lib's StandardFonts are
+  WinAnsi-encoded and throw on the first "ł". Fixed by embedding a
+  subsetted Unicode TTF (`producerFonts.server.ts` — Liberation Sans
+  subset to Latin + Latin-Ext-A, renamed per OFL, ~53kB per weight,
+  base64 in a server-only module). Verified by rendering an actual
+  generated PDF to PNG — full "zażółć gęślą jaźń" set renders correctly.
+- **The new architectural piece** landed as scoped: private `generated`
+  Storage bucket (owner-scoped `${user_id}/...` paths, same policy idiom
+  as `documents`), upload + 7-day signed URL, link returned through the
+  tool result with an explicit "include verbatim" instruction.
+- **Chat had no way to render a link**: bubbles printed raw text, so a
+  signed URL would have been dead text. New `LinkifiedText` component
+  (markdown links + bare URLs → anchors; storage URLs labeled with their
+  filename) wired into ChatPanel, and `speak()` now strips bare URLs so
+  TTS doesn't read a 400-char token aloud.
+- **Orchestrator pipeline guidance** (`runtime.server.ts`): file requests
+  → producer; "zrób mi prezentację o X" → researcher first, then producer
+  with the researcher's content in the task; producer's download link must
+  be relayed verbatim.
+
+**Lovable lesson applies: paste the migration SQL into Supabase manually.**
+Live verification checklist: (a) producer in roster/Agent Hub, (b) direct
+"zrób PDF z..." delegates to producer and the chat link downloads a valid
+file, (c) flagship two-hop demo "zrób mi prezentację o X" runs researcher
+→ producer visibly in Agent Flow Tree and the pptx opens in
+PowerPoint/Google Slides (visual layout check — LibreOffice was broken in
+the build sandbox, so the pptx template has only been verified
+structurally, not rendered), (d) Polish characters correct in all three
+formats.
+
+Original scoping notes follow. Content-agnostic "compiler" agent, deliberately not bolted onto Marketer:
 generating a file is a generic capability, not a marketing specialization,
 and this app's agent philosophy keeps each agent single-purpose (Guardian
 = monitoring, Marketer = copywriting). Enables the pipeline discussed

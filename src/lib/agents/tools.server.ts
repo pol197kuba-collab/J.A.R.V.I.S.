@@ -1257,6 +1257,132 @@ const searchDocumentsTool: Tool = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Producer tool — generate a downloadable document (pptx/docx/pdf)
+// ---------------------------------------------------------------------------
+
+// First tool in this app that produces a FILE instead of returning
+// text/data through the JSON tool-call channel: bytes go to the private
+// 'generated' Storage bucket (owner-scoped paths, same idiom as
+// 'documents') and the model gets back a signed download URL to hand to
+// the user in chat. The heavy build libraries (pptxgenjs/docx/pdf-lib +
+// the embedded PDF font) are dynamically imported so they only load when
+// a document is actually being generated, not on every runtime start.
+
+const SIGNED_URL_TTL_SECONDS = 7 * 24 * 3600; // 7 days
+
+const generateDocumentTool: Tool = {
+  declaration: {
+    name: "generate_document",
+    description:
+      "Generate a downloadable file — a presentation (pptx), a Word document (docx), or a PDF — from structured content, and return a download link. Call it ONCE with the complete, final content: a title and a list of sections, each with a heading plus paragraph text and/or bullet points. Write real content in the user's language, never placeholders.",
+    parameters: {
+      type: "object",
+      properties: {
+        format: {
+          type: "string",
+          enum: ["pptx", "docx", "pdf"],
+          description: "Output file format.",
+        },
+        title: { type: "string", description: "Document/presentation title." },
+        subtitle: { type: "string", description: "Optional subtitle shown under the title." },
+        filename: {
+          type: "string",
+          description: "Optional filename (without extension). Defaults to the title.",
+        },
+        sections: {
+          type: "array",
+          description:
+            "Ordered sections (slides for pptx, headed sections for docx/pdf). Each needs a heading and real content: paragraph text, bullet points, or both.",
+          items: {
+            type: "object",
+            properties: {
+              heading: { type: "string", description: "Section/slide heading." },
+              content: { type: "string", description: "Paragraph text for this section." },
+              bullets: {
+                type: "array",
+                items: { type: "string" },
+                description: "Bullet points for this section.",
+              },
+            },
+            required: ["heading"],
+          },
+        },
+      },
+      required: ["format", "title", "sections"],
+    },
+  },
+  async execute(args, ctx) {
+    const { normalizeDocSpec, buildDocument, CONTENT_TYPES } = await import("./producer.server");
+    const normalized = normalizeDocSpec(args);
+    if (!normalized.ok) {
+      await ctx.logEvent("warn", "tool.generate_document", `rejected: ${normalized.error}`, {
+        run_id: ctx.runId,
+      } as Json);
+      return { error: normalized.error };
+    }
+    const spec = normalized.spec;
+
+    let bytes: Uint8Array;
+    try {
+      bytes = await buildDocument(spec);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await ctx.logEvent(
+        "error",
+        "tool.generate_document",
+        `build failed (${spec.format}): ${msg}`,
+        {
+          run_id: ctx.runId,
+        } as Json,
+      );
+      return { error: `build_failed: ${msg}` };
+    }
+
+    const path = `${ctx.userId}/${crypto.randomUUID()}/${spec.filename}`;
+    const { error: uploadErr } = await ctx.supabase.storage
+      .from("generated")
+      .upload(path, bytes, { contentType: CONTENT_TYPES[spec.format] });
+    if (uploadErr) {
+      await ctx.logEvent("error", "tool.generate_document", `upload failed: ${uploadErr.message}`, {
+        run_id: ctx.runId,
+        path,
+      } as Json);
+      return { error: `storage_upload_failed: ${uploadErr.message}` };
+    }
+
+    const { data: signed, error: signErr } = await ctx.supabase.storage
+      .from("generated")
+      .createSignedUrl(path, SIGNED_URL_TTL_SECONDS, { download: spec.filename });
+    if (signErr || !signed?.signedUrl) {
+      await ctx.logEvent(
+        "error",
+        "tool.generate_document",
+        `signed url failed: ${signErr?.message ?? "no url"}`,
+        { run_id: ctx.runId, path } as Json,
+      );
+      return { error: `signed_url_failed: ${signErr?.message ?? "unknown"}` };
+    }
+
+    await ctx.logEvent(
+      "info",
+      "tool.generate_document",
+      `${spec.format} generated: ${spec.filename} (${bytes.byteLength} bytes, ${spec.sections.length} sections)`,
+      { run_id: ctx.runId, path, size_bytes: bytes.byteLength } as Json,
+    );
+    return {
+      ok: true,
+      format: spec.format,
+      filename: spec.filename,
+      sections: spec.sections.length,
+      size_bytes: bytes.byteLength,
+      download_url: signed.signedUrl,
+      link_valid_days: 7,
+      instruction: "Include download_url VERBATIM in your reply as the download link for the user.",
+    };
+  },
+};
+
 // Full catalog of tool *implementations* known to this codebase. This array
 // is the only place `execute` logic lives — it never shrinks based on DB
 // state, so a disabled tool's code stays available (just unreachable via the
@@ -1279,6 +1405,7 @@ export const ALL_TOOLS: Tool[] = [
   checkDelegation,
   listDocumentsTool,
   searchDocumentsTool,
+  generateDocumentTool,
 ];
 
 export function getToolByName(name: string): Tool | undefined {

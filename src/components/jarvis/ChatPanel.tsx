@@ -16,6 +16,7 @@ import {
 } from "@/lib/agents/runtime.functions";
 import { speak } from "@/lib/audio/speak";
 import { setAgentBusy, reportOutcome } from "@/lib/ai/agentActivity";
+import { LinkifiedText } from "./LinkifiedText";
 import { ACTIVE_AGENT_LS_KEY } from "@/routes/agent-hub";
 
 const STORAGE_KEY = "jarvis_chat_history";
@@ -375,7 +376,7 @@ export function ChatPanel() {
                     : "border-border/50 bg-secondary/30 text-foreground shadow-[inset_0_1px_0_oklch(1_0_0_/_0.04)]",
                 )}
               >
-                {m.text}
+                <LinkifiedText text={m.text} />
               </div>
             </div>
           </div>
