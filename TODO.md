@@ -1499,7 +1499,7 @@ timeout 30s → 20s (all parallel) to keep the now-heavier tool inside the
 server-function budget. Regression test asserts the producer's first turn
 carries the mode-ANY toolConfig and the second turn drops it.
 
-**Needs another live retest of the flagship demo.**
+**Confirmed working live 2026-07-22** — flagship demo "zrób mi prezentację w nowoczesnym stylu o samsungu s26 ultra" produced a 7-slide deck with the hero image on the title slide, per-section AI graphics in the right panels, correct Polish text, slugified filename and a working download link. The whole Researcher + Producer wow milestone (items 11+12) is done.
 
 Original scoping notes follow. Content-agnostic "compiler" agent, deliberately not bolted onto Marketer:
 generating a file is a generic capability, not a marketing specialization,
