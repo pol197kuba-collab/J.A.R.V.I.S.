@@ -1289,9 +1289,40 @@ OAuth-backed tools via the existing tool-registry pattern
   always wins). Wire it up as a real fallback once multi-provider routing
   lands, or delete it.
 
-## 11. [W] Researcher agent — deep multi-step web research
+## 11. [W] Researcher agent — deep multi-step web research — **shipped 2026-07-22, needs live verification**
 
-Formalizes the idea already noted in `CODEX.md` as the queued second-
+Shipped: migration `20260722120000_researcher_agent.sql` — **no new tools**,
+exactly as scoped below: binds the existing `web_search` + `fetch_url` plus
+`list_documents` + `search_documents` (the RAG grounding that makes this
+more than "Marketer but wordier") to a new `researcher` agent, seeded for
+every existing + future user via the established migration pattern
+(guardian/analityk shape; `handle_new_user()` redeclared carrying all prior
+agents forward). Persona follows the Marketer lesson: `config.system_prompt`
+holds only the specialization (multi-step process: sub-questions → several
+search rounds → fetch best sources → cross-check facts in ≥2 sources →
+check the user's own documents → structured synthesis with a source list),
+identity/language comes from `persona.ts`. Config: `max_tool_iterations` 10
+(default 6 — research needs more round-trips; runtime clamp is 12),
+`max_output_tokens` 2400, `temperature` 0.4.
+
+Code changes: only the Orchestrator's delegation guidance in
+`runtime.server.ts` (research-shaped requests → researcher, with an explicit
+carve-out that simple single-fact questions stay with the Orchestrator's own
+`web_search`) + the delegate tool description. No UI work needed — roster,
+Flow Tree, Agent Hub and chat agent picker are all DB-driven and pick the
+new agent up automatically; `toolDescriptions.ts` already covers all four
+bound tools.
+
+**Remember the Lovable lesson (CODEX.md): merging the migration does NOT
+apply it — the SQL must be pasted into Supabase manually.** Needs a live
+verification pass after that: (a) researcher appears in roster/Agent Hub,
+(b) "zbadaj temat X / przygotuj raport o X" delegates to researcher (not
+marketer, not a UI action), (c) it actually performs several search/fetch
+rounds visible in Agent Flow Tree, (d) simple factual questions do NOT get
+over-delegated. The optional "research trace" panel idea below stays open —
+Flow Tree's live tool-call chips already cover most of it.
+
+Original scoping notes follow. Formalizes the idea already noted in `CODEX.md` as the queued second-
 wow-gadget slot (previously only mentioned there, not tracked here as its
 own item — gap caught 2026-07-20). Complements Marketer (which is
 marketing-copy-focused, single-shot) with genuine multi-step research:
