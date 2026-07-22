@@ -233,7 +233,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           )
           .join("\n") +
         (agent.slug === "orchestrator"
-          ? `\n\nJako Orchestrator MOŻESZ delegować zadanie do wybranego kolegi używając narzędzia delegate_to_agent(slug, task). Rób to, kiedy zadanie pasuje wyraźnie do specjalizacji innego agenta (np. copy / marketing → marketer; pytanie o treść/zawartość przesłanego dokumentu lub pliku → analityk; pogłębiony research tematu, raport/opracowanie z wielu źródeł, "zbadaj temat X", porównanie opcji wymagające sprawdzenia źródeł → researcher; wygenerowanie PLIKU do pobrania — prezentacja pptx, dokument Word/docx, PDF → producer). Do researcher deleguj pytania wymagające WIELU wyszukiwań i weryfikacji źródeł — proste pojedyncze pytania faktograficzne obsługuj sam swoim web_search. PIPELINE DWUETAPOWY: gdy użytkownik prosi o prezentację/dokument/raport NA TEMAT wymagający zebrania treści (np. "zrób mi prezentację o X"), wykonaj DWA delegowania w tej samej turze: najpierw researcher (zbierz treść merytoryczną), potem producer — a w polu task dla producera przekaż KOMPLETNĄ treść z odpowiedzi researchera (format, tytuł i gotowe sekcje z konkretami), bo producer nie ma dostępu do internetu ani do rozmowy. Gdy treść jest prosta i już znana, deleguj bezpośrednio do producer. KRYTYCZNE dla odpowiedzi po delegacji do producer: odpowiedź producera zawiera link do pobrania pliku — przekaż ten link użytkownikowi DOSŁOWNIE, wklejając pełny URL w swojej odpowiedzi; nigdy go nie skracaj, nie parafrazuj ani nie pomijaj, bo bez niego użytkownik nie ma jak pobrać pliku. WAŻNE — OGÓLNA ZASADA ROZRÓŻNIANIA delegate_to_agent vs ${UI_ACTION_TOOL_NAME}: samo wystąpienie słowa "agent"/"agenci"/"agentów" w poleceniu NIE oznacza automatycznie prośby o otwarcie centrum agentów (open_agents) — to osobne, rzadsze znaczenie. Jeśli użytkownik chce, żeby agent(ci) COŚ ZROBILI / WYKONALI realną pracę (np. "zademonstruj ich możliwości", "użyj agentów do X", "niech marketer przygotuje Y", "uruchom agentów żeby..."), to jest prośba o pracę merytoryczną — deleguj przez delegate_to_agent, NIE wywołuj ${UI_ACTION_TOOL_NAME}. Wywołaj open_agents TYLKO gdy użytkownik chce zobaczyć/otworzyć sam WIDOK/EKRAN centrum agentów (np. "pokaż mi agentów", "otwórz centrum agentów", "przejdź do zakładki agentów"), bez oczekiwania na wykonanie jakiegokolwiek zadania. Ta sama zasada dotyczy pytań o TREŚĆ czegoś (np. "co jest w dokumencie X", "co zawiera plik Y") — to pytanie merytoryczne, deleguj do analityk, nie steruj interfejsem. Gdy użytkownik prosi o demonstrację/użycie WIELU lub WSZYSTKICH agentów, deleguj po kolei do kilku pasujących kolegów w tej samej turze (masz do kilkunastu kroków narzędziowych dostępnych), zamiast zatrzymywać się na jednym i nazywać to "początkiem". SZCZEGÓLNY PRZYPADEK: akcja UI "system_check" to WYŁĄCZNIE ozdobna, na stałe zaszyta fraza ("Wszystkie systemy sprawne...") bez żadnej realnej treści — nie sprawdza faktycznie niczego. Jeśli w zespole jest guardian (Strażnik) i użytkownik prosi o sprawdzenie/kontrolę/status/kondycję systemu (np. "sprawdź system", "wykonaj kontrolę systemu", "co się dzieje z systemem"), ZAWSZE deleguj do guardian po realny raport zamiast wywoływać system_check — użytkownik oczekuje faktycznych wniosków, nie samej dekoracji. Zwracaj użytkownikowi krótkie streszczenie odpowiedzi delegowanego agenta (lub agentów) w swoim głosie.`
+          ? `\n\nJako Orchestrator MOŻESZ delegować zadanie do wybranego kolegi używając narzędzia delegate_to_agent(slug, task). Rób to, kiedy zadanie pasuje wyraźnie do specjalizacji innego agenta (np. copy / marketing → marketer; pytanie o treść/zawartość przesłanego dokumentu lub pliku → analityk; pogłębiony research tematu, raport/opracowanie z wielu źródeł, "zbadaj temat X", porównanie opcji wymagające sprawdzenia źródeł → researcher; wygenerowanie PLIKU do pobrania — prezentacja pptx, dokument Word/docx, PDF → producer). Do researcher deleguj pytania wymagające WIELU wyszukiwań i weryfikacji źródeł — proste pojedyncze pytania faktograficzne obsługuj sam swoim web_search. PIPELINE DWUETAPOWY: gdy użytkownik prosi o prezentację/dokument/raport NA TEMAT wymagający zebrania treści (np. "zrób mi prezentację o X"), wykonaj DWA delegowania w tej samej turze: najpierw researcher (zbierz treść merytoryczną), potem producer — a w polu task dla producera przekaż KOMPLETNĄ treść z odpowiedzi researchera (format, tytuł i gotowe sekcje z konkretami), bo producer nie ma dostępu do internetu ani do rozmowy. Gdy treść jest prosta i już znana, deleguj bezpośrednio do producer. WAŻNE po delegacji do producer: NIE przepisuj ani nie wklejaj do swojej odpowiedzi żadnego linku/URL-a do pobrania pliku — system automatycznie dołącza poprawny link pod Twoją wiadomością, a ręczne przepisanie długiego adresu wprowadza literówki i psuje podpis linku. Po prostu poinformuj, że plik jest gotowy do pobrania poniżej. WAŻNE — OGÓLNA ZASADA ROZRÓŻNIANIA delegate_to_agent vs ${UI_ACTION_TOOL_NAME}: samo wystąpienie słowa "agent"/"agenci"/"agentów" w poleceniu NIE oznacza automatycznie prośby o otwarcie centrum agentów (open_agents) — to osobne, rzadsze znaczenie. Jeśli użytkownik chce, żeby agent(ci) COŚ ZROBILI / WYKONALI realną pracę (np. "zademonstruj ich możliwości", "użyj agentów do X", "niech marketer przygotuje Y", "uruchom agentów żeby..."), to jest prośba o pracę merytoryczną — deleguj przez delegate_to_agent, NIE wywołuj ${UI_ACTION_TOOL_NAME}. Wywołaj open_agents TYLKO gdy użytkownik chce zobaczyć/otworzyć sam WIDOK/EKRAN centrum agentów (np. "pokaż mi agentów", "otwórz centrum agentów", "przejdź do zakładki agentów"), bez oczekiwania na wykonanie jakiegokolwiek zadania. Ta sama zasada dotyczy pytań o TREŚĆ czegoś (np. "co jest w dokumencie X", "co zawiera plik Y") — to pytanie merytoryczne, deleguj do analityk, nie steruj interfejsem. Gdy użytkownik prosi o demonstrację/użycie WIELU lub WSZYSTKICH agentów, deleguj po kolei do kilku pasujących kolegów w tej samej turze (masz do kilkunastu kroków narzędziowych dostępnych), zamiast zatrzymywać się na jednym i nazywać to "początkiem". SZCZEGÓLNY PRZYPADEK: akcja UI "system_check" to WYŁĄCZNIE ozdobna, na stałe zaszyta fraza ("Wszystkie systemy sprawne...") bez żadnej realnej treści — nie sprawdza faktycznie niczego. Jeśli w zespole jest guardian (Strażnik) i użytkownik prosi o sprawdzenie/kontrolę/status/kondycję systemu (np. "sprawdź system", "wykonaj kontrolę systemu", "co się dzieje z systemem"), ZAWSZE deleguj do guardian po realny raport zamiast wywoływać system_check — użytkownik oczekuje faktycznych wniosków, nie samej dekoracji. Zwracaj użytkownikowi krótkie streszczenie odpowiedzi delegowanego agenta (lub agentów) w swoim głosie.`
           : "")
       : "";
 
@@ -425,6 +425,12 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     let finalText = "";
     let uiAction: UiAction | null = null;
     const toolCallLog: Array<{ name: string; args: Record<string, unknown> }> = [];
+    // Download links captured verbatim from file-producing tool results and
+    // appended to the final reply by CODE, never retyped by the model — an
+    // LLM copying a ~300-char signed-URL token by hand reliably introduces
+    // typos (live failure: InvalidJWT "signature verification failed" on a
+    // generated pptx while the pdf's luckier copy worked).
+    const attachments: Array<{ filename: string; url: string }> = [];
 
     for (let iter = 0; iter < maxToolIterations; iter++) {
       let functionCalls: Array<{ name: string; args: Record<string, unknown> }>;
@@ -575,6 +581,10 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
               delegationDepth: delegationDepth + 1,
               parentRunId: runId,
             });
+            // Bubble file links up through the delegation chain verbatim —
+            // the parent's own reply gets them appended below, so a
+            // researcher → producer chain still ends with an intact link.
+            if (sub.attachments) attachments.push(...sub.attachments);
             response = {
               delegate: target.slug,
               status: sub.status,
@@ -598,6 +608,16 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
               model,
               logEvent,
             });
+            if (
+              call.name === "generate_document" &&
+              response.ok === true &&
+              typeof response.download_url === "string"
+            ) {
+              attachments.push({
+                filename: typeof response.filename === "string" ? response.filename : "plik",
+                url: response.download_url,
+              });
+            }
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             response = { error: msg };
@@ -848,6 +868,19 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       }
     }
 
+    // Append captured file links to the user-facing reply by code, verbatim.
+    // Top-level runs only: delegated sub-runs hand their attachments up
+    // structurally instead (their output text is read by the parent model,
+    // and a URL there would only tempt it into retyping the token).
+    if (delegationDepth === 0 && attachments.length > 0) {
+      const linkLines = attachments
+        .filter((a) => !finalText.includes(a.url))
+        .map((a) => `⬇ ${a.url}`);
+      if (linkLines.length > 0) {
+        finalText = `${finalText.trim()}\n\n${linkLines.join("\n")}`.trim();
+      }
+    }
+
     const latencyMs = Date.now() - startedAt;
 
     await supabase
@@ -908,6 +941,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       tokensIn: totalTokensIn || undefined,
       tokensOut: totalTokensOut || undefined,
       latencyMs,
+      attachments: attachments.length > 0 ? attachments : undefined,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

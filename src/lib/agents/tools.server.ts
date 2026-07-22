@@ -1378,7 +1378,8 @@ const generateDocumentTool: Tool = {
       size_bytes: bytes.byteLength,
       download_url: signed.signedUrl,
       link_valid_days: 7,
-      instruction: "Include download_url VERBATIM in your reply as the download link for the user.",
+      instruction:
+        "Do NOT copy or retype download_url into your reply — the system appends the download link below your message automatically, and a hand-copied token breaks the signature. Just summarize what was generated.",
     };
   },
 };

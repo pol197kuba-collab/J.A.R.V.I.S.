@@ -51,6 +51,11 @@ export type AgentRunResult = {
   tokensIn?: number;
   tokensOut?: number;
   latencyMs?: number;
+  /** Download links captured VERBATIM from file-producing tool results
+   *  (generate_document). Delivered outside the model's own prose because
+   *  a ~300-char signed-URL token retyped by an LLM reliably picks up
+   *  typos — live failure: InvalidJWT "signature verification failed". */
+  attachments?: Array<{ filename: string; url: string }>;
 };
 
 // ---------------------------------------------------------------------------
