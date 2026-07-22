@@ -14,7 +14,16 @@
 
 import PptxGen from "pptxgenjs";
 import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
-import { PDFDocument, PDFFont, PDFPage, rgb } from "pdf-lib";
+// Deliberately the fully-bundled dist, NOT the bare "pdf-lib" entry. The
+// default multi-file es/ build imports bare `tslib` (v1 — no `exports` map,
+// UMD with dynamically-generated exports the SSR bundler's CJS interop can't
+// statically analyze), which crashed in the deployed bundle with "Cannot
+// destructure property '__extends' of '__toESM(...).default'" on every
+// generate_document call — while working fine in local node/vitest. The
+// dist bundle has tslib (and all other deps) inlined, so there's nothing
+// left for any bundler's interop to mangle. Types come from the shim in
+// pdf-lib-esm.d.ts.
+import { PDFDocument, PDFFont, PDFPage, rgb } from "pdf-lib/dist/pdf-lib.esm.js";
 import fontkit from "@pdf-lib/fontkit";
 import { sanitizeFilename } from "@/lib/documents/chunking";
 import { DOC_SANS_BOLD_B64, DOC_SANS_REGULAR_B64 } from "./producerFonts.server";
@@ -245,7 +254,10 @@ async function buildDocx(spec: DocSpec): Promise<Uint8Array> {
     title: spec.title,
     sections: [{ children }],
   });
-  const buffer = await Packer.toBuffer(doc);
+  // toArrayBuffer, not toBuffer — the deployed server runtime is not
+  // guaranteed to have Node's Buffer (nitro's default target here is
+  // cloudflare), and the ArrayBuffer path works everywhere.
+  const buffer = await Packer.toArrayBuffer(doc);
   return new Uint8Array(buffer);
 }
 

@@ -1392,6 +1392,36 @@ the build sandbox, so the pptx template has only been verified
 structurally, not rendered), (d) Polish characters correct in all three
 formats.
 
+### Follow-up (2026-07-22, same day): first live test — generate_document crashed on every call
+
+Live test "zrób mi prezentację w nowoczesnym stylu o samsungu s26 ultra"
+(3 attempts, screenshots + System Logs): the researcher → producer chain
+delegated correctly, but every generate_document call failed with
+`Cannot destructure property '__extends' of '__toESM(...).default' as it
+is undefined` (4 tool-level errors in System Logs; the model retried,
+then apologized with "napotkałem drobny problem techniczny"). The first
+two attempts (15:20/15:21) predate the deploy — old code, classifier
+misfire to open_dashboard and a raw agent error respectively; only the
+third attempt exercised the shipped code.
+
+Root cause: pdf-lib's default multi-file `es/` build imports bare `tslib`
+(v1.14, no `exports` map, UMD whose exports are generated dynamically in
+a loop — impossible for a bundler's CJS-interop static analysis). The
+deployed SSR bundle mangled that into a `.default` destructure that's
+undefined at runtime — while plain node/vitest resolved it fine, which is
+why 61/61 tests passed locally. Could not reproduce in this sandbox
+either (tried esbuild in 5 configurations and a vite-SSR
+`noExternal: true` build — all pass; Lovable's production pipeline
+differs), so the fix removes the failure mode by construction instead of
+by matching a repro: import `pdf-lib/dist/pdf-lib.esm.js` (the
+fully-bundled dist with tslib and all other deps inlined — nothing left
+for any interop pass to mangle) via a type shim (`pdf-lib-esm.d.ts`).
+tslib entered the graph ONLY through pdf-lib (pptxgenjs inlines it, docx
+9 doesn't use it), so this closes the whole class. Also switched docx
+output to `Packer.toArrayBuffer` (was `toBuffer`) — the deployed runtime
+isn't guaranteed to have Node's Buffer (nitro's default target here is
+cloudflare). **Needs a live retest of the flagship demo after deploy.**
+
 Original scoping notes follow. Content-agnostic "compiler" agent, deliberately not bolted onto Marketer:
 generating a file is a generic capability, not a marketing specialization,
 and this app's agent philosophy keeps each agent single-purpose (Guardian
