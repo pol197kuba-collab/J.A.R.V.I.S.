@@ -231,8 +231,12 @@ export async function generateDocImages(
   const images: DocImages = { sections: new Map() };
   if (capped.length === 0) return images;
 
+  // 20s per image, all in parallel — kept well under the server-function
+  // execution budget even in the worst case, since a text-only slide (image
+  // failed/timed out) is an acceptable degradation but a whole run timing
+  // out is not.
   const results = await Promise.allSettled(
-    capped.map((job) => generateOneImage(job.prompt, apiKey, 30_000)),
+    capped.map((job) => generateOneImage(job.prompt, apiKey, 20_000)),
   );
   for (const [i, result] of results.entries()) {
     const job = capped[i];

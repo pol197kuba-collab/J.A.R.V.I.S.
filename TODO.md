@@ -1478,6 +1478,29 @@ slide layout with images in PowerPoint/Google Slides and that image
 generation actually returns (first live use of the image model on this
 key; if it 404s, the model id in models.ts is the knob).
 
+### Fourth follow-up (2026-07-22, same day): producer answered in prose, never called the tool — force it
+
+Retest of the image pass: NO file and NO link, four attempts. System Logs
+were decisive — `orchestrator: delegating → producer` fired, the producer
+sub-run started, and ended `run done · 0 tool calls`: the model described
+the presentation in prose instead of calling generate_document, so the
+Orchestrator relayed a confident "plik gotowy do pobrania" with nothing
+generated. (Same class as the download-link bug: don't ask the model to
+reliably do the one thing it must — force it.)
+
+Fix: when the running agent is `producer` and generate_document is
+declared, the request pins Gemini to that function
+(`functionCallingConfig` mode ANY, allowedFunctionNames
+["generate_document"]) until it has actually run once this turn, then
+switches back to AUTO so the follow-up turn can produce the text summary.
+The force clears on the first call regardless of success/error, so a
+failing build can't pin the loop. Also lowered per-image generation
+timeout 30s → 20s (all parallel) to keep the now-heavier tool inside the
+server-function budget. Regression test asserts the producer's first turn
+carries the mode-ANY toolConfig and the second turn drops it.
+
+**Needs another live retest of the flagship demo.**
+
 Original scoping notes follow. Content-agnostic "compiler" agent, deliberately not bolted onto Marketer:
 generating a file is a generic capability, not a marketing specialization,
 and this app's agent philosophy keeps each agent single-purpose (Guardian

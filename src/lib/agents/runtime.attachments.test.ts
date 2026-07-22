@@ -100,7 +100,10 @@ function baseResponses(): Record<string, CannedResponse[]> {
     ],
     user_secrets: [{ data: { gemini_api_key: "test-key", groq_api_key: null }, error: null }],
     agent_runs: [{ data: { id: "run-under-test" }, error: null }],
-    agent_tools: [{ data: [], error: null }],
+    // generate_document is bound + enabled, so it's actually declared to the
+    // model — which is what turns on producer's forced-tool-call path.
+    agent_tools: [{ data: [{ tool_id: "t-gen" }], error: null }],
+    tools: [{ data: [{ slug: "generate_document" }], error: null }],
     conversations: [{ data: { id: "conv-1" }, error: null }],
   };
 }
@@ -111,7 +114,8 @@ afterEach(() => {
 
 describe("runOrchestrator — generate_document link delivery", () => {
   it("appends the signed URL from the TOOL RESULT to the final reply and returns it as an attachment", async () => {
-    vi.stubGlobal("fetch", makeGeminiFetchMock());
+    const fetchMock = makeGeminiFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
 
     const result = await runOrchestrator({
       supabase: makeSupabaseStub(baseResponses()),
@@ -126,5 +130,17 @@ describe("runOrchestrator — generate_document link delivery", () => {
     expect(result.output).toContain(MODEL_REPLY);
     expect(result.output).toContain(`⬇ ${SIGNED_URL}`);
     expect(result.attachments).toEqual([{ filename: "raport.pdf", url: SIGNED_URL }]);
+
+    // Producer's FIRST turn must force the generate_document call (mode ANY),
+    // so it can't end its run in prose with 0 tool calls (the live failure).
+    const firstBody = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(firstBody.toolConfig?.functionCallingConfig?.mode).toBe("ANY");
+    expect(firstBody.toolConfig?.functionCallingConfig?.allowedFunctionNames).toEqual([
+      "generate_document",
+    ]);
+    // The SECOND turn (after the tool ran) must drop the force so the model
+    // can produce its text summary instead of being pinned to the tool.
+    const secondBody = JSON.parse((fetchMock.mock.calls[1][1] as RequestInit).body as string);
+    expect(secondBody.toolConfig).toBeUndefined();
   });
 });
