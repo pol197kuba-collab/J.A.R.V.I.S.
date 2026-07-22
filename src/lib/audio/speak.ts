@@ -141,6 +141,7 @@ function stripMarkdownForSpeech(text: string): string {
     .replace(/`([^`]+)`/g, "$1") // inline code
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1") // images -> alt text
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1") // links -> link text
+    .replace(/https?:\/\/\S+/g, " ") // bare URLs (e.g. signed download links) — unreadable aloud
     .replace(/(\*{1,3}|_{1,3})(\S(?:.*?\S)?)\1/g, "$2") // **bold**, *italic*, ___, etc.
     .replace(/~~(.*?)~~/g, "$1") // ~~strikethrough~~
     .replace(/^#{1,6}\s+/gm, "") // # headers

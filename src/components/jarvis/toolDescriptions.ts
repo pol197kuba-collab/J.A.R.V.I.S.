@@ -45,6 +45,7 @@ const TOOL_DESCRIPTIONS: Record<string, Describer> = {
   guardian_check_delegation: () => `🛡️ sprawdza integralność delegacji`,
   list_documents: () => `📁 przegląda dokumenty`,
   search_documents: (a) => `🔍 szuka w dokumentach: „${truncate(str(a, "query"))}"`,
+  generate_document: (a) => `📄 generuje plik ${str(a, "format")}: „${truncate(str(a, "title"))}"`,
   perform_ui_action: (a) => `🖥️ steruje interfejsem: ${str(a, "action")}`,
 };
 
