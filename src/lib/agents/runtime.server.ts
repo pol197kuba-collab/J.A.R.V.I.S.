@@ -120,6 +120,13 @@ const DEFAULT_MAX_TOOL_ITERATIONS = 6;
 const DEFAULT_TEMPERATURE = 0.85;
 const DEFAULT_MAX_OUTPUT_TOKENS = 1600;
 
+// Transient Gemini HTTP statuses worth retrying before failing over: 429
+// (rate limit), 500/502/503/504 (overload / gateway). 503 "high demand" is
+// the one seen storming in production.
+const GEMINI_RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+const GEMINI_MAX_RETRIES = 3;
+const GEMINI_RETRY_BACKOFF_MS = 700;
+
 export type OrchestratorInput = {
   supabase: SupabaseClient<Database>;
   userId: string;
@@ -451,42 +458,72 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       let functionCalls: Array<{ name: string; args: Record<string, unknown> }>;
       let textOut: string;
       try {
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 45_000);
-        const res = await fetch(
-          `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-          {
-            method: "POST",
-            signal: ctrl.signal,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              systemInstruction: { parts: [{ text: systemPrompt }] },
-              generationConfig: { temperature, maxOutputTokens },
-              // Gemini rejects an empty functionDeclarations array, and an
-              // agent may legitimately have zero tools enabled (all toggled
-              // off in Settings) — omit the `tools` key entirely in that case.
-              ...(toolDeclarations.length > 0
-                ? { tools: [{ functionDeclarations: toolDeclarations }] }
-                : {}),
-              ...(forceGenerateDocument
-                ? {
-                    toolConfig: {
-                      functionCallingConfig: {
-                        mode: "ANY",
-                        allowedFunctionNames: [GENERATE_DOCUMENT_TOOL],
-                      },
-                    },
-                  }
-                : {}),
-              contents,
-            }),
-          },
-        );
-        clearTimeout(timer);
+        const requestBody = JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          generationConfig: { temperature, maxOutputTokens },
+          // Gemini rejects an empty functionDeclarations array, and an
+          // agent may legitimately have zero tools enabled (all toggled
+          // off in Settings) — omit the `tools` key entirely in that case.
+          ...(toolDeclarations.length > 0
+            ? { tools: [{ functionDeclarations: toolDeclarations }] }
+            : {}),
+          ...(forceGenerateDocument
+            ? {
+                toolConfig: {
+                  functionCallingConfig: {
+                    mode: "ANY",
+                    allowedFunctionNames: [GENERATE_DOCUMENT_TOOL],
+                  },
+                },
+              }
+            : {}),
+          contents,
+        });
 
-        if (!res.ok) {
-          const bodyText = await res.text().catch(() => "");
-          throw new Error(`Gemini HTTP ${res.status}: ${bodyText.slice(0, 300)}`);
+        // Gemini's shared-capacity models return HTTP 503 "high demand" in
+        // bursts (observed live 2026-07-22: a 503 storm broke every
+        // presentation run for minutes). Those are transient and usually
+        // clear within a second or two, so retry the SAME request a few
+        // times with backoff BEFORE falling over to Groq — the Groq failover
+        // can't reliably handle our tool-calling shape (it 400s on
+        // delegate_to_agent), so exhausting a quick retry against Gemini is
+        // far more likely to succeed than switching providers.
+        let res: Response | null = null;
+        for (let attempt = 0; attempt <= GEMINI_MAX_RETRIES; attempt++) {
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 45_000);
+          try {
+            res = await fetch(
+              `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+              {
+                method: "POST",
+                signal: ctrl.signal,
+                headers: { "Content-Type": "application/json" },
+                body: requestBody,
+              },
+            );
+          } finally {
+            clearTimeout(timer);
+          }
+          if (
+            res.ok ||
+            !GEMINI_RETRYABLE_STATUS.has(res.status) ||
+            attempt === GEMINI_MAX_RETRIES
+          ) {
+            break;
+          }
+          await logEvent(
+            "warn",
+            "orchestrator",
+            `gemini HTTP ${res.status}, retry ${attempt + 1}/${GEMINI_MAX_RETRIES}`,
+            { run_id: runId, iter } as Json,
+          );
+          await new Promise((r) => setTimeout(r, GEMINI_RETRY_BACKOFF_MS * (attempt + 1)));
+        }
+
+        if (!res || !res.ok) {
+          const bodyText = res ? await res.text().catch(() => "") : "";
+          throw new Error(`Gemini HTTP ${res?.status ?? "network"}: ${bodyText.slice(0, 300)}`);
         }
 
         const data = (await res.json()) as {
@@ -532,6 +569,10 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
             systemPrompt,
             contents,
             toolDeclarations: toolDeclarations.length > 0 ? toolDeclarations : undefined,
+            // Carry the producer's forced-tool-call through to the failover
+            // path too — otherwise a Gemini outage lets producer answer in
+            // prose on Groq and end with 0 tool calls (no file, no link).
+            forceToolName: forceGenerateDocument ? GENERATE_DOCUMENT_TOOL : undefined,
             temperature,
             maxOutputTokens,
           });

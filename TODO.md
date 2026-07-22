@@ -1532,6 +1532,36 @@ and all three preview types.**
 Researcher collects image URLs, Producer fetches + embeds them alongside
 the AI graphics. Not started.
 
+### Sixth follow-up (2026-07-22): Gemini 503 storm broke generation — retry before failover
+
+Live retest failed again with NO file/link and the model hallucinating
+"Researcher zajęty, spróbuj później" / trying to open_dashboard. System
+Logs showed the real cause — NOT a code regression (same code produced a
+working 7-slide deck earlier):
+`gemini call failed: Gemini HTTP 503 "This model is currently
+experiencing high demand… try again later" UNAVAILABLE`, then
+`groq failover also failed: Groq HTTP 400 invalid_request_error` on the
+delegate_to_agent call. Google was rate-throttling gemini-2.5-flash in
+bursts; the single-503→Groq failover made it worse because Groq 400s on
+our tool-calling shape.
+
+Fix (makes the runtime ride out these storms instead of failing on the
+first blip):
+
+- Retry the SAME Gemini request on transient statuses (429/500/502/503/504)
+  up to 3× with 700ms·attempt backoff BEFORE falling over to Groq — 503
+  "high demand" usually clears within a second or two, and a Gemini retry
+  is far likelier to succeed than switching to the tool-calling-incapable
+  Groq path.
+- Carry producer's forced-tool-call (forceToolName) through to the Groq
+  failover too, so a Gemini outage can't let producer answer in prose with
+  0 tool calls even when it does fall over.
+  Regression test: a 503 then 200 with NO Groq key still returns a done run
+  (proving the retry, not failover, recovered it). Code-only, no migration.
+
+The archive/preview panel (previous follow-up) is still unverified live —
+it couldn't be exercised because no file ever generated during the storm.
+
 Original scoping notes follow. Content-agnostic "compiler" agent, deliberately not bolted onto Marketer:
 generating a file is a generic capability, not a marketing specialization,
 and this app's agent philosophy keeps each agent single-purpose (Guardian
