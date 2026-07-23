@@ -37,6 +37,10 @@ export type DocSection = {
   bullets?: string[];
   /** Optional English prompt for an AI-generated illustration on this slide/section. */
   imagePrompt?: string;
+  /** Optional search phrase for a REAL web photo (Openverse) on this section.
+   *  Preferred over imagePrompt when set — real photos don't depend on the
+   *  flaky image model. */
+  imageQuery?: string;
 };
 
 export type DocSpec = {
@@ -45,8 +49,10 @@ export type DocSpec = {
   subtitle?: string;
   filename: string;
   sections: DocSection[];
-  /** Optional English prompt for the title-slide hero graphic. */
+  /** Optional English prompt for the title-slide hero graphic (AI-generated). */
   heroImagePrompt?: string;
+  /** Optional search phrase for a REAL web photo on the title slide. */
+  heroImageQuery?: string;
 };
 
 export const CONTENT_TYPES: Record<DocFormat, string> = {
@@ -118,11 +124,13 @@ export function normalizeDocSpec(args: Record<string, unknown>): NormalizeResult
       .slice(0, MAX_BULLETS_PER_SECTION);
     if (!heading && !content && bullets.length === 0) continue;
     const imagePrompt = clip(s.image_prompt ?? s.imagePrompt, MAX_IMAGE_PROMPT_CHARS);
+    const imageQuery = clip(s.image_query ?? s.imageQuery, MAX_IMAGE_PROMPT_CHARS);
     sections.push({
       heading: heading || "—",
       content: content || undefined,
       bullets,
       imagePrompt: imagePrompt || undefined,
+      imageQuery: imageQuery || undefined,
     });
   }
   if (sections.length === 0) {
@@ -132,10 +140,9 @@ export function normalizeDocSpec(args: Record<string, unknown>): NormalizeResult
   const requestedName = clip(args.filename, 120);
   const base = slugifyFilename((requestedName || title).replace(/\.(pptx|docx|pdf)$/i, ""));
   const subtitle = clip(args.subtitle, MAX_TITLE_CHARS);
-  const heroImagePrompt = clip(
-    (args as Record<string, unknown>).hero_image_prompt ?? args.heroImagePrompt,
-    MAX_IMAGE_PROMPT_CHARS,
-  );
+  const a = args as Record<string, unknown>;
+  const heroImagePrompt = clip(a.hero_image_prompt ?? a.heroImagePrompt, MAX_IMAGE_PROMPT_CHARS);
+  const heroImageQuery = clip(a.hero_image_query ?? a.heroImageQuery, MAX_IMAGE_PROMPT_CHARS);
 
   return {
     ok: true,
@@ -146,13 +153,19 @@ export function normalizeDocSpec(args: Record<string, unknown>): NormalizeResult
       filename: `${base}.${format}`,
       sections,
       heroImagePrompt: heroImagePrompt || undefined,
+      heroImageQuery: heroImageQuery || undefined,
     },
   };
 }
 
-/** Does this spec ask for any AI graphics? Drives the async enrichment flow. */
+/** Does this spec ask for any graphics (AI prompt OR web-photo query)?
+ *  Drives the async enrichment flow. */
 export function specHasImagePrompts(spec: DocSpec): boolean {
-  return !!spec.heroImagePrompt || spec.sections.some((s) => !!s.imagePrompt);
+  return (
+    !!spec.heroImagePrompt ||
+    !!spec.heroImageQuery ||
+    spec.sections.some((s) => !!s.imagePrompt || !!s.imageQuery)
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -253,31 +266,109 @@ async function generateOneImage(
   throw lastErr ?? new Error("image generation failed");
 }
 
-/** Generate the hero + section images declared in the spec's prompts.
- *  Best-effort by design: any individual failure just means that slide
- *  renders text-only — never fails the whole document. All images run in
- *  parallel, so wall-clock cost ≈ one image call. */
+// ---------------------------------------------------------------------------
+// Real web photos — Openverse (Creative Commons image search, no API key)
+// ---------------------------------------------------------------------------
+
+// Stage 2: real photos instead of AI graphics. The AI image model is chronic-
+// ally 503-throttled for some keys, so a genuine photo (Openverse, CC-licensed)
+// is the reliable path when the content is a real thing (a product, place,
+// person). Openverse is keyless with modest anonymous rate limits — plenty for
+// a handful of images per deck. Best-effort: no result / a bad fetch just
+// leaves that slide text-only.
+const MAX_WEB_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
+const WEB_IMAGE_TIMEOUT_MS = 10_000;
+
+async function fetchWebImage(query: string): Promise<DocImage | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), WEB_IMAGE_TIMEOUT_MS);
+  try {
+    const searchUrl =
+      `https://api.openverse.org/v1/images/?q=${encodeURIComponent(query)}` +
+      `&license_type=all&mature=false&page_size=3`;
+    const res = await fetch(searchUrl, {
+      signal: ctrl.signal,
+      headers: { Accept: "application/json", "User-Agent": "JARVIS-Producer/1.0" },
+    });
+    if (!res.ok) throw new Error(`openverse HTTP ${res.status}`);
+    const data = (await res.json()) as {
+      results?: Array<{ url?: string; filetype?: string }>;
+    };
+    for (const hit of data.results ?? []) {
+      const url = hit.url;
+      // Only fetch https from a public host — never a private/loopback target.
+      if (!url || !/^https:\/\//i.test(url)) continue;
+      let host = "";
+      try {
+        host = new URL(url).hostname.toLowerCase();
+      } catch {
+        continue;
+      }
+      if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".internal")) {
+        continue;
+      }
+      try {
+        const imgRes = await fetch(url, {
+          signal: ctrl.signal,
+          headers: { "User-Agent": "JARVIS-Producer/1.0" },
+        });
+        if (!imgRes.ok) continue;
+        const mime = imgRes.headers.get("content-type") ?? "";
+        if (!mime.startsWith("image/")) continue;
+        const buf = new Uint8Array(await imgRes.arrayBuffer());
+        if (buf.byteLength === 0 || buf.byteLength > MAX_WEB_IMAGE_BYTES) continue;
+        return { bytes: buf, mime: mime.split(";")[0] };
+      } catch {
+        continue; // try the next candidate
+      }
+    }
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Resolve one slide image: a real web photo (imageQuery) if requested,
+ *  otherwise an AI-generated one (imagePrompt). Web photos are preferred and
+ *  don't touch the AI image model at all. */
+async function resolveOneImage(
+  job: { imageQuery?: string; imagePrompt?: string },
+  apiKey: string,
+): Promise<DocImage | null> {
+  if (job.imageQuery) {
+    const photo = await fetchWebImage(job.imageQuery);
+    if (photo) return photo;
+    // Fall back to AI generation only if a prompt was also supplied.
+  }
+  if (job.imagePrompt) return generateOneImage(job.imagePrompt, apiKey, IMAGE_ATTEMPT_TIMEOUT_MS);
+  return null;
+}
+
+/** Resolve the hero + section images declared in the spec (web photos and/or
+ *  AI graphics). Best-effort: any individual failure just means that slide
+ *  renders text-only — never fails the whole document. All run in parallel,
+ *  so wall-clock cost ≈ the slowest single image. */
 export async function generateDocImages(
   spec: DocSpec,
   apiKey: string,
   onWarn?: (message: string) => Promise<void> | void,
 ): Promise<DocImages> {
-  const jobs: Array<{ key: "hero" | number; prompt: string }> = [];
-  if (spec.heroImagePrompt) jobs.push({ key: "hero", prompt: spec.heroImagePrompt });
+  type Job = { key: "hero" | number; imageQuery?: string; imagePrompt?: string };
+  const jobs: Job[] = [];
+  if (spec.heroImageQuery || spec.heroImagePrompt) {
+    jobs.push({ key: "hero", imageQuery: spec.heroImageQuery, imagePrompt: spec.heroImagePrompt });
+  }
   for (const [i, section] of spec.sections.entries()) {
-    if (section.imagePrompt) jobs.push({ key: i, prompt: section.imagePrompt });
+    if (section.imageQuery || section.imagePrompt) {
+      jobs.push({ key: i, imageQuery: section.imageQuery, imagePrompt: section.imagePrompt });
+    }
   }
   const capped = jobs.slice(0, 1 + MAX_SECTION_IMAGES);
 
   const images: DocImages = { sections: new Map() };
   if (capped.length === 0) return images;
 
-  // All in parallel (wall-clock ≈ the slowest single image, retries and
-  // all) — a text-only slide from a failed/timed-out image is an acceptable
-  // degradation, a whole run timing out is not.
-  const results = await Promise.allSettled(
-    capped.map((job) => generateOneImage(job.prompt, apiKey, IMAGE_ATTEMPT_TIMEOUT_MS)),
-  );
+  const results = await Promise.allSettled(capped.map((job) => resolveOneImage(job, apiKey)));
   for (const [i, result] of results.entries()) {
     const job = capped[i];
     if (result.status === "fulfilled" && result.value) {
@@ -289,8 +380,8 @@ export async function generateDocImages(
           ? result.reason instanceof Error
             ? result.reason.message
             : String(result.reason)
-          : "no image in response";
-      await onWarn?.(`image generation failed (${String(job.key)}): ${reason}`);
+          : "no image resolved";
+      await onWarn?.(`image resolution failed (${String(job.key)}): ${reason}`);
     }
   }
   return images;

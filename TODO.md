@@ -1685,6 +1685,25 @@ arrives instantly; `/documents` shows "grafiki w toku" then the images
 appear a bit later; a 503 storm degrades to a usable text-only file
 marked "grafiki niedostępne" instead of failing the whole thing.
 
+## 15. [W] Stage 2 — real web photos in decks — **shipped 2026-07-23, needs live verification**
+
+The AI image model stayed chronically 503-throttled (decks kept coming
+out "grafiki niedostępne"), so real photos are now the preferred, reliable
+source. generate_document accepts `image_query` / `hero_image_query`
+(English search phrases for a real thing); the async enrichment pass
+(producer.server.ts `fetchWebImage`) looks them up on **Openverse**
+(keyless Creative-Commons image API — verified live: 240 hits for "Samsung
+Galaxy smartphone", real Flickr JPEGs), fetches the photo (https-only, 5MB
+cap, content-type checked), and embeds it. AI-prompt fields
+(image_prompt/hero_image_prompt) are now the FALLBACK for abstract slides
+only. Same async flow as #14 (file first, images in background). buildPdf/
+docx/pptx already handle JPEG. Persona + tool-schema migration
+`20260723220000_producer_web_photos.sql`. Tests 77 total.
+
+**Needs migration SQL + live check**: "zrób prezentację o samsungu s26"
+now embeds real photos (via Openverse) instead of failing on the AI model;
+`/documents` "grafiki w toku" → real images appear.
+
 ## Long-shot / not scheduled
 
 - **Local device bridge** (desktop automation, local Ollama) — needs a new

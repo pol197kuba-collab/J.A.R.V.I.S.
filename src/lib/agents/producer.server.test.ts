@@ -208,15 +208,34 @@ describe("image prompts", () => {
     expect(images.hero?.mime).toBe("image/png");
   });
 
-  it("specHasImagePrompts drives the async-enrichment decision", () => {
+  it("specHasImagePrompts drives async enrichment (AI prompts OR web-photo queries)", () => {
     const base = { format: "pptx" as const, title: "t", filename: "t.pptx" };
     expect(specHasImagePrompts({ ...base, sections: [{ heading: "h", content: "c" }] })).toBe(
       false,
     );
     expect(specHasImagePrompts({ ...base, heroImagePrompt: "hero", sections: [] })).toBe(true);
+    expect(specHasImagePrompts({ ...base, heroImageQuery: "samsung phone", sections: [] })).toBe(
+      true,
+    );
     expect(
       specHasImagePrompts({ ...base, sections: [{ heading: "h", imagePrompt: "phone" }] }),
     ).toBe(true);
+    expect(
+      specHasImagePrompts({ ...base, sections: [{ heading: "h", imageQuery: "real photo" }] }),
+    ).toBe(true);
+  });
+
+  it("normalizeDocSpec picks up image_query and hero_image_query", () => {
+    const res = normalizeDocSpec({
+      format: "pptx",
+      title: "t",
+      hero_image_query: "  Samsung Galaxy S26 Ultra  ",
+      sections: [{ heading: "h", content: "c", image_query: "camera module" }],
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.spec.heroImageQuery).toBe("Samsung Galaxy S26 Ultra");
+    expect(res.spec.sections[0].imageQuery).toBe("camera module");
   });
 
   it("generateDocImages is a no-op without prompts (no network)", async () => {

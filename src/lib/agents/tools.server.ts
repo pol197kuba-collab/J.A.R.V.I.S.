@@ -1275,7 +1275,7 @@ const generateDocumentTool: Tool = {
   declaration: {
     name: "generate_document",
     description:
-      "Generate a downloadable file — a presentation (pptx), a Word document (docx), or a PDF — from structured content, and return a download link. Call it ONCE with the complete, final content: a title and a list of sections, each with a heading plus paragraph text and/or bullet points. Write real content in the user's language, never placeholders. For a visually rich result, also pass hero_image_prompt and per-section image_prompt fields — short vivid ENGLISH scene descriptions (no text in the image); the system generates those graphics with an AI image model and embeds them automatically.",
+      "Generate a downloadable file — a presentation (pptx), a Word document (docx), or a PDF — from structured content, and return a download link. Call it ONCE with the complete, final content: a title and a list of sections, each with a heading plus paragraph text and/or bullet points. Write real content in the user's language, never placeholders. For visuals, prefer REAL PHOTOS: pass image_query (and hero_image_query) — short English search phrases for a real thing (product, place, person, concept), e.g. 'Samsung Galaxy S26 Ultra smartphone'. The system finds a real Creative-Commons photo and embeds it. Use the AI-graphics fields (hero_image_prompt / image_prompt) only for abstract or decorative slides where no real photo exists. Graphics are added in the background after the file is delivered.",
     parameters: {
       type: "object",
       properties: {
@@ -1290,10 +1290,15 @@ const generateDocumentTool: Tool = {
           type: "string",
           description: "Optional filename (without extension). Defaults to the title.",
         },
+        hero_image_query: {
+          type: "string",
+          description:
+            "Preferred. English search phrase for a REAL title-slide photo (a real product/place/person/thing), e.g. 'Samsung Galaxy S26 Ultra smartphone'.",
+        },
         hero_image_prompt: {
           type: "string",
           description:
-            "Optional ENGLISH prompt for an AI-generated hero graphic (title slide / document header). Describe a concrete scene or object, its mood and materials. Never ask for text in the image.",
+            "Fallback only. ENGLISH prompt for an AI-generated hero graphic when no real photo fits (abstract/decorative). Concrete scene, no text in the image.",
         },
         sections: {
           type: "array",
@@ -1309,10 +1314,15 @@ const generateDocumentTool: Tool = {
                 items: { type: "string" },
                 description: "Bullet points for this section.",
               },
+              image_query: {
+                type: "string",
+                description:
+                  "Preferred. English search phrase for a REAL photo for this slide (max 4 sections get an image — pick the most important). e.g. 'smartphone camera module close-up'.",
+              },
               image_prompt: {
                 type: "string",
                 description:
-                  "Optional ENGLISH prompt for an AI-generated illustration on this slide/section (max 4 sections get one — pick the most important). Concrete scene, no text in the image.",
+                  "Fallback only. ENGLISH prompt for an AI-generated illustration when no real photo fits. Concrete scene, no text in the image.",
               },
             },
             required: ["heading"],
