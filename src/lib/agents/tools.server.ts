@@ -1323,7 +1323,7 @@ const generateDocumentTool: Tool = {
     },
   },
   async execute(args, ctx) {
-    const { normalizeDocSpec, buildDocument, generateDocImages, CONTENT_TYPES } =
+    const { normalizeDocSpec, buildDocument, CONTENT_TYPES, specHasImagePrompts } =
       await import("./producer.server");
     const normalized = normalizeDocSpec(args);
     if (!normalized.ok) {
@@ -1334,16 +1334,13 @@ const generateDocumentTool: Tool = {
     }
     const spec = normalized.spec;
 
-    // AI slide graphics — best-effort: every failure just means that slide
-    // renders text-only. Runs before the build so all formats can embed.
-    const images = await generateDocImages(spec, ctx.apiKey, (message) =>
-      ctx.logEvent("warn", "tool.generate_document", message, { run_id: ctx.runId } as Json),
-    );
-    const imagesGenerated = (images.hero ? 1 : 0) + images.sections.size;
-
+    // Build the file TEXT-ONLY and return it immediately. Image generation is
+    // slow + 503-prone and used to blow the server-function budget inline;
+    // it now runs as a separate enrichment pass (enrichDocumentImagesFn),
+    // kicked by the client after this returns. NO_IMAGES = the default arg.
     let bytes: Uint8Array;
     try {
-      bytes = await buildDocument(spec, images);
+      bytes = await buildDocument(spec);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await ctx.logEvent(
@@ -1382,14 +1379,12 @@ const generateDocumentTool: Tool = {
       return { error: `signed_url_failed: ${signErr?.message ?? "unknown"}` };
     }
 
-    // pptx has no in-browser renderer, so also render the SAME deck to PDF
-    // (identical builder + already-generated images, no extra image calls)
-    // and store it as the in-app preview. Best-effort: a failed preview just
-    // means the archive falls back to download-only for this file.
+    // pptx has no in-browser renderer, so also store a text-only PDF rendering
+    // as the in-app preview (enrichment rebuilds it with images later).
     let previewPath: string | null = null;
     if (spec.format === "pptx") {
       try {
-        const previewBytes = await buildDocument({ ...spec, format: "pdf" }, images);
+        const previewBytes = await buildDocument({ ...spec, format: "pdf" });
         const pp = `${ctx.userId}/${crypto.randomUUID()}/preview.pdf`;
         const { error: pErr } = await ctx.supabase.storage
           .from("generated")
@@ -1406,10 +1401,12 @@ const generateDocumentTool: Tool = {
       }
     }
 
-    // Index the file so it shows up in the /documents "Generated" archive.
-    // Best-effort: a failed insert must not fail the whole generation — the
-    // chat download link (the primary delivery) already succeeded above.
+    // Does the spec ask for any graphics? If so, mark it 'pending' and store
+    // the spec so enrichment can rebuild the exact same document with images.
+    const wantsImages = specHasImagePrompts(spec);
+    const documentId = crypto.randomUUID();
     const { error: idxErr } = await ctx.supabase.from("generated_files").insert({
+      id: documentId,
       user_id: ctx.userId,
       filename: spec.filename,
       format: spec.format,
@@ -1418,7 +1415,9 @@ const generateDocumentTool: Tool = {
       size_bytes: bytes.byteLength,
       title: spec.title,
       section_count: spec.sections.length,
-      image_count: imagesGenerated,
+      image_count: 0,
+      image_status: wantsImages ? "pending" : "none",
+      spec: wantsImages ? (spec as unknown as Json) : null,
       run_id: ctx.runId,
     });
     if (idxErr) {
@@ -1435,20 +1434,24 @@ const generateDocumentTool: Tool = {
     await ctx.logEvent(
       "info",
       "tool.generate_document",
-      `${spec.format} generated: ${spec.filename} (${bytes.byteLength} bytes, ${spec.sections.length} sections, ${imagesGenerated} images)`,
-      { run_id: ctx.runId, path, size_bytes: bytes.byteLength, images: imagesGenerated } as Json,
+      `${spec.format} generated: ${spec.filename} (${bytes.byteLength} bytes, ${spec.sections.length} sections, images ${wantsImages ? "pending" : "none"})`,
+      { run_id: ctx.runId, path, size_bytes: bytes.byteLength } as Json,
     );
     return {
       ok: true,
       format: spec.format,
       filename: spec.filename,
       sections: spec.sections.length,
-      images_generated: imagesGenerated,
       size_bytes: bytes.byteLength,
       download_url: signed.signedUrl,
       link_valid_days: 7,
-      instruction:
-        "Do NOT copy or retype download_url into your reply — the system appends the download link below your message automatically, and a hand-copied token breaks the signature. Just summarize what was generated.",
+      // Non-null document_id + images_pending tells the runtime to hand the
+      // client an enrichment job (see runtime.server.ts / ChatPanel).
+      document_id: documentId,
+      images_pending: wantsImages && !idxErr,
+      instruction: wantsImages
+        ? "Do NOT copy download_url into your reply — the system appends it automatically. Summarize what was generated and mention the file is ready now, with graphics being added in the background."
+        : "Do NOT copy download_url into your reply — the system appends it automatically. Just summarize what was generated.",
     };
   },
 };

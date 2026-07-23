@@ -15,6 +15,7 @@ import {
   normalizeDocSpec,
   pngDims,
   slugifyFilename,
+  specHasImagePrompts,
   type DocImages,
   type DocSpec,
 } from "./producer.server";
@@ -205,6 +206,17 @@ describe("image prompts", () => {
     // 503 then 200 — the hero image survives instead of degrading to text-only.
     expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(images.hero?.mime).toBe("image/png");
+  });
+
+  it("specHasImagePrompts drives the async-enrichment decision", () => {
+    const base = { format: "pptx" as const, title: "t", filename: "t.pptx" };
+    expect(specHasImagePrompts({ ...base, sections: [{ heading: "h", content: "c" }] })).toBe(
+      false,
+    );
+    expect(specHasImagePrompts({ ...base, heroImagePrompt: "hero", sections: [] })).toBe(true);
+    expect(
+      specHasImagePrompts({ ...base, sections: [{ heading: "h", imagePrompt: "phone" }] }),
+    ).toBe(true);
   });
 
   it("generateDocImages is a no-op without prompts (no network)", async () => {

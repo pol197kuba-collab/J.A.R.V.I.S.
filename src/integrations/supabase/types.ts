@@ -388,10 +388,12 @@ export type Database = {
           format: string;
           id: string;
           image_count: number | null;
+          image_status: string;
           preview_path: string | null;
           run_id: string | null;
           section_count: number | null;
           size_bytes: number;
+          spec: Json | null;
           storage_path: string;
           title: string | null;
           user_id: string;
@@ -402,10 +404,12 @@ export type Database = {
           format: string;
           id?: string;
           image_count?: number | null;
+          image_status?: string;
           preview_path?: string | null;
           run_id?: string | null;
           section_count?: number | null;
           size_bytes: number;
+          spec?: Json | null;
           storage_path: string;
           title?: string | null;
           user_id: string;
@@ -416,10 +420,12 @@ export type Database = {
           format?: string;
           id?: string;
           image_count?: number | null;
+          image_status?: string;
           preview_path?: string | null;
           run_id?: string | null;
           section_count?: number | null;
           size_bytes?: number;
+          spec?: Json | null;
           storage_path?: string;
           title?: string | null;
           user_id?: string;

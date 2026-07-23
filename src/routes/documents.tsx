@@ -334,6 +334,21 @@ function DocumentsPage() {
                     <span className="font-display text-[10px] uppercase tracking-widest text-primary/80">
                       {f.format}
                     </span>
+                    {f.image_status === "pending" && (
+                      <span className="flex items-center gap-1 text-[9px] uppercase tracking-widest text-primary/70">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                        grafiki w toku
+                      </span>
+                    )}
+                    {f.image_status === "failed" && (
+                      <span
+                        className="text-[9px] uppercase tracking-widest"
+                        style={{ color: "var(--destructive)" }}
+                        title="Nie udało się wygenerować grafik (model przeciążony) — plik jest gotowy bez nich."
+                      >
+                        grafiki niedostępne
+                      </span>
+                    )}
                     <span className="ml-auto flex items-center gap-1 text-[10px] uppercase tracking-widest text-muted-foreground opacity-0 transition group-hover:opacity-100">
                       <Eye className="h-3 w-3" strokeWidth={1.5} /> podgląd
                     </span>

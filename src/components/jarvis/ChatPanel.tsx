@@ -18,6 +18,7 @@ import { speak } from "@/lib/audio/speak";
 import { setAgentBusy, reportOutcome } from "@/lib/ai/agentActivity";
 import { LinkifiedText } from "./LinkifiedText";
 import { requestOpenDocument } from "@/lib/documents/openDocumentBus";
+import { enrichDocumentImagesFn } from "@/lib/documents/generated.functions";
 import { ACTIVE_AGENT_LS_KEY } from "@/routes/agent-hub";
 
 const STORAGE_KEY = "jarvis_chat_history";
@@ -92,6 +93,7 @@ export function ChatPanel() {
   const clearConversationFn = useServerFn(clearConversation);
   const persistActiveAgent = useServerFn(setActiveAgentFn);
   const fetchActiveAgentSlug = useServerFn(getActiveAgentSlug);
+  const enrichImages = useServerFn(enrichDocumentImagesFn);
   const noticeShownRef = useRef(false);
 
   const { data: agents = [] } = useQuery({
@@ -238,6 +240,15 @@ export function ChatPanel() {
             agentSlug: activeAgent.slug,
             agentName: activeAgent.name,
           });
+          // Background graphics: the file is already delivered text-only;
+          // kick the enrichment pass in its own request and don't await it
+          // (it can take 20-40s during a 503 storm). The /documents panel
+          // reflects progress via image_status. Fire-and-forget by design.
+          if (result.enrichDocument) {
+            enrichImages({ data: { fileId: result.enrichDocument.id } }).catch(() => {
+              /* best-effort — the file exists text-only regardless */
+            });
+          }
           if (result.status === "done") {
             // open_document resolved to a specific file → hand its id to the
             // Documents module and navigate there, so its preview opens. The
