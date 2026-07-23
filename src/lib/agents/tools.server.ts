@@ -1512,9 +1512,19 @@ const openDocumentTool: Tool = {
 
     if (!query) return { error: "empty_query" };
 
-    // Match topic words against filename + title. sanitizeForOrFilter keeps
-    // the ILIKE .or() expression safe from user-controlled punctuation.
-    const kw = sanitizeForOrFilter(query);
+    // Per-WORD matching, not whole-phrase: an ILIKE on the full query
+    // ("samsungu s26 ultra") never matches a title like "Samsung Galaxy S26
+    // Ultra" — a word sits between the terms and Polish inflection differs
+    // ("samsungu" vs "samsung"). Instead: split into tokens (>=3 chars), OR
+    // an ILIKE per token, then rank rows in code by how many tokens they
+    // actually contain so the best match wins and near-misses still surface.
+    const tokens = query
+      .toLowerCase()
+      .split(/\s+/)
+      .map((t) => sanitizeForOrFilter(t))
+      .filter((t) => t.length >= 3)
+      .slice(0, 8);
+
     let rows: Array<{
       id: string;
       filename: string;
@@ -1522,16 +1532,29 @@ const openDocumentTool: Tool = {
       title: string | null;
       created_at: string;
     }> = [];
-    if (kw) {
+    if (tokens.length > 0) {
+      const orExpr = tokens
+        .flatMap((t) => [`filename.ilike.%${t}%`, `title.ilike.%${t}%`])
+        .join(",");
       const { data, error } = await ctx.supabase
         .from("generated_files")
         .select("id, filename, format, title, created_at")
         .eq("user_id", ctx.userId)
-        .or(`filename.ilike.%${kw}%,title.ilike.%${kw}%`)
+        .or(orExpr)
         .order("created_at", { ascending: false })
-        .limit(6);
+        .limit(20);
       if (error) return { error: error.message };
-      rows = data ?? [];
+      // Rank by token-hit count (desc), then recency (query already sorted
+      // desc, so a stable sort keeps newer first among ties).
+      rows = (data ?? [])
+        .map((r) => {
+          const hay = `${r.title ?? ""} ${r.filename}`.toLowerCase();
+          return { r, score: tokens.filter((t) => hay.includes(t)).length };
+        })
+        .filter((x) => x.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 6)
+        .map((x) => x.r);
     }
 
     if (rows.length === 0) {

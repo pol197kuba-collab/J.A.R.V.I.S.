@@ -174,13 +174,45 @@ describe("open_document tool", () => {
 
   it("returns candidates (no auto-open) when several match", async () => {
     const rows = [
-      { id: "f1", filename: "a.pptx", format: "pptx", title: "A", created_at: "2" },
-      { id: "f2", filename: "b.pptx", format: "pptx", title: "B", created_at: "1" },
+      {
+        id: "f1",
+        filename: "s26-a.pptx",
+        format: "pptx",
+        title: "Samsung S26 Ultra: A",
+        created_at: "2",
+      },
+      {
+        id: "f2",
+        filename: "s26-b.pptx",
+        format: "pptx",
+        title: "Samsung S26 Ultra: B",
+        created_at: "1",
+      },
     ];
-    const res = await tool.execute({ query: "samsung" }, makeCtx(rows));
+    // Inflected, word-separated query — the old whole-phrase ILIKE would have
+    // matched neither title; per-token ranking finds both via s26/ultra.
+    const res = await tool.execute({ query: "samsungu s26 ultra" }, makeCtx(rows));
     expect(res.found).toBe(2);
     expect(res.open).toBeUndefined();
     expect((res.candidates as unknown[]).length).toBe(2);
+  });
+
+  it("ranks the best token match first and drops non-matching rows", async () => {
+    const rows = [
+      { id: "f1", filename: "raport.pdf", format: "pdf", title: "Raport roczny", created_at: "3" },
+      {
+        id: "f2",
+        filename: "s26.pptx",
+        format: "pptx",
+        title: "Samsung S26 Ultra",
+        created_at: "2",
+      },
+    ];
+    // Only the Samsung row shares tokens; the unrelated report is filtered out
+    // → exactly one match → auto-open.
+    const res = await tool.execute({ query: "samsung s26 ultra" }, makeCtx(rows));
+    expect(res.found).toBe(1);
+    expect(res.open).toEqual({ id: "f2", filename: "s26.pptx" });
   });
 
   it("opens directly by file_id (disambiguation follow-up)", async () => {
