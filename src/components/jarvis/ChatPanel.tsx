@@ -17,6 +17,7 @@ import {
 import { speak } from "@/lib/audio/speak";
 import { setAgentBusy, reportOutcome } from "@/lib/ai/agentActivity";
 import { LinkifiedText } from "./LinkifiedText";
+import { requestOpenDocument } from "@/lib/documents/openDocumentBus";
 import { ACTIVE_AGENT_LS_KEY } from "@/routes/agent-hub";
 
 const STORAGE_KEY = "jarvis_chat_history";
@@ -238,14 +239,24 @@ export function ChatPanel() {
             agentName: activeAgent.name,
           });
           if (result.status === "done") {
-            const action = (result.action ?? "none") as JarvisAction;
-            if (action !== "none") {
-              // performAction() speaks `reply` itself via fire()'s spokenLine
-              // param — don't ALSO call speak(reply) below, or JARVIS would
-              // narrate the same line twice.
-              performAction(action, reply);
+            // open_document resolved to a specific file → hand its id to the
+            // Documents module and navigate there, so its preview opens. The
+            // id is stashed for a fresh mount AND broadcast for an already-
+            // mounted /documents (see documents.tsx). Takes precedence over a
+            // plain nav action.
+            if (result.openDocument) {
+              requestOpenDocument(result.openDocument.id);
+              performAction("open_documents", reply);
             } else {
-              speak(reply);
+              const action = (result.action ?? "none") as JarvisAction;
+              if (action !== "none") {
+                // performAction() speaks `reply` itself via fire()'s spokenLine
+                // param — don't ALSO call speak(reply) below, or JARVIS would
+                // narrate the same line twice.
+                performAction(action, reply);
+              } else {
+                speak(reply);
+              }
             }
           }
           qc.invalidateQueries({ queryKey: ["notes", "list"] });

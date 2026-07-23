@@ -1453,6 +1453,119 @@ const generateDocumentTool: Tool = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// open_document — find a previously generated file and open its in-app preview
+// ---------------------------------------------------------------------------
+
+// Companion to generate_document: lets the user say "otwórz prezentację o
+// samsungu" and have JARVIS locate the matching file in the generated_files
+// archive and open its preview, instead of only being able to CREATE files.
+// Discriminated result:
+//   - found 0  → nothing matched (model tells the user, offers to generate)
+//   - found 1  → `open: {id, filename}` — runtime.server.ts lifts this into
+//                AgentRunResult.openDocument and the client opens the preview
+//   - found >1 → `candidates: [...]` — the model lists them and asks which;
+//                the follow-up call passes `file_id` to disambiguate.
+const openDocumentTool: Tool = {
+  declaration: {
+    name: "open_document",
+    description:
+      "Find a document/presentation the user previously generated (in the Producer archive) and open its preview in the app. Use when the user asks to OPEN / SHOW / display an existing file (e.g. 'otwórz prezentację o samsungu', 'pokaż mój raport'), NOT when they ask to create a new one. Pass `query` with the topic/title words. If a previous call returned multiple candidates, call again with `file_id` set to the chosen one.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "Topic/title words to match against generated files (in the user's language).",
+        },
+        file_id: {
+          type: "string",
+          description:
+            "Exact id of a file to open — use to pick one of the candidates a previous call returned.",
+        },
+      },
+    },
+  },
+  async execute(args, ctx) {
+    const fileId = String(args.file_id ?? "").trim();
+    const query = String(args.query ?? "").trim();
+
+    // Direct pick by id (disambiguation follow-up).
+    if (fileId) {
+      const { data, error } = await ctx.supabase
+        .from("generated_files")
+        .select("id, filename, format, title")
+        .eq("user_id", ctx.userId)
+        .eq("id", fileId)
+        .maybeSingle();
+      if (error) return { error: error.message };
+      if (!data) return { found: 0, message: "Nie znaleziono pliku o tym identyfikatorze." };
+      await ctx.logEvent("info", "tool.open_document", `open by id: ${data.filename}`, {
+        run_id: ctx.runId,
+      } as Json);
+      return { found: 1, open: { id: data.id, filename: data.filename }, file: data };
+    }
+
+    if (!query) return { error: "empty_query" };
+
+    // Match topic words against filename + title. sanitizeForOrFilter keeps
+    // the ILIKE .or() expression safe from user-controlled punctuation.
+    const kw = sanitizeForOrFilter(query);
+    let rows: Array<{
+      id: string;
+      filename: string;
+      format: string;
+      title: string | null;
+      created_at: string;
+    }> = [];
+    if (kw) {
+      const { data, error } = await ctx.supabase
+        .from("generated_files")
+        .select("id, filename, format, title, created_at")
+        .eq("user_id", ctx.userId)
+        .or(`filename.ilike.%${kw}%,title.ilike.%${kw}%`)
+        .order("created_at", { ascending: false })
+        .limit(6);
+      if (error) return { error: error.message };
+      rows = data ?? [];
+    }
+
+    if (rows.length === 0) {
+      await ctx.logEvent("info", "tool.open_document", `no match: ${query}`, {
+        run_id: ctx.runId,
+      } as Json);
+      return {
+        found: 0,
+        message: `Nie znalazłem żadnego wygenerowanego pliku pasującego do „${query}".`,
+      };
+    }
+    if (rows.length === 1) {
+      const f = rows[0];
+      await ctx.logEvent("info", "tool.open_document", `open: ${f.filename}`, {
+        run_id: ctx.runId,
+      } as Json);
+      return { found: 1, open: { id: f.id, filename: f.filename }, file: f };
+    }
+
+    await ctx.logEvent("info", "tool.open_document", `${rows.length} candidates: ${query}`, {
+      run_id: ctx.runId,
+    } as Json);
+    return {
+      found: rows.length,
+      candidates: rows.map((f) => ({
+        file_id: f.id,
+        filename: f.filename,
+        title: f.title,
+        format: f.format,
+        created_at: f.created_at,
+      })),
+      instruction:
+        "Multiple files match. Ask the user which one (mention title/format/date), then call open_document again with the chosen file_id.",
+    };
+  },
+};
+
 // Full catalog of tool *implementations* known to this codebase. This array
 // is the only place `execute` logic lives — it never shrinks based on DB
 // state, so a disabled tool's code stays available (just unreachable via the
@@ -1476,6 +1589,7 @@ export const ALL_TOOLS: Tool[] = [
   listDocumentsTool,
   searchDocumentsTool,
   generateDocumentTool,
+  openDocumentTool,
 ];
 
 export function getToolByName(name: string): Tool | undefined {

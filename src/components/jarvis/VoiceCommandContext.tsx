@@ -154,6 +154,8 @@ type LocalAction =
   | "logs"
   | "tasks"
   | "subsystems"
+  | "documents"
+  | "schema"
   | "vision_scan";
 
 const ACTION_MAP: Record<JarvisAction, LocalAction | null> = {
@@ -174,6 +176,8 @@ const ACTION_MAP: Record<JarvisAction, LocalAction | null> = {
   open_logs: "logs",
   open_tasks: "tasks",
   open_subsystems: "subsystems",
+  open_documents: "documents",
+  open_schema: "schema",
   vision_scan: "vision_scan",
 };
 

@@ -111,6 +111,8 @@ export const JARVIS_ACTIONS = [
   "open_logs",
   "open_tasks",
   "open_subsystems",
+  "open_documents",
+  "open_schema",
   "vision_scan",
 ] as const;
 
@@ -144,7 +146,13 @@ INVALID examples (do NOT do this):
 
 Allowed values for "action": none, open_dashboard, open_fuel, open_calculator,
 open_jobfit, open_telemetry, open_menu, close_menu, system_check, sleep, shutdown, reboot,
-open_agents, open_settings, open_logs, open_tasks, open_subsystems, vision_scan.
+open_agents, open_settings, open_logs, open_tasks, open_subsystems, open_documents,
+open_schema, vision_scan.
+
+- Użyj "open_documents", gdy użytkownik prosi o otwarcie modułu dokumentów /
+  plików / archiwum (np. "otwórz dokumenty", "pokaż pliki", "otwórz moduł
+  dokumentów"). Uwaga: to tylko OTWARCIE modułu — konkretną prezentację po
+  nazwie ("otwórz prezentację o X") obsługuje agent serwerowy, nie ta ścieżka.
 
 - Użyj "open_tasks", gdy użytkownik prosi o otwarcie zadań / listy zadań /
   kolejki zadań (np. "otwórz zadania", "pokaż zadania", "moje zadania",

@@ -1618,6 +1618,38 @@ build order follows that.
 
 ---
 
+## 13. [W] Voice/chat control of every module + opening generated files — **shipped 2026-07-23, needs live verification**
+
+User ask: every module reachable by voice AND chat, and "otwórz prezentację
+o X" should find the file, go to Documents and open its preview (asking
+which one if several match).
+
+Shipped:
+
+- **Full navigation coverage**: added `open_documents` + `open_schema` UI
+  actions (were the only routes with no voice/chat action) across the whole
+  chain — `UI_ACTIONS`/confirmations (runtime.server), `JARVIS_ACTIONS` +
+  SYSTEM_PROMPT (jarvisBrain), `LocalAction`/`ACTION_MAP`/`fire()` cases +
+  voice regexes (VoiceCommandContext). The uiActions drift test keeps the
+  server/client vocabularies in lockstep.
+- **open_document tool** (bound to Orchestrator, migration
+  `20260723090000_open_document_tool.sql`): searches `generated_files` by
+  topic words (filename/title ILIKE). Discriminated result — 0 → tell user
+  - offer to generate; 1 → `open:{id,filename}`; >1 → `candidates[]` so the
+    model asks which, then re-calls with `file_id`. Orchestrator persona
+    teaches when to use it (open existing ≠ create new ≠ delegate).
+- **Structured open channel**: `AgentRunResult.openDocument` lifts the id
+  out of the tool result (not model prose, same discipline as
+  `attachments`), bubbles through delegation. ChatPanel hands it to a small
+  `openDocumentBus` (sessionStorage for a fresh /documents mount + a
+  CustomEvent for an already-mounted one) and navigates via `open_documents`;
+  `documents.tsx` opens that file's preview once its list contains it.
+- Tests: open_document 0/1/many/by-id (74/74 total). Build verified.
+
+**Needs migration SQL pasted into Supabase + live check**: "otwórz dokumenty"
+(voice + chat) opens the module; "otwórz prezentację o samsungu" opens the
+file's preview; two matches → JARVIS asks which; no match → says so.
+
 ## Long-shot / not scheduled
 
 - **Local device bridge** (desktop automation, local Ollama) — needs a new
