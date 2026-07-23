@@ -56,6 +56,10 @@ export type AgentRunResult = {
    *  a ~300-char signed-URL token retyped by an LLM reliably picks up
    *  typos — live failure: InvalidJWT "signature verification failed". */
   attachments?: Array<{ filename: string; url: string }>;
+  /** Set when the open_document tool resolved to exactly one file — the
+   *  client navigates to /documents and opens that file's preview. Structured
+   *  (not model prose) so the id arrives intact, same as `attachments`. */
+  openDocument?: { id: string; filename: string };
 };
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -22,6 +22,7 @@ import {
   listGeneratedFilesFn,
   type GeneratedFileSummary,
 } from "@/lib/documents/generated.functions";
+import { consumePendingOpenDocument, onOpenDocument } from "@/lib/documents/openDocumentBus";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/documents")({
@@ -69,6 +70,9 @@ function DocumentsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<GeneratedFileSummary | null>(null);
+  // A file id requested by chat/voice ("otwórz prezentację o X") that we
+  // must open once the generated-files list has loaded and contains it.
+  const pendingOpenRef = useRef<string | null>(consumePendingOpenDocument());
 
   const {
     data: documents = [],
@@ -93,6 +97,22 @@ function DocumentsPage() {
     queryFn: () => fetchGenerated(),
     refetchInterval: 5000,
   });
+
+  // Chat/voice "open this file" requests arriving while we're already mounted.
+  useEffect(() => onOpenDocument((id) => (pendingOpenRef.current = id)), []);
+
+  // Once a pending id is set (from navigation or a live event) and the list
+  // contains it, open that file's preview. Runs whenever the list changes so
+  // it fires as soon as the target file is present.
+  useEffect(() => {
+    const id = pendingOpenRef.current;
+    if (!id) return;
+    const match = generated.find((f) => f.id === id);
+    if (match) {
+      pendingOpenRef.current = null;
+      setPreview(match);
+    }
+  }, [generated]);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["documents"] });
 

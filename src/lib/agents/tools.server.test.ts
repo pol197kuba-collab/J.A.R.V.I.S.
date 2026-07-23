@@ -128,3 +128,65 @@ describe("tool registry", () => {
     expect(getToolByName("definitely_not_a_tool")).toBeUndefined();
   });
 });
+
+// open_document lets the user OPEN an existing generated file. Its three
+// branches (none / exactly one / many) drive different UX: one → the app
+// opens the preview; many → the model must disambiguate.
+describe("open_document tool", () => {
+  const tool = getToolByName("open_document")!;
+
+  // Minimal supabase stub: a chained query builder whose terminal awaits
+  // resolve to the canned rows, plus maybeSingle for the by-id path.
+  function makeCtx(rows: unknown[], single?: unknown) {
+    const builder: Record<string, unknown> = {};
+    for (const m of ["select", "eq", "or", "order"]) builder[m] = () => builder;
+    builder.limit = () => Promise.resolve({ data: rows, error: null });
+    builder.maybeSingle = () => Promise.resolve({ data: single ?? null, error: null });
+    return {
+      supabase: { from: () => builder },
+      userId: "u1",
+      agentId: "a1",
+      runId: "r1",
+      apiKey: "k",
+      model: "m",
+      logEvent: vi.fn(async () => {}),
+    } as never;
+  }
+
+  it("returns found:0 when nothing matches", async () => {
+    const res = await tool.execute({ query: "nieistniejąca" }, makeCtx([]));
+    expect(res.found).toBe(0);
+    expect(res.open).toBeUndefined();
+  });
+
+  it("returns a single open target when exactly one matches", async () => {
+    const row = {
+      id: "f1",
+      filename: "raport.pptx",
+      format: "pptx",
+      title: "Raport",
+      created_at: "x",
+    };
+    const res = await tool.execute({ query: "raport" }, makeCtx([row]));
+    expect(res.found).toBe(1);
+    expect(res.open).toEqual({ id: "f1", filename: "raport.pptx" });
+  });
+
+  it("returns candidates (no auto-open) when several match", async () => {
+    const rows = [
+      { id: "f1", filename: "a.pptx", format: "pptx", title: "A", created_at: "2" },
+      { id: "f2", filename: "b.pptx", format: "pptx", title: "B", created_at: "1" },
+    ];
+    const res = await tool.execute({ query: "samsung" }, makeCtx(rows));
+    expect(res.found).toBe(2);
+    expect(res.open).toBeUndefined();
+    expect((res.candidates as unknown[]).length).toBe(2);
+  });
+
+  it("opens directly by file_id (disambiguation follow-up)", async () => {
+    const single = { id: "f2", filename: "b.pptx", format: "pptx", title: "B" };
+    const res = await tool.execute({ file_id: "f2" }, makeCtx([], single));
+    expect(res.found).toBe(1);
+    expect(res.open).toEqual({ id: "f2", filename: "b.pptx" });
+  });
+});

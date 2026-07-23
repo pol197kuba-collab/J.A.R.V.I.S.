@@ -39,6 +39,8 @@ export const UI_ACTIONS = [
   "open_logs",
   "open_tasks",
   "open_subsystems",
+  "open_documents",
+  "open_schema",
   "vision_scan",
 ] as const;
 type UiAction = (typeof UI_ACTIONS)[number];
@@ -71,6 +73,8 @@ export const UI_ACTION_CONFIRMATIONS: Record<UiAction, string> = {
   open_logs: "Otwieram dziennik systemowy.",
   open_tasks: "Otwieram zadania.",
   open_subsystems: "Otwieram podsystemy.",
+  open_documents: "Otwieram moduł dokumentów.",
+  open_schema: "Otwieram eksplorator schematu.",
   vision_scan: "Uruchamiam skan wizyjny.",
 };
 
@@ -110,6 +114,15 @@ proactively rather than guessing or refusing:
   teammate, it is good practice to create/assign a task for it. If the user
   wants a task removed entirely (not just cancelled), use delete_task; prefer
   update_task status='cancelled' when it's merely no longer relevant.
+- OPENING EXISTING FILES: if the user asks to OPEN / SHOW / display a
+  document or presentation they already have (e.g. "otwórz prezentację o
+  samsungu", "pokaż mój raport o X", "open my presentation"), use the
+  open_document tool with the topic words — do NOT create a new one and do
+  NOT delegate to researcher/producer. If it returns multiple candidates,
+  ask the user which one (name their titles/dates) and call open_document
+  again with the chosen file_id. If it returns none, say so and offer to
+  generate it. The app opens the preview automatically — you need only
+  confirm in words which file you're opening.
 - If no tool fits or none are available, answer directly from your own
   knowledge instead of mentioning that a tool is missing.
 - After tool calls, produce a final natural-language answer in character. Do
@@ -438,6 +451,10 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // typos (live failure: InvalidJWT "signature verification failed" on a
     // generated pptx while the pdf's luckier copy worked).
     const attachments: Array<{ filename: string; url: string }> = [];
+    // Set when open_document resolves to exactly one file — lifted from the
+    // tool result (not model prose) so the id arrives intact, then returned
+    // as AgentRunResult.openDocument for the client to open the preview.
+    let openDocument: { id: string; filename: string } | null = null;
 
     // Producer's whole job is to CALL generate_document — but live testing
     // showed the model instead describing the presentation in prose and
@@ -651,6 +668,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
             // the parent's own reply gets them appended below, so a
             // researcher → producer chain still ends with an intact link.
             if (sub.attachments) attachments.push(...sub.attachments);
+            if (sub.openDocument && !openDocument) openDocument = sub.openDocument;
             response = {
               delegate: target.slug,
               status: sub.status,
@@ -684,6 +702,18 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
                   filename: typeof response.filename === "string" ? response.filename : "plik",
                   url: response.download_url,
                 });
+              }
+            }
+            // open_document resolved to exactly one file → lift its id out of
+            // the tool result so the client can open the preview. Structured,
+            // not model prose (same reason as attachments).
+            if (call.name === "open_document" && !openDocument) {
+              const open = (response as Record<string, unknown>).open;
+              if (open && typeof open === "object") {
+                const o = open as Record<string, unknown>;
+                if (typeof o.id === "string" && typeof o.filename === "string") {
+                  openDocument = { id: o.id, filename: o.filename };
+                }
               }
             }
           } catch (err) {
@@ -1010,6 +1040,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       tokensOut: totalTokensOut || undefined,
       latencyMs,
       attachments: attachments.length > 0 ? attachments : undefined,
+      openDocument: openDocument ?? undefined,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
