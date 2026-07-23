@@ -150,6 +150,11 @@ export function normalizeDocSpec(args: Record<string, unknown>): NormalizeResult
   };
 }
 
+/** Does this spec ask for any AI graphics? Drives the async enrichment flow. */
+export function specHasImagePrompts(spec: DocSpec): boolean {
+  return !!spec.heroImagePrompt || spec.sections.some((s) => !!s.imagePrompt);
+}
+
 // ---------------------------------------------------------------------------
 // AI slide graphics — Gemini image generation on the user's own key
 // ---------------------------------------------------------------------------

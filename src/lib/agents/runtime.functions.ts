@@ -60,6 +60,10 @@ export type AgentRunResult = {
    *  client navigates to /documents and opens that file's preview. Structured
    *  (not model prose) so the id arrives intact, same as `attachments`. */
   openDocument?: { id: string; filename: string };
+  /** Set when generate_document produced a file whose graphics still need to
+   *  be generated. The client fire-and-forgets enrichDocumentImagesFn for
+   *  this id, so slow image generation runs in its own time budget. */
+  enrichDocument?: { id: string };
 };
 
 // ---------------------------------------------------------------------------

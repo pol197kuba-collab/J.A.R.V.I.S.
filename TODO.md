@@ -1650,6 +1650,41 @@ Shipped:
 (voice + chat) opens the module; "otwórz prezentację o samsungu" opens the
 file's preview; two matches → JARVIS asks which; no match → says so.
 
+## 14. [F] Async slide graphics — file first, images in the background — **shipped 2026-07-23, needs live verification**
+
+Live problem (user, after several tries): generating a deck WITH images
+took too long, the image model 503'd, and the whole producer run either
+failed or came back with 0 images — inline image generation was blowing
+the server-function time budget. Decision (AskUserQuestion): file
+immediately, images enriched in the background.
+
+Shipped:
+
+- **generate_document builds text-only and returns instantly** — link
+  ready with zero image-model calls in the chat turn. Records the
+  normalized DocSpec + `image_status='pending'` in `generated_files`
+  (migration `20260723210000_async_doc_images.sql`: adds `image_status`,
+  `spec` jsonb).
+- **enrichDocumentImagesFn** (generated.functions.ts) — a SEPARATE server
+  function, its own time budget, kicked fire-and-forget by ChatPanel when
+  the run returns `enrichDocument`. Generates the images (existing retry),
+  rebuilds the same doc from the stored spec, replaces the bytes +
+  pptx→pdf preview in Storage, flips status to `ready` (or `failed` if the
+  503 storm ate every image — file stays usable text-only). Only acts on a
+  `pending` row, so a double-kick is a no-op.
+- **Channel**: `AgentRunResult.enrichDocument` lifts the id from the tool
+  result (structured, bubbles through delegation), ChatPanel fires the
+  enrichment without awaiting. `/documents` shows a "grafiki w toku"
+  pulse (or "grafiki niedostępne" on failed), and its 5s refetch swaps in
+  the enriched file when ready.
+- Tests: specHasImagePrompts drives the pending decision (75 total). Build
+  verified.
+
+**Needs migration SQL pasted into Supabase + live check**: deck link
+arrives instantly; `/documents` shows "grafiki w toku" then the images
+appear a bit later; a 503 storm degrades to a usable text-only file
+marked "grafiki niedostępne" instead of failing the whole thing.
+
 ## Long-shot / not scheduled
 
 - **Local device bridge** (desktop automation, local Ollama) — needs a new

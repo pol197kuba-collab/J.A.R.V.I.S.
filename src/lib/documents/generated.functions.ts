@@ -25,6 +25,8 @@ export type GeneratedFileSummary = {
   title: string | null;
   section_count: number | null;
   image_count: number | null;
+  /** 'none' | 'pending' | 'ready' | 'failed' — background graphics status. */
+  image_status: string;
   has_preview: boolean;
   created_at: string;
 };
@@ -36,7 +38,7 @@ export const listGeneratedFilesFn = createServerFn({ method: "GET" })
     const { data, error } = await supabase
       .from("generated_files")
       .select(
-        "id, filename, format, size_bytes, title, section_count, image_count, preview_path, created_at",
+        "id, filename, format, size_bytes, title, section_count, image_count, image_status, preview_path, created_at",
       )
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
@@ -52,9 +54,101 @@ export const listGeneratedFilesFn = createServerFn({ method: "GET" })
       title: r.title,
       section_count: r.section_count,
       image_count: r.image_count,
+      image_status: r.image_status,
       has_preview: !!r.preview_path,
       created_at: r.created_at,
     }));
+  });
+
+// ---------------------------------------------------------------------------
+// enrichDocumentImages — background pass that adds AI graphics to a file
+// ---------------------------------------------------------------------------
+
+// Kicked by the client (fire-and-forget) right after generate_document
+// returns a text-only file with image_status 'pending'. Runs in its OWN
+// server-function invocation — its own time budget — so slow/503-prone image
+// generation can't blow the budget of the chat turn that produced the file.
+// Rebuilds the SAME document (from the stored spec) with images, replaces the
+// bytes in place, and flips the status. Idempotent-ish: only acts on a
+// 'pending' row, so a double-kick won't double-generate.
+
+const EnrichInput = z.object({ fileId: z.string().uuid() });
+
+export type EnrichResult =
+  | { ok: true; imageCount: number; status: "ready" | "failed" }
+  | { ok: false; reason: string };
+
+export const enrichDocumentImagesFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => EnrichInput.parse(input))
+  .handler(async ({ data, context }): Promise<EnrichResult> => {
+    const { supabase, userId } = context;
+    const { generateDocImages, buildDocument, CONTENT_TYPES } =
+      await import("@/lib/agents/producer.server");
+    type ProducerDocSpec = import("@/lib/agents/producer.server").DocSpec;
+
+    const { data: row, error } = await supabase
+      .from("generated_files")
+      .select("id, format, storage_path, preview_path, image_status, spec")
+      .eq("id", data.fileId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error || !row) return { ok: false, reason: "not_found" };
+    if (row.image_status !== "pending") return { ok: false, reason: "not_pending" };
+    if (!row.spec) return { ok: false, reason: "no_spec" };
+
+    const spec = row.spec as unknown as ProducerDocSpec;
+
+    const { data: secret } = await supabase
+      .from("user_secrets")
+      .select("gemini_api_key")
+      .eq("owner_id", userId)
+      .maybeSingle();
+    const apiKey = secret?.gemini_api_key?.trim();
+    if (!apiKey) {
+      await supabase.from("generated_files").update({ image_status: "failed" }).eq("id", row.id);
+      return { ok: false, reason: "no_api_key" };
+    }
+
+    const images = await generateDocImages(spec, apiKey, (message) =>
+      logServerWarn(supabase, userId, "generated_files", `enrich: ${message}`, {
+        file_id: row.id,
+      } as Json),
+    );
+    const imageCount = (images.hero ? 1 : 0) + images.sections.size;
+
+    if (imageCount === 0) {
+      // Every image failed (503 storm etc). Leave the text-only file as-is,
+      // mark failed so the UI can offer a retry instead of spinning forever.
+      await supabase.from("generated_files").update({ image_status: "failed" }).eq("id", row.id);
+      return { ok: true, imageCount: 0, status: "failed" };
+    }
+
+    try {
+      const bytes = await buildDocument(spec, images);
+      const { error: upErr } = await supabase.storage
+        .from("generated")
+        .update(row.storage_path, bytes, { contentType: CONTENT_TYPES[spec.format] });
+      if (upErr) throw new Error(upErr.message);
+
+      // pptx: rebuild the PDF preview with images too.
+      if (spec.format === "pptx" && row.preview_path) {
+        const previewBytes = await buildDocument({ ...spec, format: "pdf" }, images);
+        await supabase.storage
+          .from("generated")
+          .update(row.preview_path, previewBytes, { contentType: CONTENT_TYPES.pdf });
+      }
+
+      await supabase
+        .from("generated_files")
+        .update({ image_status: "ready", image_count: imageCount, size_bytes: bytes.byteLength })
+        .eq("id", row.id);
+      return { ok: true, imageCount, status: "ready" };
+    } catch (err) {
+      await supabase.from("generated_files").update({ image_status: "failed" }).eq("id", row.id);
+      await logServerError(supabase, userId, "generated_files", err, { file_id: row.id } as Json);
+      return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+    }
   });
 
 const UrlInput = z.object({

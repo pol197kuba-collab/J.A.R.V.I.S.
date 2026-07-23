@@ -455,6 +455,9 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // tool result (not model prose) so the id arrives intact, then returned
     // as AgentRunResult.openDocument for the client to open the preview.
     let openDocument: { id: string; filename: string } | null = null;
+    // Set when generate_document made a file whose graphics still need to be
+    // generated — the client kicks the background enrichment pass for it.
+    let enrichDocument: { id: string } | null = null;
 
     // Producer's whole job is to CALL generate_document — but live testing
     // showed the model instead describing the presentation in prose and
@@ -669,6 +672,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
             // researcher → producer chain still ends with an intact link.
             if (sub.attachments) attachments.push(...sub.attachments);
             if (sub.openDocument && !openDocument) openDocument = sub.openDocument;
+            if (sub.enrichDocument && !enrichDocument) enrichDocument = sub.enrichDocument;
             response = {
               delegate: target.slug,
               status: sub.status,
@@ -702,6 +706,15 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
                   filename: typeof response.filename === "string" ? response.filename : "plik",
                   url: response.download_url,
                 });
+              }
+              // File built text-only with graphics still pending → tell the
+              // client to kick the background enrichment pass for this id.
+              if (
+                response.images_pending === true &&
+                typeof response.document_id === "string" &&
+                !enrichDocument
+              ) {
+                enrichDocument = { id: response.document_id };
               }
             }
             // open_document resolved to exactly one file → lift its id out of
@@ -1041,6 +1054,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       latencyMs,
       attachments: attachments.length > 0 ? attachments : undefined,
       openDocument: openDocument ?? undefined,
+      enrichDocument: enrichDocument ?? undefined,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
