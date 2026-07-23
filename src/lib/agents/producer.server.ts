@@ -165,51 +165,87 @@ const IMAGE_STYLE_PREFIX =
   "cinematic lighting, sleek modern aesthetic, high detail. Strictly no text, no words, " +
   "no letters, no captions, no watermarks. ";
 
+// The image model (gemini-2.5-flash-image, preview) is heavily
+// shared-capacity and returns HTTP 503 "high demand" / 500 "internal error"
+// in bursts far more often than the text model — observed live 2026-07-22:
+// five presentation runs in a row all came back with 0 images while the deck
+// itself generated fine. A single shot reliably loses that race, so retry on
+// transient statuses with short backoff. Kept separate from the orchestrator
+// retry (different endpoint, tighter per-attempt timeout) but same idea.
+const IMAGE_RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+// 3 attempts total. Worst case 3×12s + backoff stays inside the
+// server-function budget (a producer run has been observed at ~41s), while
+// giving three shots at hitting an available window during a 503 burst —
+// each 503 fails fast (<1s), so the retries are cheap unless the model
+// actually hangs.
+const IMAGE_MAX_RETRIES = 2;
+const IMAGE_RETRY_BACKOFF_MS = 500;
+const IMAGE_ATTEMPT_TIMEOUT_MS = 12_000;
+
 async function generateOneImage(
   prompt: string,
   apiKey: string,
   timeoutMs: number,
 ): Promise<DocImage | null> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-        DEFAULT_GEMINI_IMAGE_MODEL,
-      )}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: "POST",
-        signal: ctrl.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: IMAGE_STYLE_PREFIX + prompt }] }],
-          generationConfig: {
-            responseModalities: ["IMAGE"],
-            imageConfig: { aspectRatio: "16:9" },
-          },
-        }),
-      },
-    );
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
+  let lastErr: Error | null = null;
+  for (let attempt = 0; attempt <= IMAGE_MAX_RETRIES; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+          DEFAULT_GEMINI_IMAGE_MODEL,
+        )}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: "POST",
+          signal: ctrl.signal,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: IMAGE_STYLE_PREFIX + prompt }] }],
+            generationConfig: {
+              responseModalities: ["IMAGE"],
+              imageConfig: { aspectRatio: "16:9" },
+            },
+          }),
+        },
+      );
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        // Retry transient overload; give up immediately on anything else
+        // (bad request, auth) — retrying won't help there.
+        if (IMAGE_RETRYABLE_STATUS.has(res.status) && attempt < IMAGE_MAX_RETRIES) {
+          lastErr = new Error(`HTTP ${res.status}`);
+          await new Promise((r) => setTimeout(r, IMAGE_RETRY_BACKOFF_MS * (attempt + 1)));
+          continue;
+        }
+        throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
+      }
+      const data = (await res.json()) as {
+        candidates?: Array<{
+          content?: { parts?: Array<{ inlineData?: { mimeType?: string; data?: string } }> };
+        }>;
+      };
+      const inline = (data.candidates?.[0]?.content?.parts ?? []).find((p) =>
+        p.inlineData?.mimeType?.startsWith("image/"),
+      )?.inlineData;
+      if (!inline?.data) return null;
+      return {
+        bytes: Uint8Array.from(atob(inline.data), (c) => c.charCodeAt(0)),
+        mime: inline.mimeType ?? "image/png",
+      };
+    } catch (err) {
+      // AbortError (timeout) is worth one more try too, up to the cap.
+      lastErr = err instanceof Error ? err : new Error(String(err));
+      if (attempt < IMAGE_MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, IMAGE_RETRY_BACKOFF_MS * (attempt + 1)));
+        continue;
+      }
+      throw lastErr;
+    } finally {
+      clearTimeout(timer);
     }
-    const data = (await res.json()) as {
-      candidates?: Array<{
-        content?: { parts?: Array<{ inlineData?: { mimeType?: string; data?: string } }> };
-      }>;
-    };
-    const inline = (data.candidates?.[0]?.content?.parts ?? []).find((p) =>
-      p.inlineData?.mimeType?.startsWith("image/"),
-    )?.inlineData;
-    if (!inline?.data) return null;
-    return {
-      bytes: Uint8Array.from(atob(inline.data), (c) => c.charCodeAt(0)),
-      mime: inline.mimeType ?? "image/png",
-    };
-  } finally {
-    clearTimeout(timer);
   }
+  throw lastErr ?? new Error("image generation failed");
 }
 
 /** Generate the hero + section images declared in the spec's prompts.
@@ -231,12 +267,11 @@ export async function generateDocImages(
   const images: DocImages = { sections: new Map() };
   if (capped.length === 0) return images;
 
-  // 20s per image, all in parallel — kept well under the server-function
-  // execution budget even in the worst case, since a text-only slide (image
-  // failed/timed out) is an acceptable degradation but a whole run timing
-  // out is not.
+  // All in parallel (wall-clock ≈ the slowest single image, retries and
+  // all) — a text-only slide from a failed/timed-out image is an acceptable
+  // degradation, a whole run timing out is not.
   const results = await Promise.allSettled(
-    capped.map((job) => generateOneImage(job.prompt, apiKey, 20_000)),
+    capped.map((job) => generateOneImage(job.prompt, apiKey, IMAGE_ATTEMPT_TIMEOUT_MS)),
   );
   for (const [i, result] of results.entries()) {
     const job = capped[i];

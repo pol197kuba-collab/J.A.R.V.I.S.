@@ -1562,6 +1562,27 @@ first blip):
 The archive/preview panel (previous follow-up) is still unverified live —
 it couldn't be exercised because no file ever generated during the storm.
 
+### Seventh follow-up (2026-07-23): image generation had no retry — decks kept coming out text-only
+
+The #58 retry fixed the MAIN generation (decks + links now come through
+the 503 storm fine), but live logs showed every image job still failing:
+`IMAGE GENERATION FAILED (HERO/0/1/2): HTTP 503/500 "high demand"` → decks
+generated with 0 images across ~5 tries. Cause: the #58 retry only covered
+the orchestrator's text-model loop; `generateOneImage` was still a single
+shot, and the image model (gemini-2.5-flash-image, preview) is far more
+overloaded than the text model.
+
+Fix: same retry-on-transient-status in generateOneImage (429/500/502/503/
+504, up to 3 attempts, 500ms·attempt backoff), with per-attempt timeout
+lowered 20s → 12s so 3 attempts stay inside the server-function budget
+(each 503 fails fast, so retries are cheap unless the model truly hangs).
+Still best-effort — a slide with no image after all retries just renders
+text-only. Regression test: a 503 then 200 recovers the hero image.
+
+Note for future: if the image model stays this flaky, options are (a) a
+different/GA image model id in models.ts, or (b) making AI images opt-in
+rather than always-on. Not doing either yet — retry first, reassess live.
+
 Original scoping notes follow. Content-agnostic "compiler" agent, deliberately not bolted onto Marketer:
 generating a file is a generic capability, not a marketing specialization,
 and this app's agent philosophy keeps each agent single-purpose (Guardian

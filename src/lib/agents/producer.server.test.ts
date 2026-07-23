@@ -171,6 +171,42 @@ describe("image prompts", () => {
     expect(pngDims(images.hero!.bytes)).toEqual({ width: 1, height: 1 });
   });
 
+  it("generateDocImages retries a transient 503 and recovers the image", async () => {
+    const PNG =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    let call = 0;
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      call += 1;
+      // First attempt: the 503 storm the image model was throwing live.
+      if (call === 1) {
+        return {
+          ok: false,
+          status: 503,
+          text: async () => '{"error":{"code":503,"status":"UNAVAILABLE"}}',
+          json: async () => ({}),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          candidates: [
+            { content: { parts: [{ inlineData: { mimeType: "image/png", data: PNG } }] } },
+          ],
+        }),
+        text: async () => "",
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const images = await generateDocImages(
+      { format: "pdf", title: "t", filename: "t.pdf", heroImagePrompt: "hero", sections: [] },
+      "test-key",
+    );
+    // 503 then 200 — the hero image survives instead of degrading to text-only.
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(images.hero?.mime).toBe("image/png");
+  });
+
   it("generateDocImages is a no-op without prompts (no network)", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
