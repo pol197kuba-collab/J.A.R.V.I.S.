@@ -224,6 +224,17 @@ const COMMANDS: Array<{ re: RegExp; action: LocalAction }> = [
     action: "subsystems",
   },
   {
+    // Bare "open the documents module". A specific "otwórz prezentację o X"
+    // is handled by the chat agent's open_document tool (it finds the file);
+    // this only opens the module.
+    re: /\b(open\s+documents?|show\s+files?|otwórz\s+dokumenty|otworz\s+dokumenty|pokaż\s+dokumenty|pokaz\s+dokumenty|otwórz\s+pliki|otworz\s+pliki|moduł\s+dokumentów|modul\s+dokumentow|archiwum\s+plików|archiwum\s+plikow)\b/i,
+    action: "documents",
+  },
+  {
+    re: /\b(open\s+schema|schema\s+explorer|otwórz\s+schemat|otworz\s+schemat|pokaż\s+schemat|pokaz\s+schemat|eksplorator\s+schematu)\b/i,
+    action: "schema",
+  },
+  {
     re: /\b(co\s+widzisz|powiedz\s+co\s+widzisz|zeskanuj\s+otoczenie|przeskanuj\s+otoczenie|skanuj\s+otoczenie|zeskanuj\s+to|what\s+do\s+you\s+see|scan\s+(?:the\s+)?(?:room|area|surroundings)|vision\s+scan)\b/i,
     action: "vision_scan",
   },
@@ -440,6 +451,14 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
           say("Otwieram podsystemy.");
           go("/sub-systems");
           break;
+        case "documents":
+          say("Otwieram moduł dokumentów, sir.");
+          go("/documents");
+          break;
+        case "schema":
+          say("Otwieram eksplorator schematu.");
+          go("/schema");
+          break;
         case "system_check":
           say("Wszystkie systemy sprawne, Panie Sławiński. Temperatura rdzenia nominalna.");
           break;
@@ -470,6 +489,14 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
           window.dispatchEvent(new CustomEvent("jarvis:vision-scan"));
           go("/vision");
           break;
+        default: {
+          // Exhaustiveness guard: adding a LocalAction without a case here is
+          // exactly the bug that shipped open_documents/open_schema with no
+          // navigation (the model confirmed "Otwieram moduł dokumentów" but
+          // nothing happened). Now the compiler flags a missing case.
+          const _exhaustive: never = action;
+          void _exhaustive;
+        }
       }
     },
     [go, setPhase],
