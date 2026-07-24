@@ -388,6 +388,22 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     const enabledTools = await getEnabledToolsForAgent(supabase, agent.id);
     const toolDeclarations = enabledTools.map((t) => t.declaration);
 
+    // The Producer's ONE job is to call generate_document — but that only
+    // works if the tool is actually declared to the model. When its DB
+    // binding is missing (or the migration wasn't applied), it was declared
+    // nothing, the forced-tool-call path never turned on, and the model
+    // "confirmed" a presentation while calling zero tools (live: producer
+    // sub-run, 0 tool calls, no file). Guarantee the tool in-memory for the
+    // producer agent, exactly like the Orchestrator always gets
+    // delegate_to_agent regardless of DB state.
+    if (
+      agent.slug === "producer" &&
+      !toolDeclarations.some((d) => d.name === "generate_document")
+    ) {
+      const genTool = getToolByName("generate_document");
+      if (genTool) toolDeclarations.push(genTool.declaration);
+    }
+
     // UI action tool — available to any agent that might face the user
     // directly in chat/voice, so switching the active agent in ChatPanel
     // doesn't lose navigation ability. Deliberately NOT declared for
