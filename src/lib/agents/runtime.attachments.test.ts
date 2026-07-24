@@ -100,10 +100,12 @@ function baseResponses(): Record<string, CannedResponse[]> {
     ],
     user_secrets: [{ data: { gemini_api_key: "test-key", groq_api_key: null }, error: null }],
     agent_runs: [{ data: { id: "run-under-test" }, error: null }],
-    // generate_document is bound + enabled, so it's actually declared to the
-    // model — which is what turns on producer's forced-tool-call path.
-    agent_tools: [{ data: [{ tool_id: "t-gen" }], error: null }],
-    tools: [{ data: [{ slug: "generate_document" }], error: null }],
+    // DELIBERATELY no generate_document binding in the DB — the producer must
+    // still get the tool in-memory (runtime.server injects it for the producer
+    // agent), which is what keeps the forced-tool-call path working even when
+    // the migration/binding is missing (the live 0-tool-calls failure).
+    agent_tools: [{ data: [], error: null }],
+    tools: [{ data: [], error: null }],
     conversations: [{ data: { id: "conv-1" }, error: null }],
   };
 }
