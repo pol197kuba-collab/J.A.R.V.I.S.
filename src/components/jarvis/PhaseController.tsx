@@ -5,7 +5,6 @@ import { AppSidebar } from "@/components/jarvis/AppSidebar";
 import { BootSequence } from "@/components/jarvis/BootSequence";
 import { StarkLogin } from "@/components/jarvis/StarkLogin";
 import { DashboardShell } from "@/components/jarvis/DashboardShell";
-import { OrientationGate } from "@/components/jarvis/OrientationGate";
 import { PhaseContext, type AppPhase } from "@/components/jarvis/PhaseContext";
 import { TransitionProvider } from "@/components/jarvis/TransitionContext";
 import { VoiceCommandProvider } from "@/components/jarvis/VoiceCommandContext";
@@ -95,8 +94,7 @@ export function PhaseController() {
     phase === "transition_to_dashboard" || phase === "dashboard_active" || phase === "shutdown";
 
   return (
-    <OrientationGate exemptPaths={["/vision"]}>
-      <PhaseContext.Provider value={{ phase, setPhase }}>
+    <PhaseContext.Provider value={{ phase, setPhase }}>
         {phase === "booting" && (
           <BootSequence key="engage" mode="engage" onEngage={() => setPhase("login_screen")} />
         )}
@@ -125,7 +123,6 @@ export function PhaseController() {
             </SidebarProvider>
           </TransitionProvider>
         )}
-      </PhaseContext.Provider>
-    </OrientationGate>
+    </PhaseContext.Provider>
   );
 }
