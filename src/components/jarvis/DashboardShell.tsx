@@ -13,6 +13,7 @@ import { HeaderVoiceToggle } from "@/components/jarvis/HeaderVoiceToggle";
 import { ArkRebootProvider, useArkReboot } from "@/components/jarvis/ArkRebootContext";
 import { ArkRebootOverlay } from "@/components/jarvis/ArkRebootOverlay";
 import { RebootButton } from "@/components/jarvis/RebootButton";
+import { MobileBottomNav } from "@/components/jarvis/MobileBottomNav";
 import { isFullscreen, onFullscreenChange, toggleAppFullscreen } from "@/lib/fullscreen";
 import type { AppPhase } from "@/components/jarvis/PhaseContext";
 
@@ -50,13 +51,19 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
   return (
     <div className="relative flex min-h-screen w-full bg-background text-foreground portrait:h-[100dvh] portrait:min-h-0 portrait:overflow-hidden landscape:max-md:h-[100dvh] landscape:max-md:min-h-0 landscape:max-md:overflow-hidden short:h-[100dvh] short:min-h-0 short:overflow-hidden">
       <JarvisBackdrop />
-      <div className="relative z-10 contents">
-        <AppSidebar />
-      </div>
+      {!isMobile && (
+        <div className="relative z-10 contents">
+          <AppSidebar />
+        </div>
+      )}
       <div className="relative z-10 flex min-h-screen min-w-0 flex-1 flex-col portrait:min-h-0 landscape:max-md:min-h-0 short:min-h-0">
         <header className="sticky top-0 z-10 flex h-12 min-w-0 items-center gap-2 overflow-hidden border-b border-primary/20 bg-gradient-to-b from-black/80 to-black/50 px-4 backdrop-blur-xl shadow-[0_8px_24px_-16px_color-mix(in_oklab,var(--primary)_60%,transparent)] portrait:h-10 landscape:max-md:h-8 landscape:max-md:gap-1.5 landscape:max-md:px-2 short:h-8 short:gap-1.5 short:px-2">
-          <HudMenuTrigger />
-          <div className="h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent" />
+          {!isMobile && (
+            <>
+              <HudMenuTrigger />
+              <div className="h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent" />
+            </>
+          )}
           <MiniArcReactor size={20} />
           <span className="font-display text-[10px] uppercase tracking-[0.3em] text-primary/80 portrait:hidden landscape:max-md:text-[8px] landscape:max-md:tracking-[0.2em] short:hidden">
             J.A.R.V.I.S. // STARK SECURE TERMINAL
@@ -84,7 +91,7 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
         </header>
         <main
           className={
-            "relative flex-1 overflow-hidden landscape:max-md:overflow-auto short:overflow-auto" +
+            "relative min-h-0 flex-1 overflow-hidden portrait:overflow-y-auto landscape:max-md:overflow-auto short:overflow-auto" +
             (transition === "dematerialize" ? " animate-hud-dematerialize" : "") +
             (isDiagnosticRunning ? " ark-dimmed" : "")
           }
@@ -92,6 +99,7 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
           <Outlet />
           <HudRouteTransition />
         </main>
+        {isMobile && <MobileBottomNav />}
         <ArkRebootOverlay />
         {phase === "shutdown" && (
           <div

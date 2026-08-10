@@ -5,7 +5,6 @@ import { AppSidebar } from "@/components/jarvis/AppSidebar";
 import { BootSequence } from "@/components/jarvis/BootSequence";
 import { StarkLogin } from "@/components/jarvis/StarkLogin";
 import { DashboardShell } from "@/components/jarvis/DashboardShell";
-import { OrientationGate } from "@/components/jarvis/OrientationGate";
 import { PhaseContext, type AppPhase } from "@/components/jarvis/PhaseContext";
 import { TransitionProvider } from "@/components/jarvis/TransitionContext";
 import { VoiceCommandProvider } from "@/components/jarvis/VoiceCommandContext";
@@ -95,37 +94,35 @@ export function PhaseController() {
     phase === "transition_to_dashboard" || phase === "dashboard_active" || phase === "shutdown";
 
   return (
-    <OrientationGate exemptPaths={["/vision"]}>
-      <PhaseContext.Provider value={{ phase, setPhase }}>
-        {phase === "booting" && (
-          <BootSequence key="engage" mode="engage" onEngage={() => setPhase("login_screen")} />
-        )}
-        {phase === "login_screen" && (
-          <StarkLogin
-            onGranted={() => {
-              void navigate({ to: "/" });
-              setPhase("initializing");
-            }}
-          />
-        )}
-        {phase === "initializing" && (
-          <BootSequence
-            key="init"
-            mode="init"
-            onComplete={() => setPhase("transition_to_dashboard")}
-            onSkip={() => setPhase("transition_to_dashboard")}
-          />
-        )}
-        {showDashboardShell && (
-          <TransitionProvider>
-            <SidebarProvider defaultOpen={false}>
-              <VoiceCommandProvider>
-                <DashboardShell phase={phase} onShutdown={() => setPhase("shutdown")} />
-              </VoiceCommandProvider>
-            </SidebarProvider>
-          </TransitionProvider>
-        )}
-      </PhaseContext.Provider>
-    </OrientationGate>
+    <PhaseContext.Provider value={{ phase, setPhase }}>
+      {phase === "booting" && (
+        <BootSequence key="engage" mode="engage" onEngage={() => setPhase("login_screen")} />
+      )}
+      {phase === "login_screen" && (
+        <StarkLogin
+          onGranted={() => {
+            void navigate({ to: "/" });
+            setPhase("initializing");
+          }}
+        />
+      )}
+      {phase === "initializing" && (
+        <BootSequence
+          key="init"
+          mode="init"
+          onComplete={() => setPhase("transition_to_dashboard")}
+          onSkip={() => setPhase("transition_to_dashboard")}
+        />
+      )}
+      {showDashboardShell && (
+        <TransitionProvider>
+          <SidebarProvider defaultOpen={false}>
+            <VoiceCommandProvider>
+              <DashboardShell phase={phase} onShutdown={() => setPhase("shutdown")} />
+            </VoiceCommandProvider>
+          </SidebarProvider>
+        </TransitionProvider>
+      )}
+    </PhaseContext.Provider>
   );
 }
