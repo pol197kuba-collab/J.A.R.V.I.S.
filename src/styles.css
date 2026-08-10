@@ -874,7 +874,7 @@
     linear-gradient(
       180deg,
       color-mix(in oklab, var(--surface-3) 92%, transparent),
-      color-mix(in oklab, #000 90%, transparent)
+      color-mix(in oklab, oklch(0.15 0.026 250) 94%, transparent)
     );
   box-shadow:
     0 1px 0 color-mix(in oklab, var(--primary) 24%, transparent) inset,
