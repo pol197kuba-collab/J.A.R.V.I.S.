@@ -95,34 +95,34 @@ export function PhaseController() {
 
   return (
     <PhaseContext.Provider value={{ phase, setPhase }}>
-        {phase === "booting" && (
-          <BootSequence key="engage" mode="engage" onEngage={() => setPhase("login_screen")} />
-        )}
-        {phase === "login_screen" && (
-          <StarkLogin
-            onGranted={() => {
-              void navigate({ to: "/" });
-              setPhase("initializing");
-            }}
-          />
-        )}
-        {phase === "initializing" && (
-          <BootSequence
-            key="init"
-            mode="init"
-            onComplete={() => setPhase("transition_to_dashboard")}
-            onSkip={() => setPhase("transition_to_dashboard")}
-          />
-        )}
-        {showDashboardShell && (
-          <TransitionProvider>
-            <SidebarProvider defaultOpen={false}>
-              <VoiceCommandProvider>
-                <DashboardShell phase={phase} onShutdown={() => setPhase("shutdown")} />
-              </VoiceCommandProvider>
-            </SidebarProvider>
-          </TransitionProvider>
-        )}
+      {phase === "booting" && (
+        <BootSequence key="engage" mode="engage" onEngage={() => setPhase("login_screen")} />
+      )}
+      {phase === "login_screen" && (
+        <StarkLogin
+          onGranted={() => {
+            void navigate({ to: "/" });
+            setPhase("initializing");
+          }}
+        />
+      )}
+      {phase === "initializing" && (
+        <BootSequence
+          key="init"
+          mode="init"
+          onComplete={() => setPhase("transition_to_dashboard")}
+          onSkip={() => setPhase("transition_to_dashboard")}
+        />
+      )}
+      {showDashboardShell && (
+        <TransitionProvider>
+          <SidebarProvider defaultOpen={false}>
+            <VoiceCommandProvider>
+              <DashboardShell phase={phase} onShutdown={() => setPhase("shutdown")} />
+            </VoiceCommandProvider>
+          </SidebarProvider>
+        </TransitionProvider>
+      )}
     </PhaseContext.Provider>
   );
 }
