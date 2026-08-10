@@ -68,43 +68,43 @@
 }
 
 :root {
-  --radius: 0.875rem;
+  --radius: 1.25rem;
   /* JARVIS dark palette */
-  --background: oklch(0 0 0);
+  --background: oklch(0.14 0.025 250);
   --foreground: oklch(0.96 0.02 210);
-  --card: oklch(0.02 0 0);
+  --card: oklch(0.18 0.03 250);
   --card-foreground: oklch(0.96 0.02 210);
-  --popover: oklch(0.02 0 0);
+  --popover: oklch(0.17 0.03 250);
   --popover-foreground: oklch(0.96 0.02 210);
-  --primary: oklch(0.88 0.17 200);
+  --primary: oklch(0.84 0.15 205);
   --primary-foreground: oklch(0.05 0.02 230);
-  --secondary: oklch(0.04 0 0);
+  --secondary: oklch(0.2 0.03 250);
   --secondary-foreground: oklch(0.96 0.02 210);
-  --muted: oklch(0.04 0 0);
+  --muted: oklch(0.2 0.03 250);
   --muted-foreground: oklch(0.78 0.08 200);
-  --accent: oklch(0.85 0.18 200);
+  --accent: oklch(0.78 0.13 250);
   --accent-foreground: oklch(0.05 0.02 230);
-  --destructive: oklch(0.7 0.24 25);
+  --destructive: oklch(0.68 0.22 25);
   --destructive-foreground: oklch(0.98 0.01 0);
-  --border: oklch(0.88 0.17 200 / 28%);
-  --input: oklch(0.88 0.17 200 / 22%);
-  --ring: oklch(0.88 0.17 200);
-  --success: oklch(0.78 0.18 160);
-  --warning: oklch(0.78 0.2 60);
-  --chart-1: oklch(0.88 0.17 200);
-  --chart-2: oklch(0.72 0.16 215);
-  --chart-3: oklch(0.78 0.18 160);
-  --chart-4: oklch(0.78 0.2 60);
-  --chart-5: oklch(0.7 0.24 25);
-  --sidebar: oklch(0 0 0);
+  --border: oklch(0.84 0.15 205 / 18%);
+  --input: oklch(0.84 0.15 205 / 14%);
+  --ring: oklch(0.84 0.15 205);
+  --success: oklch(0.76 0.16 160);
+  --warning: oklch(0.8 0.15 75);
+  --chart-1: oklch(0.84 0.15 205);
+  --chart-2: oklch(0.78 0.13 250);
+  --chart-3: oklch(0.76 0.16 160);
+  --chart-4: oklch(0.8 0.15 75);
+  --chart-5: oklch(0.68 0.22 25);
+  --sidebar: oklch(0.16 0.028 250);
   --sidebar-foreground: oklch(0.95 0.03 210);
-  --sidebar-primary: oklch(0.88 0.17 200);
+  --sidebar-primary: oklch(0.84 0.15 205);
   --sidebar-primary-foreground: oklch(0.05 0.02 230);
-  --sidebar-accent: oklch(0.04 0 0);
+  --sidebar-accent: oklch(0.2 0.03 250);
   --sidebar-accent-foreground: oklch(0.96 0.02 210);
-  --sidebar-border: oklch(0.88 0.17 200 / 25%);
-  --sidebar-ring: oklch(0.88 0.17 200);
-  --glow-primary: 0 0 12px oklch(0.88 0.17 200 / 0.8), 0 0 36px oklch(0.88 0.17 200 / 0.35);
+  --sidebar-border: oklch(0.84 0.15 205 / 18%);
+  --sidebar-ring: oklch(0.84 0.15 205);
+  --glow-primary: 0 0 12px oklch(0.84 0.15 205 / 0.8), 0 0 36px oklch(0.84 0.15 205 / 0.35);
   --gradient-core: radial-gradient(
     circle at 50% 50%,
     oklch(0.98 0.06 200 / 0.95) 0%,
@@ -112,16 +112,16 @@
     transparent 70%
   );
   --grid-bg:
-    linear-gradient(oklch(0.88 0.17 200 / 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, oklch(0.88 0.17 200 / 0.06) 1px, transparent 1px);
+    linear-gradient(oklch(0.84 0.15 205 / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0.84 0.15 205 / 0.05) 1px, transparent 1px);
   /* Premium AI OS surfaces */
-  --surface-1: color-mix(in oklab, oklch(0.88 0.17 200) 5%, oklch(0.03 0 0) 95%);
-  --surface-2: color-mix(in oklab, oklch(0.88 0.17 200) 8%, oklch(0.04 0 0) 92%);
-  --surface-3: color-mix(in oklab, oklch(0.88 0.17 200) 14%, oklch(0.05 0 0) 86%);
-  --holo-edge: color-mix(in oklab, oklch(0.88 0.17 200) 35%, transparent);
+  --surface-1: color-mix(in oklab, oklch(0.84 0.15 205) 6%, oklch(0.17 0.03 250) 94%);
+  --surface-2: color-mix(in oklab, oklch(0.84 0.15 205) 9%, oklch(0.2 0.03 250) 91%);
+  --surface-3: color-mix(in oklab, oklch(0.84 0.15 205) 14%, oklch(0.23 0.032 250) 86%);
+  --holo-edge: color-mix(in oklab, oklch(0.84 0.15 205) 35%, transparent);
   --gradient-panel:
-    radial-gradient(ellipse at 20% 0%, oklch(0.88 0.17 200 / 0.08), transparent 55%),
-    radial-gradient(ellipse at 100% 100%, oklch(0.72 0.16 215 / 0.06), transparent 60%);
+    radial-gradient(ellipse at 20% 0%, oklch(0.84 0.15 205 / 0.1), transparent 55%),
+    radial-gradient(ellipse at 100% 100%, oklch(0.78 0.13 250 / 0.08), transparent 60%);
   --glow-soft:
     0 0 0 1px color-mix(in oklab, var(--primary) 12%, transparent),
     0 6px 24px -8px color-mix(in oklab, var(--primary) 30%, transparent),
