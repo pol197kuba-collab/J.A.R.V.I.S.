@@ -1,7 +1,7 @@
 // Client-side counterpart to logServerError — for code paths that never
 // reach a server function at all (the client-only Gemini fallback in
 // jarvisBrain.ts, voice engine errors in VoiceCommandContext.tsx/speak.ts)
-// and would otherwise leave zero trace in system_events for Guardian to
+// and would otherwise leave zero trace in system_events for S.H.I.E.L.D. to
 // ever find, no matter how good its analysis tools get.
 //
 // Calls the existing (previously unused anywhere in the app) emitSystemEvent

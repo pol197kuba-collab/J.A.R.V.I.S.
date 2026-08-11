@@ -1,6 +1,6 @@
 // Chat bubbles render plain text (no markdown engine, by design — agent
 // replies are spoken aloud too, and a full renderer is more than the HUD
-// needs). That broke down the moment Producer started handing back signed
+// needs). That broke down the moment F.O.R.G.E. started handing back signed
 // download URLs: a raw multi-hundred-character link rendered as dead,
 // unclickable text. This renders exactly two inline patterns as anchors —
 // markdown links `[label](url)` and bare http(s) URLs — and leaves every

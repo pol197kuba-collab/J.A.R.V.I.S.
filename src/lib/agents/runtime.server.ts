@@ -1,4 +1,4 @@
-// Server-only Orchestrator core.
+// Server-only J.A.R.V.I.S. core.
 //
 // Loads an agent from DB, pulls the user's Gemini key, calls the model,
 // then persists a row in agent_runs. Kept intentionally small — this is the
@@ -18,7 +18,7 @@ import {
 import { callGroq } from "./providers/groq";
 import type { GeminiContent, GeminiPart } from "./providers/types";
 
-// UI actions the Orchestrator (or any agent facing the user directly) can
+// UI actions J.A.R.V.I.S. (or any agent facing the user directly) can
 // trigger via the perform_ui_action tool. Must stay in sync with the
 // JarvisAction union in src/lib/ai/jarvisBrain.ts — single vocabulary shared
 // by voice, chat and the old client-side fallback path.
@@ -118,7 +118,7 @@ proactively rather than guessing or refusing:
   document or presentation they already have (e.g. "otwórz prezentację o
   samsungu", "pokaż mój raport o X", "open my presentation"), use the
   open_document tool with the topic words — do NOT create a new one and do
-  NOT delegate to researcher/producer. If it returns multiple candidates,
+  NOT delegate to insight/forge. If it returns multiple candidates,
   ask the user which one (name their titles/dates) and call open_document
   again with the chosen file_id. If it returns none, say so and offer to
   generate it. The app opens the preview automatically — you need only
@@ -170,7 +170,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
   // "input" is the parent's task text and their output goes back to the
   // parent, not to chat/voice. UI control is therefore meaningless there —
   // the perform_ui_action tool, its system-prompt pitch AND the fallback
-  // classifier are all skipped, so a delegated Marketer/Analityk run can't
+  // classifier are all skipped, so a delegated Herald/Metric run can't
   // log a spurious "steruje interfejsem" entry or have its real answer
   // overwritten by a misclassified navigation confirmation.
   const isDelegatedRun = delegationDepth > 0 || parentRunId != null;
@@ -212,7 +212,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       : null;
 
   // Team roster — every agent should know who else is on the payroll so the
-  // Orchestrator can delegate and any agent can name-drop a teammate instead
+  // J.A.R.V.I.S. can delegate and any agent can name-drop a teammate instead
   // of denying they exist.
   const { data: roster } = await supabase
     .from("agents")
@@ -222,18 +222,18 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
   const teammates = (roster ?? []).filter((r) => r.slug !== agent.slug);
 
   // `system_check` is a purely decorative UI action (a hardcoded "wszystko
-  // sprawne" line, zero real content) that predates Guardian and was never
+  // sprawne" line, zero real content) that predates S.H.I.E.L.D. and was never
   // wired to it. Three rounds of prompt-only carve-outs for this exact
   // collision (open_agents wording, then system_check wording, then this)
   // each got defeated by a new phrasing — the aggressive "always call
   // perform_ui_action" instruction reliably out-argues a textual exception
-  // no matter how it's worded. Once Guardian can actually answer this for
+  // no matter how it's worded. Once S.H.I.E.L.D. can actually answer this for
   // real, the decorative option is strictly redundant AND actively
   // misleading (a fake "all good" beats a real diagnostic), so it's
-  // removed from the declared enum outright whenever an enabled Guardian
+  // removed from the declared enum outright whenever an enabled S.H.I.E.L.D.
   // exists — the model then has no way to select it, by construction,
   // rather than one more instruction to hopefully win a wording race.
-  const hasEnabledGuardian = teammates.some((t) => t.slug === "guardian" && t.is_enabled);
+  const hasEnabledGuardian = teammates.some((t) => t.slug === "shield" && t.is_enabled);
   const effectiveUiActions: string[] = hasEnabledGuardian
     ? UI_ACTIONS.filter((a) => a !== "system_check")
     : [...UI_ACTIONS];
@@ -252,8 +252,8 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
               }${t.description ? `. ${t.description}` : ""}`,
           )
           .join("\n") +
-        (agent.slug === "orchestrator"
-          ? `\n\nJako Orchestrator MOŻESZ delegować zadanie do wybranego kolegi używając narzędzia delegate_to_agent(slug, task). Rób to, kiedy zadanie pasuje wyraźnie do specjalizacji innego agenta (np. copy / marketing → marketer; pytanie o treść/zawartość przesłanego dokumentu lub pliku → analityk; pogłębiony research tematu, raport/opracowanie z wielu źródeł, "zbadaj temat X", porównanie opcji wymagające sprawdzenia źródeł → researcher; wygenerowanie PLIKU do pobrania — prezentacja pptx, dokument Word/docx, PDF → producer). Do researcher deleguj pytania wymagające WIELU wyszukiwań i weryfikacji źródeł — proste pojedyncze pytania faktograficzne obsługuj sam swoim web_search. PIPELINE DWUETAPOWY: gdy użytkownik prosi o prezentację/dokument/raport NA TEMAT wymagający zebrania treści (np. "zrób mi prezentację o X"), wykonaj DWA delegowania w tej samej turze: najpierw researcher (zbierz treść merytoryczną), potem producer — a w polu task dla producera przekaż KOMPLETNĄ treść z odpowiedzi researchera (format, tytuł i gotowe sekcje z konkretami), bo producer nie ma dostępu do internetu ani do rozmowy. Gdy treść jest prosta i już znana, deleguj bezpośrednio do producer. WAŻNE po delegacji do producer: NIE przepisuj ani nie wklejaj do swojej odpowiedzi żadnego linku/URL-a do pobrania pliku — system automatycznie dołącza poprawny link pod Twoją wiadomością, a ręczne przepisanie długiego adresu wprowadza literówki i psuje podpis linku. Po prostu poinformuj, że plik jest gotowy do pobrania poniżej. WAŻNE — OGÓLNA ZASADA ROZRÓŻNIANIA delegate_to_agent vs ${UI_ACTION_TOOL_NAME}: samo wystąpienie słowa "agent"/"agenci"/"agentów" w poleceniu NIE oznacza automatycznie prośby o otwarcie centrum agentów (open_agents) — to osobne, rzadsze znaczenie. Jeśli użytkownik chce, żeby agent(ci) COŚ ZROBILI / WYKONALI realną pracę (np. "zademonstruj ich możliwości", "użyj agentów do X", "niech marketer przygotuje Y", "uruchom agentów żeby..."), to jest prośba o pracę merytoryczną — deleguj przez delegate_to_agent, NIE wywołuj ${UI_ACTION_TOOL_NAME}. Wywołaj open_agents TYLKO gdy użytkownik chce zobaczyć/otworzyć sam WIDOK/EKRAN centrum agentów (np. "pokaż mi agentów", "otwórz centrum agentów", "przejdź do zakładki agentów"), bez oczekiwania na wykonanie jakiegokolwiek zadania. Ta sama zasada dotyczy pytań o TREŚĆ czegoś (np. "co jest w dokumencie X", "co zawiera plik Y") — to pytanie merytoryczne, deleguj do analityk, nie steruj interfejsem. Gdy użytkownik prosi o demonstrację/użycie WIELU lub WSZYSTKICH agentów, deleguj po kolei do kilku pasujących kolegów w tej samej turze (masz do kilkunastu kroków narzędziowych dostępnych), zamiast zatrzymywać się na jednym i nazywać to "początkiem". SZCZEGÓLNY PRZYPADEK: akcja UI "system_check" to WYŁĄCZNIE ozdobna, na stałe zaszyta fraza ("Wszystkie systemy sprawne...") bez żadnej realnej treści — nie sprawdza faktycznie niczego. Jeśli w zespole jest guardian (Strażnik) i użytkownik prosi o sprawdzenie/kontrolę/status/kondycję systemu (np. "sprawdź system", "wykonaj kontrolę systemu", "co się dzieje z systemem"), ZAWSZE deleguj do guardian po realny raport zamiast wywoływać system_check — użytkownik oczekuje faktycznych wniosków, nie samej dekoracji. Zwracaj użytkownikowi krótkie streszczenie odpowiedzi delegowanego agenta (lub agentów) w swoim głosie.`
+        (agent.slug === "jarvis"
+          ? `\n\nJako J.A.R.V.I.S. MOŻESZ delegować zadanie do wybranego kolegi używając narzędzia delegate_to_agent(slug, task). Rób to, kiedy zadanie pasuje wyraźnie do specjalizacji innego agenta (np. copy / marketing → herald; pytanie o treść/zawartość przesłanego dokumentu lub pliku → metric; pogłębiony research tematu, raport/opracowanie z wielu źródeł, "zbadaj temat X", porównanie opcji wymagające sprawdzenia źródeł → insight; wygenerowanie PLIKU do pobrania — prezentacja pptx, dokument Word/docx, PDF → forge). Do insight deleguj pytania wymagające WIELU wyszukiwań i weryfikacji źródeł — proste pojedyncze pytania faktograficzne obsługuj sam swoim web_search. PIPELINE DWUETAPOWY: gdy użytkownik prosi o prezentację/dokument/raport NA TEMAT wymagający zebrania treści (np. "zrób mi prezentację o X"), wykonaj DWA delegowania w tej samej turze: najpierw insight (zbierz treść merytoryczną), potem forge — a w polu task dla forge przekaż KOMPLETNĄ treść z odpowiedzi insight (format, tytuł i gotowe sekcje z konkretami), bo forge nie ma dostępu do internetu ani do rozmowy. Gdy treść jest prosta i już znana, deleguj bezpośrednio do forge. WAŻNE po delegacji do forge: NIE przepisuj ani nie wklejaj do swojej odpowiedzi żadnego linku/URL-a do pobrania pliku — system automatycznie dołącza poprawny link pod Twoją wiadomością, a ręczne przepisanie długiego adresu wprowadza literówki i psuje podpis linku. Po prostu poinformuj, że plik jest gotowy do pobrania poniżej. WAŻNE — OGÓLNA ZASADA ROZRÓŻNIANIA delegate_to_agent vs ${UI_ACTION_TOOL_NAME}: samo wystąpienie słowa "agent"/"agenci"/"agentów" w poleceniu NIE oznacza automatycznie prośby o otwarcie centrum agentów (open_agents) — to osobne, rzadsze znaczenie. Jeśli użytkownik chce, żeby agent(ci) COŚ ZROBILI / WYKONALI realną pracę (np. "zademonstruj ich możliwości", "użyj agentów do X", "niech herald przygotuje Y", "uruchom agentów żeby..."), to jest prośba o pracę merytoryczną — deleguj przez delegate_to_agent, NIE wywołuj ${UI_ACTION_TOOL_NAME}. Wywołaj open_agents TYLKO gdy użytkownik chce zobaczyć/otworzyć sam WIDOK/EKRAN centrum agentów (np. "pokaż mi agentów", "otwórz centrum agentów", "przejdź do zakładki agentów"), bez oczekiwania na wykonanie jakiegokolwiek zadania. Ta sama zasada dotyczy pytań o TREŚĆ czegoś (np. "co jest w dokumencie X", "co zawiera plik Y") — to pytanie merytoryczne, deleguj do metric, nie steruj interfejsem. Gdy użytkownik prosi o demonstrację/użycie WIELU lub WSZYSTKICH agentów, deleguj po kolei do kilku pasujących kolegów w tej samej turze (masz do kilkunastu kroków narzędziowych dostępnych), zamiast zatrzymywać się na jednym i nazywać to "początkiem". SZCZEGÓLNY PRZYPADEK: akcja UI "system_check" to WYŁĄCZNIE ozdobna, na stałe zaszyta fraza ("Wszystkie systemy sprawne...") bez żadnej realnej treści — nie sprawdza faktycznie niczego. Jeśli w zespole jest shield (S.H.I.E.L.D.) i użytkownik prosi o sprawdzenie/kontrolę/status/kondycję systemu (np. "sprawdź system", "wykonaj kontrolę systemu", "co się dzieje z systemem"), ZAWSZE deleguj do shield po realny raport zamiast wywoływać system_check — użytkownik oczekuje faktycznych wniosków, nie samej dekoracji. Zwracaj użytkownikowi krótkie streszczenie odpowiedzi delegowanego agenta (lub agentów) w swoim głosie.`
           : "")
       : "";
 
@@ -262,7 +262,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     : DEFAULT_SYSTEM_PROMPT;
 
   // Appended for every user-facing run, regardless of whether the agent has
-  // a custom system_prompt override — otherwise agents like Marketer never
+  // a custom system_prompt override — otherwise agents like Herald never
   // learn they have this capability at all. Explicitly forbids the "I don't
   // have UI access" refusal pattern, which is a strong default behaviour in
   // base model training and tends to override a merely-declared tool
@@ -346,6 +346,15 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
   if (runErr) throw new Error(`Run insert failed: ${runErr.message}`);
   const runId = runRow.id;
 
+  // Widget-status fields (public.agents.status/current_task/progress) — best
+  // effort, structural plumbing for the interactive agent-status widget.
+  // Not awaited-and-checked like the run row above: a hiccup here shouldn't
+  // fail the whole turn, only leave the status widget momentarily stale.
+  await supabase
+    .from("agents")
+    .update({ status: "busy", current_task: input.slice(0, 200), progress: 0 })
+    .eq("id", agent.id);
+
   // logEvent helper — writes to system_events so the System Logs page shows real telemetry.
   const logEvent = async (
     level: "info" | "warn" | "error",
@@ -362,7 +371,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     });
   };
 
-  await logEvent("info", "orchestrator", `run started · model ${model}`, {
+  await logEvent("info", "jarvis", `run started · model ${model}`, {
     run_id: runId,
     agent: agentSlug,
     input_preview: input.slice(0, 120),
@@ -388,16 +397,16 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     const enabledTools = await getEnabledToolsForAgent(supabase, agent.id);
     const toolDeclarations = enabledTools.map((t) => t.declaration);
 
-    // The Producer's ONE job is to call generate_document — but that only
+    // F.O.R.G.E.'s ONE job is to call generate_document — but that only
     // works if the tool is actually declared to the model. When its DB
     // binding is missing (or the migration wasn't applied), it was declared
     // nothing, the forced-tool-call path never turned on, and the model
     // "confirmed" a presentation while calling zero tools (live: producer
     // sub-run, 0 tool calls, no file). Guarantee the tool in-memory for the
-    // producer agent, exactly like the Orchestrator always gets
+    // forge agent, exactly like J.A.R.V.I.S. always gets
     // delegate_to_agent regardless of DB state.
     if (
-      agent.slug === "producer" &&
+      agent.slug === "forge" &&
       !toolDeclarations.some((d) => d.name === "generate_document")
     ) {
       const genTool = getToolByName("generate_document");
@@ -427,17 +436,17 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       });
     }
 
-    // Orchestrator always gets an in-memory delegate tool, even without a DB
+    // J.A.R.V.I.S. always gets an in-memory delegate tool, even without a DB
     // row, so it can hand off to teammates without a migration. Guard against
     // recursion depth so a chain of delegations can't loop forever.
     const DELEGATE_TOOL_NAME = "delegate_to_agent";
     const allowDelegate =
-      agent.slug === "orchestrator" && teammates.length > 0 && delegationDepth < 2;
+      agent.slug === "jarvis" && teammates.length > 0 && delegationDepth < 2;
     if (allowDelegate) {
       toolDeclarations.push({
         name: DELEGATE_TOOL_NAME,
         description:
-          "Deleguj zadanie do innego agenta z zespołu (np. marketer, researcher, analityk). Zwraca jego odpowiedź jako tekst.",
+          "Deleguj zadanie do innego agenta z zespołu (np. herald, insight, metric). Zwraca jego odpowiedź jako tekst.",
         parameters: {
           type: "object",
           properties: {
@@ -475,9 +484,9 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // generated — the client kicks the background enrichment pass for it.
     let enrichDocument: { id: string } | null = null;
 
-    // Producer's whole job is to CALL generate_document — but live testing
+    // F.O.R.G.E.'s whole job is to CALL generate_document — but live testing
     // showed the model instead describing the presentation in prose and
-    // ending its (delegated) run with 0 tool calls, so the Orchestrator
+    // ending its (delegated) run with 0 tool calls, so J.A.R.V.I.S.
     // relayed a confident "plik gotowy" with no file and no link ever
     // produced. Same lesson as the download-link saga: don't ask the model
     // to reliably do the one thing it must — force it. Until generate_document
@@ -486,7 +495,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // back to AUTO so the follow-up turn can produce the text summary.
     const GENERATE_DOCUMENT_TOOL = "generate_document";
     const isProducer =
-      agent.slug === "producer" && toolDeclarations.some((d) => d.name === GENERATE_DOCUMENT_TOOL);
+      agent.slug === "forge" && toolDeclarations.some((d) => d.name === GENERATE_DOCUMENT_TOOL);
     let producerCalledGenerate = false;
 
     for (let iter = 0; iter < maxToolIterations; iter++) {
@@ -550,7 +559,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           }
           await logEvent(
             "warn",
-            "orchestrator",
+            "jarvis",
             `gemini HTTP ${res.status}, retry ${attempt + 1}/${GEMINI_MAX_RETRIES}`,
             { run_id: runId, iter } as Json,
           );
@@ -591,7 +600,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         if (!groqApiKey) throw geminiErr;
         await logEvent(
           "warn",
-          "orchestrator",
+          "jarvis",
           `gemini call failed, failing over to groq: ${geminiMsg}`,
           {
             run_id: runId,
@@ -616,13 +625,13 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           totalTokensOut += groqResult.tokensOut;
           functionCalls = groqResult.functionCalls;
           textOut = groqResult.text;
-          await logEvent("info", "orchestrator", "failover to groq succeeded", {
+          await logEvent("info", "jarvis", "failover to groq succeeded", {
             run_id: runId,
             iter,
           } as Json);
         } catch (groqErr) {
           const groqMsg = groqErr instanceof Error ? groqErr.message : String(groqErr);
-          await logEvent("error", "orchestrator", `groq failover also failed: ${groqMsg}`, {
+          await logEvent("error", "jarvis", `groq failover also failed: ${groqMsg}`, {
             run_id: runId,
             iter,
           } as Json);
@@ -654,7 +663,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           if ((UI_ACTIONS as readonly string[]).includes(requested)) {
             uiAction = requested as UiAction;
             response = { ok: true, action: requested };
-            await logEvent("info", "orchestrator", `ui action: ${requested}`, {
+            await logEvent("info", "jarvis", `ui action: ${requested}`, {
               run_id: runId,
             } as Json);
           } else {
@@ -666,11 +675,11 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           const target = teammates.find((t) => t.slug === targetSlug && t.is_enabled);
           if (!target || !task) {
             response = { error: `invalid_delegation`, requested: targetSlug };
-            await logEvent("warn", "orchestrator", `delegate rejected: ${targetSlug}`, {
+            await logEvent("warn", "jarvis", `delegate rejected: ${targetSlug}`, {
               run_id: runId,
             } as Json);
           } else {
-            await logEvent("info", "orchestrator", `delegating → ${targetSlug}`, {
+            await logEvent("info", "jarvis", `delegating → ${targetSlug}`, {
               run_id: runId,
               task_preview: task.slice(0, 200),
             } as Json);
@@ -685,7 +694,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
             });
             // Bubble file links up through the delegation chain verbatim —
             // the parent's own reply gets them appended below, so a
-            // researcher → producer chain still ends with an intact link.
+            // insight → forge chain still ends with an intact link.
             if (sub.attachments) attachments.push(...sub.attachments);
             if (sub.openDocument && !openDocument) openDocument = sub.openDocument;
             if (sub.enrichDocument && !enrichDocument) enrichDocument = sub.enrichDocument;
@@ -698,7 +707,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           }
         } else if (!tool) {
           response = { error: `unknown_tool_${call.name}` };
-          await logEvent("warn", "orchestrator", `unknown tool call: ${call.name}`, {
+          await logEvent("warn", "jarvis", `unknown tool call: ${call.name}`, {
             run_id: runId,
           } as Json);
         } else {
@@ -791,7 +800,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     //
     // Also skipped whenever the main turn already made ANY real tool call
     // (toolCallLog.length > 0) — not just perform_ui_action. Live-tested bug
-    // (2026-07-21): asking Analityk to summarize an uploaded document
+    // (2026-07-21): asking M.E.T.R.I.C. to summarize an uploaded document
     // correctly delegated via delegate_to_agent and got a real answer, but
     // this classifier still ran afterward (it only checked `!uiAction`),
     // got the bare user text with no conversation context, misclassified a
@@ -804,10 +813,10 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // Never runs for delegated sub-runs: their input is the parent's task
     // text, not a user utterance, and the tool wasn't even declared for
     // them. Classifying task text without context is exactly how delegated
-    // Marketer/Analityk runs ended up with phantom open_dashboard entries
+    // Herald/Metric runs ended up with phantom open_dashboard entries
     // (their real answers overwritten by a navigation confirmation).
     if (!isDelegatedRun && !uiAction && toolCallLog.length === 0) {
-      await logEvent("info", "orchestrator", "classifier fallback: block entered", {
+      await logEvent("info", "jarvis", "classifier fallback: block entered", {
         run_id: runId,
       } as Json);
 
@@ -862,7 +871,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
             });
             await logEvent(
               "info",
-              "orchestrator",
+              "jarvis",
               `ui action via classifier fallback (groq): ${requested}`,
               { run_id: runId } as Json,
             );
@@ -871,14 +880,14 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
             // Also logged on the "none" branch (the common case — most
             // turns aren't UI commands) so System Logs shows Groq was
             // actually hit every turn, not only on the rare UI-action hits.
-            await logEvent("info", "orchestrator", "classifier fallback via groq: none", {
+            await logEvent("info", "jarvis", "classifier fallback via groq: none", {
               run_id: runId,
             } as Json);
           }
           classifiedByGroq = true;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          await logEvent("warn", "orchestrator", `classifier groq failed, falling back: ${msg}`, {
+          await logEvent("warn", "jarvis", `classifier groq failed, falling back: ${msg}`, {
             run_id: runId,
           } as Json);
         }
@@ -963,7 +972,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
                 });
                 await logEvent(
                   "info",
-                  "orchestrator",
+                  "jarvis",
                   `ui action via classifier fallback: ${requested}`,
                   {
                     run_id: runId,
@@ -980,7 +989,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
               name: "classifier_http_error",
               args: { status: classifyRes.status, body: bodyText.slice(0, 300) },
             });
-            await logEvent("warn", "orchestrator", `classifier HTTP ${classifyRes.status}`, {
+            await logEvent("warn", "jarvis", `classifier HTTP ${classifyRes.status}`, {
               run_id: runId,
               body_preview: bodyText.slice(0, 200),
             } as Json);
@@ -988,7 +997,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           toolCallLog.push({ name: "classifier_exception", args: { message: msg } });
-          await logEvent("warn", "orchestrator", `classifier exception: ${msg}`, {
+          await logEvent("warn", "jarvis", `classifier exception: ${msg}`, {
             run_id: runId,
           } as Json);
         }
@@ -1022,9 +1031,19 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       })
       .eq("id", runId);
 
+    await supabase
+      .from("agents")
+      .update({
+        status: "idle",
+        current_task: null,
+        progress: 0,
+        time_elapsed_seconds: Math.round(latencyMs / 1000),
+      })
+      .eq("id", agent.id);
+
     await logEvent(
       "info",
-      "orchestrator",
+      "jarvis",
       `run done · ${toolCallLog.length} tool calls · ${latencyMs}ms`,
       {
         run_id: runId,
@@ -1083,7 +1102,16 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         latency_ms: Date.now() - startedAt,
       })
       .eq("id", runId);
-    await logEvent("error", "orchestrator", `run failed: ${msg}`, { run_id: runId } as Json);
+    await supabase
+      .from("agents")
+      .update({
+        status: "error",
+        current_task: msg.slice(0, 200),
+        progress: 0,
+        time_elapsed_seconds: Math.round((Date.now() - startedAt) / 1000),
+      })
+      .eq("id", agent.id);
+    await logEvent("error", "jarvis", `run failed: ${msg}`, { run_id: runId } as Json);
     return { runId, status: "error", output: "", error: msg };
   }
 }

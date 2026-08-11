@@ -24,7 +24,7 @@ export const GEMINI_MODELS: GeminiModelOption[] = [
 
 export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 
-// Image generation (Producer slide graphics). Not in GEMINI_MODELS on
+// Image generation (F.O.R.G.E. slide graphics). Not in GEMINI_MODELS on
 // purpose — it's not a conversational model and shouldn't appear in the
 // Settings/Console dropdowns.
 export const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image";

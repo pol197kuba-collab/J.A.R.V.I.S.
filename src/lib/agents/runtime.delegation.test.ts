@@ -5,7 +5,7 @@ import { runOrchestrator } from "./runtime.server";
 
 // Regression tests for UI control leaking into delegated sub-runs.
 //
-// Observed live (2026-07-21, screenshots of Marketer/Analityk run history):
+// Observed live (2026-07-21, screenshots of Herald/Metric run history):
 // delegated runs answered with plain text, which triggered the fallback
 // UI-action classifier on the bare task text; misclassifications logged
 // phantom "perform_ui_action: open_dashboard" entries and overwrote the
@@ -61,9 +61,9 @@ function baseResponses(): Record<string, CannedResponse[]> {
       // 1st call: the agent being run.
       {
         data: {
-          id: "agent-marketer",
-          name: "Marketer",
-          slug: "marketer",
+          id: "agent-herald",
+          name: "H.E.R.A.L.D.",
+          slug: "herald",
           model: "gemini-test",
           config: {},
         },
@@ -94,7 +94,7 @@ describe("runOrchestrator — delegated sub-runs get no UI control", () => {
     const result = await runOrchestrator({
       supabase: makeSupabaseStub(baseResponses()),
       userId: "user-1",
-      agentSlug: "marketer",
+      agentSlug: "herald",
       input: "Przygotuj tekst kampanii dla pulpitu klienta.",
       history: [],
       delegationDepth: 1,
@@ -122,7 +122,7 @@ describe("runOrchestrator — delegated sub-runs get no UI control", () => {
     const result = await runOrchestrator({
       supabase: makeSupabaseStub(baseResponses()),
       userId: "user-1",
-      agentSlug: "marketer",
+      agentSlug: "herald",
       input: "Przygotuj tekst kampanii dla pulpitu klienta.",
       history: [],
     });

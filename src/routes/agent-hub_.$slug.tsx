@@ -769,7 +769,7 @@ function LifecyclePanel({
           <div>
             <p className="text-sm text-foreground">Agent kill-switch</p>
             <p className="text-xs text-muted-foreground">
-              Wyłączony agent nie odbiera zadań (runAgent zwróci błąd Orchestratora).
+              Wyłączony agent nie odbiera zadań (runAgent zwróci błąd J.A.R.V.I.S.-a).
             </p>
           </div>
           <button

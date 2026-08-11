@@ -1,6 +1,6 @@
 // Tasks — CRUD server functions for the task queue UI (widget + /tasks page).
 // Tasks are user-scoped (RLS in DB); the same table is written by the
-// orchestrator's create_task / update_task tools. Manual UI creates leave
+// jarvis (J.A.R.V.I.S.) core's create_task / update_task tools. Manual UI creates leave
 // created_by_agent NULL; agent-created tasks carry the author, surfaced here
 // via the tasks_created_by_agent_fkey embed.
 

@@ -1,9 +1,9 @@
 // Shared helper for the one thing almost every server function's error
-// branch was missing: a trace left in public.system_events so Strażnik
-// (Guardian) can actually see it. guardian_scan_errors scans this table
+// branch was missing: a trace left in public.system_events so S.H.I.E.L.D.
+// can actually see it. guardian_scan_errors scans this table
 // for `level IN ('warn','error')` across every `source` with no filter —
 // so any call site using this helper is picked up automatically, no
-// Guardian-side changes needed.
+// S.H.I.E.L.D.-side changes needed.
 //
 // Deliberately a plain function, not a generic .handler()-wrapping HOC —
 // this project's server-function type inference (createServerFn +

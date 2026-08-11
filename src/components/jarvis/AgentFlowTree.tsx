@@ -388,9 +388,9 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
     return out;
   }, [activeBySlug]);
 
-  const orchestrator = agents.find((a) => a.slug === "orchestrator");
-  const teammates = agents.filter((a) => a.slug !== "orchestrator");
-  const orchestratorRun = activeBySlug.get("orchestrator");
+  const orchestrator = agents.find((a) => a.slug === "jarvis");
+  const teammates = agents.filter((a) => a.slug !== "jarvis");
+  const orchestratorRun = activeBySlug.get("jarvis");
 
   // Layout: horizontal spacing and vertical drop are computed independently
   // of each other (NOT a shared radius/angle pair) — an earlier version
@@ -491,9 +491,9 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
                 name={orchestrator.name}
                 run={orchestratorRun}
                 badgeSize={orchRadius * 2}
-                selected={selectedSlug === "orchestrator"}
+                selected={selectedSlug === "jarvis"}
                 onClick={() =>
-                  setSelectedSlug((s) => (s === "orchestrator" ? null : "orchestrator"))
+                  setSelectedSlug((s) => (s === "jarvis" ? null : "jarvis"))
                 }
               />
             </div>

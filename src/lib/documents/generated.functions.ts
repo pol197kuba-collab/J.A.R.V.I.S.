@@ -1,4 +1,4 @@
-// Producer-generated files archive — list / sign / delete.
+// F.O.R.G.E.-generated files archive — list / sign / delete.
 //
 // Companion to documents.functions.ts (uploaded docs). The bytes live in the
 // private 'generated' Storage bucket; these owner-scoped server functions
