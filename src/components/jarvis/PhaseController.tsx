@@ -101,7 +101,7 @@ export function PhaseController() {
       {phase === "login_screen" && (
         <StarkLogin
           onGranted={() => {
-            void navigate({ to: "/" });
+            void navigate({ to: "/jarvis" });
             setPhase("initializing");
           }}
         />
