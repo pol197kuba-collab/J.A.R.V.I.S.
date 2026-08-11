@@ -88,9 +88,9 @@ function baseResponses(): Record<string, CannedResponse[]> {
     agents: [
       {
         data: {
-          id: "agent-producer",
-          name: "Producer",
-          slug: "producer",
+          id: "agent-forge",
+          name: "F.O.R.G.E.",
+          slug: "forge",
           model: "gemini-test",
           config: {},
         },
@@ -122,7 +122,7 @@ describe("runOrchestrator — generate_document link delivery", () => {
     const result = await runOrchestrator({
       supabase: makeSupabaseStub(baseResponses()),
       userId: "user-1",
-      agentSlug: "producer",
+      agentSlug: "forge",
       input: "Zrób PDF z raportem.",
       history: [],
     });

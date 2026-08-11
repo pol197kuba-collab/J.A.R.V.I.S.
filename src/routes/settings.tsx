@@ -157,7 +157,7 @@ function Settings() {
 
   const refreshTools = useCallback(async () => {
     try {
-      const list = await fetchAgentTools({ data: { agentSlug: "orchestrator" } });
+      const list = await fetchAgentTools({ data: { agentSlug: "jarvis" } });
       setTools(list);
       setToolsError(null);
     } catch (err) {
@@ -179,7 +179,7 @@ function Settings() {
     );
     try {
       await persistAgentTool({
-        data: { agentSlug: "orchestrator", toolId: tool.id, enabled: nextEnabled },
+        data: { agentSlug: "jarvis", toolId: tool.id, enabled: nextEnabled },
       });
       audio.playClick();
     } catch (err) {
@@ -341,7 +341,7 @@ function Settings() {
           )}
           <p className="font-mono text-[10px] text-muted-foreground/70">
             ℹ „Save local" trzyma klucz tylko w tej przeglądarce. „Sync to Agent Runtime" wysyła go
-            zaszyfrowanym połączeniem na serwer, gdzie używa go Orchestrator — nadal Twój klucz,
+            zaszyfrowanym połączeniem na serwer, gdzie używa go J.A.R.V.I.S. — nadal Twój klucz,
             Twój ruch, darmowy tier Gemini. Puste pole + zapis = usunięcie klucza.
           </p>
         </div>
@@ -400,7 +400,7 @@ function Settings() {
             </p>
           )}
           <p className="font-mono text-[10px] text-muted-foreground/70">
-            ℹ Darmowy klucz z console.groq.com, bez karty płatniczej. Orchestrator używa go tylko do
+            ℹ Darmowy klucz z console.groq.com, bez karty płatniczej. J.A.R.V.I.S. używa go tylko do
             dwóch rzeczy: (1) klasyfikacji „czy to komenda UI" zamiast płatnego wywołania Gemini
             przy każdej wiadomości, (2) awaryjnego fallbacku, gdy Gemini padnie (rate limit / błąd).
             Główna rozmowa i narzędzia (web_search, pamięć) nadal idą przez Gemini. Puste pole +
@@ -414,7 +414,7 @@ function Settings() {
             <div>
               <p className="text-sm text-foreground">Route chat through Agent Runtime</p>
               <p className="text-xs text-muted-foreground">
-                Wysyła wiadomości przez serwerowego Orchestratora (log w agent_runs, historia w DB).
+                Wysyła wiadomości przez serwerowego J.A.R.V.I.S.-a (log w agent_runs, historia w DB).
                 Wymaga „Sync to Agent Runtime" wyżej.
               </p>
             </div>
@@ -439,7 +439,7 @@ function Settings() {
             <div>
               <p className="text-sm text-foreground">Default model</p>
               <p className="text-xs text-muted-foreground">
-                Model używany przez Orchestratora dla każdego runu.
+                Model używany przez J.A.R.V.I.S.-a dla każdego runu.
               </p>
             </div>
             <select
@@ -505,10 +505,10 @@ function Settings() {
           </div>
         </div>
       </HudPanel>
-      <HudPanel index={2} title="ORCHESTRATOR // TOOLS" className="p-5">
+      <HudPanel index={2} title="J.A.R.V.I.S. // TOOLS" className="p-5">
         <div className="mt-4 space-y-3">
           <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            NARZĘDZIA DOSTĘPNE DLA AGENTA „ORCHESTRATOR"
+            NARZĘDZIA DOSTĘPNE DLA AGENTA „J.A.R.V.I.S."
           </p>
           {toolsError && (
             <p className="font-mono text-[10px]" style={{ color: "var(--destructive)" }}>
@@ -520,7 +520,7 @@ function Settings() {
           )}
           {tools?.length === 0 && (
             <p className="font-mono text-[10px] text-muted-foreground/70">
-              Brak agenta „orchestrator" lub brak zarejestrowanych narzędzi.
+              Brak agenta „jarvis" lub brak zarejestrowanych narzędzi.
             </p>
           )}
           {tools?.map((tool, i) => (
@@ -558,7 +558,7 @@ function Settings() {
             </div>
           ))}
           <p className="font-mono text-[10px] text-muted-foreground/70">
-            ℹ Wyłączenie tu nie usuwa narzędzia — Orchestrator po prostu nie zaproponuje go modelowi
+            ℹ Wyłączenie tu nie usuwa narzędzia — J.A.R.V.I.S. po prostu nie zaproponuje go modelowi
             przy kolejnym uruchomieniu (agent_runs/tool_calls nie będzie go zawierać).
           </p>
         </div>

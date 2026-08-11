@@ -1,4 +1,4 @@
-// Document upload + processing pipeline for RAG (Analityk).
+// Document upload + processing pipeline for RAG (M.E.T.R.I.C.).
 //
 // First use of Supabase Storage in this codebase — no prior upload
 // precedent, so the flow is deliberately the standard Supabase shape:

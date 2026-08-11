@@ -1,6 +1,6 @@
 // Notes — CRUD server functions for the personal notes widget.
 // Notes are user-scoped (RLS in DB); the same table is written by the
-// orchestrator's `save_note` tool.
+// jarvis (J.A.R.V.I.S.) core's `save_note` tool.
 
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";

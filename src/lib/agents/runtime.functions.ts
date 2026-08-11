@@ -1,7 +1,7 @@
 // Agent Runtime — server-side functions.
 //
 // Zgodnie z CODEX.md: to jest fundament pod Orchestratora. Na tym etapie
-// obsługujemy jednego agenta ("orchestrator") i pojedynczy krok wywołania
+// obsługujemy jednego agenta ("jarvis") i pojedynczy krok wywołania
 // LLM (bez multi-step tool loopu). Pamięć krótkoterminowa przekazywana jest
 // w polu `history`, żeby nie budować jeszcze konwersacji w DB.
 //
@@ -36,6 +36,13 @@ export type AgentSummary = {
   description: string | null;
   model: string | null;
   status: string;
+  /** What the agent is doing right now — null when idle. Powers the
+   *  interactive agent-status widget. */
+  currentTask: string | null;
+  /** 0-100, coarse completion of `currentTask`. */
+  progress: number;
+  /** Wall-clock duration (seconds) of the current / most recently finished run. */
+  timeElapsedSeconds: number;
   isEnabled: boolean;
   activeRuns: number;
   lastRunAt: string | null;
@@ -87,6 +94,9 @@ export type AgentRecord = {
   description: string | null;
   model: string | null;
   status: string;
+  currentTask: string | null;
+  progress: number;
+  timeElapsedSeconds: number;
   isEnabled: boolean;
   capabilities: Json;
   behaviour: AgentBehaviourConfig;
@@ -357,7 +367,7 @@ export type AgentToolSummary = {
 };
 
 const AgentSlugInput = z.object({
-  agentSlug: z.string().min(1).max(64).default("orchestrator"),
+  agentSlug: z.string().min(1).max(64).default("jarvis"),
 });
 
 export const listAgentTools = createServerFn({ method: "GET" })
@@ -400,7 +410,7 @@ export const listAgentTools = createServerFn({ method: "GET" })
   });
 
 const SetAgentToolInput = z.object({
-  agentSlug: z.string().min(1).max(64).default("orchestrator"),
+  agentSlug: z.string().min(1).max(64).default("jarvis"),
   toolId: z.string().uuid(),
   enabled: z.boolean(),
 });
@@ -451,7 +461,9 @@ export const listAgents = createServerFn({ method: "GET" })
     const { supabase, userId } = context;
     const { data: agents, error } = await supabase
       .from("agents")
-      .select("id, slug, name, role, description, model, status, is_enabled")
+      .select(
+        "id, slug, name, role, description, model, status, current_task, progress, time_elapsed_seconds, is_enabled",
+      )
       .eq("owner_id", userId)
       .order("created_at", { ascending: true })
       .order("slug", { ascending: true });
@@ -479,6 +491,9 @@ export const listAgents = createServerFn({ method: "GET" })
         description: a.description,
         model: a.model,
         status: a.status,
+        currentTask: a.current_task,
+        progress: a.progress,
+        timeElapsedSeconds: a.time_elapsed_seconds,
         isEnabled: a.is_enabled,
         activeRuns,
         lastRunAt: last?.created_at ?? null,
@@ -491,7 +506,7 @@ export const listAgents = createServerFn({ method: "GET" })
 // ---------------------------------------------------------------------------
 
 const RunAgentInput = z.object({
-  agentSlug: z.string().min(1).max(64).default("orchestrator"),
+  agentSlug: z.string().min(1).max(64).default("jarvis"),
   input: z.string().min(1).max(8000),
   history: z
     .array(
@@ -651,7 +666,7 @@ export const setActiveAgent = createServerFn({ method: "POST" })
 // ---------------------------------------------------------------------------
 // getActiveAgentSlug — reads the account-level agent selection so a fresh
 // device/browser opens on whatever was last picked elsewhere, instead of
-// always defaulting to "orchestrator".
+// always defaulting to "jarvis".
 // ---------------------------------------------------------------------------
 
 export const getActiveAgentSlug = createServerFn({ method: "GET" })
@@ -663,7 +678,7 @@ export const getActiveAgentSlug = createServerFn({ method: "GET" })
       .select("active_agent_slug")
       .eq("owner_id", userId)
       .maybeSingle();
-    return { agentSlug: data?.active_agent_slug?.trim() || "orchestrator" };
+    return { agentSlug: data?.active_agent_slug?.trim() || "jarvis" };
   });
 
 // ---------------------------------------------------------------------------
@@ -698,7 +713,7 @@ export const getAgentDetail = createServerFn({ method: "GET" })
     const { data: agentRow, error: agentErr } = await supabase
       .from("agents")
       .select(
-        "id, slug, name, role, description, model, status, is_enabled, capabilities, config, created_at, updated_at",
+        "id, slug, name, role, description, model, status, current_task, progress, time_elapsed_seconds, is_enabled, capabilities, config, created_at, updated_at",
       )
       .eq("owner_id", userId)
       .eq("slug", data.slug)
@@ -714,6 +729,9 @@ export const getAgentDetail = createServerFn({ method: "GET" })
       description: agentRow.description,
       model: agentRow.model,
       status: agentRow.status,
+      currentTask: agentRow.current_task,
+      progress: agentRow.progress,
+      timeElapsedSeconds: agentRow.time_elapsed_seconds,
       isEnabled: agentRow.is_enabled,
       capabilities: agentRow.capabilities,
       behaviour: parseBehaviour(agentRow.config),
@@ -883,12 +901,12 @@ export const getAgentDetail = createServerFn({ method: "GET" })
       memoriesByKind[k] = (memoriesByKind[k] ?? 0) + 1;
     }
 
-    // Events — system_events (source = slug or 'orchestrator' or 'tool.*') + event_log for this agent.
+    // Events — system_events (source = slug or 'jarvis' or 'tool.*') + event_log for this agent.
     const { data: sysEvents } = await supabase
       .from("system_events")
       .select("id, level, source, message, meta, created_at")
       .eq("owner_id", userId)
-      .or(`source.eq.${agent.slug},source.like.tool.%,source.eq.orchestrator`)
+      .or(`source.eq.${agent.slug},source.like.tool.%,source.eq.jarvis`)
       .order("created_at", { ascending: false })
       .limit(40);
     const { data: logEvents } = await supabase

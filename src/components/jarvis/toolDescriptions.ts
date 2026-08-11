@@ -3,7 +3,7 @@
 // glance (e.g. "search_documents" -> 🔍 szuka w dokumentach: „co jest w
 // umowie"). Keyed by the exact `public.tools.slug` / declaration name.
 //
-// Growth point for future agents: when Researcher/Producer (or any new
+// Growth point for future agents: when I.N.S.I.G.H.T./F.O.R.G.E. (or any new
 // agent) gets new tools, add one entry here — everything else (the tree
 // rendering, the live-progress plumbing) is already generic and needs no
 // further changes. An unknown tool falls back to a plain "⚙️ {name}" chip

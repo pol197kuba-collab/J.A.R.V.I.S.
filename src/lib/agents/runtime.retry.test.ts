@@ -41,8 +41,8 @@ function baseResponses(): Record<string, CannedResponse[]> {
       {
         data: {
           id: "a-orch",
-          name: "Orchestrator",
-          slug: "orchestrator",
+          name: "J.A.R.V.I.S.",
+          slug: "jarvis",
           model: "gemini-test",
           config: {},
         },
@@ -88,7 +88,7 @@ describe("runOrchestrator — Gemini 503 retry before failover", () => {
     const result = await runOrchestrator({
       supabase: makeSupabaseStub(baseResponses()),
       userId: "u1",
-      agentSlug: "orchestrator",
+      agentSlug: "jarvis",
       input: "Cześć",
       history: [],
     });

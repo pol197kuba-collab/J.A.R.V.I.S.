@@ -1,4 +1,4 @@
-// Embedded TTF fonts for Producer PDF generation (see producer.server.ts).
+// Embedded TTF fonts for F.O.R.G.E. PDF generation (see producer.server.ts).
 //
 // pdf-lib's built-in StandardFonts use WinAnsi encoding, which CANNOT encode
 // Polish diacritics (a hard throw on the first "ł") — a real Unicode font

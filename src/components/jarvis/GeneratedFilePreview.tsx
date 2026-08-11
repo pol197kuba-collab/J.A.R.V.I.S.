@@ -1,8 +1,8 @@
-// In-app preview for Producer-generated files — no download required.
+// In-app preview for F.O.R.G.E.-generated files — no download required.
 //
 //  - pdf : the signed URL straight into an <iframe> (browsers render PDF).
 //  - pptx: no in-browser renderer exists, so we preview the PDF rendering
-//          the Producer stored alongside it (kind: "preview"); if that's
+//          F.O.R.G.E. stored alongside it (kind: "preview"); if that's
 //          missing (older file / failed render) we fall back to download.
 //  - docx: fetched as bytes and rendered to HTML client-side via
 //          docx-preview — the file never leaves the user's browser.

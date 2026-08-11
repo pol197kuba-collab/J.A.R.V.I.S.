@@ -31,7 +31,7 @@ export const Route = createFileRoute("/documents")({
       { title: "JARVIS // Documents" },
       {
         name: "description",
-        content: "Upload and manage documents grounding the Analityk agent's RAG search.",
+        content: "Upload and manage documents grounding the M.E.T.R.I.C. agent's RAG search.",
       },
     ],
   }),
@@ -241,7 +241,7 @@ function DocumentsPage() {
             )}
             {!isLoading && !error && documents.length === 0 && (
               <div className="px-4 py-6 text-center text-muted-foreground">
-                ▸ brak dokumentów. Prześlij plik, aby Analityk mógł go przeszukiwać.
+                ▸ brak dokumentów. Prześlij plik, aby M.E.T.R.I.C. mógł go przeszukiwać.
               </div>
             )}
 
@@ -302,7 +302,7 @@ function DocumentsPage() {
           </span>
         </div>
         <p className="px-4 pb-3 pt-1 text-[11px] text-muted-foreground">
-          Prezentacje, dokumenty i PDF-y stworzone przez agenta Producer. Kliknij, aby podejrzeć bez
+          Prezentacje, dokumenty i PDF-y stworzone przez agenta F.O.R.G.E. Kliknij, aby podejrzeć bez
           pobierania.
         </p>
 
@@ -314,7 +314,7 @@ function DocumentsPage() {
         )}
         {!genLoading && !genError && generated.length === 0 && (
           <div className="px-4 py-6 text-center text-muted-foreground">
-            ▸ brak plików. Poproś JARVIS-a, np. „zrób mi prezentację o…", aby Producer coś stworzył.
+            ▸ brak plików. Poproś JARVIS-a, np. „zrób mi prezentację o…", aby F.O.R.G.E. coś stworzył.
           </div>
         )}
 

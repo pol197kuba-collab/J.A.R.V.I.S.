@@ -1,4 +1,4 @@
-// Server-only tool implementations for the Orchestrator.
+// Server-only tool implementations for the J.A.R.V.I.S. core.
 //
 // Each tool has:
 //  - `declaration`: sent to Gemini as a function declaration.
@@ -320,7 +320,7 @@ const saveNote: Tool = {
         title,
         body,
         tags,
-        source: "orchestrator",
+        source: "jarvis",
       })
       .select("id")
       .single();
@@ -527,7 +527,7 @@ const remember: Tool = {
       if (existing) {
         const { error } = await ctx.supabase
           .from("memories")
-          .update({ value, tags, importance, source: "orchestrator", ...embeddingPatch })
+          .update({ value, tags, importance, source: "jarvis", ...embeddingPatch })
           .eq("id", existing.id);
         if (error) {
           await ctx.logEvent("error", "tool.remember", error.message, { key } as Json);
@@ -552,7 +552,7 @@ const remember: Tool = {
         value,
         tags,
         importance,
-        source: "orchestrator",
+        source: "jarvis",
         ...embeddingPatch,
       })
       .select("id")
@@ -644,7 +644,7 @@ const recall: Tool = {
         } else {
           // Previously swallowed entirely — semantic search silently
           // degrading to keyword-only with zero trace was exactly the kind
-          // of "something's wrong and Guardian has no idea" gap this pass
+          // of "something's wrong and S.H.I.E.L.D. has no idea" gap this pass
           // exists to close.
           await ctx.logEvent(
             "warn",
@@ -720,7 +720,7 @@ const createTask: Tool = {
         assignee_slug: {
           type: "string",
           description:
-            "Optional slug of the agent that should handle this (e.g. 'orchestrator', 'marketer').",
+            "Optional slug of the agent that should handle this (e.g. 'jarvis', 'herald').",
         },
         priority: { type: "integer", description: "1 (highest) … 5 (lowest). Defaults to 3." },
         due_at: { type: "string", description: "Optional ISO-8601 due date/time." },
@@ -926,7 +926,7 @@ const deleteTask: Tool = {
 };
 
 // ---------------------------------------------------------------------------
-// Guardian tools — system health monitoring + active smoke-tests. Read-only:
+// S.H.I.E.L.D. tools — system health monitoring + active smoke-tests. Read-only:
 // they observe/verify state, they never mutate anything except their own
 // diagnostic queries.
 // ---------------------------------------------------------------------------
@@ -1081,7 +1081,7 @@ const checkDelegation: Tool = {
   async execute(args, ctx) {
     const limit = clampInt(args.limit, 1, 50, 20);
 
-    // A delegated run is any run on a non-orchestrator agent — delegation is
+    // A delegated run is any run on a non-jarvis agent — delegation is
     // the only path that creates one today, so this is a reliable filter
     // without needing a dedicated schema flag.
     const { data: agentRows } = await ctx.supabase
@@ -1089,7 +1089,7 @@ const checkDelegation: Tool = {
       .select("id, slug")
       .eq("owner_id", ctx.userId);
     const nonOrchestratorIds = (agentRows ?? [])
-      .filter((a) => a.slug !== "orchestrator")
+      .filter((a) => a.slug !== "jarvis")
       .map((a) => a.id);
     if (nonOrchestratorIds.length === 0) {
       return { checked: 0, linked: 0, unlinked: 0, note: "no delegated agents exist yet" };
@@ -1119,7 +1119,7 @@ const checkDelegation: Tool = {
 };
 
 // ---------------------------------------------------------------------------
-// Analityk tools — RAG over public.documents / public.document_chunks
+// M.E.T.R.I.C. tools — RAG over public.documents / public.document_chunks
 // ---------------------------------------------------------------------------
 
 const listDocumentsTool: Tool = {
@@ -1258,7 +1258,7 @@ const searchDocumentsTool: Tool = {
 };
 
 // ---------------------------------------------------------------------------
-// Producer tool — generate a downloadable document (pptx/docx/pdf)
+// F.O.R.G.E. tool — generate a downloadable document (pptx/docx/pdf)
 // ---------------------------------------------------------------------------
 
 // First tool in this app that produces a FILE instead of returning
@@ -1483,7 +1483,7 @@ const openDocumentTool: Tool = {
   declaration: {
     name: "open_document",
     description:
-      "Find a document/presentation the user previously generated (in the Producer archive) and open its preview in the app. Use when the user asks to OPEN / SHOW / display an existing file (e.g. 'otwórz prezentację o samsungu', 'pokaż mój raport'), NOT when they ask to create a new one. Pass `query` with the topic/title words. If a previous call returned multiple candidates, call again with `file_id` set to the chosen one.",
+      "Find a document/presentation the user previously generated (in the F.O.R.G.E. archive) and open its preview in the app. Use when the user asks to OPEN / SHOW / display an existing file (e.g. 'otwórz prezentację o samsungu', 'pokaż mój raport'), NOT when they ask to create a new one. Pass `query` with the topic/title words. If a previous call returned multiple candidates, call again with `file_id` set to the chosen one.",
     parameters: {
       type: "object",
       properties: {

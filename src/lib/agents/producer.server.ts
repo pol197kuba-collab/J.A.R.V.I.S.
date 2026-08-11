@@ -1,4 +1,4 @@
-// Producer agent — document builders (pptx / docx / pdf).
+// F.O.R.G.E. agent — document builders (pptx / docx / pdf).
 //
 // Pure functions from a normalized DocSpec to file bytes, kept separate from
 // the tool wiring in tools.server.ts so they're unit-testable without a
@@ -288,7 +288,7 @@ async function fetchWebImage(query: string): Promise<DocImage | null> {
       `&license_type=all&mature=false&page_size=3`;
     const res = await fetch(searchUrl, {
       signal: ctrl.signal,
-      headers: { Accept: "application/json", "User-Agent": "JARVIS-Producer/1.0" },
+      headers: { Accept: "application/json", "User-Agent": "JARVIS-Forge/1.0" },
     });
     if (!res.ok) throw new Error(`openverse HTTP ${res.status}`);
     const data = (await res.json()) as {
@@ -310,7 +310,7 @@ async function fetchWebImage(query: string): Promise<DocImage | null> {
       try {
         const imgRes = await fetch(url, {
           signal: ctrl.signal,
-          headers: { "User-Agent": "JARVIS-Producer/1.0" },
+          headers: { "User-Agent": "JARVIS-Forge/1.0" },
         });
         if (!imgRes.ok) continue;
         const mime = imgRes.headers.get("content-type") ?? "";
@@ -605,7 +605,7 @@ async function buildDocx(spec: DocSpec, images: DocImages): Promise<Uint8Array> 
   }
 
   const doc = new Document({
-    creator: "J.A.R.V.I.S. Producer",
+    creator: "J.A.R.V.I.S. F.O.R.G.E.",
     title: spec.title,
     sections: [{ children }],
   });
@@ -651,7 +651,7 @@ async function buildPdf(spec: DocSpec, images: DocImages): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.registerFontkit(fontkit);
   doc.setTitle(spec.title);
-  doc.setProducer("J.A.R.V.I.S. Producer");
+  doc.setProducer("J.A.R.V.I.S. F.O.R.G.E.");
   const regular = await doc.embedFont(
     Uint8Array.from(atob(DOC_SANS_REGULAR_B64), (c) => c.charCodeAt(0)),
     { subset: true },

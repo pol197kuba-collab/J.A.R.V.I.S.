@@ -26,7 +26,7 @@ const MAX_HISTORY = 60;
 const SERVER_KEY_LINKED_LS_KEY = "jarvis_server_gemini_linked";
 
 // Domyślny agent gdy żaden nie jest wybrany z Agent Hub
-const DEFAULT_AGENT = { slug: "orchestrator", name: "ORCHESTRATOR" };
+const DEFAULT_AGENT = { slug: "jarvis", name: "J.A.R.V.I.S." };
 
 type ActiveAgent = { slug: string; name: string };
 
@@ -222,7 +222,7 @@ export function ChatPanel() {
         setAgentBusy(true);
         try {
           const result = await runAgentFn({
-            // Używamy aktywnego agenta zamiast hardkodowanego "orchestrator"
+            // Używamy aktywnego agenta zamiast hardkodowanego "jarvis"
             data: {
               agentSlug: activeAgent.slug,
               input: text,

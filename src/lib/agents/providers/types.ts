@@ -1,4 +1,4 @@
-// Shared conversation-turn shape for the Orchestrator's model loop.
+// Shared conversation-turn shape for the J.A.R.V.I.S. core's model loop.
 //
 // Gemini's request/response format is the canonical in-memory representation
 // (runtime.server.ts builds and mutates `contents` in this shape across the

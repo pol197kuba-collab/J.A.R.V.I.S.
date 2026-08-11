@@ -33,7 +33,7 @@ type Ctx = {
   routeText: (text: string) => Promise<void>;
   /**
    * Execute a JarvisAction directly, without going through Gemini again.
-   * Used by ChatPanel when the server-routed orchestrator already resolved
+   * Used by ChatPanel when the server-routed jarvis core already resolved
    * an action server-side — avoids a second, redundant classification pass
    * and reuses the exact same navigation logic voice commands use.
    */

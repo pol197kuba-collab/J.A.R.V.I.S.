@@ -86,7 +86,7 @@ function AgentHub() {
       {!isLoading && !error && agents.length === 0 && (
         <HudPanel index={1} className="p-5">
           <p className="font-display text-xs uppercase tracking-widest text-muted-foreground">
-            ▸ NO AGENTS PROVISIONED. RELOG TO SEED THE ORCHESTRATOR.
+            ▸ NO AGENTS PROVISIONED. RELOG TO SEED THE J.A.R.V.I.S. CORE.
           </p>
         </HudPanel>
       )}

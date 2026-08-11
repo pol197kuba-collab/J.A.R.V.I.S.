@@ -60,7 +60,7 @@ function shouldUseServerRuntime(): boolean {
 // Conversation continuity for the server-routed path.
 //
 // Voice and the manual chat input both end up here calling the same
-// "orchestrator" agent. Without threading a conversationId through, every
+// "jarvis" agent. Without threading a conversationId through, every
 // voice utterance would spawn its own conversation row server-side, and
 // ChatPanel (which always shows the most-recently-updated conversation for
 // the active agent) would keep flipping to whatever channel spoke last —
@@ -77,7 +77,7 @@ async function resolveConversationId(): Promise<string | null> {
     conversationLookupPromise = (async () => {
       try {
         const { getActiveConversation } = await import("@/lib/agents/runtime.functions");
-        const res = await getActiveConversation({ data: { agentSlug: "orchestrator" } });
+        const res = await getActiveConversation({ data: { agentSlug: "jarvis" } });
         return res.conversationId ?? null;
       } catch {
         return null;
@@ -92,7 +92,7 @@ async function resolveConversationId(): Promise<string | null> {
 // Runtime source of truth for the action vocabulary, so server-side mirrors
 // (UI_ACTIONS in runtime.server.ts) can be checked against it in tests
 // instead of drifting silently — that drift already shipped twice
-// (system_check shadowing Guardian, PRs #43/#44).
+// (system_check shadowing S.H.I.E.L.D., PRs #43/#44).
 export const JARVIS_ACTIONS = [
   "none",
   "open_dashboard",
@@ -269,7 +269,7 @@ export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
       try {
         result = await runAgent({
           data: {
-            agentSlug: "orchestrator",
+            agentSlug: "jarvis",
             input: input.prompt,
             history: input.history ?? [],
             conversationId: conversationId ?? undefined,

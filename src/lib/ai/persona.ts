@@ -3,7 +3,7 @@
 // This is the SINGLE SOURCE OF TRUTH for who J.A.R.V.I.S. is. It is imported
 // by both call sites that talk to an LLM on the assistant's behalf:
 //   - src/lib/ai/jarvisBrain.ts   (client-side quick-reply path)
-//   - src/lib/agents/runtime.server.ts (server-side Orchestrator)
+//   - src/lib/agents/runtime.server.ts (server-side J.A.R.V.I.S. core)
 //
 // Previously this text was duplicated by hand in three places (those two
 // files plus a literal string baked into a SQL migration's config.system_prompt),

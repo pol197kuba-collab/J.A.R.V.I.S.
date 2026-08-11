@@ -1,4 +1,4 @@
-// Producer document builders — the parts most likely to regress silently:
+// F.O.R.G.E. document builders — the parts most likely to regress silently:
 //
 // 1. normalizeDocSpec: model-produced args are untrusted — malformed input
 //    must come back as a typed error, never throw or produce a broken spec.
