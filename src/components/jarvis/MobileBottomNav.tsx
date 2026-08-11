@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
+  Hexagon,
   Bot,
   Terminal,
   Settings as SettingsIcon,
@@ -20,6 +21,7 @@ import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 
 const items = [
+  { title: "JARVIS", url: "/jarvis", icon: Hexagon },
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Agents", url: "/agent-hub", icon: Bot },
   { title: "Tasks", url: "/tasks", icon: ListChecks },
