@@ -18,6 +18,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SchemaRouteImport } from './routes/schema'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as McpRouteImport } from './routes/mcp'
+import { Route as JarvisRouteImport } from './routes/jarvis'
 import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as AgentHubRouteImport } from './routes/agent-hub'
 import { Route as IndexRouteImport } from './routes/index'
@@ -72,6 +73,11 @@ const McpRoute = McpRouteImport.update({
   path: '/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
+const JarvisRoute = JarvisRouteImport.update({
+  id: '/jarvis',
+  path: '/jarvis',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DocumentsRoute = DocumentsRouteImport.update({
   id: '/documents',
   path: '/documents',
@@ -120,6 +126,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
   '/documents': typeof DocumentsRoute
+  '/jarvis': typeof JarvisRoute
   '/mcp': typeof McpRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schema': typeof SchemaRoute
@@ -139,6 +146,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
   '/documents': typeof DocumentsRoute
+  '/jarvis': typeof JarvisRoute
   '/mcp': typeof McpRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schema': typeof SchemaRoute
@@ -159,6 +167,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
   '/documents': typeof DocumentsRoute
+  '/jarvis': typeof JarvisRoute
   '/mcp': typeof McpRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schema': typeof SchemaRoute
@@ -180,6 +189,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agent-hub'
     | '/documents'
+    | '/jarvis'
     | '/mcp'
     | '/reset-password'
     | '/schema'
@@ -199,6 +209,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agent-hub'
     | '/documents'
+    | '/jarvis'
     | '/mcp'
     | '/reset-password'
     | '/schema'
@@ -218,6 +229,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agent-hub'
     | '/documents'
+    | '/jarvis'
     | '/mcp'
     | '/reset-password'
     | '/schema'
@@ -238,6 +250,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgentHubRoute: typeof AgentHubRoute
   DocumentsRoute: typeof DocumentsRoute
+  JarvisRoute: typeof JarvisRoute
   McpRoute: typeof McpRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SchemaRoute: typeof SchemaRoute
@@ -319,6 +332,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof McpRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/jarvis': {
+      id: '/jarvis'
+      path: '/jarvis'
+      fullPath: '/jarvis'
+      preLoaderRoute: typeof JarvisRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/documents': {
       id: '/documents'
       path: '/documents'
@@ -382,6 +402,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgentHubRoute: AgentHubRoute,
   DocumentsRoute: DocumentsRoute,
+  JarvisRoute: JarvisRoute,
   McpRoute: McpRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SchemaRoute: SchemaRoute,
