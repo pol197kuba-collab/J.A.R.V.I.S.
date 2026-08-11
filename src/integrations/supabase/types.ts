@@ -134,45 +134,54 @@ export type Database = {
           capabilities: Json
           config: Json
           created_at: string
+          current_task: string | null
           description: string | null
           id: string
           is_enabled: boolean
           model: string | null
           name: string
           owner_id: string
+          progress: number
           role: string | null
           slug: string
           status: string
+          time_elapsed_seconds: number
           updated_at: string
         }
         Insert: {
           capabilities?: Json
           config?: Json
           created_at?: string
+          current_task?: string | null
           description?: string | null
           id?: string
           is_enabled?: boolean
           model?: string | null
           name: string
           owner_id: string
+          progress?: number
           role?: string | null
           slug: string
           status?: string
+          time_elapsed_seconds?: number
           updated_at?: string
         }
         Update: {
           capabilities?: Json
           config?: Json
           created_at?: string
+          current_task?: string | null
           description?: string | null
           id?: string
           is_enabled?: boolean
           model?: string | null
           name?: string
           owner_id?: string
+          progress?: number
           role?: string | null
           slug?: string
           status?: string
+          time_elapsed_seconds?: number
           updated_at?: string
         }
         Relationships: []
