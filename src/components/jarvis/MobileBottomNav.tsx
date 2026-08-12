@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
+  Hexagon,
   Bot,
   Terminal,
   Settings as SettingsIcon,
@@ -11,7 +12,6 @@ import {
   ListChecks,
   Database,
   FileText,
-  Orbit,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -21,9 +21,9 @@ import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 
 const items = [
+  { title: "JARVIS", url: "/jarvis", icon: Hexagon },
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Agents", url: "/agent-hub", icon: Bot },
-  { title: "Matrix", url: "/jarvis", icon: Orbit },
   { title: "Tasks", url: "/tasks", icon: ListChecks },
   { title: "Systems", url: "/sub-systems", icon: Boxes },
   { title: "Situation", url: "/situation-room", icon: Radar },

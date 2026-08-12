@@ -2,6 +2,7 @@ import { useRouterState } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
+  Hexagon,
   Bot,
   Terminal,
   Settings as SettingsIcon,
@@ -11,7 +12,6 @@ import {
   ListChecks,
   Database,
   FileText,
-  Orbit,
 } from "lucide-react";
 import {
   Sidebar,
@@ -35,9 +35,9 @@ import { speak } from "@/lib/audio/speak";
 import { useArkReboot } from "./ArkRebootContext";
 
 const items = [
+  { title: "J.A.R.V.I.S.", url: "/jarvis", icon: Hexagon },
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Agent Hub", url: "/agent-hub", icon: Bot },
-  { title: "Agent Matrix", url: "/jarvis", icon: Orbit },
   { title: "Tasks", url: "/tasks", icon: ListChecks },
   { title: "Sub-Systems", url: "/sub-systems", icon: Boxes },
   { title: "Situation Room", url: "/situation-room", icon: Radar },
