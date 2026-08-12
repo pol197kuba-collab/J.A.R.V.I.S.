@@ -11,6 +11,7 @@ import {
   ListChecks,
   Database,
   FileText,
+  Orbit,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -22,6 +23,7 @@ import { speak } from "@/lib/audio/speak";
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Agents", url: "/agent-hub", icon: Bot },
+  { title: "Matrix", url: "/jarvis", icon: Orbit },
   { title: "Tasks", url: "/tasks", icon: ListChecks },
   { title: "Systems", url: "/sub-systems", icon: Boxes },
   { title: "Situation", url: "/situation-room", icon: Radar },

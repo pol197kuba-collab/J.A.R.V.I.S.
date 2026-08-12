@@ -11,6 +11,7 @@ import {
   ListChecks,
   Database,
   FileText,
+  Orbit,
 } from "lucide-react";
 import {
   Sidebar,
@@ -36,6 +37,7 @@ import { useArkReboot } from "./ArkRebootContext";
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Agent Hub", url: "/agent-hub", icon: Bot },
+  { title: "Agent Matrix", url: "/jarvis", icon: Orbit },
   { title: "Tasks", url: "/tasks", icon: ListChecks },
   { title: "Sub-Systems", url: "/sub-systems", icon: Boxes },
   { title: "Situation Room", url: "/situation-room", icon: Radar },
