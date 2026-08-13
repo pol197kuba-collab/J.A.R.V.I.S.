@@ -18,33 +18,9 @@ import {
 import { callGroq } from "./providers/groq";
 import type { GeminiContent, GeminiPart } from "./providers/types";
 import { AGENT_SLUGS, isToolForcedForAgent } from "@/lib/constants/agentSlugs";
+import { UI_ACTIONS, type UiAction } from "@/lib/constants/uiActions";
 
-// UI actions J.A.R.V.I.S. (or any agent facing the user directly) can
-// trigger via the perform_ui_action tool. Must stay in sync with the
-// JarvisAction union in src/lib/ai/jarvisBrain.ts — single vocabulary shared
-// by voice, chat and the old client-side fallback path.
-export const UI_ACTIONS = [
-  "open_dashboard",
-  "open_fuel",
-  "open_calculator",
-  "open_jobfit",
-  "open_telemetry",
-  "open_menu",
-  "close_menu",
-  "system_check",
-  "sleep",
-  "shutdown",
-  "reboot",
-  "open_agents",
-  "open_settings",
-  "open_logs",
-  "open_tasks",
-  "open_subsystems",
-  "open_documents",
-  "open_schema",
-  "vision_scan",
-] as const;
-type UiAction = (typeof UI_ACTIONS)[number];
+export { UI_ACTIONS };
 const UI_ACTION_TOOL_NAME = "perform_ui_action";
 // Same vocabulary plus an explicit escape hatch — used only by the forced
 // classifier fallback below, where the model MUST pick something and needs

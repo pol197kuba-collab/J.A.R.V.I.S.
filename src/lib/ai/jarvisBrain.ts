@@ -11,6 +11,7 @@ import { JARVIS_PERSONA } from "./persona";
 import { setAgentBusy, reportOutcome } from "./agentActivity";
 import { logClientEvent } from "@/lib/system/logClientEvent";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
+import { UI_ACTIONS } from "@/lib/constants/uiActions";
 
 const MODELS = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"];
 const endpointFor = (model: string) =>
@@ -90,32 +91,12 @@ async function resolveConversationId(): Promise<string | null> {
   return id;
 }
 
-// Runtime source of truth for the action vocabulary, so server-side mirrors
-// (UI_ACTIONS in runtime.server.ts) can be checked against it in tests
-// instead of drifting silently — that drift already shipped twice
-// (system_check shadowing S.H.I.E.L.D., PRs #43/#44).
-export const JARVIS_ACTIONS = [
-  "none",
-  "open_dashboard",
-  "open_fuel",
-  "open_calculator",
-  "open_jobfit",
-  "open_telemetry",
-  "open_menu",
-  "close_menu",
-  "system_check",
-  "sleep",
-  "shutdown",
-  "reboot",
-  "open_agents",
-  "open_settings",
-  "open_logs",
-  "open_tasks",
-  "open_subsystems",
-  "open_documents",
-  "open_schema",
-  "vision_scan",
-] as const;
+// Action vocabulary shared with the server orchestrator (UI_ACTIONS in
+// src/lib/constants/uiActions.ts) plus the client-only "none" escape hatch.
+// Sourcing both from the same array is what stops them from drifting
+// silently — that drift already shipped twice (system_check shadowing
+// S.H.I.E.L.D., PRs #43/#44).
+export const JARVIS_ACTIONS = ["none", ...UI_ACTIONS] as const;
 
 export type JarvisAction = (typeof JARVIS_ACTIONS)[number];
 
@@ -145,10 +126,7 @@ INVALID examples (do NOT do this):
 {"action":"none","speech":"..."}
 \`\`\`
 
-Allowed values for "action": none, open_dashboard, open_fuel, open_calculator,
-open_jobfit, open_telemetry, open_menu, close_menu, system_check, sleep, shutdown, reboot,
-open_agents, open_settings, open_logs, open_tasks, open_subsystems, open_documents,
-open_schema, vision_scan.
+Allowed values for "action": ${JARVIS_ACTIONS.join(", ")}.
 
 - Użyj "open_documents", gdy użytkownik prosi o otwarcie modułu dokumentów /
   plików / archiwum (np. "otwórz dokumenty", "pokaż pliki", "otwórz moduł
