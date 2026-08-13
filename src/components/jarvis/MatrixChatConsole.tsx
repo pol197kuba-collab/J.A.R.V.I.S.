@@ -120,7 +120,7 @@ export function MatrixChatConsole() {
                 decrypting response
               </p>
               <div className="mt-1.5 h-[3px] w-full overflow-hidden rounded-full bg-cyan-400/10">
-                <div className="h-full w-1/3 animate-[hud-sweep_1.2s_ease-in-out_infinite] rounded-full bg-cyan-300/80 shadow-[0_0_10px_rgba(77,216,255,0.8)]" />
+                <div className="h-full w-1/3 animate-[hud-scan_1.4s_ease-in-out_infinite] rounded-full bg-cyan-300/80 shadow-[0_0_10px_rgba(77,216,255,0.8)]" />
               </div>
               <div className="mt-1 flex gap-1">
                 {Array.from({ length: 12 }).map((_, i) => (

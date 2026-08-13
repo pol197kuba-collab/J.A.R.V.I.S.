@@ -5,6 +5,7 @@ import { listAgents } from "@/lib/agents/runtime.functions";
 import { JarvisCanvas } from "@/components/jarvis/JarvisCanvas";
 import { HudOverlay } from "@/components/jarvis/HudOverlay";
 import { AgentRegistryPanel } from "@/components/jarvis/AgentRegistryPanel";
+import { MatrixChatConsole } from "@/components/jarvis/MatrixChatConsole";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
 export const Route = createFileRoute("/jarvis")({
@@ -66,11 +67,7 @@ function AgentMatrix() {
         data-slot="jarvis-chat-panel"
         className="relative h-[40%] min-h-0 w-full shrink-0 border-t border-cyan-400/20 bg-black/40 backdrop-blur-sm"
       >
-        <div className="flex h-full w-full items-center justify-center">
-          <p className="font-display text-[10px] uppercase tracking-[0.3em] text-white/25">
-            chat module // pending integration
-          </p>
-        </div>
+        <MatrixChatConsole />
       </div>
     </div>
   );
