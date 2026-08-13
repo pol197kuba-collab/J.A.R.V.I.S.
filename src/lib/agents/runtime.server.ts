@@ -17,34 +17,10 @@ import {
 } from "./models";
 import { callGroq } from "./providers/groq";
 import type { GeminiContent, GeminiPart } from "./providers/types";
-import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
+import { AGENT_SLUGS, isToolForcedForAgent } from "@/lib/constants/agentSlugs";
+import { UI_ACTIONS, type UiAction } from "@/lib/constants/uiActions";
 
-// UI actions J.A.R.V.I.S. (or any agent facing the user directly) can
-// trigger via the perform_ui_action tool. Must stay in sync with the
-// JarvisAction union in src/lib/ai/jarvisBrain.ts — single vocabulary shared
-// by voice, chat and the old client-side fallback path.
-export const UI_ACTIONS = [
-  "open_dashboard",
-  "open_fuel",
-  "open_calculator",
-  "open_jobfit",
-  "open_telemetry",
-  "open_menu",
-  "close_menu",
-  "system_check",
-  "sleep",
-  "shutdown",
-  "reboot",
-  "open_agents",
-  "open_settings",
-  "open_logs",
-  "open_tasks",
-  "open_subsystems",
-  "open_documents",
-  "open_schema",
-  "vision_scan",
-] as const;
-type UiAction = (typeof UI_ACTIONS)[number];
+export { UI_ACTIONS };
 const UI_ACTION_TOOL_NAME = "perform_ui_action";
 // Same vocabulary plus an explicit escape hatch — used only by the forced
 // classifier fallback below, where the model MUST pick something and needs
@@ -154,6 +130,234 @@ export type OrchestratorInput = {
   /** agent_runs.id of the delegating run, when this call is a delegate_to_agent hop. */
   parentRunId?: string | null;
 };
+
+export type ClassifierFallbackDeps = {
+  /** Present → try the free Groq tier first; null/undefined → go straight to Gemini. */
+  groqApiKey: string | null | undefined;
+  input: string;
+  /** Gemini model id used only for the Gemini leg (Groq always uses DEFAULT_GROQ_CLASSIFIER_MODEL). */
+  model: string;
+  apiKey: string;
+  effectiveUiActionsWithNone: string[];
+  runId: string;
+  logEvent: (
+    level: "info" | "warn" | "error",
+    source: string,
+    message: string,
+    meta?: Json,
+  ) => Promise<void>;
+};
+
+export type ClassifierFallbackResult = {
+  uiAction: UiAction | null;
+  finalText: string | null;
+  toolCallLogEntry: { name: string; args: Record<string, unknown> } | null;
+  tokensInDelta: number;
+  tokensOutDelta: number;
+};
+
+// Forces one narrow yes/no decision ("does this message match a UI action?")
+// via the free Groq tier when a key is configured, falling back to Gemini on
+// any Groq failure or when no key is set. Extracted from runOrchestrator so
+// the request-building/response-parsing that used to be written out twice
+// (once per provider) lives in one place — the two providers still need
+// separate branches internally (different APIs, different failure shapes),
+// and those branches deliberately preserve today's asymmetric side effects
+// (e.g. Groq's classifier tokens are not counted toward the run's totals,
+// only Gemini's are; Groq logs its "none" outcome, Gemini's HTTP-200-no-call
+// case doesn't) rather than silently normalizing them.
+export async function runClassifierFallback(
+  deps: ClassifierFallbackDeps,
+): Promise<ClassifierFallbackResult> {
+  const { groqApiKey, input, model, apiKey, effectiveUiActionsWithNone, runId, logEvent } = deps;
+
+  const classifierSystemPrompt =
+    'Jesteś klasyfikatorem intencji dla interfejsu JARVIS HUD. Oceń wiadomość użytkownika i zdecyduj, czy odpowiada ona DOKŁADNIE jednej z dostępnych akcji UI. Zawsze wywołaj narzędzie perform_ui_action z jedną wartością — jeśli żadna akcja nie pasuje (np. zwykła pogawędka, pytanie merytoryczne, prośba o treść), wybierz "none". Nie odpowiadaj tekstem, nie tłumacz się.';
+  const classifierToolDeclaration = {
+    name: UI_ACTION_TOOL_NAME,
+    description:
+      "Klasyfikacja: która akcja UI (jeśli którakolwiek) pasuje do wiadomości użytkownika.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: effectiveUiActionsWithNone,
+          description: 'Dokładnie jedna wartość — konkretna akcja albo "none".',
+        },
+      },
+      required: ["action"],
+    },
+  };
+
+  // This entire pass exists only to force one narrow yes/no decision — it
+  // never needs Gemini's specific capabilities. Route it through the free
+  // Groq tier when a key is configured, saving a full paid Gemini call on
+  // every single turn that doesn't already invoke perform_ui_action (the
+  // majority of turns). Falls through to the original Gemini path below
+  // on any Groq failure or when no Groq key is set — never a regression.
+  if (groqApiKey) {
+    try {
+      const groqResult = await callGroq({
+        apiKey: groqApiKey,
+        model: DEFAULT_GROQ_CLASSIFIER_MODEL,
+        systemPrompt: classifierSystemPrompt,
+        contents: [{ role: "user", parts: [{ text: input }] }],
+        toolDeclarations: [classifierToolDeclaration],
+        forceToolName: UI_ACTION_TOOL_NAME,
+        temperature: 0.1,
+        maxOutputTokens: 50,
+      });
+      const requested = String(
+        (groqResult.functionCalls[0]?.args as Record<string, unknown> | undefined)?.action ??
+          "none",
+      );
+      if (requested !== "none" && (UI_ACTIONS as readonly string[]).includes(requested)) {
+        const uiAction = requested as UiAction;
+        await logEvent(
+          "info",
+          AGENT_SLUGS.JARVIS,
+          `ui action via classifier fallback (groq): ${requested}`,
+          { run_id: runId } as Json,
+        );
+        return {
+          uiAction,
+          finalText: UI_ACTION_CONFIRMATIONS[uiAction],
+          toolCallLogEntry: {
+            name: UI_ACTION_TOOL_NAME,
+            args: { action: requested, via: "classifier_fallback_groq" },
+          },
+          tokensInDelta: 0,
+          tokensOutDelta: 0,
+        };
+      }
+      // Also logged on the "none" branch (the common case — most turns
+      // aren't UI commands) so System Logs shows Groq was actually hit
+      // every turn, not only on the rare UI-action hits.
+      await logEvent("info", AGENT_SLUGS.JARVIS, "classifier fallback via groq: none", {
+        run_id: runId,
+      } as Json);
+      return {
+        uiAction: null,
+        finalText: null,
+        toolCallLogEntry: { name: "classifier_none", args: { requested, via: "groq" } },
+        tokensInDelta: 0,
+        tokensOutDelta: 0,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await logEvent("warn", AGENT_SLUGS.JARVIS, `classifier groq failed, falling back: ${msg}`, {
+        run_id: runId,
+      } as Json);
+      // falls through to Gemini below
+    }
+  }
+
+  try {
+    const classifyRes = await fetch(
+      `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: classifierSystemPrompt }] },
+          tools: [{ functionDeclarations: [classifierToolDeclaration] }],
+          toolConfig: {
+            functionCallingConfig: {
+              mode: "ANY",
+              allowedFunctionNames: [UI_ACTION_TOOL_NAME],
+            },
+          },
+          generationConfig: { temperature: 0.1, maxOutputTokens: 50 },
+          contents: [{ role: "user", parts: [{ text: input }] }],
+        }),
+      },
+    );
+    if (classifyRes.ok) {
+      const classifyData = (await classifyRes.json()) as {
+        candidates?: Array<{ content?: { parts?: GeminiPart[] } }>;
+        usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+      };
+      const tokensInDelta = classifyData.usageMetadata?.promptTokenCount ?? 0;
+      const tokensOutDelta = classifyData.usageMetadata?.candidatesTokenCount ?? 0;
+      const classifyParts = classifyData.candidates?.[0]?.content?.parts ?? [];
+      const classifyCall = classifyParts.flatMap((p) =>
+        "functionCall" in p && p.functionCall ? [p.functionCall] : [],
+      )[0];
+      if (!classifyCall) {
+        // Model returned 200 but no functionCall part — visible now instead
+        // of silently vanishing, so we can see WHY next time.
+        return {
+          uiAction: null,
+          finalText: null,
+          toolCallLogEntry: {
+            name: "classifier_no_function_call",
+            args: { raw: JSON.stringify(classifyData).slice(0, 300) },
+          },
+          tokensInDelta,
+          tokensOutDelta,
+        };
+      }
+      const requested = String(
+        (classifyCall.args as Record<string, unknown> | undefined)?.action ?? "none",
+      );
+      if (requested !== "none" && (UI_ACTIONS as readonly string[]).includes(requested)) {
+        const uiAction = requested as UiAction;
+        await logEvent(
+          "info",
+          AGENT_SLUGS.JARVIS,
+          `ui action via classifier fallback: ${requested}`,
+          { run_id: runId } as Json,
+        );
+        return {
+          uiAction,
+          finalText: UI_ACTION_CONFIRMATIONS[uiAction],
+          toolCallLogEntry: {
+            name: UI_ACTION_TOOL_NAME,
+            args: { action: requested, via: "classifier_fallback" },
+          },
+          tokensInDelta,
+          tokensOutDelta,
+        };
+      }
+      return {
+        uiAction: null,
+        finalText: null,
+        toolCallLogEntry: { name: "classifier_none", args: { requested } },
+        tokensInDelta,
+        tokensOutDelta,
+      };
+    }
+    // HTTP-level failure — surface status + body instead of swallowing it.
+    const bodyText = await classifyRes.text().catch(() => "");
+    await logEvent("warn", AGENT_SLUGS.JARVIS, `classifier HTTP ${classifyRes.status}`, {
+      run_id: runId,
+      body_preview: bodyText.slice(0, 200),
+    } as Json);
+    return {
+      uiAction: null,
+      finalText: null,
+      toolCallLogEntry: {
+        name: "classifier_http_error",
+        args: { status: classifyRes.status, body: bodyText.slice(0, 300) },
+      },
+      tokensInDelta: 0,
+      tokensOutDelta: 0,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await logEvent("warn", AGENT_SLUGS.JARVIS, `classifier exception: ${msg}`, {
+      run_id: runId,
+    } as Json);
+    return {
+      uiAction: null,
+      finalText: null,
+      toolCallLogEntry: { name: "classifier_exception", args: { message: msg } },
+      tokensInDelta: 0,
+      tokensOutDelta: 0,
+    };
+  }
+}
 
 export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRunResult> {
   const {
@@ -407,7 +611,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // forge agent, exactly like J.A.R.V.I.S. always gets
     // delegate_to_agent regardless of DB state.
     if (
-      agent.slug === AGENT_SLUGS.FORGE &&
+      isToolForcedForAgent(agent.slug, "generate_document") &&
       !toolDeclarations.some((d) => d.name === "generate_document")
     ) {
       const genTool = getToolByName("generate_document");
@@ -442,7 +646,9 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // recursion depth so a chain of delegations can't loop forever.
     const DELEGATE_TOOL_NAME = "delegate_to_agent";
     const allowDelegate =
-      agent.slug === AGENT_SLUGS.JARVIS && teammates.length > 0 && delegationDepth < 2;
+      isToolForcedForAgent(agent.slug, DELEGATE_TOOL_NAME) &&
+      teammates.length > 0 &&
+      delegationDepth < 2;
     if (allowDelegate) {
       toolDeclarations.push({
         name: DELEGATE_TOOL_NAME,
@@ -822,192 +1028,21 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         run_id: runId,
       } as Json);
 
-      const classifierSystemPrompt =
-        'Jesteś klasyfikatorem intencji dla interfejsu JARVIS HUD. Oceń wiadomość użytkownika i zdecyduj, czy odpowiada ona DOKŁADNIE jednej z dostępnych akcji UI. Zawsze wywołaj narzędzie perform_ui_action z jedną wartością — jeśli żadna akcja nie pasuje (np. zwykła pogawędka, pytanie merytoryczne, prośba o treść), wybierz "none". Nie odpowiadaj tekstem, nie tłumacz się.';
-      const classifierToolDeclaration = {
-        name: UI_ACTION_TOOL_NAME,
-        description:
-          "Klasyfikacja: która akcja UI (jeśli którakolwiek) pasuje do wiadomości użytkownika.",
-        parameters: {
-          type: "object",
-          properties: {
-            action: {
-              type: "string",
-              enum: effectiveUiActionsWithNone,
-              description: 'Dokładnie jedna wartość — konkretna akcja albo "none".',
-            },
-          },
-          required: ["action"],
-        },
-      };
-
-      // This entire pass exists only to force one narrow yes/no decision — it
-      // never needs Gemini's specific capabilities. Route it through the free
-      // Groq tier when a key is configured, saving a full paid Gemini call on
-      // every single turn that doesn't already invoke perform_ui_action (the
-      // majority of turns). Falls through to the original Gemini path below
-      // on any Groq failure or when no Groq key is set — never a regression.
-      let classifiedByGroq = false;
-      if (groqApiKey) {
-        try {
-          const groqResult = await callGroq({
-            apiKey: groqApiKey,
-            model: DEFAULT_GROQ_CLASSIFIER_MODEL,
-            systemPrompt: classifierSystemPrompt,
-            contents: [{ role: "user", parts: [{ text: input }] }],
-            toolDeclarations: [classifierToolDeclaration],
-            forceToolName: UI_ACTION_TOOL_NAME,
-            temperature: 0.1,
-            maxOutputTokens: 50,
-          });
-          const requested = String(
-            (groqResult.functionCalls[0]?.args as Record<string, unknown> | undefined)?.action ??
-              "none",
-          );
-          if (requested !== "none" && (UI_ACTIONS as readonly string[]).includes(requested)) {
-            uiAction = requested as UiAction;
-            finalText = UI_ACTION_CONFIRMATIONS[uiAction];
-            toolCallLog.push({
-              name: UI_ACTION_TOOL_NAME,
-              args: { action: requested, via: "classifier_fallback_groq" },
-            });
-            await logEvent(
-              "info",
-              AGENT_SLUGS.JARVIS,
-              `ui action via classifier fallback (groq): ${requested}`,
-              { run_id: runId } as Json,
-            );
-          } else {
-            toolCallLog.push({ name: "classifier_none", args: { requested, via: "groq" } });
-            // Also logged on the "none" branch (the common case — most
-            // turns aren't UI commands) so System Logs shows Groq was
-            // actually hit every turn, not only on the rare UI-action hits.
-            await logEvent("info", AGENT_SLUGS.JARVIS, "classifier fallback via groq: none", {
-              run_id: runId,
-            } as Json);
-          }
-          classifiedByGroq = true;
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          await logEvent(
-            "warn",
-            AGENT_SLUGS.JARVIS,
-            `classifier groq failed, falling back: ${msg}`,
-            {
-              run_id: runId,
-            } as Json,
-          );
-        }
-      }
-
-      if (!classifiedByGroq) {
-        try {
-          const classifyRes = await fetch(
-            `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                systemInstruction: {
-                  parts: [
-                    {
-                      text: 'Jesteś klasyfikatorem intencji dla interfejsu JARVIS HUD. Oceń wiadomość użytkownika i zdecyduj, czy odpowiada ona DOKŁADNIE jednej z dostępnych akcji UI. Zawsze wywołaj narzędzie perform_ui_action z jedną wartością — jeśli żadna akcja nie pasuje (np. zwykła pogawędka, pytanie merytoryczne, prośba o treść), wybierz "none". Nie odpowiadaj tekstem, nie tłumacz się.',
-                    },
-                  ],
-                },
-                tools: [
-                  {
-                    functionDeclarations: [
-                      {
-                        name: UI_ACTION_TOOL_NAME,
-                        description:
-                          "Klasyfikacja: która akcja UI (jeśli którakolwiek) pasuje do wiadomości użytkownika.",
-                        parameters: {
-                          type: "object",
-                          properties: {
-                            action: {
-                              type: "string",
-                              enum: effectiveUiActionsWithNone,
-                              description: 'Dokładnie jedna wartość — konkretna akcja albo "none".',
-                            },
-                          },
-                          required: ["action"],
-                        },
-                      },
-                    ],
-                  },
-                ],
-                toolConfig: {
-                  functionCallingConfig: {
-                    mode: "ANY",
-                    allowedFunctionNames: [UI_ACTION_TOOL_NAME],
-                  },
-                },
-                generationConfig: { temperature: 0.1, maxOutputTokens: 50 },
-                contents: [{ role: "user", parts: [{ text: input }] }],
-              }),
-            },
-          );
-          if (classifyRes.ok) {
-            const classifyData = (await classifyRes.json()) as {
-              candidates?: Array<{ content?: { parts?: GeminiPart[] } }>;
-              usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
-            };
-            totalTokensIn += classifyData.usageMetadata?.promptTokenCount ?? 0;
-            totalTokensOut += classifyData.usageMetadata?.candidatesTokenCount ?? 0;
-            const classifyParts = classifyData.candidates?.[0]?.content?.parts ?? [];
-            const classifyCall = classifyParts.flatMap((p) =>
-              "functionCall" in p && p.functionCall ? [p.functionCall] : [],
-            )[0];
-            if (!classifyCall) {
-              // Model returned 200 but no functionCall part — visible now
-              // instead of silently vanishing, so we can see WHY next time.
-              toolCallLog.push({
-                name: "classifier_no_function_call",
-                args: { raw: JSON.stringify(classifyData).slice(0, 300) },
-              });
-            } else {
-              const requested = String(
-                (classifyCall.args as Record<string, unknown> | undefined)?.action ?? "none",
-              );
-              if (requested !== "none" && (UI_ACTIONS as readonly string[]).includes(requested)) {
-                uiAction = requested as UiAction;
-                finalText = UI_ACTION_CONFIRMATIONS[uiAction];
-                toolCallLog.push({
-                  name: UI_ACTION_TOOL_NAME,
-                  args: { action: requested, via: "classifier_fallback" },
-                });
-                await logEvent(
-                  "info",
-                  AGENT_SLUGS.JARVIS,
-                  `ui action via classifier fallback: ${requested}`,
-                  {
-                    run_id: runId,
-                  } as Json,
-                );
-              } else {
-                toolCallLog.push({ name: "classifier_none", args: { requested } });
-              }
-            }
-          } else {
-            // HTTP-level failure — surface status + body instead of swallowing it.
-            const bodyText = await classifyRes.text().catch(() => "");
-            toolCallLog.push({
-              name: "classifier_http_error",
-              args: { status: classifyRes.status, body: bodyText.slice(0, 300) },
-            });
-            await logEvent("warn", AGENT_SLUGS.JARVIS, `classifier HTTP ${classifyRes.status}`, {
-              run_id: runId,
-              body_preview: bodyText.slice(0, 200),
-            } as Json);
-          }
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          toolCallLog.push({ name: "classifier_exception", args: { message: msg } });
-          await logEvent("warn", AGENT_SLUGS.JARVIS, `classifier exception: ${msg}`, {
-            run_id: runId,
-          } as Json);
-        }
+      const classifierResult = await runClassifierFallback({
+        groqApiKey,
+        input,
+        model,
+        apiKey,
+        effectiveUiActionsWithNone,
+        runId,
+        logEvent,
+      });
+      totalTokensIn += classifierResult.tokensInDelta;
+      totalTokensOut += classifierResult.tokensOutDelta;
+      if (classifierResult.toolCallLogEntry) toolCallLog.push(classifierResult.toolCallLogEntry);
+      if (classifierResult.uiAction) {
+        uiAction = classifierResult.uiAction;
+        finalText = classifierResult.finalText!;
       }
     }
 

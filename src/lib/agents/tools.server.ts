@@ -293,7 +293,7 @@ const saveNote: Tool = {
       type: "object",
       properties: {
         title: { type: "string", description: "Short title, max 200 chars." },
-        body: { type: "string", description: "Full body / content of the note." },
+        body: { type: "string", description: "Full body / content of the note, max 20000 chars." },
         tags: {
           type: "array",
           items: { type: "string" },
@@ -307,7 +307,7 @@ const saveNote: Tool = {
     const title = String(args.title ?? "")
       .trim()
       .slice(0, 200);
-    const body = String(args.body ?? "");
+    const body = String(args.body ?? "").slice(0, 20_000);
     if (!title) return { error: "missing_title" };
     const tagsInput = Array.isArray(args.tags) ? args.tags : [];
     const tags = tagsInput
@@ -350,12 +350,12 @@ const listNotesTool: Tool = {
           type: "string",
           description: "Optional free-text search over title+body. Omit to list recent notes.",
         },
-        limit: { type: "integer", description: "Max results (default 10, max 50)." },
+        limit: { type: "integer", description: "Max results (default 25, max 100)." },
       },
     },
   },
   async execute(args, ctx) {
-    const limit = clampInt(args.limit, 1, 50, 10);
+    const limit = clampInt(args.limit, 1, 100, 25);
     let q = ctx.supabase
       .from("notes")
       .select("id, title, body, tags, created_at")
@@ -797,12 +797,12 @@ const listTasks: Tool = {
           type: "string",
           description: "Filter to tasks assigned to this agent slug.",
         },
-        limit: { type: "integer", description: "Max results (default 20, max 50)." },
+        limit: { type: "integer", description: "Max results (default 25, max 100)." },
       },
     },
   },
   async execute(args, ctx) {
-    const limit = clampInt(args.limit, 1, 50, 20);
+    const limit = clampInt(args.limit, 1, 100, 25);
     let q = ctx.supabase
       .from("tasks")
       .select(
