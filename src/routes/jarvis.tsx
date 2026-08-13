@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { listAgents } from "@/lib/agents/runtime.functions";
 import { JarvisCanvas } from "@/components/jarvis/JarvisCanvas";
 import { HudOverlay } from "@/components/jarvis/HudOverlay";
+import { AgentRegistryPanel } from "@/components/jarvis/AgentRegistryPanel";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
 export const Route = createFileRoute("/jarvis")({
@@ -50,6 +51,7 @@ function AgentMatrix() {
         }))}
       />
       <HudOverlay agentCount={agents.length} onlineCount={onlineCount} />
+      <AgentRegistryPanel agents={agents} />
     </div>
   );
 }
