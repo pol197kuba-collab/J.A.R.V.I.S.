@@ -22,6 +22,7 @@ import {
 } from "@/lib/agents/runtime.functions";
 import { setServerRuntimePreference } from "@/lib/ai/jarvisBrain";
 import { GEMINI_MODELS } from "@/lib/agents/models";
+import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
 const GEMINI_LS_KEY = "jarvis_gemini_api_key";
 // Groq has no browser-side consumer (unlike Gemini) — this local copy exists
@@ -157,7 +158,7 @@ function Settings() {
 
   const refreshTools = useCallback(async () => {
     try {
-      const list = await fetchAgentTools({ data: { agentSlug: "jarvis" } });
+      const list = await fetchAgentTools({ data: { agentSlug: AGENT_SLUGS.JARVIS } });
       setTools(list);
       setToolsError(null);
     } catch (err) {
@@ -179,7 +180,7 @@ function Settings() {
     );
     try {
       await persistAgentTool({
-        data: { agentSlug: "jarvis", toolId: tool.id, enabled: nextEnabled },
+        data: { agentSlug: AGENT_SLUGS.JARVIS, toolId: tool.id, enabled: nextEnabled },
       });
       audio.playClick();
     } catch (err) {

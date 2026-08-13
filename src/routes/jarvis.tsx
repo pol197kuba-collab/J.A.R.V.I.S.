@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { listAgents } from "@/lib/agents/runtime.functions";
 import { JarvisCanvas } from "@/components/jarvis/JarvisCanvas";
 import { HudOverlay } from "@/components/jarvis/HudOverlay";
+import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
 export const Route = createFileRoute("/jarvis")({
   head: () => ({
@@ -31,7 +32,7 @@ function AgentMatrix() {
     refetchInterval: 3000,
   });
 
-  const teammates = agents.filter((a) => a.slug !== "jarvis");
+  const teammates = agents.filter((a) => a.slug !== AGENT_SLUGS.JARVIS);
   const onlineCount = agents.filter((a) => a.isEnabled).length;
 
   return (

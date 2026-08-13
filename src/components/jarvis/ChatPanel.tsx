@@ -20,13 +20,14 @@ import { LinkifiedText } from "./LinkifiedText";
 import { requestOpenDocument } from "@/lib/documents/openDocumentBus";
 import { enrichDocumentImagesFn } from "@/lib/documents/generated.functions";
 import { ACTIVE_AGENT_LS_KEY } from "@/routes/agent-hub";
+import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
 const STORAGE_KEY = "jarvis_chat_history";
 const MAX_HISTORY = 60;
 const SERVER_KEY_LINKED_LS_KEY = "jarvis_server_gemini_linked";
 
 // Domyślny agent gdy żaden nie jest wybrany z Agent Hub
-const DEFAULT_AGENT = { slug: "jarvis", name: "J.A.R.V.I.S." };
+const DEFAULT_AGENT = { slug: AGENT_SLUGS.JARVIS, name: "J.A.R.V.I.S." };
 
 type ActiveAgent = { slug: string; name: string };
 

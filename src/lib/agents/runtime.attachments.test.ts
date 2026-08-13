@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { runOrchestrator } from "./runtime.server";
+import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
 // Regression test for download-link delivery.
 //
@@ -90,7 +91,7 @@ function baseResponses(): Record<string, CannedResponse[]> {
         data: {
           id: "agent-forge",
           name: "F.O.R.G.E.",
-          slug: "forge",
+          slug: AGENT_SLUGS.FORGE,
           model: "gemini-test",
           config: {},
         },
@@ -122,7 +123,7 @@ describe("runOrchestrator — generate_document link delivery", () => {
     const result = await runOrchestrator({
       supabase: makeSupabaseStub(baseResponses()),
       userId: "user-1",
-      agentSlug: "forge",
+      agentSlug: AGENT_SLUGS.FORGE,
       input: "Zrób PDF z raportem.",
       history: [],
     });
