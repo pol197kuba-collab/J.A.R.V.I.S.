@@ -72,7 +72,7 @@ export function onChat(handler: (msg: ChatBusMessage) => void) {
 // into Gemini as multi-turn context. Filters out anything that looks like a
 // raw JSON envelope from the system pipeline ({"action":..,"speech":..}) so
 // the model never sees its own protocol leaking back as conversation.
-const HISTORY_KEY = "jarvis_chat_history";
+export const HISTORY_KEY = "jarvis_chat_history";
 
 function looksLikeJsonEnvelope(text: string): boolean {
   const t = text.trim();

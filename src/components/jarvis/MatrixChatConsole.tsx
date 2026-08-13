@@ -1,49 +1,52 @@
 import { useEffect, useRef, useState } from "react";
 import { Mic, MicOff, SendHorizonal, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { emitChat, onChat, type ChatBusMessage } from "@/lib/ai/chatBus";
+import { useAgentChatChannel } from "@/lib/ai/useAgentChatChannel";
 import { useVoiceCommands } from "./VoiceCommandContext";
+import { useSingleVoiceCommand } from "./useSingleVoiceCommand";
 
 // Transmission-log styled chat console for the /jarvis matrix view.
 // Deliberately different from the Dashboard ChatPanel (bubbles): here every
 // line is a channel transmission with a gutter timestamp, a callsign and a
 // left signal rail — same tokens (cyan HUD, font-display/font-mono, panel
-// chrome) as HudOverlay / "Recent Network Assignments".
-
-const MAX_LINES = 40;
+// chrome) as HudOverlay / "Recent Network Assignments". The actual send/
+// receive/error-handling logic is NOT reimplemented here — both this console
+// and the Dashboard ChatPanel share useAgentChatChannel() so they talk to
+// the exact same orchestrator/backend.
 
 function nowStamp() {
   return new Date().toTimeString().slice(0, 8);
 }
 
 export function MatrixChatConsole() {
-  const [lines, setLines] = useState<ChatBusMessage[]>([]);
+  const { messages, typing, activeAgent, send } = useAgentChatChannel();
   const [input, setInput] = useState("");
-  const [processing, setProcessing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { listening, supported, setEnabled } = useVoiceCommands();
 
-  useEffect(
-    () =>
-      onChat((msg) => {
-        setLines((prev) =>
-          prev.some((m) => m.id === msg.id) ? prev : [...prev, msg].slice(-MAX_LINES),
-        );
-        if (msg.role === "jarvis") setProcessing(false);
-      }),
-    [],
-  );
+  // Continuous wake-word listening (global toggle) is a DIFFERENT mode from
+  // this console's mic button, which captures exactly one command. Pausing
+  // it before a capture avoids two SpeechRecognition sessions fighting over
+  // the same microphone.
+  const { enabled: continuousListeningEnabled, setEnabled: setContinuousListening } =
+    useVoiceCommands();
+  const { listening: capturing, supported: micSupported, capture } = useSingleVoiceCommand();
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [lines, processing]);
+  }, [messages, typing]);
 
-  function send() {
+  function handleSend() {
     const text = input.trim();
     if (!text) return;
     setInput("");
-    emitChat("user", text);
-    setProcessing(true);
+    void send(text);
+  }
+
+  async function handleMicClick() {
+    if (capturing) return;
+    if (continuousListeningEnabled) setContinuousListening(false);
+    const transcript = await capture();
+    if (transcript) void send(transcript);
   }
 
   return (
@@ -53,28 +56,28 @@ export function MatrixChatConsole() {
         <div className="flex items-center gap-2">
           <Radio className="h-3 w-3 text-cyan-300" strokeWidth={1.5} />
           <span className="font-display text-[9px] uppercase tracking-[0.28em] text-cyan-300/90 [text-shadow:0_0_12px_rgba(77,216,255,0.5)]">
-            Direct Channel // J.A.R.V.I.S.
+            Direct Channel // {activeAgent.name.toUpperCase()}
           </span>
         </div>
         <span
           className={cn(
             "font-mono text-[8px] uppercase tracking-[0.2em]",
-            processing ? "text-cyan-200" : "text-white/35",
+            typing ? "text-cyan-200" : "text-white/35",
           )}
         >
-          {processing ? "link · active" : "link · idle"}
+          {typing ? "link · active" : "link · idle"}
         </span>
       </div>
 
       {/* Transmission log */}
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3">
-        {lines.length === 0 && !processing ? (
+        {messages.length === 0 && !typing ? (
           <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/25">
             ▸ kanał otwarty — nadaj komendę…
           </p>
         ) : null}
 
-        {lines.map((m) => {
+        {messages.map((m) => {
           const jarvis = m.role === "jarvis";
           return (
             <div
@@ -110,7 +113,7 @@ export function MatrixChatConsole() {
         })}
 
         {/* HUD processing indicator — scanning bar, not a spinner */}
-        {processing ? (
+        {typing ? (
           <div className="grid grid-cols-[52px_1fr] gap-2 border-l-2 border-cyan-400/70 pl-2">
             <span className="pt-[3px] font-mono text-[8px] leading-none text-white/35">
               {nowStamp()}
@@ -127,7 +130,9 @@ export function MatrixChatConsole() {
                   <span
                     key={i}
                     className="h-2 w-[3px] origin-bottom bg-cyan-300/60"
-                    style={{ animation: `wave-bar ${0.5 + (i % 4) * 0.12}s ease-in-out ${i * 0.05}s infinite` }}
+                    style={{
+                      animation: `wave-bar ${0.5 + (i % 4) * 0.12}s ease-in-out ${i * 0.05}s infinite`,
+                    }}
                   />
                 ))}
               </div>
@@ -146,7 +151,7 @@ export function MatrixChatConsole() {
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                send();
+                handleSend();
               }
             }}
             placeholder="wpisz komendę dla J.A.R.V.I.S.…"
@@ -154,18 +159,18 @@ export function MatrixChatConsole() {
           />
           <button
             type="button"
-            disabled={!supported}
-            onClick={() => setEnabled(!listening)}
-            aria-label="Komenda głosowa"
+            disabled={!micSupported}
+            onClick={handleMicClick}
+            aria-label="Pojedyncza komenda głosowa"
             className={cn(
               "flex h-7 w-7 items-center justify-center rounded-md border transition-colors",
-              listening
+              capturing
                 ? "border-cyan-300 bg-cyan-400/20 text-cyan-200 shadow-[0_0_14px_rgba(77,216,255,0.6)]"
                 : "border-cyan-400/25 text-cyan-300/70 hover:bg-cyan-400/10",
-              !supported && "opacity-40",
+              !micSupported && "opacity-40",
             )}
           >
-            {listening ? (
+            {capturing ? (
               <MicOff className="h-3.5 w-3.5" strokeWidth={1.5} />
             ) : (
               <Mic className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -173,7 +178,7 @@ export function MatrixChatConsole() {
           </button>
           <button
             type="button"
-            onClick={send}
+            onClick={handleSend}
             aria-label="Wyślij"
             className="flex h-7 items-center gap-1.5 rounded-md border border-cyan-400/40 bg-cyan-400/15 px-2.5 font-display text-[8px] uppercase tracking-[0.22em] text-cyan-200 transition-colors hover:bg-cyan-400/25"
           >

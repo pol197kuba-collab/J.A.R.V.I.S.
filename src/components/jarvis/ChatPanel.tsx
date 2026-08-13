@@ -1,300 +1,23 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { Send } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { emitChat, getRecentHistory, onChat, type ChatBusMessage } from "@/lib/ai/chatBus";
-import type { JarvisAction } from "@/lib/ai/jarvisBrain";
-import { useVoiceCommands } from "./VoiceCommandContext";
-import {
-  listAgents,
-  runAgent,
-  getActiveConversation,
-  clearConversation,
-  setActiveAgent as setActiveAgentFn,
-  getActiveAgentSlug,
-} from "@/lib/agents/runtime.functions";
-import { speak } from "@/lib/audio/speak";
-import { setAgentBusy, reportOutcome } from "@/lib/ai/agentActivity";
+import { useAgentChatChannel } from "@/lib/ai/useAgentChatChannel";
 import { LinkifiedText } from "./LinkifiedText";
-import { requestOpenDocument } from "@/lib/documents/openDocumentBus";
-import { enrichDocumentImagesFn } from "@/lib/documents/generated.functions";
-import { ACTIVE_AGENT_LS_KEY } from "@/routes/agent-hub";
-import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
-
-const STORAGE_KEY = "jarvis_chat_history";
-const MAX_HISTORY = 60;
-const SERVER_KEY_LINKED_LS_KEY = "jarvis_server_gemini_linked";
-
-// Domyślny agent gdy żaden nie jest wybrany z Agent Hub
-const DEFAULT_AGENT = { slug: AGENT_SLUGS.JARVIS, name: "J.A.R.V.I.S." };
-
-type ActiveAgent = { slug: string; name: string };
-
-function readActiveAgent(): ActiveAgent {
-  if (typeof window === "undefined") return DEFAULT_AGENT;
-  try {
-    const raw = window.localStorage.getItem(ACTIVE_AGENT_LS_KEY);
-    if (!raw) return DEFAULT_AGENT;
-    const parsed = JSON.parse(raw) as ActiveAgent;
-    return parsed.slug && parsed.name ? parsed : DEFAULT_AGENT;
-  } catch {
-    return DEFAULT_AGENT;
-  }
-}
-
-function hasServerKey(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(SERVER_KEY_LINKED_LS_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function loadHistory(): ChatBusMessage[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as ChatBusMessage[];
-  } catch {
-    return [];
-  }
-}
-
-function saveHistory(items: ChatBusMessage[]) {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items.slice(-MAX_HISTORY)));
-  } catch {
-    /* ignore */
-  }
-}
 
 export function ChatPanel() {
-  // localStorage daje natychmiastowy render (brak pustego ekranu przy
-  // starcie); serwer jest źródłem prawdy i nadpisuje to zaraz po hydratacji
-  // — patrz efekty poniżej.
-  const [messages, setMessages] = useState<ChatBusMessage[]>(() => loadHistory());
+  const { messages, typing, activeAgent, agents, switchAgent, send, clear } = useAgentChatChannel();
   const [input, setInput] = useState("");
-  const [typing, setTyping] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(null);
-
-  // Aktywny agent — startowo z localStorage (instant paint), zaraz
-  // potwierdzany/nadpisywany wartością z konta (user_settings.active_agent_slug)
-  // w efekcie poniżej, żeby nowe urządzenie otwierało się na tym samym agencie.
-  const [activeAgent, setActiveAgent] = useState<ActiveAgent>(() => readActiveAgent());
-
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { routeText, performAction } = useVoiceCommands();
-  const qc = useQueryClient();
-  const runAgentFn = useServerFn(runAgent);
-  const fetchAgents = useServerFn(listAgents);
-  const fetchConversation = useServerFn(getActiveConversation);
-  const clearConversationFn = useServerFn(clearConversation);
-  const persistActiveAgent = useServerFn(setActiveAgentFn);
-  const fetchActiveAgentSlug = useServerFn(getActiveAgentSlug);
-  const enrichImages = useServerFn(enrichDocumentImagesFn);
-  const noticeShownRef = useRef(false);
-
-  const { data: agents = [] } = useQuery({
-    queryKey: ["agents", "list"],
-    queryFn: () => fetchAgents(),
-    refetchInterval: 15000,
-  });
-
-  function switchAgent(slug: string) {
-    const found = agents.find((a) => a.slug === slug);
-    if (!found) return;
-    const next = { slug: found.slug, name: found.name };
-    setActiveAgent(next);
-    setConversationId(null); // nowy agent → efekt niżej wczyta jego własny wątek
-    try {
-      window.localStorage.setItem(ACTIVE_AGENT_LS_KEY, JSON.stringify(next));
-    } catch {
-      /* ignore */
-    }
-    persistActiveAgent({ data: { agentSlug: found.slug } }).catch(() => {
-      /* najwyżej nie zsynchronizuje się na inne urządzenie — nie blokujemy UI */
-    });
-    // Nie kasujemy historii — rozmowa jest ciągła, tylko zmienia się etykieta
-    // tego, kto odpowiada. Dokładamy krótką informację systemową w chacie.
-    emitChat("jarvis", `▸ Aktywny agent zmieniony na ${found.name.toUpperCase()}.`, {
-      agentSlug: found.slug,
-      agentName: found.name,
-    });
-  }
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, typing]);
 
-  // Jednorazowo przy montowaniu: zapytaj konto, jaki agent był ostatnio
-  // wybrany na DOWOLNYM urządzeniu, i przełącz się na niego jeśli różni się
-  // od tego, co mamy lokalnie w tej przeglądarce.
-  useEffect(() => {
-    let cancelled = false;
-    fetchActiveAgentSlug()
-      .then((res) => {
-        if (cancelled || !res.agentSlug) return;
-        setActiveAgent((prev) =>
-          prev.slug === res.agentSlug ? prev : { slug: res.agentSlug, name: res.agentSlug },
-        );
-      })
-      .catch(() => {
-        /* zostań przy lokalnym wyborze */
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Gdy `agents` się załaduje, dociągnij pełną nazwę aktywnego agenta (na
-  // wypadek gdyby powyższy efekt ustawił tylko slug jako placeholder name).
-  useEffect(() => {
-    if (agents.length === 0) return;
-    const found = agents.find((a) => a.slug === activeAgent.slug);
-    if (found && found.name !== activeAgent.name) {
-      setActiveAgent({ slug: found.slug, name: found.name });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agents]);
-
-  // Za każdym razem, gdy zmienia się aktywny agent, wczytaj JEGO wątek z
-  // serwera — to jest właściwa synchronizacja historii między urządzeniami.
-  useEffect(() => {
-    let cancelled = false;
-    fetchConversation({ data: { agentSlug: activeAgent.slug } })
-      .then((res) => {
-        if (cancelled) return;
-        setConversationId(res.conversationId);
-        if (res.messages.length > 0) {
-          setMessages(res.messages);
-          saveHistory(res.messages);
-        }
-      })
-      .catch(() => {
-        /* offline / błąd sieci — zostań przy lokalnym cache, nic nie psuj */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeAgent.slug]);
-
-  // Słuchaj na zmianę agenta z Agent Hub (przycisk LAUNCH)
-  useEffect(() => {
-    function handleAgentChanged(e: Event) {
-      const detail = (e as CustomEvent<ActiveAgent>).detail;
-      if (!detail?.slug || !detail?.name) return;
-      setActiveAgent(detail);
-      setConversationId(null);
-      persistActiveAgent({ data: { agentSlug: detail.slug } }).catch(() => {});
-      // Zachowujemy historię — ciągła rozmowa z całym zespołem.
-    }
-
-    window.addEventListener("jarvis:agent-changed", handleAgentChanged);
-    return () => window.removeEventListener("jarvis:agent-changed", handleAgentChanged);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Subscribe to the global chat bus
-  useEffect(() => {
-    return onChat((msg) => {
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === msg.id)) return prev;
-        const next = [...prev, msg].slice(-MAX_HISTORY);
-        saveHistory(next);
-        return next;
-      });
-      if (msg.role === "jarvis") setTyping(false);
-    });
-  }, []);
-
-  async function send() {
+  function handleSend() {
     const text = input.trim();
     if (!text) return;
     setInput("");
-    setTyping(true);
-    try {
-      if (hasServerKey()) {
-        emitChat("user", text);
-        const history = getRecentHistory(3);
-        setAgentBusy(true);
-        try {
-          const result = await runAgentFn({
-            // Używamy aktywnego agenta zamiast hardkodowanego "jarvis"
-            data: {
-              agentSlug: activeAgent.slug,
-              input: text,
-              history,
-              conversationId: conversationId ?? undefined,
-            },
-          });
-          reportOutcome(result.status === "done" ? "done" : "error");
-          if (result.conversationId) setConversationId(result.conversationId);
-          const reply =
-            result.status === "done" && result.output
-              ? result.output
-              : `⚠ Agent error: ${result.error ?? "unknown"}`;
-          emitChat("jarvis", reply, {
-            agentSlug: activeAgent.slug,
-            agentName: activeAgent.name,
-          });
-          // Background graphics: the file is already delivered text-only;
-          // kick the enrichment pass in its own request and don't await it
-          // (it can take 20-40s during a 503 storm). The /documents panel
-          // reflects progress via image_status. Fire-and-forget by design.
-          if (result.enrichDocument) {
-            enrichImages({ data: { fileId: result.enrichDocument.id } }).catch(() => {
-              /* best-effort — the file exists text-only regardless */
-            });
-          }
-          if (result.status === "done") {
-            // open_document resolved to a specific file → hand its id to the
-            // Documents module and navigate there, so its preview opens. The
-            // id is stashed for a fresh mount AND broadcast for an already-
-            // mounted /documents (see documents.tsx). Takes precedence over a
-            // plain nav action.
-            if (result.openDocument) {
-              requestOpenDocument(result.openDocument.id);
-              performAction("open_documents", reply);
-            } else {
-              const action = (result.action ?? "none") as JarvisAction;
-              if (action !== "none") {
-                // performAction() speaks `reply` itself via fire()'s spokenLine
-                // param — don't ALSO call speak(reply) below, or JARVIS would
-                // narrate the same line twice.
-                performAction(action, reply);
-              } else {
-                speak(reply);
-              }
-            }
-          }
-          qc.invalidateQueries({ queryKey: ["notes", "list"] });
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          reportOutcome("error");
-          emitChat("jarvis", `⚠ Agent runtime failed: ${msg}`, {
-            agentSlug: activeAgent.slug,
-            agentName: activeAgent.name,
-          });
-        } finally {
-          setAgentBusy(false);
-        }
-      } else {
-        await routeText(text);
-        if (!noticeShownRef.current) {
-          noticeShownRef.current = true;
-          emitChat(
-            "jarvis",
-            "⚠ Tool-calling offline — save your Gemini key in Settings → Agent Runtime to unlock web_search / save_note / fetch_url.",
-          );
-        }
-      }
-    } finally {
-      setTyping(false);
-    }
+    void send(text);
   }
 
   // Nazwa agenta do wyświetlenia w UI — zawsze uppercase
@@ -341,13 +64,7 @@ export function ChatPanel() {
           {messages.length > 0 && (
             <button
               type="button"
-              onClick={() => {
-                setMessages([]);
-                saveHistory([]);
-                clearConversationFn({ data: { agentSlug: activeAgent.slug } }).catch(() => {
-                  /* lokalny widok już wyczyszczony — serwer dogoni przy następnej sesji */
-                });
-              }}
+              onClick={clear}
               className="font-display text-[9px] uppercase tracking-[0.28em] text-muted-foreground transition hover:text-destructive"
             >
               CLEAR
@@ -423,7 +140,7 @@ export function ChatPanel() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          send();
+          handleSend();
         }}
         className="flex items-center gap-2 border-t border-primary/15 bg-gradient-to-t from-primary/[0.04] to-transparent p-3.5"
       >
