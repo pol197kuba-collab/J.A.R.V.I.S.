@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import type { Mesh } from "three";
+import { MATRIX_SCALE } from "./matrixScale";
 
 // Slim view over AgentSummary (src/lib/agents/runtime.functions.ts) — only
 // the fields this satellite node actually renders, kept decoupled from the
@@ -77,7 +78,7 @@ export function AgentNode3D({
           onSelect(selected ? null : agent.slug);
         }}
       >
-        <icosahedronGeometry args={[0.38, 0]} />
+        <icosahedronGeometry args={[0.38 * MATRIX_SCALE, 0]} />
         <meshStandardMaterial
           color={color}
           emissive={color}
@@ -88,11 +89,16 @@ export function AgentNode3D({
       </mesh>
       {/* Wireframe shell — reads as a containment lattice around the core gem. */}
       <mesh>
-        <icosahedronGeometry args={[0.52, 0]} />
+        <icosahedronGeometry args={[0.52 * MATRIX_SCALE, 0]} />
         <meshBasicMaterial color={color} wireframe transparent opacity={0.22} />
       </mesh>
 
-      <Html center distanceFactor={8} position={[0, -0.78, 0]} style={{ pointerEvents: "none" }}>
+      <Html
+        center
+        distanceFactor={8}
+        position={[0, -0.78 * MATRIX_SCALE, 0]}
+        style={{ pointerEvents: "none" }}
+      >
         <div
           className="whitespace-nowrap text-center font-display text-[10px] uppercase tracking-[0.25em]"
           style={{ color, textShadow: `0 0 8px ${color}` }}
@@ -105,7 +111,12 @@ export function AgentNode3D({
       </Html>
 
       {showCard && (
-        <Html center distanceFactor={8} position={[0, 0.98, 0]} style={{ pointerEvents: "none" }}>
+        <Html
+          center
+          distanceFactor={8}
+          position={[0, 0.98 * MATRIX_SCALE, 0]}
+          style={{ pointerEvents: "none" }}
+        >
           <div
             className="w-[190px] rounded-md border bg-black/85 px-3 py-2 backdrop-blur-md"
             style={{ borderColor: `${color}88`, boxShadow: `0 0 20px -4px ${color}` }}

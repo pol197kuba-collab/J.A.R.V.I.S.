@@ -55,14 +55,14 @@ export function HudOverlay({
       </div>
 
       {/* Right log panel */}
-      <div className="pointer-events-auto absolute right-4 top-16 max-h-[45vh] w-[220px] overflow-hidden rounded-lg border border-cyan-400/25 bg-black/60 shadow-[0_0_30px_-10px_rgba(77,216,255,0.5)] backdrop-blur-md sm:right-6 sm:top-20 sm:w-[260px]">
-        <div className="flex items-center gap-1.5 border-b border-cyan-400/20 px-3 py-2">
+      <div className="pointer-events-auto absolute right-4 top-16 flex max-h-[50%] w-[220px] flex-col overflow-hidden rounded-lg border border-cyan-400/25 bg-black/60 shadow-[0_0_30px_-10px_rgba(77,216,255,0.5)] backdrop-blur-md sm:right-6 sm:top-20 sm:w-[260px]">
+        <div className="flex shrink-0 items-center gap-1.5 border-b border-cyan-400/20 px-3 py-2">
           <Activity className="h-3 w-3 text-cyan-300" strokeWidth={1.5} />
           <span className="font-display text-[9px] uppercase tracking-[0.25em] text-cyan-300/90">
             Recent Network Assignments
           </span>
         </div>
-        <div className="max-h-[38vh] space-y-1.5 overflow-y-auto p-2">
+        <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-2">
           {events.length === 0 ? (
             <p className="px-1 py-2 font-mono text-[9px] uppercase tracking-widest text-white/30">
               ▸ awaiting activity…

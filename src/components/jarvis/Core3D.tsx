@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { MeshDistortMaterial } from "@react-three/drei";
 import type { Mesh, PointLight } from "three";
+import { MATRIX_SCALE } from "./matrixScale";
 
 // Central J.A.R.V.I.S. reactor core — a molten, distorting sphere (drei's
 // MeshDistortMaterial extends MeshPhysicalMaterial, so emissive/roughness/
@@ -35,10 +36,16 @@ export function Core3D({ pulse = 0 }: { pulse?: number }) {
 
   return (
     <group>
-      <pointLight ref={lightRef} color={CORE_EMISSIVE} intensity={6} distance={14} decay={2} />
+      <pointLight
+        ref={lightRef}
+        color={CORE_EMISSIVE}
+        intensity={6}
+        distance={14 * MATRIX_SCALE}
+        decay={2}
+      />
 
       <mesh ref={coreRef}>
-        <sphereGeometry args={[1, 96, 96]} />
+        <sphereGeometry args={[MATRIX_SCALE, 96, 96]} />
         <MeshDistortMaterial
           color={CORE_BASE_COLOR}
           emissive={CORE_EMISSIVE}
@@ -51,15 +58,15 @@ export function Core3D({ pulse = 0 }: { pulse?: number }) {
       </mesh>
 
       <mesh ref={ringA} rotation={[Math.PI / 2.3, 0, 0]}>
-        <torusGeometry args={[1.55, 0.012, 8, 128]} />
+        <torusGeometry args={[1.55 * MATRIX_SCALE, 0.012, 8, 128]} />
         <meshBasicMaterial color={CORE_EMISSIVE} transparent opacity={0.55} />
       </mesh>
       <mesh ref={ringB} rotation={[Math.PI / 3.1, Math.PI / 5, 0]}>
-        <torusGeometry args={[1.85, 0.008, 8, 128]} />
+        <torusGeometry args={[1.85 * MATRIX_SCALE, 0.008, 8, 128]} />
         <meshBasicMaterial color={RING_ACCENT} transparent opacity={0.4} />
       </mesh>
       <mesh ref={ringC} rotation={[0, Math.PI / 2.4, Math.PI / 6]}>
-        <torusGeometry args={[2.1, 0.006, 8, 128]} />
+        <torusGeometry args={[2.1 * MATRIX_SCALE, 0.006, 8, 128]} />
         <meshBasicMaterial color={CORE_EMISSIVE} transparent opacity={0.3} />
       </mesh>
     </group>
