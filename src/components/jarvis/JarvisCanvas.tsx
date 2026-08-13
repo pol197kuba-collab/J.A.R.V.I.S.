@@ -4,6 +4,7 @@ import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import { Line, OrbitControls, Points, PointMaterial } from "@react-three/drei";
 import { Core3D } from "./Core3D";
 import { AgentNode3D, type AgentNodeData } from "./AgentNode3D";
+import { MATRIX_SCALE as SCALE } from "./matrixScale";
 
 const PARTICLE_COLOR = "#4dd8ff";
 
@@ -14,7 +15,7 @@ function ParticleField({ count = 500 }: { count?: number }) {
   const positions = useMemo(() => {
     const arr = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
-      const r = 3 + Math.random() * 5.5;
+      const r = (3 + Math.random() * 5.5) * SCALE;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
       arr[i * 3] = r * Math.sin(phi) * Math.cos(theta);
@@ -74,10 +75,10 @@ export function JarvisCanvas({ agents }: { agents: AgentNodeData[] }) {
 
   const positioned = useMemo(() => {
     const n = Math.max(agents.length, 1);
-    const radius = n <= 4 ? 2.6 : n <= 6 ? 3.0 : 3.4;
+    const radius = (n <= 4 ? 2.6 : n <= 6 ? 3.0 : 3.4) * SCALE;
     return agents.map((a, i) => {
       const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
-      const y = (i % 2 === 0 ? 1 : -1) * 0.35;
+      const y = (i % 2 === 0 ? 1 : -1) * 0.35 * SCALE;
       const position: [number, number, number] = [
         Math.cos(angle) * radius,
         y,
@@ -91,13 +92,13 @@ export function JarvisCanvas({ agents }: { agents: AgentNodeData[] }) {
 
   return (
     <Canvas
-      camera={{ position: [0, 2.2, 8.5], fov: 45 }}
+      camera={{ position: [0, 2.2 * SCALE, 8.5 * SCALE], fov: 45 }}
       dpr={[1, 1.75]}
       gl={{ antialias: true, powerPreference: "high-performance" }}
       onPointerMissed={() => setSelectedSlug(null)}
     >
       <color attach="background" args={["#020409"]} />
-      <fog attach="fog" args={["#020409", 8, 20]} />
+      <fog attach="fog" args={["#020409", 8 * SCALE, 20 * SCALE]} />
       <ambientLight intensity={0.25} color="#4dd8ff" />
       <directionalLight position={[5, 8, 5]} intensity={0.4} color="#ffffff" />
 
@@ -122,8 +123,8 @@ export function JarvisCanvas({ agents }: { agents: AgentNodeData[] }) {
 
       <OrbitControls
         enablePan={false}
-        minDistance={5}
-        maxDistance={14}
+        minDistance={5 * SCALE}
+        maxDistance={14 * SCALE}
         autoRotate
         autoRotateSpeed={0.35}
         maxPolarAngle={Math.PI / 1.6}
