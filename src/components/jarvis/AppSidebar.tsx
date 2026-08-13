@@ -58,9 +58,9 @@ export function AppSidebar() {
   return (
     <Sidebar
       collapsible="icon"
-      className="border-r border-sidebar-border/40 bg-gradient-to-b from-black/70 via-black/50 to-black/70 backdrop-blur-xl shadow-[8px_0_32px_-16px_color-mix(in_oklab,var(--primary)_50%,transparent)]"
+      className="border-r border-border/40 backdrop-blur-xl shadow-[8px_0_32px_-16px_color-mix(in_oklab,var(--primary)_50%,transparent)]"
     >
-      <SidebarHeader className="border-b border-sidebar-border/30 bg-gradient-to-b from-primary/[0.08] to-transparent">
+      <SidebarHeader className="border-b border-border/30 bg-gradient-to-b from-primary/[0.08] to-transparent">
         <div className="flex items-center gap-3 px-2 py-2">
           <MiniArcReactor size={36} />
           {(!collapsed || isMobile) && (
@@ -77,7 +77,7 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup className="px-3 py-3">
+        <SidebarGroup className="px-3 py-3 group-data-[collapsible=icon]:px-1.5">
           {(!collapsed || isMobile) && (
             <SidebarGroupLabel className="font-display mb-2 flex items-center gap-2 text-[9px] uppercase tracking-[0.35em] text-primary/60">
               <span className="h-px flex-1 bg-gradient-to-r from-transparent to-primary/30" />
@@ -87,7 +87,7 @@ export function AppSidebar() {
           )}
           <SidebarGroupContent
             className={cn(
-              "rounded-[var(--radius-md)] border border-primary/10 p-1.5",
+              "rounded-[var(--radius-md)] border border-primary/10 p-1.5 group-data-[collapsible=icon]:p-0",
               "bg-gradient-to-b from-primary/[0.04] via-transparent to-primary/[0.03]",
               "shadow-[inset_0_1px_0_color-mix(in_oklab,var(--primary)_12%,transparent),0_8px_24px_-16px_color-mix(in_oklab,var(--primary)_40%,transparent)]",
             )}
@@ -138,7 +138,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       {(!collapsed || isMobile) && (
-        <SidebarFooter className="border-t border-sidebar-border/30 bg-gradient-to-t from-primary/[0.08] to-transparent">
+        <SidebarFooter className="border-t border-border/30 bg-gradient-to-t from-primary/[0.08] to-transparent">
           <ArcCorePanel />
           <div className="space-y-1 px-2 py-2">
             <div className="flex items-center justify-between text-[10px] font-display uppercase tracking-widest">
@@ -167,7 +167,7 @@ function ArcCorePanel() {
   const status = useAgentStatus();
 
   return (
-    <div className={cn("border-b border-sidebar-border px-2", isMobile ? "py-1.5" : "py-2")}>
+    <div className={cn("border-b border-border px-2", isMobile ? "py-1.5" : "py-2")}>
       <div className="flex items-center justify-between font-display text-[9px] uppercase tracking-[0.28em] text-primary/80">
         <span>ARC CORE // J-3140</span>
         <span className="flex items-center gap-1 text-primary">
