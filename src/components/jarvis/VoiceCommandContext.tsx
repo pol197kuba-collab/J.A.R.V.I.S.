@@ -111,7 +111,7 @@ function isNoise(command: string): boolean {
   return false;
 }
 
-type AnySpeechRecognition = {
+export type AnySpeechRecognition = {
   continuous: boolean;
   interimResults: boolean;
   lang: string;
@@ -128,7 +128,7 @@ type AnySpeechRecognition = {
   stop: () => void;
 };
 
-function getSpeechCtor(): (new () => AnySpeechRecognition) | null {
+export function getSpeechCtor(): (new () => AnySpeechRecognition) | null {
   if (typeof window === "undefined") return null;
   const w = window as unknown as {
     SpeechRecognition?: new () => AnySpeechRecognition;
