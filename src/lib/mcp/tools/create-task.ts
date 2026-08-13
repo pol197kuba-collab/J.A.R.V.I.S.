@@ -16,7 +16,13 @@ export default defineTool({
   inputSchema: {
     title: z.string().min(1).max(200).describe("Short task title."),
     details: z.string().max(4000).optional().describe("Optional longer description."),
-    priority: z.number().int().min(0).max(5).optional().describe("Priority 0-5 (default 2)."),
+    priority: z
+      .number()
+      .int()
+      .min(1)
+      .max(5)
+      .optional()
+      .describe("Priority 1 (highest) – 5 (lowest). Defaults to 3."),
     tags: z.array(z.string().min(1).max(40)).max(20).optional(),
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
@@ -31,7 +37,7 @@ export default defineTool({
         user_id: ctx.getUserId()!,
         title: title.trim(),
         details: details ?? null,
-        priority: priority ?? 2,
+        priority: priority ?? 3,
         tags: tags ?? [],
         status: "todo",
       })
