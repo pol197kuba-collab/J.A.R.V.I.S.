@@ -415,8 +415,8 @@ function Settings() {
             <div>
               <p className="text-sm text-foreground">Route chat through Agent Runtime</p>
               <p className="text-xs text-muted-foreground">
-                Wysyła wiadomości przez serwerowego J.A.R.V.I.S.-a (log w agent_runs, historia w DB).
-                Wymaga „Sync to Agent Runtime" wyżej.
+                Wysyła wiadomości przez serwerowego J.A.R.V.I.S.-a (log w agent_runs, historia w
+                DB). Wymaga „Sync to Agent Runtime" wyżej.
               </p>
             </div>
             <button

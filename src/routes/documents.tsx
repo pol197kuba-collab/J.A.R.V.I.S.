@@ -302,8 +302,8 @@ function DocumentsPage() {
           </span>
         </div>
         <p className="px-4 pb-3 pt-1 text-[11px] text-muted-foreground">
-          Prezentacje, dokumenty i PDF-y stworzone przez agenta F.O.R.G.E. Kliknij, aby podejrzeć bez
-          pobierania.
+          Prezentacje, dokumenty i PDF-y stworzone przez agenta F.O.R.G.E. Kliknij, aby podejrzeć
+          bez pobierania.
         </p>
 
         {genLoading && <div className="px-4 py-3 text-muted-foreground">▸ loading…</div>}
@@ -314,7 +314,8 @@ function DocumentsPage() {
         )}
         {!genLoading && !genError && generated.length === 0 && (
           <div className="px-4 py-6 text-center text-muted-foreground">
-            ▸ brak plików. Poproś JARVIS-a, np. „zrób mi prezentację o…", aby F.O.R.G.E. coś stworzył.
+            ▸ brak plików. Poproś JARVIS-a, np. „zrób mi prezentację o…", aby F.O.R.G.E. coś
+            stworzył.
           </div>
         )}
 

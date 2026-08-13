@@ -43,7 +43,9 @@ export function AgentNode3D({
 }) {
   const meshRef = useRef<Mesh>(null);
   const [hovered, setHovered] = useState(false);
-  const color = agent.isEnabled ? (STATUS_COLOR[agent.status] ?? STATUS_COLOR.idle) : DISABLED_COLOR;
+  const color = agent.isEnabled
+    ? (STATUS_COLOR[agent.status] ?? STATUS_COLOR.idle)
+    : DISABLED_COLOR;
   const busy = agent.status === "busy";
   const showCard = hovered || selected;
 
@@ -109,7 +111,11 @@ export function AgentNode3D({
             style={{ borderColor: `${color}88`, boxShadow: `0 0 20px -4px ${color}` }}
           >
             <p className="font-display text-[9px] uppercase tracking-[0.2em]" style={{ color }}>
-              {agent.status === "busy" ? "ACTIVE TASK" : agent.status === "error" ? "ERROR" : "STANDBY"}
+              {agent.status === "busy"
+                ? "ACTIVE TASK"
+                : agent.status === "error"
+                  ? "ERROR"
+                  : "STANDBY"}
               {!agent.isEnabled && " · DISABLED"}
             </p>
             {agent.currentTask ? (
@@ -120,7 +126,11 @@ export function AgentNode3D({
                 <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/10">
                   <div
                     className="h-full rounded-full transition-[width]"
-                    style={{ width: `${agent.progress}%`, backgroundColor: color, boxShadow: `0 0 6px ${color}` }}
+                    style={{
+                      width: `${agent.progress}%`,
+                      backgroundColor: color,
+                      boxShadow: `0 0 6px ${color}`,
+                    }}
                   />
                 </div>
                 <div className="mt-1 flex items-center justify-between font-mono text-[8px] text-white/60">

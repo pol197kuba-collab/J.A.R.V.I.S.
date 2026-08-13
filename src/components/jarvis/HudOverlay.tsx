@@ -26,7 +26,13 @@ function timeOf(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour12: false });
 }
 
-export function HudOverlay({ agentCount, onlineCount }: { agentCount: number; onlineCount: number }) {
+export function HudOverlay({
+  agentCount,
+  onlineCount,
+}: {
+  agentCount: number;
+  onlineCount: number;
+}) {
   const fetchEvents = useServerFn(listSystemEvents);
   const { data: events = [] } = useQuery({
     queryKey: ["system-events", "jarvis-matrix"],

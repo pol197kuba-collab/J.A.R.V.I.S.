@@ -43,7 +43,12 @@ function ParticleField({ count = 500 }: { count?: number }) {
 function ConnectionLines({
   nodes,
 }: {
-  nodes: Array<{ slug: string; position: [number, number, number]; status: string; isEnabled: boolean }>;
+  nodes: Array<{
+    slug: string;
+    position: [number, number, number];
+    status: string;
+    isEnabled: boolean;
+  }>;
 }) {
   return (
     <>
@@ -52,10 +57,7 @@ function ConnectionLines({
         return (
           <Line
             key={n.slug}
-            points={[
-              [0, 0, 0],
-              n.position,
-            ]}
+            points={[[0, 0, 0], n.position]}
             color={active ? "#ffaa00" : "#0891b2"}
             transparent
             opacity={active ? 0.85 : n.isEnabled ? 0.28 : 0.12}
