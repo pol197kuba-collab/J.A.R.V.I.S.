@@ -17,7 +17,7 @@ import {
 } from "./models";
 import { callGroq } from "./providers/groq";
 import type { GeminiContent, GeminiPart } from "./providers/types";
-import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
+import { AGENT_SLUGS, isToolForcedForAgent } from "@/lib/constants/agentSlugs";
 
 // UI actions J.A.R.V.I.S. (or any agent facing the user directly) can
 // trigger via the perform_ui_action tool. Must stay in sync with the
@@ -407,7 +407,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // forge agent, exactly like J.A.R.V.I.S. always gets
     // delegate_to_agent regardless of DB state.
     if (
-      agent.slug === AGENT_SLUGS.FORGE &&
+      isToolForcedForAgent(agent.slug, "generate_document") &&
       !toolDeclarations.some((d) => d.name === "generate_document")
     ) {
       const genTool = getToolByName("generate_document");
@@ -442,7 +442,9 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // recursion depth so a chain of delegations can't loop forever.
     const DELEGATE_TOOL_NAME = "delegate_to_agent";
     const allowDelegate =
-      agent.slug === AGENT_SLUGS.JARVIS && teammates.length > 0 && delegationDepth < 2;
+      isToolForcedForAgent(agent.slug, DELEGATE_TOOL_NAME) &&
+      teammates.length > 0 &&
+      delegationDepth < 2;
     if (allowDelegate) {
       toolDeclarations.push({
         name: DELEGATE_TOOL_NAME,
