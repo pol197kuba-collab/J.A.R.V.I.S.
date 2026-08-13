@@ -13,6 +13,7 @@ import { isIP } from "node:net";
 import { lookup } from "node:dns/promises";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
+import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
 export type ToolContext = {
   supabase: SupabaseClient<Database>;
@@ -320,7 +321,7 @@ const saveNote: Tool = {
         title,
         body,
         tags,
-        source: "jarvis",
+        source: AGENT_SLUGS.JARVIS,
       })
       .select("id")
       .single();
@@ -527,7 +528,7 @@ const remember: Tool = {
       if (existing) {
         const { error } = await ctx.supabase
           .from("memories")
-          .update({ value, tags, importance, source: "jarvis", ...embeddingPatch })
+          .update({ value, tags, importance, source: AGENT_SLUGS.JARVIS, ...embeddingPatch })
           .eq("id", existing.id);
         if (error) {
           await ctx.logEvent("error", "tool.remember", error.message, { key } as Json);
@@ -552,7 +553,7 @@ const remember: Tool = {
         value,
         tags,
         importance,
-        source: "jarvis",
+        source: AGENT_SLUGS.JARVIS,
         ...embeddingPatch,
       })
       .select("id")
@@ -1089,7 +1090,7 @@ const checkDelegation: Tool = {
       .select("id, slug")
       .eq("owner_id", ctx.userId);
     const nonOrchestratorIds = (agentRows ?? [])
-      .filter((a) => a.slug !== "jarvis")
+      .filter((a) => a.slug !== AGENT_SLUGS.JARVIS)
       .map((a) => a.id);
     if (nonOrchestratorIds.length === 0) {
       return { checked: 0, linked: 0, unlinked: 0, note: "no delegated agents exist yet" };

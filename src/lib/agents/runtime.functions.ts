@@ -14,6 +14,7 @@ import { z } from "zod";
 import type { Json } from "@/integrations/supabase/types";
 import { DEFAULT_GEMINI_MODEL } from "./models";
 import { logServerError } from "@/lib/system/logServerError";
+import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
 // Accept any Gemini model id — the enum used to be a small whitelist which
 // made every new Gemini release require a code change. The Google API itself
@@ -367,7 +368,7 @@ export type AgentToolSummary = {
 };
 
 const AgentSlugInput = z.object({
-  agentSlug: z.string().min(1).max(64).default("jarvis"),
+  agentSlug: z.string().min(1).max(64).default(AGENT_SLUGS.JARVIS),
 });
 
 export const listAgentTools = createServerFn({ method: "GET" })
@@ -410,7 +411,7 @@ export const listAgentTools = createServerFn({ method: "GET" })
   });
 
 const SetAgentToolInput = z.object({
-  agentSlug: z.string().min(1).max(64).default("jarvis"),
+  agentSlug: z.string().min(1).max(64).default(AGENT_SLUGS.JARVIS),
   toolId: z.string().uuid(),
   enabled: z.boolean(),
 });
@@ -506,7 +507,7 @@ export const listAgents = createServerFn({ method: "GET" })
 // ---------------------------------------------------------------------------
 
 const RunAgentInput = z.object({
-  agentSlug: z.string().min(1).max(64).default("jarvis"),
+  agentSlug: z.string().min(1).max(64).default(AGENT_SLUGS.JARVIS),
   input: z.string().min(1).max(8000),
   history: z
     .array(
@@ -678,7 +679,7 @@ export const getActiveAgentSlug = createServerFn({ method: "GET" })
       .select("active_agent_slug")
       .eq("owner_id", userId)
       .maybeSingle();
-    return { agentSlug: data?.active_agent_slug?.trim() || "jarvis" };
+    return { agentSlug: data?.active_agent_slug?.trim() || AGENT_SLUGS.JARVIS };
   });
 
 // ---------------------------------------------------------------------------
@@ -906,7 +907,7 @@ export const getAgentDetail = createServerFn({ method: "GET" })
       .from("system_events")
       .select("id, level, source, message, meta, created_at")
       .eq("owner_id", userId)
-      .or(`source.eq.${agent.slug},source.like.tool.%,source.eq.jarvis`)
+      .or(`source.eq.${agent.slug},source.like.tool.%,source.eq.${AGENT_SLUGS.JARVIS}`)
       .order("created_at", { ascending: false })
       .limit(40);
     const { data: logEvents } = await supabase

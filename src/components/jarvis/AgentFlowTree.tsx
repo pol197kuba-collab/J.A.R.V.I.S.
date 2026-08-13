@@ -11,6 +11,7 @@ import {
 import { describeToolCall } from "./toolDescriptions";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
 // How long a fully-settled interaction stays highlighted before the tree
 // fades back to full standby. Without this, the last-ever completed run
@@ -388,9 +389,9 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
     return out;
   }, [activeBySlug]);
 
-  const orchestrator = agents.find((a) => a.slug === "jarvis");
-  const teammates = agents.filter((a) => a.slug !== "jarvis");
-  const orchestratorRun = activeBySlug.get("jarvis");
+  const orchestrator = agents.find((a) => a.slug === AGENT_SLUGS.JARVIS);
+  const teammates = agents.filter((a) => a.slug !== AGENT_SLUGS.JARVIS);
+  const orchestratorRun = activeBySlug.get(AGENT_SLUGS.JARVIS);
 
   // Layout: horizontal spacing and vertical drop are computed independently
   // of each other (NOT a shared radius/angle pair) — an earlier version
@@ -491,9 +492,9 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
                 name={orchestrator.name}
                 run={orchestratorRun}
                 badgeSize={orchRadius * 2}
-                selected={selectedSlug === "jarvis"}
+                selected={selectedSlug === AGENT_SLUGS.JARVIS}
                 onClick={() =>
-                  setSelectedSlug((s) => (s === "jarvis" ? null : "jarvis"))
+                  setSelectedSlug((s) => (s === AGENT_SLUGS.JARVIS ? null : AGENT_SLUGS.JARVIS))
                 }
               />
             </div>

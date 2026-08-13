@@ -10,6 +10,7 @@
 import { JARVIS_PERSONA } from "./persona";
 import { setAgentBusy, reportOutcome } from "./agentActivity";
 import { logClientEvent } from "@/lib/system/logClientEvent";
+import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
 const MODELS = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"];
 const endpointFor = (model: string) =>
@@ -77,7 +78,7 @@ async function resolveConversationId(): Promise<string | null> {
     conversationLookupPromise = (async () => {
       try {
         const { getActiveConversation } = await import("@/lib/agents/runtime.functions");
-        const res = await getActiveConversation({ data: { agentSlug: "jarvis" } });
+        const res = await getActiveConversation({ data: { agentSlug: AGENT_SLUGS.JARVIS } });
         return res.conversationId ?? null;
       } catch {
         return null;
@@ -269,7 +270,7 @@ export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
       try {
         result = await runAgent({
           data: {
-            agentSlug: "jarvis",
+            agentSlug: AGENT_SLUGS.JARVIS,
             input: input.prompt,
             history: input.history ?? [],
             conversationId: conversationId ?? undefined,

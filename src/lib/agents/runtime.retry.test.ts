@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { runOrchestrator } from "./runtime.server";
+import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
 // Regression test for the Gemini 503 "high demand" storm (observed live
 // 2026-07-22: bursts of HTTP 503 broke every presentation run for minutes,
@@ -42,7 +43,7 @@ function baseResponses(): Record<string, CannedResponse[]> {
         data: {
           id: "a-orch",
           name: "J.A.R.V.I.S.",
-          slug: "jarvis",
+          slug: AGENT_SLUGS.JARVIS,
           model: "gemini-test",
           config: {},
         },
@@ -88,7 +89,7 @@ describe("runOrchestrator — Gemini 503 retry before failover", () => {
     const result = await runOrchestrator({
       supabase: makeSupabaseStub(baseResponses()),
       userId: "u1",
-      agentSlug: "jarvis",
+      agentSlug: AGENT_SLUGS.JARVIS,
       input: "Cześć",
       history: [],
     });

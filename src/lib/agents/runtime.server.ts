@@ -17,6 +17,7 @@ import {
 } from "./models";
 import { callGroq } from "./providers/groq";
 import type { GeminiContent, GeminiPart } from "./providers/types";
+import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
 // UI actions J.A.R.V.I.S. (or any agent facing the user directly) can
 // trigger via the perform_ui_action tool. Must stay in sync with the
@@ -233,7 +234,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
   // removed from the declared enum outright whenever an enabled S.H.I.E.L.D.
   // exists — the model then has no way to select it, by construction,
   // rather than one more instruction to hopefully win a wording race.
-  const hasEnabledGuardian = teammates.some((t) => t.slug === "shield" && t.is_enabled);
+  const hasEnabledGuardian = teammates.some((t) => t.slug === AGENT_SLUGS.SHIELD && t.is_enabled);
   const effectiveUiActions: string[] = hasEnabledGuardian
     ? UI_ACTIONS.filter((a) => a !== "system_check")
     : [...UI_ACTIONS];
@@ -252,7 +253,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
               }${t.description ? `. ${t.description}` : ""}`,
           )
           .join("\n") +
-        (agent.slug === "jarvis"
+        (agent.slug === AGENT_SLUGS.JARVIS
           ? `\n\nJako J.A.R.V.I.S. MOŻESZ delegować zadanie do wybranego kolegi używając narzędzia delegate_to_agent(slug, task). Rób to, kiedy zadanie pasuje wyraźnie do specjalizacji innego agenta (np. copy / marketing → herald; pytanie o treść/zawartość przesłanego dokumentu lub pliku → metric; pogłębiony research tematu, raport/opracowanie z wielu źródeł, "zbadaj temat X", porównanie opcji wymagające sprawdzenia źródeł → insight; wygenerowanie PLIKU do pobrania — prezentacja pptx, dokument Word/docx, PDF → forge). Do insight deleguj pytania wymagające WIELU wyszukiwań i weryfikacji źródeł — proste pojedyncze pytania faktograficzne obsługuj sam swoim web_search. PIPELINE DWUETAPOWY: gdy użytkownik prosi o prezentację/dokument/raport NA TEMAT wymagający zebrania treści (np. "zrób mi prezentację o X"), wykonaj DWA delegowania w tej samej turze: najpierw insight (zbierz treść merytoryczną), potem forge — a w polu task dla forge przekaż KOMPLETNĄ treść z odpowiedzi insight (format, tytuł i gotowe sekcje z konkretami), bo forge nie ma dostępu do internetu ani do rozmowy. Gdy treść jest prosta i już znana, deleguj bezpośrednio do forge. WAŻNE po delegacji do forge: NIE przepisuj ani nie wklejaj do swojej odpowiedzi żadnego linku/URL-a do pobrania pliku — system automatycznie dołącza poprawny link pod Twoją wiadomością, a ręczne przepisanie długiego adresu wprowadza literówki i psuje podpis linku. Po prostu poinformuj, że plik jest gotowy do pobrania poniżej. WAŻNE — OGÓLNA ZASADA ROZRÓŻNIANIA delegate_to_agent vs ${UI_ACTION_TOOL_NAME}: samo wystąpienie słowa "agent"/"agenci"/"agentów" w poleceniu NIE oznacza automatycznie prośby o otwarcie centrum agentów (open_agents) — to osobne, rzadsze znaczenie. Jeśli użytkownik chce, żeby agent(ci) COŚ ZROBILI / WYKONALI realną pracę (np. "zademonstruj ich możliwości", "użyj agentów do X", "niech herald przygotuje Y", "uruchom agentów żeby..."), to jest prośba o pracę merytoryczną — deleguj przez delegate_to_agent, NIE wywołuj ${UI_ACTION_TOOL_NAME}. Wywołaj open_agents TYLKO gdy użytkownik chce zobaczyć/otworzyć sam WIDOK/EKRAN centrum agentów (np. "pokaż mi agentów", "otwórz centrum agentów", "przejdź do zakładki agentów"), bez oczekiwania na wykonanie jakiegokolwiek zadania. Ta sama zasada dotyczy pytań o TREŚĆ czegoś (np. "co jest w dokumencie X", "co zawiera plik Y") — to pytanie merytoryczne, deleguj do metric, nie steruj interfejsem. Gdy użytkownik prosi o demonstrację/użycie WIELU lub WSZYSTKICH agentów, deleguj po kolei do kilku pasujących kolegów w tej samej turze (masz do kilkunastu kroków narzędziowych dostępnych), zamiast zatrzymywać się na jednym i nazywać to "początkiem". SZCZEGÓLNY PRZYPADEK: akcja UI "system_check" to WYŁĄCZNIE ozdobna, na stałe zaszyta fraza ("Wszystkie systemy sprawne...") bez żadnej realnej treści — nie sprawdza faktycznie niczego. Jeśli w zespole jest shield (S.H.I.E.L.D.) i użytkownik prosi o sprawdzenie/kontrolę/status/kondycję systemu (np. "sprawdź system", "wykonaj kontrolę systemu", "co się dzieje z systemem"), ZAWSZE deleguj do shield po realny raport zamiast wywoływać system_check — użytkownik oczekuje faktycznych wniosków, nie samej dekoracji. Zwracaj użytkownikowi krótkie streszczenie odpowiedzi delegowanego agenta (lub agentów) w swoim głosie.`
           : "")
       : "";
@@ -371,7 +372,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     });
   };
 
-  await logEvent("info", "jarvis", `run started · model ${model}`, {
+  await logEvent("info", AGENT_SLUGS.JARVIS, `run started · model ${model}`, {
     run_id: runId,
     agent: agentSlug,
     input_preview: input.slice(0, 120),
@@ -406,7 +407,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // forge agent, exactly like J.A.R.V.I.S. always gets
     // delegate_to_agent regardless of DB state.
     if (
-      agent.slug === "forge" &&
+      agent.slug === AGENT_SLUGS.FORGE &&
       !toolDeclarations.some((d) => d.name === "generate_document")
     ) {
       const genTool = getToolByName("generate_document");
@@ -441,7 +442,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // recursion depth so a chain of delegations can't loop forever.
     const DELEGATE_TOOL_NAME = "delegate_to_agent";
     const allowDelegate =
-      agent.slug === "jarvis" && teammates.length > 0 && delegationDepth < 2;
+      agent.slug === AGENT_SLUGS.JARVIS && teammates.length > 0 && delegationDepth < 2;
     if (allowDelegate) {
       toolDeclarations.push({
         name: DELEGATE_TOOL_NAME,
@@ -495,7 +496,8 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // back to AUTO so the follow-up turn can produce the text summary.
     const GENERATE_DOCUMENT_TOOL = "generate_document";
     const isProducer =
-      agent.slug === "forge" && toolDeclarations.some((d) => d.name === GENERATE_DOCUMENT_TOOL);
+      agent.slug === AGENT_SLUGS.FORGE &&
+      toolDeclarations.some((d) => d.name === GENERATE_DOCUMENT_TOOL);
     let producerCalledGenerate = false;
 
     for (let iter = 0; iter < maxToolIterations; iter++) {
@@ -559,7 +561,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           }
           await logEvent(
             "warn",
-            "jarvis",
+            AGENT_SLUGS.JARVIS,
             `gemini HTTP ${res.status}, retry ${attempt + 1}/${GEMINI_MAX_RETRIES}`,
             { run_id: runId, iter } as Json,
           );
@@ -600,7 +602,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         if (!groqApiKey) throw geminiErr;
         await logEvent(
           "warn",
-          "jarvis",
+          AGENT_SLUGS.JARVIS,
           `gemini call failed, failing over to groq: ${geminiMsg}`,
           {
             run_id: runId,
@@ -625,13 +627,13 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           totalTokensOut += groqResult.tokensOut;
           functionCalls = groqResult.functionCalls;
           textOut = groqResult.text;
-          await logEvent("info", "jarvis", "failover to groq succeeded", {
+          await logEvent("info", AGENT_SLUGS.JARVIS, "failover to groq succeeded", {
             run_id: runId,
             iter,
           } as Json);
         } catch (groqErr) {
           const groqMsg = groqErr instanceof Error ? groqErr.message : String(groqErr);
-          await logEvent("error", "jarvis", `groq failover also failed: ${groqMsg}`, {
+          await logEvent("error", AGENT_SLUGS.JARVIS, `groq failover also failed: ${groqMsg}`, {
             run_id: runId,
             iter,
           } as Json);
@@ -663,7 +665,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           if ((UI_ACTIONS as readonly string[]).includes(requested)) {
             uiAction = requested as UiAction;
             response = { ok: true, action: requested };
-            await logEvent("info", "jarvis", `ui action: ${requested}`, {
+            await logEvent("info", AGENT_SLUGS.JARVIS, `ui action: ${requested}`, {
               run_id: runId,
             } as Json);
           } else {
@@ -675,11 +677,11 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           const target = teammates.find((t) => t.slug === targetSlug && t.is_enabled);
           if (!target || !task) {
             response = { error: `invalid_delegation`, requested: targetSlug };
-            await logEvent("warn", "jarvis", `delegate rejected: ${targetSlug}`, {
+            await logEvent("warn", AGENT_SLUGS.JARVIS, `delegate rejected: ${targetSlug}`, {
               run_id: runId,
             } as Json);
           } else {
-            await logEvent("info", "jarvis", `delegating → ${targetSlug}`, {
+            await logEvent("info", AGENT_SLUGS.JARVIS, `delegating → ${targetSlug}`, {
               run_id: runId,
               task_preview: task.slice(0, 200),
             } as Json);
@@ -707,7 +709,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           }
         } else if (!tool) {
           response = { error: `unknown_tool_${call.name}` };
-          await logEvent("warn", "jarvis", `unknown tool call: ${call.name}`, {
+          await logEvent("warn", AGENT_SLUGS.JARVIS, `unknown tool call: ${call.name}`, {
             run_id: runId,
           } as Json);
         } else {
@@ -816,7 +818,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // Herald/Metric runs ended up with phantom open_dashboard entries
     // (their real answers overwritten by a navigation confirmation).
     if (!isDelegatedRun && !uiAction && toolCallLog.length === 0) {
-      await logEvent("info", "jarvis", "classifier fallback: block entered", {
+      await logEvent("info", AGENT_SLUGS.JARVIS, "classifier fallback: block entered", {
         run_id: runId,
       } as Json);
 
@@ -871,7 +873,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
             });
             await logEvent(
               "info",
-              "jarvis",
+              AGENT_SLUGS.JARVIS,
               `ui action via classifier fallback (groq): ${requested}`,
               { run_id: runId } as Json,
             );
@@ -880,16 +882,21 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
             // Also logged on the "none" branch (the common case — most
             // turns aren't UI commands) so System Logs shows Groq was
             // actually hit every turn, not only on the rare UI-action hits.
-            await logEvent("info", "jarvis", "classifier fallback via groq: none", {
+            await logEvent("info", AGENT_SLUGS.JARVIS, "classifier fallback via groq: none", {
               run_id: runId,
             } as Json);
           }
           classifiedByGroq = true;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          await logEvent("warn", "jarvis", `classifier groq failed, falling back: ${msg}`, {
-            run_id: runId,
-          } as Json);
+          await logEvent(
+            "warn",
+            AGENT_SLUGS.JARVIS,
+            `classifier groq failed, falling back: ${msg}`,
+            {
+              run_id: runId,
+            } as Json,
+          );
         }
       }
 
@@ -972,7 +979,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
                 });
                 await logEvent(
                   "info",
-                  "jarvis",
+                  AGENT_SLUGS.JARVIS,
                   `ui action via classifier fallback: ${requested}`,
                   {
                     run_id: runId,
@@ -989,7 +996,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
               name: "classifier_http_error",
               args: { status: classifyRes.status, body: bodyText.slice(0, 300) },
             });
-            await logEvent("warn", "jarvis", `classifier HTTP ${classifyRes.status}`, {
+            await logEvent("warn", AGENT_SLUGS.JARVIS, `classifier HTTP ${classifyRes.status}`, {
               run_id: runId,
               body_preview: bodyText.slice(0, 200),
             } as Json);
@@ -997,7 +1004,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           toolCallLog.push({ name: "classifier_exception", args: { message: msg } });
-          await logEvent("warn", "jarvis", `classifier exception: ${msg}`, {
+          await logEvent("warn", AGENT_SLUGS.JARVIS, `classifier exception: ${msg}`, {
             run_id: runId,
           } as Json);
         }
@@ -1043,7 +1050,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
 
     await logEvent(
       "info",
-      "jarvis",
+      AGENT_SLUGS.JARVIS,
       `run done · ${toolCallLog.length} tool calls · ${latencyMs}ms`,
       {
         run_id: runId,
@@ -1111,7 +1118,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         time_elapsed_seconds: Math.round((Date.now() - startedAt) / 1000),
       })
       .eq("id", agent.id);
-    await logEvent("error", "jarvis", `run failed: ${msg}`, { run_id: runId } as Json);
+    await logEvent("error", AGENT_SLUGS.JARVIS, `run failed: ${msg}`, { run_id: runId } as Json);
     return { runId, status: "error", output: "", error: msg };
   }
 }

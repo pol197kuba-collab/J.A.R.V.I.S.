@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { runOrchestrator } from "./runtime.server";
+import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
 // Regression tests for UI control leaking into delegated sub-runs.
 //
@@ -63,7 +64,7 @@ function baseResponses(): Record<string, CannedResponse[]> {
         data: {
           id: "agent-herald",
           name: "H.E.R.A.L.D.",
-          slug: "herald",
+          slug: AGENT_SLUGS.HERALD,
           model: "gemini-test",
           config: {},
         },
@@ -94,7 +95,7 @@ describe("runOrchestrator — delegated sub-runs get no UI control", () => {
     const result = await runOrchestrator({
       supabase: makeSupabaseStub(baseResponses()),
       userId: "user-1",
-      agentSlug: "herald",
+      agentSlug: AGENT_SLUGS.HERALD,
       input: "Przygotuj tekst kampanii dla pulpitu klienta.",
       history: [],
       delegationDepth: 1,
@@ -122,7 +123,7 @@ describe("runOrchestrator — delegated sub-runs get no UI control", () => {
     const result = await runOrchestrator({
       supabase: makeSupabaseStub(baseResponses()),
       userId: "user-1",
-      agentSlug: "herald",
+      agentSlug: AGENT_SLUGS.HERALD,
       input: "Przygotuj tekst kampanii dla pulpitu klienta.",
       history: [],
     });
