@@ -44,6 +44,10 @@ export type AgentSummary = {
   progress: number;
   /** Wall-clock duration (seconds) of the current / most recently finished run. */
   timeElapsedSeconds: number;
+  /** Set once when the current run started, cleared when it finishes — lets
+   *  the client compute a live elapsed-time counter by ticking locally
+   *  instead of waiting on the next poll. Null when idle. */
+  busySince: string | null;
   isEnabled: boolean;
   activeRuns: number;
   lastRunAt: string | null;
@@ -468,7 +472,7 @@ export const listAgents = createServerFn({ method: "GET" })
     const { data: agents, error } = await supabase
       .from("agents")
       .select(
-        "id, slug, name, role, description, model, status, current_task, progress, time_elapsed_seconds, is_enabled",
+        "id, slug, name, role, description, model, status, current_task, progress, time_elapsed_seconds, busy_since, is_enabled",
       )
       .eq("owner_id", userId)
       .order("created_at", { ascending: true })
@@ -500,6 +504,7 @@ export const listAgents = createServerFn({ method: "GET" })
         currentTask: a.current_task,
         progress: a.progress,
         timeElapsedSeconds: a.time_elapsed_seconds,
+        busySince: a.busy_since,
         isEnabled: a.is_enabled,
         activeRuns,
         lastRunAt: last?.created_at ?? null,
