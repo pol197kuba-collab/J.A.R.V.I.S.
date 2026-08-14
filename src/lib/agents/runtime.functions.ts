@@ -72,6 +72,11 @@ export type AgentRunResult = {
    *  be generated. The client fire-and-forgets enrichDocumentImagesFn for
    *  this id, so slow image generation runs in its own time budget. */
   enrichDocument?: { id: string };
+  /** Set when queue_document_job enqueued a background Insight → Forge run.
+   *  The client fire-and-forgets runDocumentJobFn for this id; completion
+   *  (success or failure) arrives later as a row in public.notifications,
+   *  not in this turn's reply. */
+  documentJob?: { id: string };
 };
 
 // ---------------------------------------------------------------------------

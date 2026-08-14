@@ -17,6 +17,7 @@ import { speak } from "@/lib/audio/speak";
 import { setAgentBusy, reportOutcome } from "./agentActivity";
 import { requestOpenDocument } from "@/lib/documents/openDocumentBus";
 import { enrichDocumentImagesFn } from "@/lib/documents/generated.functions";
+import { runDocumentJobFn } from "@/lib/agents/documentJobs.functions";
 import { ACTIVE_AGENT_LS_KEY } from "@/routes/agent-hub";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
@@ -106,6 +107,7 @@ export function useAgentChatChannel(): AgentChatChannel {
   const persistActiveAgent = useServerFn(setActiveAgentFn);
   const fetchActiveAgentSlug = useServerFn(getActiveAgentSlug);
   const enrichImages = useServerFn(enrichDocumentImagesFn);
+  const runDocumentJob = useServerFn(runDocumentJobFn);
 
   const { data: agents = [] } = useQuery({
     queryKey: ["agents", "list"],
@@ -258,6 +260,16 @@ export function useAgentChatChannel(): AgentChatChannel {
             if (result.enrichDocument) {
               enrichImages({ data: { fileId: result.enrichDocument.id } }).catch(() => {
                 /* best-effort — the file exists text-only regardless */
+              });
+            }
+            // Real background pipeline: queue_document_job only enqueued a
+            // row — kick the actual Insight → Forge run in its own request,
+            // same fire-and-forget idiom as image enrichment above. It can
+            // take minutes; completion arrives later as a notification, not
+            // in this response, so nothing here awaits it.
+            if (result.documentJob) {
+              runDocumentJob({ data: { jobId: result.documentJob.id } }).catch(() => {
+                /* best-effort — a failure still lands a notification server-side */
               });
             }
             if (result.status === "done") {

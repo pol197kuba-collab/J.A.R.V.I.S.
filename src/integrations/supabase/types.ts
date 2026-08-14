@@ -572,6 +572,89 @@ export type Database = {
           },
         ];
       };
+      document_jobs: {
+        Row: {
+          brief: string;
+          created_at: string;
+          error: string | null;
+          finished_at: string | null;
+          id: string;
+          owner_id: string;
+          result: Json | null;
+          run_id: string | null;
+          status: string;
+          title: string;
+          updated_at: string;
+        };
+        Insert: {
+          brief: string;
+          created_at?: string;
+          error?: string | null;
+          finished_at?: string | null;
+          id?: string;
+          owner_id: string;
+          result?: Json | null;
+          run_id?: string | null;
+          status?: string;
+          title: string;
+          updated_at?: string;
+        };
+        Update: {
+          brief?: string;
+          created_at?: string;
+          error?: string | null;
+          finished_at?: string | null;
+          id?: string;
+          owner_id?: string;
+          result?: Json | null;
+          run_id?: string | null;
+          status?: string;
+          title?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "document_jobs_run_id_fkey";
+            columns: ["run_id"];
+            isOneToOne: false;
+            referencedRelation: "agent_runs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      notifications: {
+        Row: {
+          body: string | null;
+          created_at: string;
+          id: string;
+          kind: string;
+          owner_id: string;
+          payload: Json;
+          read: boolean;
+          title: string;
+        };
+        Insert: {
+          body?: string | null;
+          created_at?: string;
+          id?: string;
+          kind: string;
+          owner_id: string;
+          payload?: Json;
+          read?: boolean;
+          title: string;
+        };
+        Update: {
+          body?: string | null;
+          created_at?: string;
+          id?: string;
+          kind?: string;
+          owner_id?: string;
+          payload?: Json;
+          read?: boolean;
+          title?: string;
+        };
+        Relationships: [];
+      };
       local_jobs: {
         Row: {
           args: Json;

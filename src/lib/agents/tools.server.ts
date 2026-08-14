@@ -1375,6 +1375,70 @@ const searchDocumentsTool: Tool = {
 
 const SIGNED_URL_TTL_SECONDS = 7 * 24 * 3600; // 7 days
 
+// ---------------------------------------------------------------------------
+// queue_document_job — background Insight → Forge pipeline
+// ---------------------------------------------------------------------------
+
+// Replaces running Insight then Forge SYNCHRONOUSLY inside this same chat
+// turn (the old "PIPELINE DWUETAPOWY" instruction below) for anything that
+// needs real research: that made every "zrób mi prezentację o X" request
+// block on both agents finishing inside one HTTP request's time budget,
+// which is exactly why decks came back thin — research got cut short to fit.
+// This tool only enqueues a row; the actual work runs in its own execution
+// (runDocumentJobFn, src/lib/agents/documentJobs.functions.ts), fire-and-
+// forgotten by the client right after this turn returns — same idiom the
+// image-enrichment pass already uses. Completion (success OR failure) lands
+// as a row in public.notifications, which the HUD shows via Realtime.
+const queueDocumentJob: Tool = {
+  declaration: {
+    name: "queue_document_job",
+    description:
+      "Zleć w TLE pełne przygotowanie dokumentu/prezentacji, które wymaga researchu (Insight zbierze treść, potem Forge zbuduje plik ze zdjęciami). Zwraca natychmiast — NIE czekaj na wynik w tej turze. Użyj zamiast delegate_to_agent(insight) + delegate_to_agent(forge), gdy temat wymaga zebrania faktów z internetu. Dla prostej, już znanej treści nadal deleguj bezpośrednio do forge.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Krótki tytuł dokumentu/prezentacji." },
+        brief: {
+          type: "string",
+          description:
+            "Pełne zadanie badawcze dla Insight — temat, kątem czego ma szukać, jaki format finalnie (prezentacja/dokument/PDF) i jak szczegółowy ma być wynik.",
+        },
+      },
+      required: ["title", "brief"],
+    },
+  },
+  async execute(args, ctx) {
+    const title = String(args.title ?? "")
+      .trim()
+      .slice(0, 200);
+    const brief = String(args.brief ?? "")
+      .trim()
+      .slice(0, 4000);
+    if (!title) return { error: "missing_title" };
+    if (!brief) return { error: "missing_brief" };
+
+    const { data, error } = await ctx.supabase
+      .from("document_jobs")
+      .insert({ owner_id: ctx.userId, run_id: ctx.runId, title, brief })
+      .select("id")
+      .single();
+    if (error) {
+      await ctx.logEvent("error", "tool.queue_document_job", error.message, { title } as Json);
+      return { error: error.message };
+    }
+    await ctx.logEvent("info", "tool.queue_document_job", `queued: ${title}`, {
+      job_id: data.id,
+      run_id: ctx.runId,
+    } as Json);
+    return {
+      ok: true,
+      job_id: data.id,
+      instruction:
+        "Zadanie zostało zlecone w tle. Odpowiedz KRÓTKO, że zaczynasz nad tym pracować i dasz znać (powiadomieniem), gdy będzie gotowe — NIE opisuj treści, której jeszcze nie ma.",
+    };
+  },
+};
+
 const generateDocumentTool: Tool = {
   declaration: {
     name: "generate_document",
@@ -1729,6 +1793,7 @@ export const ALL_TOOLS: Tool[] = [
   runLocalAction,
   listDocumentsTool,
   searchDocumentsTool,
+  queueDocumentJob,
   generateDocumentTool,
   openDocumentTool,
 ];

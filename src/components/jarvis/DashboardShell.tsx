@@ -10,6 +10,8 @@ import { useRouteTransition } from "@/components/jarvis/TransitionContext";
 import { useSidebar } from "@/components/ui/sidebar";
 import { audio } from "@/lib/audio/AudioEngine";
 import { HeaderVoiceToggle } from "@/components/jarvis/HeaderVoiceToggle";
+import { NotificationBell } from "@/components/jarvis/NotificationBell";
+import { Toaster } from "@/components/ui/sonner";
 import { ArkRebootProvider, useArkReboot } from "@/components/jarvis/ArkRebootContext";
 import { ArkRebootOverlay } from "@/components/jarvis/ArkRebootOverlay";
 import { RebootButton } from "@/components/jarvis/RebootButton";
@@ -87,6 +89,8 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
             <div className="ml-3 h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent portrait:ml-1" />
             <HeaderVoiceToggle />
             <div className="h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent" />
+            <NotificationBell />
+            <div className="h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent" />
             <ShowcaseButton />
             <div className="h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent" />
             <RebootButton />
@@ -109,6 +113,7 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
         {isMobile && <MobileBottomNav />}
         <ArkRebootOverlay />
         <ShowcaseOverlay />
+        <Toaster theme="dark" position="top-right" richColors />
         {phase === "shutdown" && (
           <div
             className="pointer-events-none fixed inset-0 z-[90] bg-black animate-shutdown-flash"
