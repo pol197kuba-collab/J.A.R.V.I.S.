@@ -11,8 +11,9 @@ export type ShowcaseStep = {
   label: string;
   /** Spoken line, shown as a caption while the step is on screen. */
   narration: string;
-  /** Special full-screen flourish rendered on top of the real page. */
-  flourish?: "agent-orbit";
+  /** Special full-screen flourish rendered on top of the real page, or a
+   *  side effect fired the moment the step is revealed. */
+  flourish?: "agent-orbit" | "agent-matrix-demo";
 };
 
 export const SHOWCASE_COLD_OPEN = {
@@ -29,7 +30,8 @@ export const SHOWCASE_SEQUENCE: ShowcaseStep[] = [
     path: "/jarvis",
     label: "J.A.R.V.I.S. CORE",
     narration:
-      "To mój główny panel dowodzenia, Panie Sławiński — rdzeń Arc Reactor, strumień zdarzeń na żywo i rozmowa ze mną, głosem albo tekstem, z pełną pamięcią kontekstu.",
+      "To mój główny panel dowodzenia, Panie Sławiński — rdzeń Arc Reactor, strumień zdarzeń na żywo i rozmowa ze mną, głosem albo tekstem, z pełną pamięcią kontekstu. Niech Pan patrzy na Agent Matrix — zaraz deleguję zadania do zespołu na żywo.",
+    flourish: "agent-matrix-demo",
   },
   {
     id: "commands",
