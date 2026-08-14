@@ -351,6 +351,56 @@ export type Database = {
           },
         ]
       }
+      document_jobs: {
+        Row: {
+          brief: string
+          created_at: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          owner_id: string
+          result: Json | null
+          run_id: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          brief: string
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          owner_id: string
+          result?: Json | null
+          run_id?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          brief?: string
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          owner_id?: string
+          result?: Json | null
+          run_id?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_jobs_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "agent_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       documents: {
         Row: {
           char_count: number | null
@@ -474,6 +524,48 @@ export type Database = {
           storage_path?: string
           title?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      local_jobs: {
+        Row: {
+          args: Json
+          claimed_at: string | null
+          created_at: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          owner_id: string
+          result: Json | null
+          status: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          args?: Json
+          claimed_at?: string | null
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          owner_id: string
+          result?: Json | null
+          status?: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          args?: Json
+          claimed_at?: string | null
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          owner_id?: string
+          result?: Json | null
+          status?: string
+          type?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -608,6 +700,39 @@ export type Database = {
           tags?: string[]
           title?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          kind: string
+          owner_id: string
+          payload: Json
+          read: boolean
+          title: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          owner_id: string
+          payload?: Json
+          read?: boolean
+          title: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          owner_id?: string
+          payload?: Json
+          read?: boolean
+          title?: string
         }
         Relationships: []
       }
