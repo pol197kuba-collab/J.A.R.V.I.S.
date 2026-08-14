@@ -125,6 +125,16 @@ export type ClassifierFallbackDeps = {
   apiKey: string;
   effectiveUiActionsWithNone: string[];
   runId: string;
+  /** Needed only to actually enqueue a job if the classifier picks
+   *  queue_document_job — omit (with queueDocumentJobEnabled false/omitted)
+   *  for a plain UI-action-only classifier pass. */
+  supabase?: SupabaseClient<Database>;
+  userId?: string;
+  agentId?: string;
+  /** Whether this agent actually has queue_document_job bound — offering it to the
+   *  classifier when it isn't would let the fallback "succeed" at calling a tool
+   *  the main turn could never have called either. Defaults to false. */
+  queueDocumentJobEnabled?: boolean;
   logEvent: (
     level: "info" | "warn" | "error",
     source: string,
@@ -135,6 +145,9 @@ export type ClassifierFallbackDeps = {
 
 export type ClassifierFallbackResult = {
   uiAction: UiAction | null;
+  /** Set when the classifier decided this was a document/presentation request
+   *  needing research and enqueued it via queue_document_job. */
+  documentJob: { id: string } | null;
   finalText: string | null;
   toolCallLogEntry: { name: string; args: Record<string, unknown> } | null;
   tokensInDelta: number;
@@ -151,13 +164,34 @@ export type ClassifierFallbackResult = {
 // (e.g. Groq's classifier tokens are not counted toward the run's totals,
 // only Gemini's are; Groq logs its "none" outcome, Gemini's HTTP-200-no-call
 // case doesn't) rather than silently normalizing them.
+const QUEUE_DOCUMENT_JOB_TOOL_NAME = "queue_document_job";
+
 export async function runClassifierFallback(
   deps: ClassifierFallbackDeps,
 ): Promise<ClassifierFallbackResult> {
-  const { groqApiKey, input, model, apiKey, effectiveUiActionsWithNone, runId, logEvent } = deps;
+  const {
+    groqApiKey,
+    input,
+    model,
+    apiKey,
+    effectiveUiActionsWithNone,
+    runId,
+    supabase,
+    userId,
+    agentId,
+    queueDocumentJobEnabled,
+    logEvent,
+  } = deps;
 
-  const classifierSystemPrompt =
-    'Jesteś klasyfikatorem intencji dla interfejsu JARVIS HUD. Oceń wiadomość użytkownika i zdecyduj, czy odpowiada ona DOKŁADNIE jednej z dostępnych akcji UI. Zawsze wywołaj narzędzie perform_ui_action z jedną wartością — jeśli żadna akcja nie pasuje (np. zwykła pogawędka, pytanie merytoryczne, prośba o treść), wybierz "none". Nie odpowiadaj tekstem, nie tłumacz się.';
+  // Only offered when the real tool is actually bound for this agent —
+  // otherwise the fallback could "succeed" at a tool the main turn could
+  // never have called either, which would just move the bug rather than
+  // fix it.
+  const queueTool = queueDocumentJobEnabled ? getToolByName(QUEUE_DOCUMENT_JOB_TOOL_NAME) : null;
+
+  const classifierSystemPrompt = queueTool
+    ? 'Jesteś klasyfikatorem intencji dla interfejsu JARVIS HUD. Oceń wiadomość użytkownika i zdecyduj DOKŁADNIE JEDNO z trzech: (1) czy pasuje do jednej z dostępnych akcji UI — wywołaj perform_ui_action; (2) czy to prośba o przygotowanie dokumentu/prezentacji/raportu NA TEMAT wymagającym zebrania treści (np. "zrób mi prezentację o X", "przygotuj raport o Y") — wywołaj queue_document_job z krótkim tytułem i pełnym opisem zadania badawczego dla brief; (3) jeśli żadne z powyższych nie pasuje (zwykła pogawędka, pytanie merytoryczne bez prośby o plik) — wywołaj perform_ui_action z action="none". Zawsze wywołaj DOKŁADNIE jedno z tych dwóch narzędzi. Nie odpowiadaj tekstem, nie tłumacz się.'
+    : 'Jesteś klasyfikatorem intencji dla interfejsu JARVIS HUD. Oceń wiadomość użytkownika i zdecyduj, czy odpowiada ona DOKŁADNIE jednej z dostępnych akcji UI. Zawsze wywołaj narzędzie perform_ui_action z jedną wartością — jeśli żadna akcja nie pasuje (np. zwykła pogawędka, pytanie merytoryczne, prośba o treść), wybierz "none". Nie odpowiadaj tekstem, nie tłumacz się.';
   const classifierToolDeclaration = {
     name: UI_ACTION_TOOL_NAME,
     description:
@@ -174,13 +208,76 @@ export async function runClassifierFallback(
       required: ["action"],
     },
   };
+  const classifierToolDeclarations = queueTool
+    ? [classifierToolDeclaration, queueTool.declaration]
+    : [classifierToolDeclaration];
+  const classifierAllowedNames = queueTool
+    ? [UI_ACTION_TOOL_NAME, QUEUE_DOCUMENT_JOB_TOOL_NAME]
+    : [UI_ACTION_TOOL_NAME];
 
-  // This entire pass exists only to force one narrow yes/no decision — it
-  // never needs Gemini's specific capabilities. Route it through the free
-  // Groq tier when a key is configured, saving a full paid Gemini call on
-  // every single turn that doesn't already invoke perform_ui_action (the
-  // majority of turns). Falls through to the original Gemini path below
-  // on any Groq failure or when no Groq key is set — never a regression.
+  // Shared by both provider branches below: the classifier decided this is a
+  // document/presentation job, so actually enqueue it (reusing the real
+  // tool's own execute(), not a reimplementation) and report a friendly
+  // "started" reply instead of the model's own text (which never ran).
+  const handleQueueDocumentJob = async (
+    call: { name: string; args?: Record<string, unknown> },
+    via: string,
+  ): Promise<ClassifierFallbackResult> => {
+    // Only ever called when queueTool is truthy, which itself only happens
+    // when the caller opted in via queueDocumentJobEnabled — the same
+    // caller is responsible for also passing real supabase/userId/agentId
+    // in that case (see runOrchestrator's call site below).
+    const response = await queueTool!.execute(call.args ?? {}, {
+      supabase: supabase!,
+      userId: userId!,
+      agentId: agentId!,
+      runId,
+      apiKey,
+      model,
+      logEvent,
+    });
+    if (response.ok !== true || typeof response.job_id !== "string") {
+      await logEvent(
+        "warn",
+        AGENT_SLUGS.JARVIS,
+        `queue_document_job via classifier fallback (${via}) failed: ${JSON.stringify(response).slice(0, 200)}`,
+        { run_id: runId } as Json,
+      );
+      return {
+        uiAction: null,
+        documentJob: null,
+        finalText: null,
+        toolCallLogEntry: { name: "classifier_queue_document_job_failed", args: { via } },
+        tokensInDelta: 0,
+        tokensOutDelta: 0,
+      };
+    }
+    await logEvent(
+      "info",
+      AGENT_SLUGS.JARVIS,
+      `document job queued via classifier fallback (${via}): ${response.job_id}`,
+      { run_id: runId } as Json,
+    );
+    return {
+      uiAction: null,
+      documentJob: { id: response.job_id },
+      finalText:
+        "Zaczynam przygotowywać ten dokument, Panie Sławiński — dam znać powiadomieniem, gdy będzie gotowy.",
+      toolCallLogEntry: {
+        name: QUEUE_DOCUMENT_JOB_TOOL_NAME,
+        args: { ...(call.args ?? {}), via: `classifier_fallback_${via}` },
+      },
+      tokensInDelta: 0,
+      tokensOutDelta: 0,
+    };
+  };
+
+  // This entire pass exists only to force one narrow decision — it never
+  // needs Gemini's specific capabilities. Route it through the free Groq
+  // tier when a key is configured, saving a full paid Gemini call on every
+  // single turn that doesn't already invoke a tool (the majority of turns).
+  // Falls through to the original Gemini path below on any Groq failure or
+  // when no Groq key is set — never a regression.
   if (groqApiKey) {
     try {
       const groqResult = await callGroq({
@@ -188,14 +285,20 @@ export async function runClassifierFallback(
         model: DEFAULT_GROQ_CLASSIFIER_MODEL,
         systemPrompt: classifierSystemPrompt,
         contents: [{ role: "user", parts: [{ text: input }] }],
-        toolDeclarations: [classifierToolDeclaration],
-        forceToolName: UI_ACTION_TOOL_NAME,
+        toolDeclarations: classifierToolDeclarations,
+        forceToolName: classifierAllowedNames.length === 1 ? UI_ACTION_TOOL_NAME : undefined,
+        forceAnyTool: classifierAllowedNames.length > 1,
         temperature: 0.1,
-        maxOutputTokens: 50,
+        // A plain UI-action pick only needs the enum value (50 is plenty);
+        // queue_document_job additionally has to generate a title + brief.
+        maxOutputTokens: queueTool ? 200 : 50,
       });
+      const call = groqResult.functionCalls[0];
+      if (queueTool && call?.name === QUEUE_DOCUMENT_JOB_TOOL_NAME) {
+        return await handleQueueDocumentJob(call, "groq");
+      }
       const requested = String(
-        (groqResult.functionCalls[0]?.args as Record<string, unknown> | undefined)?.action ??
-          "none",
+        (call?.args as Record<string, unknown> | undefined)?.action ?? "none",
       );
       if (requested !== "none" && (UI_ACTIONS as readonly string[]).includes(requested)) {
         const uiAction = requested as UiAction;
@@ -207,6 +310,7 @@ export async function runClassifierFallback(
         );
         return {
           uiAction,
+          documentJob: null,
           finalText: UI_ACTION_CONFIRMATIONS[uiAction],
           toolCallLogEntry: {
             name: UI_ACTION_TOOL_NAME,
@@ -224,6 +328,7 @@ export async function runClassifierFallback(
       } as Json);
       return {
         uiAction: null,
+        documentJob: null,
         finalText: null,
         toolCallLogEntry: { name: "classifier_none", args: { requested, via: "groq" } },
         tokensInDelta: 0,
@@ -246,14 +351,14 @@ export async function runClassifierFallback(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: classifierSystemPrompt }] },
-          tools: [{ functionDeclarations: [classifierToolDeclaration] }],
+          tools: [{ functionDeclarations: classifierToolDeclarations }],
           toolConfig: {
             functionCallingConfig: {
               mode: "ANY",
-              allowedFunctionNames: [UI_ACTION_TOOL_NAME],
+              allowedFunctionNames: classifierAllowedNames,
             },
           },
-          generationConfig: { temperature: 0.1, maxOutputTokens: 50 },
+          generationConfig: { temperature: 0.1, maxOutputTokens: queueTool ? 200 : 50 },
           contents: [{ role: "user", parts: [{ text: input }] }],
         }),
       },
@@ -274,6 +379,7 @@ export async function runClassifierFallback(
         // of silently vanishing, so we can see WHY next time.
         return {
           uiAction: null,
+          documentJob: null,
           finalText: null,
           toolCallLogEntry: {
             name: "classifier_no_function_call",
@@ -282,6 +388,10 @@ export async function runClassifierFallback(
           tokensInDelta,
           tokensOutDelta,
         };
+      }
+      if (queueTool && classifyCall.name === QUEUE_DOCUMENT_JOB_TOOL_NAME) {
+        const result = await handleQueueDocumentJob(classifyCall, "gemini");
+        return { ...result, tokensInDelta, tokensOutDelta };
       }
       const requested = String(
         (classifyCall.args as Record<string, unknown> | undefined)?.action ?? "none",
@@ -296,6 +406,7 @@ export async function runClassifierFallback(
         );
         return {
           uiAction,
+          documentJob: null,
           finalText: UI_ACTION_CONFIRMATIONS[uiAction],
           toolCallLogEntry: {
             name: UI_ACTION_TOOL_NAME,
@@ -307,6 +418,7 @@ export async function runClassifierFallback(
       }
       return {
         uiAction: null,
+        documentJob: null,
         finalText: null,
         toolCallLogEntry: { name: "classifier_none", args: { requested } },
         tokensInDelta,
@@ -321,6 +433,7 @@ export async function runClassifierFallback(
     } as Json);
     return {
       uiAction: null,
+      documentJob: null,
       finalText: null,
       toolCallLogEntry: {
         name: "classifier_http_error",
@@ -336,6 +449,7 @@ export async function runClassifierFallback(
     } as Json);
     return {
       uiAction: null,
+      documentJob: null,
       finalText: null,
       toolCallLogEntry: { name: "classifier_exception", args: { message: msg } },
       tokensInDelta: 0,
@@ -1035,6 +1149,10 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         apiKey,
         effectiveUiActionsWithNone,
         runId,
+        supabase,
+        userId,
+        agentId: agent.id,
+        queueDocumentJobEnabled: toolDeclarations.some((d) => d.name === "queue_document_job"),
         logEvent,
       });
       totalTokensIn += classifierResult.tokensInDelta;
@@ -1042,6 +1160,10 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       if (classifierResult.toolCallLogEntry) toolCallLog.push(classifierResult.toolCallLogEntry);
       if (classifierResult.uiAction) {
         uiAction = classifierResult.uiAction;
+        finalText = classifierResult.finalText!;
+      }
+      if (classifierResult.documentJob) {
+        documentJob = classifierResult.documentJob;
         finalText = classifierResult.finalText!;
       }
     }

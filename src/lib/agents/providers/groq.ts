@@ -98,6 +98,12 @@ export type CallGroqOptions = {
   toolDeclarations?: ToolDeclaration[];
   /** Force one specific tool by name (used by the UI-action classifier). */
   forceToolName?: string;
+  /** Force SOME tool call without pinning the name — used when the classifier
+   *  is choosing between two or more tools (e.g. UI action vs. queue_document_job).
+   *  Ignored when forceToolName is set. Without either, tool_choice is "auto",
+   *  which lets the model reply with plain text instead of calling anything —
+   *  wrong for a classifier pass that must always produce a decision. */
+  forceAnyTool?: boolean;
   temperature?: number;
   maxOutputTokens?: number;
   timeoutMs?: number;
@@ -125,7 +131,9 @@ export async function callGroq(opts: CallGroqOptions): Promise<ModelTurnResult> 
               tools,
               tool_choice: opts.forceToolName
                 ? { type: "function", function: { name: opts.forceToolName } }
-                : "auto",
+                : opts.forceAnyTool
+                  ? "required"
+                  : "auto",
             }
           : {}),
       }),
