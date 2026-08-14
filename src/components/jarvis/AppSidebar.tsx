@@ -12,6 +12,7 @@ import {
   ListChecks,
   Database,
   FileText,
+  Command,
 } from "lucide-react";
 import {
   Sidebar,
@@ -45,6 +46,7 @@ const items = [
   { title: "System Logs", url: "/system-logs", icon: Terminal },
   { title: "Schema", url: "/schema", icon: Database },
   { title: "Documents", url: "/documents", icon: FileText },
+  { title: "Commands", url: "/commands", icon: Command },
   { title: "Settings", url: "/settings", icon: SettingsIcon },
 ] as const;
 

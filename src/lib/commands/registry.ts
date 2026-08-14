@@ -230,6 +230,23 @@ export const COMMAND_REGISTRY = [
     description: "Opens the Vision module without starting a scan.",
   },
   {
+    id: "open_commands",
+    category: "Navigation",
+    kind: { type: "route", path: "/commands" },
+    pattern:
+      /\b(open\s+commands?|command\s+directory|command\s+playground|otwórz\s+komendy|otworz\s+komendy|pokaż\s+komendy|pokaz\s+komendy|lista\s+komend|katalog\s+komend)\b/i,
+    confirmation: "Otwieram katalog komend.",
+    label: "Open Commands",
+    phrases: [
+      "Open commands",
+      "Command directory",
+      "Jarvis, otwórz komendy",
+      "Jarvis, pokaż listę komend",
+    ],
+    description:
+      "Opens the Commands module — the full command directory plus a live test playground.",
+  },
+  {
     id: "open_menu",
     category: "Interface",
     kind: { type: "special" },

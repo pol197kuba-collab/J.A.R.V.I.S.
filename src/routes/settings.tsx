@@ -4,7 +4,7 @@ import { HudPanel } from "@/components/jarvis/HudPanel";
 import { useAudioSettings } from "@/lib/audio/useAudioSettings";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
-import { CommandDirectory } from "@/components/jarvis/CommandDirectory";
+import { useHudNavigate } from "@/components/jarvis/TransitionContext";
 import { useServerFn } from "@tanstack/react-start";
 import {
   deleteGeminiKey,
@@ -41,6 +41,7 @@ export const Route = createFileRoute("/settings")({
 });
 
 function Settings() {
+  const { go } = useHudNavigate();
   const { settings, set } = useAudioSettings();
   const [apiKey, setApiKey] = useState("");
   const [linked, setLinked] = useState(false);
@@ -564,7 +565,24 @@ function Settings() {
           </p>
         </div>
       </HudPanel>
-      <CommandDirectory index={2} />
+      <HudPanel index={2} title="COMMAND DIRECTORY" tone="quiet" className="p-5">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="font-mono text-[11px] text-muted-foreground">
+            The full command directory and a live voice/text test playground now live in their own
+            module.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              audio.playClick();
+              go("/commands");
+            }}
+            className="font-display shrink-0 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-primary transition hover:border-primary hover:bg-primary/20"
+          >
+            Open Commands →
+          </button>
+        </div>
+      </HudPanel>
       <HudPanel index={3} title="AUDIO // SUBSYSTEM" className="p-5">
         <div className="mt-4 space-y-4">
           <div>

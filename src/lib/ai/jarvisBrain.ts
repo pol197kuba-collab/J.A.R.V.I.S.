@@ -153,6 +153,10 @@ Allowed values for "action": ${JARVIS_ACTIONS.join(", ")}.
 - Użyj "open_jarvis", gdy użytkownik prosi o otwarcie panelu J.A.R.V.I.S.
   (np. "otwórz panel JARVIS", "pokaż JARVISA").
 
+- Użyj "open_commands", gdy użytkownik chce zobaczyć listę dostępnych komend
+  albo przetestować sterowanie głosowe/tekstowe (np. "otwórz komendy",
+  "pokaż katalog komend", "chcę przetestować komendy").
+
 - Używaj akcji UI TYLKO gdy użytkownik wyraźnie prosi o otwarcie/zamknięcie/
   wyłączenie czegoś w interfejsie. W innych wypadkach użyj "action":"none"
   i całą odpowiedź umieść w "speech".
