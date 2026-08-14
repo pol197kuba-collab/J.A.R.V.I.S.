@@ -19,6 +19,7 @@ import { callGroq } from "./providers/groq";
 import type { GeminiContent, GeminiPart } from "./providers/types";
 import { AGENT_SLUGS, isToolForcedForAgent } from "@/lib/constants/agentSlugs";
 import { UI_ACTIONS, type UiAction } from "@/lib/constants/uiActions";
+import { COMMAND_REGISTRY } from "@/lib/commands/registry";
 
 export { UI_ACTIONS };
 const UI_ACTION_TOOL_NAME = "perform_ui_action";
@@ -33,27 +34,11 @@ const UI_ACTIONS_WITH_NONE = [...UI_ACTIONS, "none"] as const;
 // a failed delegate_to_agent guess or a confused non-answer). Once the
 // fallback finds a real action, overwrite that text with a clean confirmation
 // instead of leaving the confused main-turn reply in the chat bubble.
-export const UI_ACTION_CONFIRMATIONS: Record<UiAction, string> = {
-  open_dashboard: "Otwieram pulpit główny.",
-  open_fuel: "Otwieram moduł paliwa.",
-  open_calculator: "Otwieram kalkulator.",
-  open_jobfit: "Otwieram JobFit.",
-  open_telemetry: "Otwieram telemetrię.",
-  open_menu: "Otwieram menu.",
-  close_menu: "Zamykam menu.",
-  system_check: "Wykonuję kontrolę systemu.",
-  sleep: "Przechodzę w tryb uśpienia.",
-  shutdown: "Wyłączam system.",
-  reboot: "Restartuję system.",
-  open_agents: "Otwieram centrum agentów.",
-  open_settings: "Otwieram ustawienia.",
-  open_logs: "Otwieram dziennik systemowy.",
-  open_tasks: "Otwieram zadania.",
-  open_subsystems: "Otwieram podsystemy.",
-  open_documents: "Otwieram moduł dokumentów.",
-  open_schema: "Otwieram eksplorator schematu.",
-  vision_scan: "Uruchamiam skan wizyjny.",
-};
+// Sourced from COMMAND_REGISTRY so every command's confirmation line lives
+// in exactly one place — see src/lib/commands/registry.ts.
+export const UI_ACTION_CONFIRMATIONS: Record<UiAction, string> = Object.fromEntries(
+  COMMAND_REGISTRY.map((c) => [c.id, c.confirmation]),
+) as Record<UiAction, string>;
 
 const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 

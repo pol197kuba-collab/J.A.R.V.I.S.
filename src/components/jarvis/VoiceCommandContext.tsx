@@ -18,6 +18,7 @@ import { emitChat, getRecentHistory } from "@/lib/ai/chatBus";
 import { matchesReboot } from "@/lib/ai/rebootPhrases";
 import { getUserSettings } from "@/lib/agents/runtime.functions";
 import { logClientEvent } from "@/lib/system/logClientEvent";
+import { COMMAND_REGISTRY, getCommand, type CommandActionId } from "@/lib/commands/registry";
 
 type Ctx = {
   enabled: boolean;
@@ -137,134 +138,17 @@ export function getSpeechCtor(): (new () => AnySpeechRecognition) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-type LocalAction =
-  | "dashboard"
-  | "fuel"
-  | "rto"
-  | "jobfit"
-  | "telemetry"
-  | "menu_open"
-  | "menu_close"
-  | "system_check"
-  | "sleep"
-  | "shutdown"
-  | "reboot"
-  | "agents"
-  | "settings"
-  | "logs"
-  | "tasks"
-  | "subsystems"
-  | "documents"
-  | "schema"
-  | "vision_scan";
+// Local action id = the command's registry id. Kept as a distinct alias so
+// call sites read naturally, but there is no separate mapping table anymore
+// — JarvisAction IS a CommandActionId (jarvisBrain.ts's JARVIS_ACTIONS is
+// "none" + every registry id), so routing a Gemini reply's action straight
+// into fire() needs no lookup beyond "is this id in the registry".
+type LocalAction = CommandActionId;
 
-const ACTION_MAP: Record<JarvisAction, LocalAction | null> = {
-  none: null,
-  open_dashboard: "dashboard",
-  open_fuel: "fuel",
-  open_calculator: "rto",
-  open_jobfit: "jobfit",
-  open_telemetry: "telemetry",
-  open_menu: "menu_open",
-  close_menu: "menu_close",
-  system_check: "system_check",
-  sleep: "sleep",
-  shutdown: "shutdown",
-  reboot: "reboot",
-  open_agents: "agents",
-  open_settings: "settings",
-  open_logs: "logs",
-  open_tasks: "tasks",
-  open_subsystems: "subsystems",
-  open_documents: "documents",
-  open_schema: "schema",
-  vision_scan: "vision_scan",
-};
-
-const COMMANDS: Array<{ re: RegExp; action: LocalAction }> = [
-  // Navigation
-  {
-    re: /\b(open\s+dashboard|show\s+status|show\s+core|jarvis\s+dashboard|otwórz\s+pulpit|otworz\s+pulpit|pokaż\s+dashboard|pokaz\s+dashboard|wróć\s+do\s+dashboardu|wroc\s+do\s+dashboardu)\b/i,
-    action: "dashboard",
-  },
-  {
-    re: /\b(open\s+fuel|launch\s+monitor|jarvis\s+fuel|otwórz\s+paliwo|otworz\s+paliwo|monitor\s+paliwa)\b/i,
-    action: "fuel",
-  },
-  {
-    re: /\b(open\s+calculator|launch\s+rto|jarvis\s+office|otwórz\s+kalkulator|otworz\s+kalkulator|kalkulator\s+rto)\b/i,
-    action: "rto",
-  },
-  {
-    re: /\b(open\s+jobfit|launch\s+ai|jarvis\s+job|otwórz\s+jobfit|otworz\s+jobfit)\b/i,
-    action: "jobfit",
-  },
-  {
-    re: /\b(show\s+telemetry|open\s+map|geo[-\s]?tracking|otwórz\s+mapę|otworz\s+mape|pokaż\s+mapę|pokaz\s+mape|geolokalizacja)\b/i,
-    action: "telemetry",
-  },
-  {
-    re: /\b(open\s+agents?|agent\s+hub|otwórz\s+agentów|otworz\s+agentow|pokaż\s+agentów|pokaz\s+agentow)\b/i,
-    action: "agents",
-  },
-  {
-    re: /\b(open\s+settings|otwórz\s+ustawienia|otworz\s+ustawienia|pokaż\s+ustawienia|pokaz\s+ustawienia|konfiguracja)\b/i,
-    action: "settings",
-  },
-  {
-    re: /\b(open\s+logs|system\s+logs|otwórz\s+logi|otworz\s+logi|pokaż\s+logi|pokaz\s+logi|dziennik\s+systemu)\b/i,
-    action: "logs",
-  },
-  {
-    re: /\b(open\s+tasks?|task\s+queue|otwórz\s+zadania|otworz\s+zadania|pokaż\s+zadania|pokaz\s+zadania|moje\s+zadania|lista\s+zadań|lista\s+zadan)\b/i,
-    action: "tasks",
-  },
-  {
-    re: /\b(open\s+sub[-\s]?systems|otwórz\s+podsystemy|otworz\s+podsystemy|pokaż\s+podsystemy|pokaz\s+podsystemy)\b/i,
-    action: "subsystems",
-  },
-  {
-    // Bare "open the documents module". A specific "otwórz prezentację o X"
-    // is handled by the chat agent's open_document tool (it finds the file);
-    // this only opens the module.
-    re: /\b(open\s+documents?|show\s+files?|otwórz\s+dokumenty|otworz\s+dokumenty|pokaż\s+dokumenty|pokaz\s+dokumenty|otwórz\s+pliki|otworz\s+pliki|moduł\s+dokumentów|modul\s+dokumentow|archiwum\s+plików|archiwum\s+plikow)\b/i,
-    action: "documents",
-  },
-  {
-    re: /\b(open\s+schema|schema\s+explorer|otwórz\s+schemat|otworz\s+schemat|pokaż\s+schemat|pokaz\s+schemat|eksplorator\s+schematu)\b/i,
-    action: "schema",
-  },
-  {
-    re: /\b(co\s+widzisz|powiedz\s+co\s+widzisz|zeskanuj\s+otoczenie|przeskanuj\s+otoczenie|skanuj\s+otoczenie|zeskanuj\s+to|what\s+do\s+you\s+see|scan\s+(?:the\s+)?(?:room|area|surroundings)|vision\s+scan)\b/i,
-    action: "vision_scan",
-  },
-  // Interface
-  {
-    re: /\b(open\s+menu|show\s+sidebar|otwórz\s+menu|otworz\s+menu|pokaż\s+menu|pokaz\s+menu)\b/i,
-    action: "menu_open",
-  },
-  {
-    re: /\b(close\s+menu|hide\s+sidebar|zamknij\s+menu|schowaj\s+menu|ukryj\s+menu)\b/i,
-    action: "menu_close",
-  },
-  // Status & shutdown
-  {
-    re: /\b(system\s+check|sprawdź\s+system|sprawdz\s+system|status\s+systemu|raport\s+systemu)\b/i,
-    action: "system_check",
-  },
-  {
-    re: /\b(jarvis\s+sleep|standby|uśpij|uspij|tryb\s+czuwania|stan\s+czuwania)\b/i,
-    action: "sleep",
-  },
-  {
-    re: /\b(disconnect|shutdown|system\s+shutdown|wyłącz\s+system|wylacz\s+system|zamknij\s+system|rozłącz|rozlacz)\b/i,
-    action: "shutdown",
-  },
-  {
-    re: /\b(reboot|restart|reset|zrestartuj|zresetuj|ark\s+reboot|zrestartuj\s+system|uruchom\s+ponownie)\b/i,
-    action: "reboot",
-  },
-];
+const COMMANDS: Array<{ re: RegExp; action: LocalAction }> = COMMAND_REGISTRY.map((c) => ({
+  re: c.pattern,
+  action: c.id,
+}));
 
 export function VoiceCommandProvider({ children }: { children: ReactNode }) {
   const { go } = useHudNavigate();
@@ -399,75 +283,50 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       lastFireMapRef.current.set(action, now);
       const say = (fallback: string) =>
         speak(spokenLine && spokenLine.trim() ? spokenLine : fallback);
+
+      const cmd = getCommand(action);
+      if (!cmd) {
+        // Registry lookup failed for a value that passed the LocalAction
+        // type — should be unreachable, but fail loudly rather than
+        // silently doing nothing (that exact silent-no-op bug shipped once
+        // for open_documents/open_schema before this registry existed).
+        console.error("[voice] no registry entry for action", action);
+        return;
+      }
+
+      // Data-driven cases: plain route navigation, or a /sub-systems
+      // navigation with a pending module handoff. Every other command has
+      // bespoke side effects and is handled explicitly below.
+      if (cmd.kind.type === "route") {
+        say(cmd.confirmation);
+        go(cmd.kind.path);
+        return;
+      }
+      if (cmd.kind.type === "module") {
+        pendingRef.current = cmd.kind.module;
+        say(cmd.confirmation);
+        go("/sub-systems");
+        return;
+      }
+
       switch (action) {
-        case "dashboard":
-          go("/");
-          if (spokenLine) speak(spokenLine);
-          break;
-        case "fuel":
-          pendingRef.current = "fuel-monitor";
-          say("Ładuję Fuel Monitor Matrix.");
-          go("/sub-systems");
-          break;
-        case "rto":
-          pendingRef.current = "rto-calculator";
-          say("Uruchamiam kalkulator RTO.");
-          go("/sub-systems");
-          break;
-        case "jobfit":
-          pendingRef.current = "jobfit-ai";
-          say("Uruchamiam optymalizator CV.");
-          go("/sub-systems");
-          break;
-        case "telemetry":
-          say("Uruchamiam telemetrię satelitarną.");
-          go("/situation-room");
-          break;
-        case "menu_open":
+        case "open_menu":
           window.dispatchEvent(new CustomEvent("jarvis:sidebar", { detail: "open" }));
           if (spokenLine) speak(spokenLine);
           break;
-        case "menu_close":
+        case "close_menu":
           window.dispatchEvent(new CustomEvent("jarvis:sidebar", { detail: "close" }));
           if (spokenLine) speak(spokenLine);
           break;
-        case "agents":
-          say("Przechodzę do Agent Hub, sir.");
-          go("/agent-hub");
-          break;
-        case "settings":
-          say("Otwieram konfigurację.");
-          go("/settings");
-          break;
-        case "logs":
-          say("Otwieram dziennik systemu.");
-          go("/system-logs");
-          break;
-        case "tasks":
-          say("Otwieram kolejkę zadań, sir.");
-          go("/tasks");
-          break;
-        case "subsystems":
-          say("Otwieram podsystemy.");
-          go("/sub-systems");
-          break;
-        case "documents":
-          say("Otwieram moduł dokumentów, sir.");
-          go("/documents");
-          break;
-        case "schema":
-          say("Otwieram eksplorator schematu.");
-          go("/schema");
-          break;
         case "system_check":
-          say("Wszystkie systemy sprawne, Panie Sławiński. Temperatura rdzenia nominalna.");
+          say(cmd.confirmation);
           break;
         case "sleep":
-          say("Tryb czuwania aktywny.");
+          say(cmd.confirmation);
           setEnabled(false);
           break;
         case "shutdown":
-          say("Wyłączam system. Do zobaczenia, Panie Sławiński.");
+          say(cmd.confirmation);
           setTimeout(() => speakCancel(), 3200);
           setPhase("shutdown");
           break;
@@ -480,7 +339,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
           // Bridge to VisionScanner: the sessionStorage flag survives the
           // route transition when we're elsewhere, the event covers the
           // already-on-/vision case (go() no-ops on same path).
-          say("Analizuję obraz z czujników optycznych.");
+          say(cmd.confirmation);
           try {
             window.sessionStorage.setItem("jarvis_pending_scan", "1");
           } catch {
@@ -489,14 +348,12 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
           window.dispatchEvent(new CustomEvent("jarvis:vision-scan"));
           go("/vision");
           break;
-        default: {
-          // Exhaustiveness guard: adding a LocalAction without a case here is
-          // exactly the bug that shipped open_documents/open_schema with no
-          // navigation (the model confirmed "Otwieram moduł dokumentów" but
-          // nothing happened). Now the compiler flags a missing case.
-          const _exhaustive: never = action;
-          void _exhaustive;
-        }
+        default:
+          // Every "route"/"module" kind returned above; every remaining
+          // "special" id must have an explicit case here. Adding a new
+          // "special" command without one is exactly the silent-no-op bug
+          // that shipped for open_documents/open_schema — surface it loudly.
+          console.error("[voice] no special-case handler for action", action);
       }
     },
     [go, setPhase],
@@ -576,9 +433,8 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       });
       console.debug("[voice] ← gemini", reply);
       if (reply.speech) emitChat("jarvis", reply.speech);
-      const mapped = ACTION_MAP[reply.action];
-      if (mapped) {
-        fire(mapped, reply.speech);
+      if (reply.action !== "none") {
+        fire(reply.action, reply.speech);
         return;
       }
       // Pure chit-chat — just speak.
@@ -757,8 +613,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
   const routeText = useCallback((text: string) => route(text, "chat"), [route]);
   const performAction = useCallback(
     (action: JarvisAction, spokenLine?: string) => {
-      const mapped = ACTION_MAP[action];
-      if (mapped) fire(mapped, spokenLine);
+      if (action !== "none") fire(action, spokenLine);
     },
     [fire],
   );

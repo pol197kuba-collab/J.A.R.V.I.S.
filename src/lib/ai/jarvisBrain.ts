@@ -146,6 +146,13 @@ Allowed values for "action": ${JARVIS_ACTIONS.join(", ")}.
   room"). System otworzy moduł Vision i wykona analizę obrazu — w "speech"
   krótko potwierdź rozpoczęcie skanowania.
 
+- Użyj "open_vision", gdy użytkownik chce tylko OTWORZYĆ moduł Vision bez
+  skanowania (np. "otwórz moduł wizji", "pokaż vision"). Nie uruchamia skanu —
+  do tego służy "vision_scan".
+
+- Użyj "open_jarvis", gdy użytkownik prosi o otwarcie panelu J.A.R.V.I.S.
+  (np. "otwórz panel JARVIS", "pokaż JARVISA").
+
 - Używaj akcji UI TYLKO gdy użytkownik wyraźnie prosi o otwarcie/zamknięcie/
   wyłączenie czegoś w interfejsie. W innych wypadkach użyj "action":"none"
   i całą odpowiedź umieść w "speech".
