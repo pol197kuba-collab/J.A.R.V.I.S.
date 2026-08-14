@@ -18,6 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useHudNavigate } from "./TransitionContext";
 import { useArkReboot } from "./ArkRebootContext";
+import { useShowcase } from "./ShowcaseContext";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 
@@ -46,6 +47,7 @@ export function MobileBottomNav() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const { go, isTransitioning } = useHudNavigate();
   const { isDiagnosticRunning } = useArkReboot();
+  const { isRunning: isShowcaseRunning } = useShowcase();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
   const drag = useRef({
@@ -166,7 +168,7 @@ export function MobileBottomNav() {
               key={item.url}
               ref={active ? activeRef : undefined}
               type="button"
-              disabled={isTransitioning || isDiagnosticRunning}
+              disabled={isTransitioning || isDiagnosticRunning || isShowcaseRunning}
               aria-current={active ? "page" : undefined}
               onClick={() => {
                 if (drag.current.moved) return;

@@ -157,6 +157,12 @@ Allowed values for "action": ${JARVIS_ACTIONS.join(", ")}.
   albo przetestować sterowanie głosowe/tekstowe (np. "otwórz komendy",
   "pokaż katalog komend", "chcę przetestować komendy").
 
+- Użyj "demo_showcase", gdy użytkownik prosi o pokazanie/zaprezentowanie
+  Twoich możliwości (np. "pokaż co potrafisz", "zrób prezentację swoich
+  możliwości", "pokaż demo", "show me what you can do"). Uruchamia to
+  scenariuszowe zwiedzanie wszystkich modułów — w "speech" krótko potwierdź
+  rozpoczęcie prezentacji.
+
 - Używaj akcji UI TYLKO gdy użytkownik wyraźnie prosi o otwarcie/zamknięcie/
   wyłączenie czegoś w interfejsie. W innych wypadkach użyj "action":"none"
   i całą odpowiedź umieść w "speech".

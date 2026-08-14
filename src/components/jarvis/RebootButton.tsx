@@ -1,13 +1,15 @@
 import { Zap } from "lucide-react";
 import { audio } from "@/lib/audio/AudioEngine";
 import { useArkReboot } from "./ArkRebootContext";
+import { useShowcase } from "./ShowcaseContext";
 
 export function RebootButton() {
   const { startReboot, isDiagnosticRunning } = useArkReboot();
+  const { isRunning: isShowcaseRunning } = useShowcase();
   return (
     <button
       type="button"
-      disabled={isDiagnosticRunning}
+      disabled={isDiagnosticRunning || isShowcaseRunning}
       onClick={() => {
         audio.playClick();
         startReboot();

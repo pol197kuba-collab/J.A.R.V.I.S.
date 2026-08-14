@@ -34,6 +34,7 @@ import { useAgentStatus } from "./useAgentStatus";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 import { useArkReboot } from "./ArkRebootContext";
+import { useShowcase } from "./ShowcaseContext";
 
 const items = [
   { title: "J.A.R.V.I.S.", url: "/jarvis", icon: Hexagon },
@@ -56,6 +57,7 @@ export function AppSidebar() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const { go, isTransitioning } = useHudNavigate();
   const { isDiagnosticRunning } = useArkReboot();
+  const { isRunning: isShowcaseRunning } = useShowcase();
 
   return (
     <Sidebar
@@ -101,7 +103,7 @@ export function AppSidebar() {
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
                       isActive={active}
-                      disabled={isTransitioning || isDiagnosticRunning}
+                      disabled={isTransitioning || isDiagnosticRunning || isShowcaseRunning}
                       onClick={() => {
                         audio.playClick();
                         if (item.url === "/situation-room") {
