@@ -62,7 +62,7 @@ export function HudOverlay({
             Recent Network Assignments
           </span>
         </div>
-        <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-2">
+        <div className="no-scrollbar min-h-0 flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden p-2">
           {events.length === 0 ? (
             <p className="px-1 py-2 font-mono text-[9px] uppercase tracking-widest text-white/30">
               ▸ awaiting activity…
