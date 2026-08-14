@@ -20,22 +20,16 @@ export const SHOWCASE_COLD_OPEN = {
     "Dobry wieczór, Panie Sławiński. Pozwoli Pan, że zaprezentuję pełny zakres moich możliwości.",
 };
 
-// Opens on the J.A.R.V.I.S. core panel — the assistant introducing itself —
-// before touring outward to the dashboard and every other module.
+// Opens on the J.A.R.V.I.S. core panel — now the primary command center (the
+// Dashboard module is being retired/repurposed, so it's deliberately absent
+// from this tour; the "main command deck" narration lives here instead).
 export const SHOWCASE_SEQUENCE: ShowcaseStep[] = [
   {
     id: "jarvis",
     path: "/jarvis",
     label: "J.A.R.V.I.S. CORE",
     narration:
-      "Tutaj rozmawiamy — głosem albo tekstem, w czasie rzeczywistym, z pełną pamięcią kontekstu.",
-  },
-  {
-    id: "dashboard",
-    path: "/",
-    label: "DASHBOARD",
-    narration:
-      "Oto mój główny pulpit dowodzenia — rdzeń Arc Reactor, strumień zdarzeń na żywo i bezpośredni kanał czatu.",
+      "To mój główny panel dowodzenia, Panie Sławiński — rdzeń Arc Reactor, strumień zdarzeń na żywo i rozmowa ze mną, głosem albo tekstem, z pełną pamięcią kontekstu.",
   },
   {
     id: "commands",
@@ -75,7 +69,22 @@ export const SHOWCASE_SEQUENCE: ShowcaseStep[] = [
     id: "documents",
     path: "/documents",
     label: "DOCUMENTS",
-    narration: "Archiwum dokumentów z inteligentnym wyszukiwaniem i podglądem plików.",
+    narration:
+      "Archiwum dokumentów. Insight wyszuka informacje, Forge wygeneruje z nich prezentację, PDF czy dokument Word, a Metric przeanalizuje treść tego, co Pan tu prześle.",
+  },
+  {
+    id: "schema",
+    path: "/schema",
+    label: "SCHEMA",
+    narration:
+      "Eksplorator schematu — pełna topologia bazy danych: tabele, kolumny, relacje i reguły dostępu, w jednym miejscu.",
+  },
+  {
+    id: "system-logs",
+    path: "/system-logs",
+    label: "SYSTEM LOGS",
+    narration:
+      "Każde zdarzenie systemowe trafia do tego dziennika. Agent Strażnik może go przeanalizować i zdać raport, co ostatnio szwankowało.",
   },
   {
     id: "settings",
