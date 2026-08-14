@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Mic, MicOff, SendHorizonal, Radio } from "lucide-react";
+import { Mic, MicOff, SendHorizonal, Radio, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAgentChatChannel } from "@/lib/ai/useAgentChatChannel";
 import { useVoiceCommands } from "./VoiceCommandContext";
@@ -12,16 +12,44 @@ import { useSingleVoiceCommand } from "./useSingleVoiceCommand";
 // chrome) as HudOverlay / "Recent Network Assignments". The actual send/
 // receive/error-handling logic is NOT reimplemented here — both this console
 // and the Dashboard ChatPanel share useAgentChatChannel() so they talk to
-// the exact same orchestrator/backend.
+// the exact same orchestrator/backend. Reverse-pagination (below) is a
+// render-only concern layered on top of the shared `messages` array — it
+// never touches how history is fetched or persisted.
+
+const PAGE_SIZE = 8;
+const LOAD_MORE_THRESHOLD_PX = 40;
 
 function nowStamp() {
   return new Date().toTimeString().slice(0, 8);
 }
 
 export function MatrixChatConsole() {
-  const { messages, typing, activeAgent, send } = useAgentChatChannel();
+  const { messages, typing, activeAgent, send, clear } = useAgentChatChannel();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Only render the newest `visibleCount` messages — loading the whole
+  // history at once is both wasteful and (with a hard-capped panel height)
+  // makes scroll-to-bottom jump through everything. Scrolling near the top
+  // reveals older ones a page at a time (handleScroll below).
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const restoreScrollRef = useRef<{ height: number; top: number } | null>(null);
+  // A smooth scrollTo() animates scrollTop from its current value up to the
+  // target over time, firing real 'scroll' events along the way — including
+  // ones at a still-low scrollTop right as the animation starts. Without this
+  // guard, handleScroll below reads that transient low value as "user
+  // scrolled near the top" and fires a bogus extra page load on every new
+  // message (and once again on mount).
+  const autoScrollingRef = useRef(false);
+
+  // A different agent's thread just loaded (or the transcript was cleared)
+  // — start windowed from the newest message again.
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [activeAgent.slug]);
+
+  const hasMore = messages.length > visibleCount;
+  const visibleMessages = messages.slice(Math.max(0, messages.length - visibleCount));
 
   // Continuous wake-word listening (global toggle) is a DIFFERENT mode from
   // this console's mic button, which captures exactly one command. Pausing
@@ -32,8 +60,38 @@ export function MatrixChatConsole() {
   const { listening: capturing, supported: micSupported, capture } = useSingleVoiceCommand();
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    // Loading older messages (below) manages scroll position itself —
+    // don't also yank to the bottom on that render.
+    const el = scrollRef.current;
+    if (restoreScrollRef.current || !el) return;
+    autoScrollingRef.current = true;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    const t = setTimeout(() => {
+      autoScrollingRef.current = false;
+    }, 500);
+    return () => clearTimeout(t);
   }, [messages, typing]);
+
+  useEffect(() => {
+    const pending = restoreScrollRef.current;
+    const el = scrollRef.current;
+    if (!pending || !el) return;
+    el.scrollTop = pending.top + (el.scrollHeight - pending.height);
+    restoreScrollRef.current = null;
+  }, [visibleCount]);
+
+  function handleScroll(e: React.UIEvent<HTMLDivElement>) {
+    const el = e.currentTarget;
+    if (
+      autoScrollingRef.current ||
+      el.scrollTop > LOAD_MORE_THRESHOLD_PX ||
+      !hasMore ||
+      restoreScrollRef.current
+    )
+      return;
+    restoreScrollRef.current = { height: el.scrollHeight, top: el.scrollTop };
+    setVisibleCount((c) => Math.min(messages.length, c + PAGE_SIZE));
+  }
 
   function handleSend() {
     const text = input.trim();
@@ -59,25 +117,48 @@ export function MatrixChatConsole() {
             Direct Channel // {activeAgent.name.toUpperCase()}
           </span>
         </div>
-        <span
-          className={cn(
-            "font-mono text-[8px] uppercase tracking-[0.2em]",
-            typing ? "text-cyan-200" : "text-white/35",
+        <div className="flex items-center gap-3">
+          <span
+            className={cn(
+              "font-mono text-[8px] uppercase tracking-[0.2em]",
+              typing ? "text-cyan-200" : "text-white/35",
+            )}
+          >
+            {typing ? "link · active" : "link · idle"}
+          </span>
+          {messages.length > 0 && (
+            <button
+              type="button"
+              onClick={clear}
+              aria-label="Wyczyść czat"
+              title="Wyczyść czat"
+              className="flex h-5 w-5 items-center justify-center rounded text-white/35 transition-colors hover:bg-red-400/10 hover:text-red-300"
+            >
+              <Trash2 className="h-3 w-3" strokeWidth={1.5} />
+            </button>
           )}
-        >
-          {typing ? "link · active" : "link · idle"}
-        </span>
+        </div>
       </div>
 
       {/* Transmission log */}
-      <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3">
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="no-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden px-4 py-3"
+      >
         {messages.length === 0 && !typing ? (
           <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/25">
             ▸ kanał otwarty — nadaj komendę…
           </p>
         ) : null}
 
-        {messages.map((m) => {
+        {hasMore && (
+          <p className="pb-1 text-center font-mono text-[9px] uppercase tracking-[0.2em] text-white/25">
+            ▸ przewiń w górę, aby wczytać starsze…
+          </p>
+        )}
+
+        {visibleMessages.map((m) => {
           const jarvis = m.role === "jarvis";
           return (
             <div
@@ -90,7 +171,7 @@ export function MatrixChatConsole() {
               <span className="pt-[3px] font-mono text-[8px] leading-none text-white/35">
                 {m.time || nowStamp()}
               </span>
-              <div>
+              <div className="min-w-0">
                 <p
                   className={cn(
                     "font-display text-[8px] uppercase tracking-[0.28em]",
