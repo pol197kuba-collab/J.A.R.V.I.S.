@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import type { Mesh } from "three";
@@ -16,6 +16,10 @@ export type AgentNodeData = {
   currentTask: string | null;
   progress: number;
   timeElapsedSeconds: number;
+  /** Set once when the current run started, cleared when it finishes. Used
+   *  to tick the elapsed-time counter live instead of only updating it on
+   *  the next ~3s poll. */
+  busySince: string | null;
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -49,6 +53,22 @@ export function AgentNode3D({
     : DISABLED_COLOR;
   const busy = agent.status === "busy";
   const showCard = hovered || selected;
+
+  // The server only writes timeElapsedSeconds once a run finishes, so while
+  // one is in flight it just shows whatever the previous run left behind —
+  // frozen for the whole duration. busySince is a stable start timestamp set
+  // once per run, so ticking against it locally gives a live, per-second
+  // counter regardless of how stale the last poll is.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!busy || !agent.busySince) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [busy, agent.busySince]);
+  const liveElapsedSeconds =
+    busy && agent.busySince
+      ? Math.max(0, Math.round((now - new Date(agent.busySince).getTime()) / 1000))
+      : agent.timeElapsedSeconds;
 
   useFrame((state, delta) => {
     if (!meshRef.current) return;
@@ -146,7 +166,7 @@ export function AgentNode3D({
                 </div>
                 <div className="mt-1 flex items-center justify-between font-mono text-[8px] text-white/60">
                   <span>PROGRESS: {agent.progress}%</span>
-                  <span>TIME: {formatElapsed(agent.timeElapsedSeconds)}</span>
+                  <span>TIME: {formatElapsed(liveElapsedSeconds)}</span>
                 </div>
               </>
             ) : (

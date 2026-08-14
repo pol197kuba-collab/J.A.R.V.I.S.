@@ -64,6 +64,7 @@ function AgentMatrix() {
             currentTask: a.currentTask,
             progress: a.progress,
             timeElapsedSeconds: a.timeElapsedSeconds,
+            busySince: a.busySince,
           }))}
         />
         <HudOverlay agentCount={agents.length} onlineCount={onlineCount} />

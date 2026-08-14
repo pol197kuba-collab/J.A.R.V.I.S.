@@ -656,7 +656,12 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
   // fail the whole turn, only leave the status widget momentarily stale.
   await supabase
     .from("agents")
-    .update({ status: "busy", current_task: input.slice(0, 200), progress: 0 })
+    .update({
+      status: "busy",
+      current_task: input.slice(0, 200),
+      progress: 0,
+      busy_since: new Date(startedAt).toISOString(),
+    })
     .eq("id", agent.id);
 
   // logEvent helper — writes to system_events so the System Logs page shows real telemetry.
@@ -1101,6 +1106,17 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         .update({ output: { tool_calls: toolCallLog } as Json })
         .eq("id", runId);
 
+      // Same live-visibility fix, for the agent-status widget's progress bar:
+      // previously `progress` was written once (0) at run start and once more
+      // (0) at the very end, so it never moved for the whole duration of a
+      // run. Cap below 100 while iterating — only the final "done" update
+      // (which resets progress to 0 alongside status: "idle") represents true
+      // completion, so a stalled/erroring last iteration never reads 100%.
+      await supabase
+        .from("agents")
+        .update({ progress: Math.min(90, Math.round(((iter + 1) / maxToolIterations) * 100)) })
+        .eq("id", agent.id);
+
       if (iter === maxToolIterations - 1) {
         // Force a final text reply on the next (skipped) turn by breaking here
         // but we already broke out via loop bound. If we get here we still
@@ -1202,6 +1218,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         current_task: null,
         progress: 0,
         time_elapsed_seconds: Math.round(latencyMs / 1000),
+        busy_since: null,
       })
       .eq("id", agent.id);
 
@@ -1274,6 +1291,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         current_task: msg.slice(0, 200),
         progress: 0,
         time_elapsed_seconds: Math.round((Date.now() - startedAt) / 1000),
+        busy_since: null,
       })
       .eq("id", agent.id);
     await logEvent("error", AGENT_SLUGS.JARVIS, `run failed: ${msg}`, { run_id: runId } as Json);

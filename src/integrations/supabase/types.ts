@@ -125,6 +125,7 @@ export type Database = {
       };
       agents: {
         Row: {
+          busy_since: string | null;
           capabilities: Json;
           config: Json;
           created_at: string;
@@ -143,6 +144,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          busy_since?: string | null;
           capabilities?: Json;
           config?: Json;
           created_at?: string;
@@ -161,6 +163,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          busy_since?: string | null;
           capabilities?: Json;
           config?: Json;
           created_at?: string;
