@@ -13,6 +13,9 @@ import { HeaderVoiceToggle } from "@/components/jarvis/HeaderVoiceToggle";
 import { ArkRebootProvider, useArkReboot } from "@/components/jarvis/ArkRebootContext";
 import { ArkRebootOverlay } from "@/components/jarvis/ArkRebootOverlay";
 import { RebootButton } from "@/components/jarvis/RebootButton";
+import { ShowcaseProvider } from "@/components/jarvis/ShowcaseContext";
+import { ShowcaseOverlay } from "@/components/jarvis/ShowcaseOverlay";
+import { ShowcaseButton } from "@/components/jarvis/ShowcaseButton";
 import { MobileBottomNav } from "@/components/jarvis/MobileBottomNav";
 import { isFullscreen, onFullscreenChange, toggleAppFullscreen } from "@/lib/fullscreen";
 import type { AppPhase } from "@/components/jarvis/PhaseContext";
@@ -25,7 +28,9 @@ import type { AppPhase } from "@/components/jarvis/PhaseContext";
 export function DashboardShell({ phase, onShutdown }: { phase: AppPhase; onShutdown: () => void }) {
   return (
     <ArkRebootProvider>
-      <DashboardShellInner phase={phase} onShutdown={onShutdown} />
+      <ShowcaseProvider>
+        <DashboardShellInner phase={phase} onShutdown={onShutdown} />
+      </ShowcaseProvider>
     </ArkRebootProvider>
   );
 }
@@ -82,6 +87,8 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
             <div className="ml-3 h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent portrait:ml-1" />
             <HeaderVoiceToggle />
             <div className="h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent" />
+            <ShowcaseButton />
+            <div className="h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent" />
             <RebootButton />
             <div className="h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent portrait:hidden short:hidden" />
             <FullscreenToggle />
@@ -101,6 +108,7 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
         </main>
         {isMobile && <MobileBottomNav />}
         <ArkRebootOverlay />
+        <ShowcaseOverlay />
         {phase === "shutdown" && (
           <div
             className="pointer-events-none fixed inset-0 z-[90] bg-black animate-shutdown-flash"
