@@ -850,6 +850,17 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           ...(toolDeclarations.length > 0
             ? { tools: [{ functionDeclarations: toolDeclarations }] }
             : {}),
+          // gemini-2.5-flash "thinks" by default, and those thinking tokens
+          // are deducted from the SAME maxOutputTokens budget as the actual
+          // response — for a forced structured call this can starve the
+          // function-call JSON of budget mid-generation, truncating it into
+          // invalid JSON (finishReason: MALFORMED_FUNCTION_CALL, 0 usable
+          // calls). Live failure (2026-08-14): generate_document forced via
+          // toolConfig ANY for a 10-slide deck came back empty on repeated
+          // attempts with exactly that finish reason. This call is pure
+          // mechanical structuring, not reasoning, so thinking buys nothing
+          // — turning it off frees the entire budget for the actual output.
+          ...(forceGenerateDocument ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
           ...(forceGenerateDocument
             ? {
                 toolConfig: {
