@@ -76,7 +76,7 @@ describe("runClassifierFallback", () => {
     });
 
     expect(result.uiAction).toBe("open_dashboard");
-    expect(result.finalText).toBe("Otwieram pulpit główny.");
+    expect(result.finalText).toBe("Wracam do głównego kokpitu, Panie Sławiński.");
     expect(result.toolCallLogEntry).toEqual({
       name: "perform_ui_action",
       args: { action: "open_dashboard", via: "classifier_fallback_groq" },
