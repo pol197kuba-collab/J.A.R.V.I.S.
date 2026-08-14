@@ -1443,7 +1443,7 @@ const generateDocumentTool: Tool = {
   declaration: {
     name: "generate_document",
     description:
-      "Generate a downloadable file — a presentation (pptx), a Word document (docx), or a PDF — from structured content, and return a download link. Call it ONCE with the complete, final content: a title and a list of sections, each with a heading plus paragraph text and/or bullet points. Write real content in the user's language, never placeholders. For visuals, prefer REAL PHOTOS: pass image_query (and hero_image_query) — short English search phrases for a real thing (product, place, person, concept), e.g. 'Samsung Galaxy S26 Ultra smartphone'. The system finds a real Creative-Commons photo and embeds it. Use the AI-graphics fields (hero_image_prompt / image_prompt) only for abstract or decorative slides where no real photo exists. Graphics are added in the background after the file is delivered.",
+      "Generate a downloadable file — a presentation (pptx), a Word document (docx), or a PDF — from structured content, and return a download link. Call it ONCE with the complete, final content: a title and a list of sections, each with a heading plus paragraph text and/or bullet points. Write real content in the user's language, never placeholders. For visuals, prefer REAL PHOTOS: pass image_query (and hero_image_query) — short English search phrases for a real thing (product, place, person, concept), e.g. 'Samsung Galaxy S26 Ultra smartphone'. The system finds a real Creative-Commons photo and embeds it. IMPORTANT — Creative-Commons photos frequently do NOT exist for specific branded products, newly-released items, or anything under copyright (e.g. a just-announced car model, a named consumer gadget): whenever you set image_query or hero_image_query for this kind of concrete, brand-specific subject, ALSO set the matching image_prompt / hero_image_prompt as a genuine fallback describing the same subject in general visual terms (no exact brand names/logos, since it's AI-generated) — otherwise that slide silently ends up with no image at all if no real photo is found. Only skip the *_prompt fallback when the subject is generic/decorative enough that a missing photo is fine. Graphics are added in the background after the file is delivered.",
     parameters: {
       type: "object",
       properties: {
@@ -1466,7 +1466,7 @@ const generateDocumentTool: Tool = {
         hero_image_prompt: {
           type: "string",
           description:
-            "Fallback only. ENGLISH prompt for an AI-generated hero graphic when no real photo fits (abstract/decorative). Concrete scene, no text in the image.",
+            "Fallback for hero_image_query. ENGLISH prompt for an AI-generated hero graphic, used only if no real photo is found. Set this alongside hero_image_query whenever the subject is a specific branded/copyrighted product or place — Creative-Commons photos of those often don't exist. Describe the subject visually without exact brand names/logos. Concrete scene, no text in the image.",
         },
         sections: {
           type: "array",
@@ -1490,7 +1490,7 @@ const generateDocumentTool: Tool = {
               image_prompt: {
                 type: "string",
                 description:
-                  "Fallback only. ENGLISH prompt for an AI-generated illustration when no real photo fits. Concrete scene, no text in the image.",
+                  "Fallback for image_query. ENGLISH prompt for an AI-generated illustration, used only if no real photo is found. Set this alongside image_query whenever the subject is a specific branded/copyrighted product — Creative-Commons photos of those often don't exist. Describe the subject visually without exact brand names/logos. Concrete scene, no text in the image.",
               },
             },
             required: ["heading"],
