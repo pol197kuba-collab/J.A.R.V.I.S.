@@ -11,7 +11,14 @@ import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { speak, speakCancel } from "@/lib/audio/speak";
 import { audio } from "@/lib/audio/AudioEngine";
-import { listAgents, type AgentSummary } from "@/lib/agents/runtime.functions";
+import {
+  listAgents,
+  runAgent,
+  getActiveConversation,
+  type AgentSummary,
+} from "@/lib/agents/runtime.functions";
+import { emitChat } from "@/lib/ai/chatBus";
+import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { useArkReboot } from "./ArkRebootContext";
 import {
   SHOWCASE_SEQUENCE,
@@ -56,10 +63,20 @@ function playShowcaseChime() {
   setTimeout(() => audio.playBeep(1320, 0.16, 0.26), 220);
 }
 
+// Prompt for the "agent-matrix-demo" flourish — phrased to match the exact
+// "zademonstruj ich możliwości" pattern the orchestrator's own system prompt
+// (runtime.server.ts) already recognizes as "delegate to several teammates
+// in this turn", and asked for SHORT sub-tasks so it resolves quickly rather
+// than kicking off something slow mid-demo.
+const AGENT_MATRIX_DEMO_PROMPT =
+  "Zademonstruj Agent Matrix: krótko deleguj po jednym prostym zadaniu testowym do dwóch lub trzech dostępnych agentów jednocześnie (np. jednozdaniowe przywitanie albo streszczenie), żeby pokazać jak wygląda delegacja w czasie rzeczywistym.";
+
 export function ShowcaseProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { isDiagnosticRunning } = useArkReboot();
   const fetchAgents = useServerFn(listAgents);
+  const fetchActiveConversation = useServerFn(getActiveConversation);
+  const runAgentFn = useServerFn(runAgent);
 
   const [isRunning, setRunning] = useState(false);
   const [phase, setPhase] = useState<ShowcasePhase>("idle");
@@ -76,6 +93,41 @@ export function ShowcaseProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => () => clearTimers(), [clearTimers]);
 
+  // Fires a REAL delegation turn through the actual orchestrator so the
+  // Agent Matrix (JarvisCanvas on /jarvis) lights up with genuine activity
+  // — busy status, glowing spokes, live task/progress cards — instead of a
+  // faked animation. Appends to the user's existing J.A.R.V.I.S. conversation
+  // (fetched first, same as jarvisBrain.ts's resolveConversationId) rather
+  // than an omitted conversationId, which would otherwise fork a new thread
+  // that then hijacks "most recently updated" on every other chat surface.
+  // Best-effort and silent: no Gemini/Groq key configured, or the call
+  // failing outright, just means the matrix stays at its idle animation —
+  // never blocks or visibly errors the showcase itself.
+  const triggerAgentMatrixDemo = useCallback(() => {
+    fetchActiveConversation({ data: { agentSlug: AGENT_SLUGS.JARVIS } })
+      .then((conv) =>
+        runAgentFn({
+          data: {
+            agentSlug: AGENT_SLUGS.JARVIS,
+            input: AGENT_MATRIX_DEMO_PROMPT,
+            conversationId: conv.conversationId ?? undefined,
+          },
+        }),
+      )
+      .then((result) => {
+        if (result.status === "done" && result.output) {
+          emitChat("user", AGENT_MATRIX_DEMO_PROMPT);
+          // Not spoken — the showcase's own scripted narration owns the
+          // voice channel for this step, two overlapping TTS lines would
+          // just talk over each other.
+          emitChat("jarvis", result.output);
+        }
+      })
+      .catch(() => {
+        /* best-effort — matrix simply stays idle */
+      });
+  }, [fetchActiveConversation, runAgentFn]);
+
   const skip = useCallback(() => {
     if (!runningRef.current) return;
     clearTimers();
@@ -85,7 +137,7 @@ export function ShowcaseProvider({ children }: { children: ReactNode }) {
     setPhase("idle");
     setStepIndex(-1);
     try {
-      router.navigate({ to: "/" });
+      router.navigate({ to: "/jarvis" });
     } catch {
       /* ignore — router may be transitioning */
     }
@@ -127,6 +179,7 @@ export function ShowcaseProvider({ children }: { children: ReactNode }) {
           setPhase("step");
           audio.playBeep(1100, 0.05, 0.16);
           speak(step.narration);
+          if (step.flourish === "agent-matrix-demo") triggerAgentMatrixDemo();
         }, t),
       );
       t += estimateNarrationMs(step.narration);
@@ -135,7 +188,7 @@ export function ShowcaseProvider({ children }: { children: ReactNode }) {
     timersRef.current.push(
       setTimeout(() => {
         try {
-          router.navigate({ to: "/" });
+          router.navigate({ to: "/jarvis" });
         } catch {
           /* ignore */
         }
@@ -154,7 +207,7 @@ export function ShowcaseProvider({ children }: { children: ReactNode }) {
         setStepIndex(-1);
       }, t),
     );
-  }, [fetchAgents, isDiagnosticRunning, router]);
+  }, [fetchAgents, isDiagnosticRunning, router, triggerAgentMatrixDemo]);
 
   // Voice/text bridge — VoiceCommandProvider is mounted above this provider
   // and dispatches this event for the demo_showcase action, same pattern
