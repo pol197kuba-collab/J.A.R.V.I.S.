@@ -3,10 +3,10 @@
 // public.notifications on completion — success OR failure, never silent —
 // and this component picks it up over Supabase Realtime the instant it
 // lands, regardless of what screen the user is on.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type TouchEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Bell } from "lucide-react";
+import { Bell, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   DropdownMenu,
@@ -18,8 +18,17 @@ import { audio } from "@/lib/audio/AudioEngine";
 import {
   listNotifications,
   markAllNotificationsRead,
+  deleteNotification,
   type AppNotification,
 } from "@/lib/notifications/notifications.functions";
+
+// How far (px) a swipe-left has to travel before release counts as "delete"
+// rather than snapping back — short enough to feel responsive on a phone,
+// long enough that a vertical scroll inside the dropdown doesn't misfire it.
+const SWIPE_DELETE_THRESHOLD = 64;
+// Hard cap on how far the row can be dragged, so the revealed red "delete"
+// backing never overshoots into visibly empty space past its own width.
+const SWIPE_MAX_DRAG = 96;
 
 function timeOf(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -29,6 +38,7 @@ export function NotificationBell() {
   const qc = useQueryClient();
   const fetchNotifications = useServerFn(listNotifications);
   const markAllRead = useServerFn(markAllNotificationsRead);
+  const deleteNotif = useServerFn(deleteNotification);
   const [open, setOpen] = useState(false);
 
   const { data: notifications = [] } = useQuery({
@@ -61,6 +71,18 @@ export function NotificationBell() {
   }, [qc]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+
+  // Optimistic removal — the row disappears immediately (swipe/tap already
+  // animated it out), and only rolls back by refetching if the delete
+  // itself failed server-side.
+  const handleDelete = (id: string) => {
+    qc.setQueryData<AppNotification[]>(["notifications", "list"], (old) =>
+      (old ?? []).filter((n) => n.id !== id),
+    );
+    deleteNotif({ data: { id } }).catch(() => {
+      qc.invalidateQueries({ queryKey: ["notifications", "list"] });
+    });
+  };
 
   const onOpenChange = (next: boolean) => {
     setOpen(next);
@@ -101,7 +123,9 @@ export function NotificationBell() {
               brak powiadomień
             </p>
           ) : (
-            notifications.map((n) => <NotificationRow key={n.id} notification={n} />)
+            notifications.map((n) => (
+              <NotificationRow key={n.id} notification={n} onDelete={() => handleDelete(n.id)} />
+            ))
           )}
         </div>
       </DropdownMenuContent>
@@ -109,7 +133,13 @@ export function NotificationBell() {
   );
 }
 
-function NotificationRow({ notification }: { notification: AppNotification }) {
+function NotificationRow({
+  notification,
+  onDelete,
+}: {
+  notification: AppNotification;
+  onDelete: () => void;
+}) {
   const failed = notification.kind === "document_failed";
   const payload =
     notification.payload &&
@@ -119,39 +149,106 @@ function NotificationRow({ notification }: { notification: AppNotification }) {
       : undefined;
   const downloadUrl = typeof payload?.download_url === "string" ? payload.download_url : undefined;
 
+  // Swipe-left-to-delete (mobile): tracks the raw touch delta rather than
+  // reading e.target — a dropdown-menu content area can intercept touch
+  // targets in ways that make per-element hit-testing unreliable, but the
+  // start/current X coordinates are always accurate regardless of what's
+  // under the finger.
+  const [dragX, setDragX] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+  // Once a gesture commits to horizontal (swipe) or vertical (scroll), it
+  // stays committed for the rest of that touch — otherwise a diagonal
+  // finger movement could fight the dropdown's own vertical scrolling.
+  const axisLock = useRef<"x" | "y" | null>(null);
+
+  const onTouchStart = (e: TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    axisLock.current = null;
+    setDragging(true);
+  };
+  const onTouchMove = (e: TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const dx = e.touches[0].clientX - touchStartX.current;
+    const dy = e.touches[0].clientY - touchStartY.current;
+    if (!axisLock.current) {
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+      axisLock.current = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+    }
+    if (axisLock.current !== "x") return;
+    // Only swipe LEFT reveals delete — clamp positive drag to 0 so the row
+    // can't be dragged rightward off-screen.
+    setDragX(Math.max(-SWIPE_MAX_DRAG, Math.min(0, dx)));
+  };
+  const onTouchEnd = () => {
+    setDragging(false);
+    if (dragX <= -SWIPE_DELETE_THRESHOLD) {
+      onDelete();
+    } else {
+      setDragX(0);
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
+    axisLock.current = null;
+  };
+
   return (
-    <div
-      className={
-        "min-w-0 border-b border-primary/10 px-3 py-2 last:border-b-0" +
-        (notification.read ? " opacity-60" : "")
-      }
-    >
-      <div className="flex items-center justify-between gap-2">
-        <p
-          className="min-w-0 flex-1 truncate font-display text-[11px] uppercase tracking-wide"
-          style={{ color: failed ? "var(--destructive)" : "var(--success)" }}
-        >
-          {notification.title}
-        </p>
-        <span className="shrink-0 font-mono text-[9px] text-white/30">
-          {timeOf(notification.createdAt)}
-        </span>
+    <div className="relative min-w-0 overflow-hidden border-b border-primary/10 last:border-b-0">
+      {/* Red "delete" backing revealed as the row swipes left. */}
+      <div className="absolute inset-0 flex items-center justify-end bg-[color:var(--destructive)]/80 px-3">
+        <X className="h-4 w-4 text-white" strokeWidth={2} />
       </div>
-      {notification.body && (
-        <p className="mt-1 min-w-0 break-words text-[11px] leading-snug text-white/70">
-          {notification.body}
-        </p>
-      )}
-      {downloadUrl && (
-        <a
-          href={downloadUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-1 inline-block font-mono text-[10px] uppercase tracking-wide text-primary underline underline-offset-2"
-        >
-          Pobierz plik
-        </a>
-      )}
+      <div
+        className="relative min-w-0 bg-[color:var(--surface-0,black)] px-3 py-2 group/notif"
+        style={{
+          transform: `translateX(${dragX}px)`,
+          transition: dragging ? "none" : "transform 200ms ease-out",
+          opacity: notification.read ? 0.6 : 1,
+        }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <p
+            className="min-w-0 flex-1 truncate font-display text-[11px] uppercase tracking-wide"
+            style={{ color: failed ? "var(--destructive)" : "var(--success)" }}
+          >
+            {notification.title}
+          </p>
+          <span className="shrink-0 font-mono text-[9px] text-white/30">
+            {timeOf(notification.createdAt)}
+          </span>
+          <button
+            type="button"
+            aria-label="Usuń powiadomienie"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="shrink-0 rounded p-0.5 text-white/30 opacity-0 transition hover:text-white/80 group-hover/notif:opacity-100 focus-visible:opacity-100 portrait:opacity-100"
+          >
+            <X className="h-3 w-3" strokeWidth={2} />
+          </button>
+        </div>
+        {notification.body && (
+          <p className="mt-1 min-w-0 break-words text-[11px] leading-snug text-white/70">
+            {notification.body}
+          </p>
+        )}
+        {downloadUrl && (
+          <a
+            href={downloadUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1 inline-block font-mono text-[10px] uppercase tracking-wide text-primary underline underline-offset-2"
+          >
+            Pobierz plik
+          </a>
+        )}
+      </div>
     </div>
   );
 }
