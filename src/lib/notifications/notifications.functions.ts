@@ -74,3 +74,19 @@ export const markAllNotificationsRead = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+const DeleteInput = z.object({ id: z.string().uuid() });
+
+export const deleteNotification = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => DeleteInput.parse(input))
+  .handler(async ({ data, context }): Promise<{ ok: boolean }> => {
+    const { supabase, userId } = context;
+    const { error } = await supabase
+      .from("notifications")
+      .delete()
+      .eq("id", data.id)
+      .eq("owner_id", userId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });

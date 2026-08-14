@@ -102,6 +102,25 @@ const GEMINI_RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const GEMINI_MAX_RETRIES = 3;
 const GEMINI_RETRY_BACKOFF_MS = 700;
 
+// Gemini's DEFAULT safety thresholds (unset = BLOCK_MEDIUM_AND_ABOVE) silently
+// return an empty candidate (no text, no function call, no error/exception —
+// just candidates[0].finishReason: "SAFETY") for entirely legal, mundane
+// requests that merely brush a sensitive category, e.g. summarizing a
+// Mature-rated video game's crime/violence themes for a presentation. Live
+// failure (2026-08-14): asking Forge to build a GTA VI slide deck came back
+// with 0 function calls on BOTH the initial attempt and the QA-corrective
+// retry — Forge was never actually refusing, Gemini was silently discarding
+// the response before it reached the app. This is a personal, non-commercial
+// assistant producing ordinary descriptive content (not real instructions for
+// harm), so relax to BLOCK_ONLY_HIGH — filters things that are actually
+// severe, stops blocking normal mature-media descriptions.
+const GEMINI_SAFETY_SETTINGS = [
+  { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+  { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+  { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+  { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" },
+];
+
 export type OrchestratorInput = {
   supabase: SupabaseClient<Database>;
   userId: string;
@@ -352,6 +371,7 @@ export async function runClassifierFallback(
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: classifierSystemPrompt }] },
           tools: [{ functionDeclarations: classifierToolDeclarations }],
+          safetySettings: GEMINI_SAFETY_SETTINGS,
           toolConfig: {
             functionCallingConfig: {
               mode: "ANY",
@@ -823,6 +843,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         const requestBody = JSON.stringify({
           systemInstruction: { parts: [{ text: systemPrompt }] },
           generationConfig: { temperature, maxOutputTokens },
+          safetySettings: GEMINI_SAFETY_SETTINGS,
           // Gemini rejects an empty functionDeclarations array, and an
           // agent may legitimately have zero tools enabled (all toggled
           // off in Settings) — omit the `tools` key entirely in that case.
@@ -889,7 +910,11 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         }
 
         const data = (await res.json()) as {
-          candidates?: Array<{ content?: { role?: string; parts?: GeminiPart[] } }>;
+          candidates?: Array<{
+            content?: { role?: string; parts?: GeminiPart[] };
+            finishReason?: string;
+          }>;
+          promptFeedback?: { blockReason?: string };
           usageMetadata?: {
             promptTokenCount?: number;
             candidatesTokenCount?: number;
@@ -906,6 +931,26 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           .flatMap((p) => ("text" in p && p.text ? [p.text] : []))
           .join("")
           .trim();
+
+        // A turn that comes back with nothing at all (no function call, no
+        // text) is otherwise silent — from the caller's perspective it looks
+        // identical to "the model chose to stop", when it's almost always
+        // Gemini's safety filter discarding the response server-side. Log
+        // the real reason so a stuck run (e.g. forceGenerateDocument ending
+        // with 0 tool calls) is diagnosable from System Logs instead of a
+        // guessing game.
+        if (functionCalls.length === 0 && !textOut) {
+          const finishReason = data.candidates?.[0]?.finishReason;
+          const blockReason = data.promptFeedback?.blockReason;
+          if (finishReason || blockReason) {
+            await logEvent(
+              "warn",
+              AGENT_SLUGS.JARVIS,
+              `empty Gemini response · finishReason=${finishReason ?? "?"} blockReason=${blockReason ?? "?"}`,
+              { run_id: runId, iter, forceGenerateDocument } as Json,
+            );
+          }
+        }
       } catch (geminiErr) {
         // Emergency failover: Gemini errored (rate limit, 5xx, timeout,
         // network) — retry this exact turn against the free Groq tier
