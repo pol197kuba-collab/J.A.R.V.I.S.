@@ -71,7 +71,11 @@ async function failJob(
 ): Promise<void> {
   await supabase
     .from("document_jobs")
-    .update({ status: "error", error: reason.slice(0, 2000), finished_at: new Date().toISOString() })
+    .update({
+      status: "error",
+      error: reason.slice(0, 2000),
+      finished_at: new Date().toISOString(),
+    })
     .eq("id", jobId);
   await supabase.from("notifications").insert({
     owner_id: userId,
@@ -99,7 +103,9 @@ function buildDigest(spec: DocSpec): string {
   for (const [i, s] of spec.sections.entries()) {
     const bulletPreview = (s.bullets ?? []).slice(0, 3).join("; ");
     const contentPreview = (s.content ?? "").slice(0, 200);
-    lines.push(`${i + 1}. ${s.heading} — ${contentPreview}${bulletPreview ? ` [${bulletPreview}]` : ""}`);
+    lines.push(
+      `${i + 1}. ${s.heading} — ${contentPreview}${bulletPreview ? ` [${bulletPreview}]` : ""}`,
+    );
   }
   return lines.join("\n").slice(0, 6000);
 }
@@ -123,21 +129,32 @@ async function judgeDocument(apiKey: string, brief: string, digest: string): Pro
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.2, maxOutputTokens: 150, responseMimeType: "application/json" },
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: 150,
+              responseMimeType: "application/json",
+            },
           }),
         },
       );
     } finally {
       clearTimeout(timer);
     }
-    if (!res.ok) return { ok: true, reason: `QA niedostępne (HTTP ${res.status}) — plik dostarczony bez weryfikacji` };
+    if (!res.ok)
+      return {
+        ok: true,
+        reason: `QA niedostępne (HTTP ${res.status}) — plik dostarczony bez weryfikacji`,
+      };
     const data = (await res.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
     };
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
     const parsed = JSON.parse(text) as { ok?: unknown; reason?: unknown };
     if (typeof parsed.ok !== "boolean") throw new Error("malformed QA response");
-    return { ok: parsed.ok, reason: typeof parsed.reason === "string" ? parsed.reason.slice(0, 300) : "" };
+    return {
+      ok: parsed.ok,
+      reason: typeof parsed.reason === "string" ? parsed.reason.slice(0, 300) : "",
+    };
   } catch (err) {
     // Fail open: a broken QA call must never block a real, already-built file.
     return {
@@ -223,14 +240,14 @@ export const runDocumentJobFn = createServerFn({ method: "POST" })
           try {
             const enrichOutcome = await enrichGeneratedFileImages(supabase, userId, fileId);
             if (enrichOutcome.ok && enrichOutcome.status === "failed") {
-              warnings.push("nie udało się pobrać/wygenerować żadnego zdjęcia — plik jest tekstowy");
+              warnings.push(
+                "nie udało się pobrać/wygenerować żadnego zdjęcia — plik jest tekstowy",
+              );
             } else if (!enrichOutcome.ok) {
               warnings.push(`obrazki: ${enrichOutcome.reason}`);
             }
           } catch (err) {
-            warnings.push(
-              `obrazki: ${err instanceof Error ? err.message : String(err)}`,
-            );
+            warnings.push(`obrazki: ${err instanceof Error ? err.message : String(err)}`);
             await logServerWarn(
               supabase,
               userId,
