@@ -20,6 +20,7 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as JarvisRouteImport } from './routes/jarvis'
 import { Route as DocumentsRouteImport } from './routes/documents'
+import { Route as CommandsRouteImport } from './routes/commands'
 import { Route as AgentHubRouteImport } from './routes/agent-hub'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AgentHubSlugRouteImport } from './routes/agent-hub_.$slug'
@@ -83,6 +84,11 @@ const DocumentsRoute = DocumentsRouteImport.update({
   path: '/documents',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CommandsRoute = CommandsRouteImport.update({
+  id: '/commands',
+  path: '/commands',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AgentHubRoute = AgentHubRouteImport.update({
   id: '/agent-hub',
   path: '/agent-hub',
@@ -125,6 +131,7 @@ const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
+  '/commands': typeof CommandsRoute
   '/documents': typeof DocumentsRoute
   '/jarvis': typeof JarvisRoute
   '/mcp': typeof McpRoute
@@ -145,6 +152,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
+  '/commands': typeof CommandsRoute
   '/documents': typeof DocumentsRoute
   '/jarvis': typeof JarvisRoute
   '/mcp': typeof McpRoute
@@ -166,6 +174,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/agent-hub': typeof AgentHubRoute
+  '/commands': typeof CommandsRoute
   '/documents': typeof DocumentsRoute
   '/jarvis': typeof JarvisRoute
   '/mcp': typeof McpRoute
@@ -188,6 +197,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/agent-hub'
+    | '/commands'
     | '/documents'
     | '/jarvis'
     | '/mcp'
@@ -208,6 +218,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/agent-hub'
+    | '/commands'
     | '/documents'
     | '/jarvis'
     | '/mcp'
@@ -228,6 +239,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/agent-hub'
+    | '/commands'
     | '/documents'
     | '/jarvis'
     | '/mcp'
@@ -249,6 +261,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgentHubRoute: typeof AgentHubRoute
+  CommandsRoute: typeof CommandsRoute
   DocumentsRoute: typeof DocumentsRoute
   JarvisRoute: typeof JarvisRoute
   McpRoute: typeof McpRoute
@@ -346,6 +359,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocumentsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/commands': {
+      id: '/commands'
+      path: '/commands'
+      fullPath: '/commands'
+      preLoaderRoute: typeof CommandsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/agent-hub': {
       id: '/agent-hub'
       path: '/agent-hub'
@@ -401,6 +421,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgentHubRoute: AgentHubRoute,
+  CommandsRoute: CommandsRoute,
   DocumentsRoute: DocumentsRoute,
   JarvisRoute: JarvisRoute,
   McpRoute: McpRoute,

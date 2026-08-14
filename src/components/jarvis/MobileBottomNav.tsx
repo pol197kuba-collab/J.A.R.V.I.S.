@@ -12,6 +12,7 @@ import {
   ListChecks,
   Database,
   FileText,
+  Command,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -31,6 +32,7 @@ const items = [
   { title: "Logs", url: "/system-logs", icon: Terminal },
   { title: "Schema", url: "/schema", icon: Database },
   { title: "Docs", url: "/documents", icon: FileText },
+  { title: "Commands", url: "/commands", icon: Command },
   { title: "Settings", url: "/settings", icon: SettingsIcon },
 ] as const;
 
