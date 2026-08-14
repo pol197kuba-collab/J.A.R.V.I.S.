@@ -38,7 +38,18 @@ function AgentMatrix() {
   const onlineCount = agents.filter((a) => a.isEnabled).length;
 
   return (
-    <div className="flex h-full min-h-[560px] w-full flex-col overflow-hidden">
+    // Anchored to the real viewport (dvh) instead of h-full: DashboardShell's
+    // desktop wrapper only sets min-height (a floor, not a ceiling), so a
+    // percentage/h-full chain through it is never guaranteed definite and
+    // can let this route's content dictate page height, forcing the browser
+    // to scroll instead of clipping inside the shell. dvh always resolves
+    // against the true viewport regardless of ancestor sizing, so this is a
+    // hard "windowed" cap — the module never grows past one screen. The
+    // portrait/landscape-max-md/short breakpoints already get a hard
+    // h-[100dvh] cap on DashboardShell itself, so h-full is definite there
+    // and is kept as-is; only the default (desktop) case needs the anchor,
+    // matched to the header's h-12 (3rem).
+    <div className="flex h-[calc(100dvh-3rem)] min-h-[560px] w-full flex-col overflow-hidden portrait:h-full landscape:max-md:h-full short:h-full">
       {/* Matrix zone — 60% of the view. Sized so the whole route (matrix +
           chat) fits a typical desktop viewport (~900-1000px) without page
           scroll: see AgentChatPanel below for the other 40%. */}
