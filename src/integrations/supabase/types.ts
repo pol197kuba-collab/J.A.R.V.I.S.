@@ -572,6 +572,48 @@ export type Database = {
           },
         ];
       };
+      local_jobs: {
+        Row: {
+          args: Json;
+          claimed_at: string | null;
+          created_at: string;
+          error: string | null;
+          finished_at: string | null;
+          id: string;
+          owner_id: string;
+          result: Json | null;
+          status: string;
+          type: string;
+          updated_at: string;
+        };
+        Insert: {
+          args?: Json;
+          claimed_at?: string | null;
+          created_at?: string;
+          error?: string | null;
+          finished_at?: string | null;
+          id?: string;
+          owner_id: string;
+          result?: Json | null;
+          status?: string;
+          type: string;
+          updated_at?: string;
+        };
+        Update: {
+          args?: Json;
+          claimed_at?: string | null;
+          created_at?: string;
+          error?: string | null;
+          finished_at?: string | null;
+          id?: string;
+          owner_id?: string;
+          result?: Json | null;
+          status?: string;
+          type?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       notes: {
         Row: {
           body: string;
