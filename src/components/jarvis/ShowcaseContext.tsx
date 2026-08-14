@@ -20,6 +20,7 @@ import {
   SHOWCASE_BUILD_MS,
   type ShowcaseStep,
 } from "@/lib/showcase/sequence";
+import { estimateNarrationMs } from "@/lib/showcase/timing";
 
 export type ShowcasePhase = "idle" | "coldopen" | "building" | "step" | "outro";
 
@@ -107,7 +108,7 @@ export function ShowcaseProvider({ children }: { children: ReactNode }) {
     playShowcaseChime();
     speak(SHOWCASE_COLD_OPEN.narration);
 
-    let t = SHOWCASE_COLD_OPEN.durationMs;
+    let t = estimateNarrationMs(SHOWCASE_COLD_OPEN.narration);
     SHOWCASE_SEQUENCE.forEach((step, i) => {
       timersRef.current.push(
         setTimeout(() => {
@@ -128,7 +129,7 @@ export function ShowcaseProvider({ children }: { children: ReactNode }) {
           speak(step.narration);
         }, t),
       );
-      t += step.displayMs;
+      t += estimateNarrationMs(step.narration);
     });
 
     timersRef.current.push(
@@ -143,7 +144,7 @@ export function ShowcaseProvider({ children }: { children: ReactNode }) {
         speak(SHOWCASE_OUTRO.narration);
       }, t),
     );
-    t += SHOWCASE_OUTRO.durationMs;
+    t += estimateNarrationMs(SHOWCASE_OUTRO.narration);
 
     timersRef.current.push(
       setTimeout(() => {
