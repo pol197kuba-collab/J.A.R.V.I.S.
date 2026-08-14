@@ -113,27 +113,52 @@ function BuildingScreen({ label }: { label: string }) {
   );
 }
 
+const STATUS_COLOR: Record<string, string> = {
+  active: "var(--success)",
+  running: "var(--success)",
+  idle: "var(--muted-foreground)",
+  error: "var(--destructive)",
+};
+
+type OrbitAgent = { name: string; role: string | null; dotColor: string };
+
 function AgentOrbit({ agents }: { agents: AgentSummary[] }) {
-  const names = agents.length > 0 ? agents.map((a) => a.name) : FALLBACK_AGENTS;
-  const n = names.length;
-  const radiusVmin = 26;
-  const durationS = 4.5;
+  const items: OrbitAgent[] =
+    agents.length > 0
+      ? agents.map((a) => ({
+          name: a.name,
+          role: a.role,
+          dotColor: a.isEnabled
+            ? (STATUS_COLOR[a.status] ?? "var(--success)")
+            : "var(--muted-foreground)",
+        }))
+      : FALLBACK_AGENTS.map((name) => ({ name, role: null, dotColor: "var(--success)" }));
+  const n = items.length;
+  // Slow, readable sweep — legible names matter more than a flashy spin.
+  // At this pace the ring completes well under one full turn during a
+  // typical step's narration window, which is the point: you should be
+  // able to actually READ who's in the roster, not just see a blur go by.
+  const durationS = 11;
 
   return (
-    <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/55 backdrop-blur-[2px] animate-fade-in">
+    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/70 animate-fade-in">
+      <p className="font-display text-[10px] uppercase tracking-[0.4em] text-primary/80">
+        ◢ {n} AGENTS ONLINE
+      </p>
       <div
-        className="relative h-[60vmin] w-[60vmin]"
+        className="relative aspect-square w-[min(84vmin,760px)]"
         style={{ animation: `ring-spin ${durationS}s linear infinite` }}
       >
-        {names.map((name, i) => {
+        {items.map((agent, i) => {
           const angle = (360 / n) * i;
           const rad = (angle * Math.PI) / 180;
-          const x = 50 + radiusVmin * Math.cos(rad);
-          const y = 50 + radiusVmin * Math.sin(rad);
+          const radiusPct = 36;
+          const x = 50 + radiusPct * Math.cos(rad);
+          const y = 50 + radiusPct * Math.sin(rad);
           return (
             <div
-              key={`${name}-${i}`}
-              className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1.5"
+              key={`${agent.name}-${i}`}
+              className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2"
               style={{
                 left: `${x}%`,
                 top: `${y}%`,
@@ -141,19 +166,31 @@ function AgentOrbit({ agents }: { agents: AgentSummary[] }) {
               }}
             >
               <span
-                className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-primary/70 bg-primary/10 font-display text-[10px] uppercase text-primary shadow-[0_0_20px_-4px_var(--primary)]"
-                style={{ textShadow: "0 0 8px var(--primary)" }}
+                className="relative flex h-20 w-20 items-center justify-center rounded-full border-2 border-primary/70 bg-primary/10 font-display text-xl uppercase text-primary shadow-[0_0_28px_-4px_var(--primary)]"
+                style={{ textShadow: "0 0 10px var(--primary)" }}
               >
-                {name.slice(0, 2).toUpperCase()}
+                {agent.name.slice(0, 2).toUpperCase()}
+                <span
+                  className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border border-black/60"
+                  style={{
+                    backgroundColor: agent.dotColor,
+                    boxShadow: `0 0 8px ${agent.dotColor}`,
+                  }}
+                />
               </span>
-              <span className="font-display max-w-[90px] truncate text-center text-[9px] uppercase tracking-[0.18em] text-foreground/90">
-                {name}
+              <span className="font-display max-w-[140px] truncate text-center text-sm uppercase tracking-[0.16em] text-foreground">
+                {agent.name}
               </span>
+              {agent.role && (
+                <span className="font-mono max-w-[140px] truncate text-center text-[10px] text-muted-foreground">
+                  {agent.role}
+                </span>
+              )}
             </div>
           );
         })}
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          <ArcReactorTriangle className="!w-[18vmin]" />
+          <ArcReactorTriangle className="!w-[22vmin]" />
         </div>
       </div>
     </div>
