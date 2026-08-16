@@ -528,26 +528,53 @@ async function fetchWebSearchOgImage(
   }
 }
 
+async function hashImageBytes(bytes: Uint8Array): Promise<string> {
+  // Copy into a fresh, non-generic Uint8Array — TS's BufferSource type
+  // rejects the ArrayBufferLike-backed view DocImage.bytes can carry.
+  const digest = await crypto.subtle.digest("SHA-256", Uint8Array.from(bytes));
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 /** Resolve one slide image: a real photo — tried Google CSE (if configured),
  *  Wikipedia, a free whole-web og:image lookup, then Openverse CC, in that
  *  order — if imageQuery was requested, otherwise an AI-generated one
  *  (imagePrompt). Real photos are preferred and don't touch the AI image
- *  model at all. */
+ *  model at all.
+ *
+ *  `usedHashes` dedupes ACROSS the whole document: querying different facets
+ *  of the same broad subject (e.g. "GTA VI characters" vs "GTA VI gameplay")
+ *  very often resolves to the SAME Wikipedia article — and thus the same
+ *  single infobox image — for both. Live failure (2026-08-16): a 5-slide
+ *  GTA VI deck showed the identical cover art on every single slide. When a
+ *  tier's hit hashes to an image already claimed elsewhere in this document,
+ *  it's treated as a miss and the next tier is tried instead, so a repeat
+ *  never gets embedded twice. */
 async function resolveOneImage(
   job: { imageQuery?: string; imagePrompt?: string },
   apiKey: string,
+  usedHashes: Set<string>,
   googleCse?: GoogleCseCreds,
 ): Promise<DocImage | null> {
+  const claim = async (candidate: DocImage | null): Promise<DocImage | null> => {
+    if (!candidate) return null;
+    const hash = await hashImageBytes(candidate.bytes);
+    if (usedHashes.has(hash)) return null; // duplicate — let the caller try the next tier
+    usedHashes.add(hash);
+    return candidate;
+  };
+
   if (job.imageQuery) {
     if (googleCse) {
-      const cse = await fetchGoogleCseImage(job.imageQuery, googleCse);
+      const cse = await claim(await fetchGoogleCseImage(job.imageQuery, googleCse));
       if (cse) return cse;
     }
-    const wiki = await fetchWikipediaImage(job.imageQuery);
+    const wiki = await claim(await fetchWikipediaImage(job.imageQuery));
     if (wiki) return wiki;
-    const webPhoto = await fetchWebSearchOgImage(job.imageQuery, apiKey);
+    const webPhoto = await claim(await fetchWebSearchOgImage(job.imageQuery, apiKey));
     if (webPhoto) return webPhoto;
-    const photo = await fetchWebImage(job.imageQuery);
+    const photo = await claim(await fetchWebImage(job.imageQuery));
     if (photo) return photo;
     // Fall back to AI generation only if a prompt was also supplied.
   }
@@ -557,8 +584,12 @@ async function resolveOneImage(
 
 /** Resolve the hero + section images declared in the spec (web photos and/or
  *  AI graphics). Best-effort: any individual failure just means that slide
- *  renders text-only — never fails the whole document. All run in parallel,
- *  so wall-clock cost ≈ the slowest single image. */
+ *  renders text-only — never fails the whole document. Resolved SEQUENTIALLY
+ *  (not in parallel): cross-document deduplication (see resolveOneImage)
+ *  needs each job to see what every earlier job already claimed, which a
+ *  parallel Promise.all can't provide without races. Slower wall-clock, but
+ *  correctness (no repeated image) matters more than shaving a few seconds
+ *  off a background job. */
 export async function generateDocImages(
   spec: DocSpec,
   apiKey: string,
@@ -580,21 +611,18 @@ export async function generateDocImages(
   const images: DocImages = { sections: new Map() };
   if (capped.length === 0) return images;
 
-  const results = await Promise.allSettled(
-    capped.map((job) => resolveOneImage(job, apiKey, googleCse)),
-  );
-  for (const [i, result] of results.entries()) {
-    const job = capped[i];
-    if (result.status === "fulfilled" && result.value) {
-      if (job.key === "hero") images.hero = result.value;
-      else images.sections.set(job.key, result.value);
-    } else {
-      const reason =
-        result.status === "rejected"
-          ? result.reason instanceof Error
-            ? result.reason.message
-            : String(result.reason)
-          : "no image resolved";
+  const usedHashes = new Set<string>();
+  for (const job of capped) {
+    try {
+      const result = await resolveOneImage(job, apiKey, usedHashes, googleCse);
+      if (result) {
+        if (job.key === "hero") images.hero = result;
+        else images.sections.set(job.key, result);
+      } else {
+        await onWarn?.(`image resolution failed (${String(job.key)}): no image resolved`);
+      }
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
       await onWarn?.(`image resolution failed (${String(job.key)}): ${reason}`);
     }
   }
