@@ -734,7 +734,10 @@ async function buildPptx(spec: DocSpec, images: DocImages): Promise<Uint8Array> 
     const imageOnLeft = sectionImage ? i % 2 === 1 : false;
     const imageX = imageOnLeft ? 0.75 : 8.15;
     const textX = imageOnLeft ? 5.9 : 0.8;
-    const headingX = imageOnLeft ? 5.9 : 1.6;
+    // Badge sits at 5.9 in the imageOnLeft case (see badgeX below) — offset
+    // the heading past it by the same 0.85" gap the imageOnLeft=false case
+    // uses (badgeX 0.75 → headingX 1.6), instead of the two colliding.
+    const headingX = imageOnLeft ? 6.75 : 1.6;
 
     // Header chrome: deck title (kicker) + running page count, tucked into
     // whichever top corner sits ABOVE the photo — the one guaranteed-empty
