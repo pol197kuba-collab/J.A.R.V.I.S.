@@ -269,7 +269,20 @@ export const runDocumentJobFn = createServerFn({ method: "POST" })
         return { forgeResult, attachment, digest };
       };
 
-      let { forgeResult, attachment, digest } = await buildForgeAndEnrich(insightResult.output);
+      // Forge only ever saw Insight's research digest, never the user's
+      // original brief — so concrete asks buried in the brief (an exact
+      // slide count, a requested tone/style, a length target) had no way to
+      // reach Forge at all; it only had raw facts to work from and had to
+      // guess everything about shape and depth, which is exactly why decks
+      // came back short and generic regardless of what was actually asked.
+      // Prepending the brief verbatim means Forge sees both what the user
+      // wanted AND what Insight found.
+      const forgeInput =
+        `ZADANIE UŻYTKOWNIKA (dokładne wymagania — format, długość, styl, liczba slajdów itd. — ` +
+        `zastosuj się do nich dosłownie):\n${job.brief}\n\n` +
+        `ZEBRANY RESEARCH (I.N.S.I.G.H.T.):\n${insightResult.output}`;
+
+      let { forgeResult, attachment, digest } = await buildForgeAndEnrich(forgeInput);
       if (forgeResult.status !== "done" || !attachment) {
         await failJob(
           supabase,
@@ -298,7 +311,7 @@ export const runDocumentJobFn = createServerFn({ method: "POST" })
           // concrete QA complaint, so the second attempt targets the actual
           // gap instead of repeating the same thin draft.
           const retryInput =
-            `${insightResult.output}\n\n` +
+            `${forgeInput}\n\n` +
             `UWAGA — poprzednia wersja tego dokumentu NIE spełniła wymagań (ocena QA: "${verdict.reason}"). ` +
             `Zbuduj dokument ponownie, wyraźnie adresując ten problem — więcej konkretów, głębsza treść, ` +
             `nie skracaj sekcji.`;

@@ -328,14 +328,85 @@ async function fetchWebImage(query: string): Promise<DocImage | null> {
   }
 }
 
-/** Resolve one slide image: a real web photo (imageQuery) if requested,
- *  otherwise an AI-generated one (imagePrompt). Web photos are preferred and
- *  don't touch the AI image model at all. */
+// ---------------------------------------------------------------------------
+// Real web photos — Wikipedia/Wikimedia (broader than Openverse's CC-only
+// index, still keyless, no scraping)
+// ---------------------------------------------------------------------------
+
+// Openverse only indexes Creative-Commons-licensed images, which essentially
+// never exist for a specific branded/newly-released subject (a game, a
+// gadget, a car model) — official promotional screenshots and box art are
+// copyrighted, not CC-licensed, so Openverse reliably returns nothing for
+// exactly the subjects users most want a real photo of. Wikipedia articles
+// for well-known, named subjects (games, products, places, people) almost
+// always carry a real, on-topic infobox image, hosted directly on Wikimedia's
+// own CDN — no scraping, one search call + one summary call, both public,
+// keyless JSON endpoints. This is a deliberate, user-confirmed tradeoff for
+// this personal/non-commercial project: the embedded image may be under
+// standard copyright (fair-use rationale on Wikipedia's side, not a CC
+// license), which is why it's tried BEFORE Openverse's clean-license search,
+// not instead of it — Openverse still gets a turn for generic/decorative
+// queries that have real CC alternatives.
+async function fetchWikipediaImage(query: string): Promise<DocImage | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), WEB_IMAGE_TIMEOUT_MS);
+  try {
+    const searchUrl =
+      `https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*` +
+      `&list=search&srlimit=1&srsearch=${encodeURIComponent(query)}`;
+    const searchRes = await fetch(searchUrl, {
+      signal: ctrl.signal,
+      headers: { "User-Agent": "JARVIS-Forge/1.0" },
+    });
+    if (!searchRes.ok) return null;
+    const searchData = (await searchRes.json()) as {
+      query?: { search?: Array<{ title?: string }> };
+    };
+    const title = searchData.query?.search?.[0]?.title;
+    if (!title) return null;
+
+    const summaryRes = await fetch(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+      {
+        signal: ctrl.signal,
+        headers: { "User-Agent": "JARVIS-Forge/1.0", Accept: "application/json" },
+      },
+    );
+    if (!summaryRes.ok) return null;
+    const summary = (await summaryRes.json()) as {
+      originalimage?: { source?: string };
+      thumbnail?: { source?: string };
+    };
+    const imageUrl = summary.originalimage?.source ?? summary.thumbnail?.source;
+    if (!imageUrl || !/^https:\/\/upload\.wikimedia\.org\//i.test(imageUrl)) return null;
+
+    const imgRes = await fetch(imageUrl, {
+      signal: ctrl.signal,
+      headers: { "User-Agent": "JARVIS-Forge/1.0" },
+    });
+    if (!imgRes.ok) return null;
+    const mime = imgRes.headers.get("content-type") ?? "";
+    if (!mime.startsWith("image/")) return null;
+    const buf = new Uint8Array(await imgRes.arrayBuffer());
+    if (buf.byteLength === 0 || buf.byteLength > MAX_WEB_IMAGE_BYTES) return null;
+    return { bytes: buf, mime: mime.split(";")[0] };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Resolve one slide image: a real photo (Wikipedia, then Openverse) if
+ *  imageQuery was requested, otherwise an AI-generated one (imagePrompt).
+ *  Real photos are preferred and don't touch the AI image model at all. */
 async function resolveOneImage(
   job: { imageQuery?: string; imagePrompt?: string },
   apiKey: string,
 ): Promise<DocImage | null> {
   if (job.imageQuery) {
+    const wiki = await fetchWikipediaImage(job.imageQuery);
+    if (wiki) return wiki;
     const photo = await fetchWebImage(job.imageQuery);
     if (photo) return photo;
     // Fall back to AI generation only if a prompt was also supplied.
