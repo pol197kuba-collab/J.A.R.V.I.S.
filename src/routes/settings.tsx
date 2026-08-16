@@ -8,12 +8,15 @@ import { useHudNavigate } from "@/components/jarvis/TransitionContext";
 import { useServerFn } from "@tanstack/react-start";
 import {
   deleteGeminiKey,
+  deleteGoogleCseCredentials,
   deleteGroqKey,
   getGeminiKeyStatus,
+  getGoogleCseStatus,
   getGroqKeyStatus,
   getUserSettings,
   listAgentTools,
   saveGeminiKey,
+  saveGoogleCseCredentials,
   saveGroqKey,
   setAgentToolEnabled,
   updateUserSettings,
@@ -73,6 +76,19 @@ function Settings() {
   const [groqBusy, setGroqBusy] = useState(false);
   const [groqErrorMsg, setGroqErrorMsg] = useState<string | null>(null);
 
+  // Google Custom Search — optional, self-serve upgrade for real-photo
+  // lookup in generated documents. No client-side consumer, so (like Groq)
+  // the server copy is the only one that matters; no localStorage mirror.
+  const fetchCseStatus = useServerFn(getGoogleCseStatus);
+  const persistCse = useServerFn(saveGoogleCseCredentials);
+  const clearCse = useServerFn(deleteGoogleCseCredentials);
+  const [cseApiKey, setCseApiKey] = useState("");
+  const [cseCx, setCseCx] = useState("");
+  const [cseStatus, setCseStatus] = useState<"loading" | "linked" | "empty" | "error">("loading");
+  const [csePreview, setCsePreview] = useState<string | null>(null);
+  const [cseBusy, setCseBusy] = useState(false);
+  const [cseErrorMsg, setCseErrorMsg] = useState<string | null>(null);
+
   const fetchAgentTools = useServerFn(listAgentTools);
   const persistAgentTool = useServerFn(setAgentToolEnabled);
   const [tools, setTools] = useState<AgentToolSummary[] | null>(null);
@@ -128,6 +144,45 @@ function Settings() {
   useEffect(() => {
     void refreshGroqState();
   }, [refreshGroqState]);
+
+  const refreshCseState = useCallback(async () => {
+    try {
+      const status = await fetchCseStatus();
+      setCseStatus(status.linked ? "linked" : "empty");
+      setCsePreview(status.preview);
+      if (status.cx) setCseCx((prev) => prev || status.cx!);
+    } catch (err) {
+      console.warn("[settings] google cse refresh failed", err);
+      setCseStatus("error");
+    }
+  }, [fetchCseStatus]);
+
+  useEffect(() => {
+    void refreshCseState();
+  }, [refreshCseState]);
+
+  const handleSaveCse = async () => {
+    const trimmedKey = cseApiKey.trim();
+    const trimmedCx = cseCx.trim();
+    setCseBusy(true);
+    setCseErrorMsg(null);
+    try {
+      if (trimmedKey && trimmedCx) {
+        await persistCse({ data: { key: trimmedKey, cx: trimmedCx } });
+      } else if (!trimmedKey && !trimmedCx) {
+        await clearCse();
+      } else {
+        setCseErrorMsg("Podaj oba pola (API key i Search Engine ID) albo wyczyść oba.");
+        return;
+      }
+      audio.playClick();
+      await refreshCseState();
+    } catch (err) {
+      setCseErrorMsg(err instanceof Error ? err.message : "Server sync failed");
+    } finally {
+      setCseBusy(false);
+    }
+  };
 
   const handleSaveGroqKey = async () => {
     const trimmed = groqApiKey.trim();
@@ -407,6 +462,77 @@ function Settings() {
             przy każdej wiadomości, (2) awaryjnego fallbacku, gdy Gemini padnie (rate limit / błąd).
             Główna rozmowa i narzędzia (web_search, pamięć) nadal idą przez Gemini. Puste pole +
             zapis = usunięcie klucza.
+          </p>
+        </div>
+      </HudPanel>
+      <HudPanel index={2} title="GOOGLE CUSTOM SEARCH // REAL PHOTO LOOKUP" className="p-5">
+        <div className="mt-4 space-y-3">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            OPCJONALNY UPGRADE — DOKŁADNIEJSZE PRAWDZIWE ZDJĘCIA W DOKUMENTACH
+          </p>
+          <div className="flex flex-col gap-2">
+            <input
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              value={cseApiKey}
+              onChange={(e) => setCseApiKey(e.target.value)}
+              placeholder="Wklej Google Custom Search API Key..."
+              className="font-mono flex-1 border border-primary/60 bg-black/40 px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+            />
+            <input
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              value={cseCx}
+              onChange={(e) => setCseCx(e.target.value)}
+              placeholder="Wklej Search Engine ID (cx)..."
+              className="font-mono flex-1 border border-primary/60 bg-black/40 px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+            />
+            <button
+              type="button"
+              disabled={cseBusy}
+              onClick={handleSaveCse}
+              className="font-display self-start border border-primary/60 bg-primary/20 px-4 py-2 text-[10px] uppercase tracking-widest text-primary hover:bg-primary/30 disabled:opacity-50"
+            >
+              SYNC TO AGENT RUNTIME
+            </button>
+          </div>
+          <div className="flex items-center justify-between border-t border-primary/20 pt-2">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              AGENT RUNTIME
+            </span>
+            <span
+              className="font-display text-[10px] uppercase tracking-widest"
+              style={{
+                color:
+                  cseStatus === "linked"
+                    ? "var(--success)"
+                    : cseStatus === "error"
+                      ? "var(--destructive)"
+                      : "var(--muted-foreground)",
+              }}
+            >
+              {cseStatus === "linked"
+                ? `● LINKED ${csePreview ?? ""}`
+                : cseStatus === "error"
+                  ? "✕ UNREACHABLE"
+                  : cseStatus === "loading"
+                    ? "… CHECKING"
+                    : "○ NOT SYNCED"}
+            </span>
+          </div>
+          {cseErrorMsg && (
+            <p className="font-mono text-[10px]" style={{ color: "var(--destructive)" }}>
+              ✕ {cseErrorMsg}
+            </p>
+          )}
+          <p className="font-mono text-[10px] text-muted-foreground/70">
+            ℹ Bez tego F.O.R.G.E. i tak szuka prawdziwych zdjęć za darmo (Wikipedia, wyszukiwanie po
+            całym internecie, Openverse) zanim spadnie na grafikę AI — to pole tylko poprawia
+            trafność. Załóż darmowy klucz na console.cloud.google.com (Custom Search JSON API, 100
+            zapytań/dzień gratis) i własną wyszukiwarkę na programmablesearchengine.google.com, żeby
+            dostać jej "cx" ID. Puste oba pola + zapis = usunięcie danych.
           </p>
         </div>
       </HudPanel>

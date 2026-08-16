@@ -285,6 +285,71 @@ export const deleteGroqKey = createServerFn({ method: "POST" })
   });
 
 // ---------------------------------------------------------------------------
+// user_secrets (Google Custom Search credentials — optional upgrade for
+// real-photo lookup in generated documents; free tiers cover image
+// resolution without this, this just makes it more accurate)
+// ---------------------------------------------------------------------------
+
+export const getGoogleCseStatus = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { data, error } = await supabase
+      .from("user_secrets")
+      .select("google_cse_api_key, google_cse_cx")
+      .eq("owner_id", userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const key = data?.google_cse_api_key?.trim() ?? "";
+    const cx = data?.google_cse_cx?.trim() ?? "";
+    return {
+      linked: key.length > 0 && cx.length > 0,
+      preview: key ? `••••••••${key.slice(-4)}` : null,
+      cx: cx || null,
+    };
+  });
+
+const SaveGoogleCseInput = z.object({
+  key: z.string().min(1).max(512),
+  cx: z.string().min(1).max(200),
+});
+
+export const saveGoogleCseCredentials = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => SaveGoogleCseInput.parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { error } = await supabase.from("user_secrets").upsert(
+      {
+        owner_id: userId,
+        google_cse_api_key: data.key.trim(),
+        google_cse_cx: data.cx.trim(),
+      },
+      { onConflict: "owner_id" },
+    );
+    if (error) {
+      await logServerError(supabase, userId, "settings.google_cse", error);
+      throw new Error(error.message);
+    }
+    return { ok: true as const };
+  });
+
+export const deleteGoogleCseCredentials = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { error } = await supabase
+      .from("user_secrets")
+      .update({ google_cse_api_key: null, google_cse_cx: null })
+      .eq("owner_id", userId);
+    if (error) {
+      await logServerError(supabase, userId, "settings.google_cse", error);
+      throw new Error(error.message);
+    }
+    return { ok: true as const };
+  });
+
+// ---------------------------------------------------------------------------
 // user_settings
 // ---------------------------------------------------------------------------
 

@@ -581,9 +581,22 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           : "")
       : "";
 
-  const basePrompt = agentSpecific
-    ? `${JARVIS_PERSONA}\n\n${agentSpecific}`
-    : DEFAULT_SYSTEM_PROMPT;
+  // Only the JARVIS orchestrator itself — the voice the user actually talks
+  // to — gets the Tony Stark/Iron-Man persona. Every teammate (Insight,
+  // Forge, Herald, Metric, Shield) has its own complete, self-contained
+  // system_prompt already establishing who it is; prepending JARVIS_PERSONA
+  // on top used to prime EVERY agent as "elegancki, ironiczny kamerdyner
+  // Tony'ego Starka" before its own instructions, so a deliverable-producing
+  // agent like Forge wrote actual document content in that sci-fi/HUD voice
+  // — confirmed live: presentation content came back reading like the app's
+  // own theme instead of neutral professional prose, even for topics with
+  // nothing to do with JARVIS. Teammates only need to know they're PART OF
+  // the J.A.R.V.I.S. system (their own prompts already say so), not that
+  // they ARE J.A.R.V.I.S.
+  const basePrompt =
+    agent.slug === AGENT_SLUGS.JARVIS
+      ? DEFAULT_SYSTEM_PROMPT
+      : (agentSpecific ?? DEFAULT_SYSTEM_PROMPT);
 
   // Appended for every user-facing run, regardless of whether the agent has
   // a custom system_prompt override — otherwise agents like Herald never

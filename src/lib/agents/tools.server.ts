@@ -1401,7 +1401,7 @@ const queueDocumentJob: Tool = {
         brief: {
           type: "string",
           description:
-            "Pełne zadanie badawcze dla Insight — temat, kątem czego ma szukać, jaki format finalnie (prezentacja/dokument/PDF) i jak szczegółowy ma być wynik.",
+            "Pełne zadanie badawcze dla Insight — temat, kątem czego ma szukać, jaki format finalnie (prezentacja/dokument/PDF) i jak szczegółowy ma być wynik. WAŻNE: ten tekst dociera również do Forge (który buduje sam plik) jako jedyny opis wymagań — przepisz do niego DOSŁOWNIE każdy konkretny wymóg użytkownika (dokładna liczba slajdów/stron, styl/ton np. 'profesjonalnie, jak dla zarządu', preferowana kolorystyka lub motyw, poziom szczegółowości) zamiast streszczać je ogólnikowo. Pominięty tu wymóg nigdy nie dotrze do Forge.",
         },
       },
       required: ["title", "brief"],

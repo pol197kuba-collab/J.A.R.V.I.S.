@@ -106,7 +106,7 @@ export async function enrichGeneratedFileImages(
 
   const { data: secret } = await supabase
     .from("user_secrets")
-    .select("gemini_api_key")
+    .select("gemini_api_key, google_cse_api_key, google_cse_cx")
     .eq("owner_id", userId)
     .maybeSingle();
   const apiKey = secret?.gemini_api_key?.trim();
@@ -114,11 +114,18 @@ export async function enrichGeneratedFileImages(
     await supabase.from("generated_files").update({ image_status: "failed" }).eq("id", row.id);
     return { ok: false, reason: "no_api_key" };
   }
+  const cseKey = secret?.google_cse_api_key?.trim();
+  const cseCx = secret?.google_cse_cx?.trim();
+  const googleCse = cseKey && cseCx ? { apiKey: cseKey, cx: cseCx } : undefined;
 
-  const images = await generateDocImages(spec, apiKey, (message) =>
-    logServerWarn(supabase, userId, "generated_files", `enrich: ${message}`, {
-      file_id: row.id,
-    } as Json),
+  const images = await generateDocImages(
+    spec,
+    apiKey,
+    (message) =>
+      logServerWarn(supabase, userId, "generated_files", `enrich: ${message}`, {
+        file_id: row.id,
+      } as Json),
+    googleCse,
   );
   const imageCount = (images.hero ? 1 : 0) + images.sections.size;
 

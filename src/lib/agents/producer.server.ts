@@ -26,7 +26,7 @@ import { AlignmentType, Document, HeadingLevel, ImageRun, Packer, Paragraph, Tex
 import { PDFDocument, PDFFont, PDFPage, rgb } from "pdf-lib/dist/pdf-lib.esm.js";
 import fontkit from "@pdf-lib/fontkit";
 import { DOC_SANS_BOLD_B64, DOC_SANS_REGULAR_B64 } from "./producerFonts.server";
-import { DEFAULT_GEMINI_IMAGE_MODEL } from "./models";
+import { DEFAULT_GEMINI_IMAGE_MODEL, DEFAULT_GEMINI_MODEL } from "./models";
 
 export const DOC_FORMATS = ["pptx", "docx", "pdf"] as const;
 export type DocFormat = (typeof DOC_FORMATS)[number];
@@ -328,14 +328,225 @@ async function fetchWebImage(query: string): Promise<DocImage | null> {
   }
 }
 
-/** Resolve one slide image: a real web photo (imageQuery) if requested,
- *  otherwise an AI-generated one (imagePrompt). Web photos are preferred and
- *  don't touch the AI image model at all. */
+// ---------------------------------------------------------------------------
+// Real web photos — Wikipedia/Wikimedia (broader than Openverse's CC-only
+// index, still keyless, no scraping)
+// ---------------------------------------------------------------------------
+
+// Openverse only indexes Creative-Commons-licensed images, which essentially
+// never exist for a specific branded/newly-released subject (a game, a
+// gadget, a car model) — official promotional screenshots and box art are
+// copyrighted, not CC-licensed, so Openverse reliably returns nothing for
+// exactly the subjects users most want a real photo of. Wikipedia articles
+// for well-known, named subjects (games, products, places, people) almost
+// always carry a real, on-topic infobox image, hosted directly on Wikimedia's
+// own CDN — no scraping, one search call + one summary call, both public,
+// keyless JSON endpoints. This is a deliberate, user-confirmed tradeoff for
+// this personal/non-commercial project: the embedded image may be under
+// standard copyright (fair-use rationale on Wikipedia's side, not a CC
+// license), which is why it's tried BEFORE Openverse's clean-license search,
+// not instead of it — Openverse still gets a turn for generic/decorative
+// queries that have real CC alternatives.
+async function fetchWikipediaImage(query: string): Promise<DocImage | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), WEB_IMAGE_TIMEOUT_MS);
+  try {
+    const searchUrl =
+      `https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*` +
+      `&list=search&srlimit=1&srsearch=${encodeURIComponent(query)}`;
+    const searchRes = await fetch(searchUrl, {
+      signal: ctrl.signal,
+      headers: { "User-Agent": "JARVIS-Forge/1.0" },
+    });
+    if (!searchRes.ok) return null;
+    const searchData = (await searchRes.json()) as {
+      query?: { search?: Array<{ title?: string }> };
+    };
+    const title = searchData.query?.search?.[0]?.title;
+    if (!title) return null;
+
+    const summaryRes = await fetch(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+      {
+        signal: ctrl.signal,
+        headers: { "User-Agent": "JARVIS-Forge/1.0", Accept: "application/json" },
+      },
+    );
+    if (!summaryRes.ok) return null;
+    const summary = (await summaryRes.json()) as {
+      originalimage?: { source?: string };
+      thumbnail?: { source?: string };
+    };
+    const imageUrl = summary.originalimage?.source ?? summary.thumbnail?.source;
+    if (!imageUrl || !/^https:\/\/upload\.wikimedia\.org\//i.test(imageUrl)) return null;
+
+    const imgRes = await fetch(imageUrl, {
+      signal: ctrl.signal,
+      headers: { "User-Agent": "JARVIS-Forge/1.0" },
+    });
+    if (!imgRes.ok) return null;
+    const mime = imgRes.headers.get("content-type") ?? "";
+    if (!mime.startsWith("image/")) return null;
+    const buf = new Uint8Array(await imgRes.arrayBuffer());
+    if (buf.byteLength === 0 || buf.byteLength > MAX_WEB_IMAGE_BYTES) return null;
+    return { bytes: buf, mime: mime.split(";")[0] };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Real web photos — Google Custom Search (optional, user-provided key)
+// ---------------------------------------------------------------------------
+
+export type GoogleCseCreds = { apiKey: string; cx: string };
+
+// Self-serve upgrade: with no credentials configured this tier is simply
+// skipped (see resolveOneImage). When a user sets one up (Settings →
+// console.cloud.google.com, 100 free queries/day), it's the most accurate
+// and broadest real-photo source available, so it goes first.
+async function fetchGoogleCseImage(query: string, creds: GoogleCseCreds): Promise<DocImage | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), WEB_IMAGE_TIMEOUT_MS);
+  try {
+    const url =
+      `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(creds.apiKey)}` +
+      `&cx=${encodeURIComponent(creds.cx)}&q=${encodeURIComponent(query)}` +
+      `&searchType=image&num=3&safe=active`;
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { items?: Array<{ link?: string }> };
+    for (const item of data.items ?? []) {
+      const link = item.link;
+      if (!link || !/^https:\/\//i.test(link)) continue;
+      try {
+        const imgRes = await fetch(link, {
+          signal: ctrl.signal,
+          headers: { "User-Agent": "JARVIS-Forge/1.0" },
+        });
+        if (!imgRes.ok) continue;
+        const mime = imgRes.headers.get("content-type") ?? "";
+        if (!mime.startsWith("image/")) continue;
+        const buf = new Uint8Array(await imgRes.arrayBuffer());
+        if (buf.byteLength === 0 || buf.byteLength > MAX_WEB_IMAGE_BYTES) continue;
+        return { bytes: buf, mime: mime.split(";")[0] };
+      } catch {
+        continue; // try the next candidate
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Real web photos — free, whole-internet fallback via og:image scraping
+// ---------------------------------------------------------------------------
+
+const OG_IMAGE_TIMEOUT_MS = 12_000;
+const OG_IMAGE_TAG_RE =
+  /<meta[^>]+(?:property|name)=["'](?:og:image(?::secure_url)?|twitter:image(?::src)?)["'][^>]+content=["']([^"']+)["']/i;
+
+// Free, keyless "search the whole web for a real photo" tier: reuses the
+// same google_search grounding Gemini call the web_search tool already
+// makes to get real page URLs for the query, then reads each candidate
+// page's <meta property="og:image"> (or twitter:image) tag — the standard
+// preview-image convention nearly every content site, wiki, store, and news
+// outlet sets — and embeds that image directly. No scraping of page bodies,
+// no third-party search API, no signup: only the two calls the project
+// already makes elsewhere (Gemini grounding, a plain fetch).
+async function fetchWebSearchOgImage(
+  query: string,
+  geminiApiKey: string,
+): Promise<DocImage | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), OG_IMAGE_TIMEOUT_MS);
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_GEMINI_MODEL}:generateContent?key=${encodeURIComponent(geminiApiKey)}`,
+      {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          generationConfig: { temperature: 0, maxOutputTokens: 50 },
+          tools: [{ google_search: {} }],
+          contents: [{ role: "user", parts: [{ text: query }] }],
+        }),
+      },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      candidates?: Array<{
+        groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string } }> };
+      }>;
+    };
+    const urls = (data.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [])
+      .flatMap((c) => (c.web?.uri ? [c.web.uri] : []))
+      .slice(0, 4);
+
+    for (const pageUrl of urls) {
+      try {
+        const pageRes = await fetch(pageUrl, {
+          signal: ctrl.signal,
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; JARVIS-Forge/1.0)" },
+        });
+        if (!pageRes.ok) continue;
+        const contentType = pageRes.headers.get("content-type") ?? "";
+        if (!contentType.includes("html")) continue;
+        // Only the <head> realistically needs reading for a meta tag — caps
+        // download size for pages that don't stream-truncate cleanly.
+        const html = (await pageRes.text()).slice(0, 60_000);
+        const match = OG_IMAGE_TAG_RE.exec(html);
+        const imageUrl = match?.[1];
+        if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) continue;
+
+        const imgRes = await fetch(imageUrl, {
+          signal: ctrl.signal,
+          headers: { "User-Agent": "JARVIS-Forge/1.0" },
+        });
+        if (!imgRes.ok) continue;
+        const mime = imgRes.headers.get("content-type") ?? "";
+        if (!mime.startsWith("image/")) continue;
+        const buf = new Uint8Array(await imgRes.arrayBuffer());
+        if (buf.byteLength === 0 || buf.byteLength > MAX_WEB_IMAGE_BYTES) continue;
+        return { bytes: buf, mime: mime.split(";")[0] };
+      } catch {
+        continue; // try the next candidate page
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Resolve one slide image: a real photo — tried Google CSE (if configured),
+ *  Wikipedia, a free whole-web og:image lookup, then Openverse CC, in that
+ *  order — if imageQuery was requested, otherwise an AI-generated one
+ *  (imagePrompt). Real photos are preferred and don't touch the AI image
+ *  model at all. */
 async function resolveOneImage(
   job: { imageQuery?: string; imagePrompt?: string },
   apiKey: string,
+  googleCse?: GoogleCseCreds,
 ): Promise<DocImage | null> {
   if (job.imageQuery) {
+    if (googleCse) {
+      const cse = await fetchGoogleCseImage(job.imageQuery, googleCse);
+      if (cse) return cse;
+    }
+    const wiki = await fetchWikipediaImage(job.imageQuery);
+    if (wiki) return wiki;
+    const webPhoto = await fetchWebSearchOgImage(job.imageQuery, apiKey);
+    if (webPhoto) return webPhoto;
     const photo = await fetchWebImage(job.imageQuery);
     if (photo) return photo;
     // Fall back to AI generation only if a prompt was also supplied.
@@ -352,6 +563,7 @@ export async function generateDocImages(
   spec: DocSpec,
   apiKey: string,
   onWarn?: (message: string) => Promise<void> | void,
+  googleCse?: GoogleCseCreds,
 ): Promise<DocImages> {
   type Job = { key: "hero" | number; imageQuery?: string; imagePrompt?: string };
   const jobs: Job[] = [];
@@ -368,7 +580,9 @@ export async function generateDocImages(
   const images: DocImages = { sections: new Map() };
   if (capped.length === 0) return images;
 
-  const results = await Promise.allSettled(capped.map((job) => resolveOneImage(job, apiKey)));
+  const results = await Promise.allSettled(
+    capped.map((job) => resolveOneImage(job, apiKey, googleCse)),
+  );
   for (const [i, result] of results.entries()) {
     const job = capped[i];
     if (result.status === "fulfilled" && result.value) {
