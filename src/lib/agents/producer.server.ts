@@ -654,6 +654,8 @@ export function pngDims(bytes: Uint8Array): { width: number; height: number } | 
 const ACCENT_HEX = "0891B2"; // cyan-600
 const DARK_HEX = "0F172A"; // slate-900
 const BODY_HEX = "334155"; // slate-700
+const SURFACE_HEX = "F1F5F9"; // slate-100 — matting behind photos, header/footer chrome
+const MUTED_HEX = "94A3B8"; // slate-400 — kicker labels, page numbers
 
 async function buildPptx(spec: DocSpec, images: DocImages): Promise<Uint8Array> {
   const pres = new PptxGen();
@@ -702,22 +704,76 @@ async function buildPptx(spec: DocSpec, images: DocImages): Promise<Uint8Array> 
       w: titleWidth,
       h: 0.9,
       fontSize: 18,
-      color: "94A3B8",
+      color: MUTED_HEX,
       valign: "top",
     });
   }
+  // Cover metadata line (section count) — the kind of small, quiet detail
+  // that makes a report cover read as designed rather than a bare title.
+  title.addText(`${spec.sections.length} SEKCJI`, {
+    x: 0.85,
+    y: 6.85,
+    w: 4,
+    h: 0.4,
+    fontSize: 11,
+    color: MUTED_HEX,
+    charSpacing: 2,
+  });
 
+  const totalSlides = spec.sections.length + 1; // +1 for the title slide itself
   for (const [i, section] of spec.sections.entries()) {
     const slide = pres.addSlide();
     slide.background = { color: "FFFFFF" };
     slide.addShape("rect", { x: 0, y: 0, w: 0.18, h: 7.5, fill: { color: ACCENT_HEX } });
 
     const sectionImage = images.sections.get(i);
+    // Alternate which side the photo sits on, slide to slide — a deck where
+    // every single image lands in the identical spot reads as a template
+    // stamped out by code (which, structurally, it is); alternating is the
+    // cheapest way to break that pattern without inventing new layouts.
+    const imageOnLeft = sectionImage ? i % 2 === 1 : false;
+    const imageX = imageOnLeft ? 0.75 : 8.15;
+    const textX = imageOnLeft ? 5.9 : 0.8;
+    // Badge sits at 5.9 in the imageOnLeft case (see badgeX below) — offset
+    // the heading past it by the same 0.85" gap the imageOnLeft=false case
+    // uses (badgeX 0.75 → headingX 1.6), instead of the two colliding.
+    const headingX = imageOnLeft ? 6.75 : 1.6;
+
+    // Header chrome: deck title (kicker) + running page count, tucked into
+    // whichever top corner sits ABOVE the photo — the one guaranteed-empty
+    // strip regardless of layout. With no image the heading runs nearly
+    // full-width, so there's no safe corner left for chrome — skip it there
+    // rather than risk it colliding with the heading text.
+    if (sectionImage) {
+      const chromeX = imageOnLeft ? imageX : 8.5;
+      const chromeAlign: "left" | "right" = imageOnLeft ? "left" : "right";
+      slide.addText(spec.title.toUpperCase(), {
+        x: chromeX,
+        y: 0.35,
+        w: 4.05,
+        h: 0.3,
+        fontSize: 9,
+        color: MUTED_HEX,
+        align: chromeAlign,
+        charSpacing: 1,
+      });
+      slide.addText(`${String(i + 2).padStart(2, "0")} / ${String(totalSlides).padStart(2, "0")}`, {
+        x: chromeX,
+        y: 0.65,
+        w: 4.05,
+        h: 0.3,
+        fontSize: 9,
+        color: MUTED_HEX,
+        align: chromeAlign,
+      });
+    }
+
     // Number badge — filled accent square with the slide number, anchoring
     // the heading instead of a lone footer digit.
-    slide.addShape("rect", { x: 0.75, y: 0.55, w: 0.62, h: 0.62, fill: { color: ACCENT_HEX } });
+    const badgeX = imageOnLeft ? 5.9 : 0.75;
+    slide.addShape("rect", { x: badgeX, y: 0.55, w: 0.62, h: 0.62, fill: { color: ACCENT_HEX } });
     slide.addText(String(i + 1).padStart(2, "0"), {
-      x: 0.75,
+      x: badgeX,
       y: 0.55,
       w: 0.62,
       h: 0.62,
@@ -728,7 +784,7 @@ async function buildPptx(spec: DocSpec, images: DocImages): Promise<Uint8Array> 
       valign: "middle",
     });
     slide.addText(section.heading, {
-      x: 1.6,
+      x: headingX,
       y: 0.45,
       w: sectionImage ? 6.4 : 11.0,
       h: 0.9,
@@ -739,16 +795,27 @@ async function buildPptx(spec: DocSpec, images: DocImages): Promise<Uint8Array> 
     });
 
     if (sectionImage) {
-      // Image panel on the right with a thin accent keyline underneath it.
+      // Matted panel: a soft light-grey field slightly larger than the
+      // photo itself (like a print mat around a framed picture), plus thin
+      // accent keylines top and bottom — reads as a deliberately framed
+      // photo rather than an image slapped onto bare white.
+      slide.addShape("rect", {
+        x: imageX - 0.2,
+        y: 1.35,
+        w: 4.83,
+        h: 5.4,
+        fill: { color: SURFACE_HEX },
+      });
       slide.addImage({
         data: toDataUri(sectionImage),
-        x: 8.15,
+        x: imageX,
         y: 1.55,
         w: 4.43,
         h: 5.0,
         sizing: { type: "cover", w: 4.43, h: 5.0 },
       });
-      slide.addShape("rect", { x: 8.15, y: 6.62, w: 4.43, h: 0.06, fill: { color: ACCENT_HEX } });
+      slide.addShape("rect", { x: imageX, y: 1.49, w: 4.43, h: 0.06, fill: { color: ACCENT_HEX } });
+      slide.addShape("rect", { x: imageX, y: 6.62, w: 4.43, h: 0.06, fill: { color: ACCENT_HEX } });
     }
 
     const bodyWidth = sectionImage ? 6.9 : 11.7;
@@ -768,9 +835,33 @@ async function buildPptx(spec: DocSpec, images: DocImages): Promise<Uint8Array> 
       });
     }
     if (body.length > 0) {
-      slide.addText(body, { x: 0.8, y: 1.55, w: bodyWidth, h: 5.4, valign: "top" });
+      slide.addText(body, { x: textX, y: 1.55, w: bodyWidth, h: 5.4, valign: "top" });
     }
   }
+
+  // Closing card — bookends the dark title slide instead of ending abruptly
+  // on the last content slide, the way a real report has a back cover.
+  const closing = pres.addSlide();
+  closing.background = { color: DARK_HEX };
+  closing.addShape("rect", { x: 0.9, y: 3.62, w: 1.6, h: 0.07, fill: { color: ACCENT_HEX } });
+  closing.addText(spec.title, {
+    x: 0.85,
+    y: 2.9,
+    w: 11.6,
+    h: 0.7,
+    fontSize: 22,
+    bold: true,
+    color: "F8FAFC",
+  });
+  closing.addText("KONIEC PREZENTACJI", {
+    x: 0.85,
+    y: 3.75,
+    w: 11.6,
+    h: 0.4,
+    fontSize: 12,
+    color: MUTED_HEX,
+    charSpacing: 2,
+  });
 
   const out = (await pres.write({ outputType: "arraybuffer" })) as ArrayBuffer;
   return new Uint8Array(out);
