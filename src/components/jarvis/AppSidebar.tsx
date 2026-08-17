@@ -13,6 +13,8 @@ import {
   Database,
   FileText,
   Command,
+  StickyNote,
+  Rss,
 } from "lucide-react";
 import {
   Sidebar,
@@ -39,8 +41,10 @@ import { useShowcase } from "./ShowcaseContext";
 const items = [
   { title: "J.A.R.V.I.S.", url: "/jarvis", icon: Hexagon },
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Feed", url: "/feed", icon: Rss },
   { title: "Agent Hub", url: "/agent-hub", icon: Bot },
   { title: "Tasks", url: "/tasks", icon: ListChecks },
+  { title: "Notes", url: "/notes", icon: StickyNote },
   { title: "Sub-Systems", url: "/sub-systems", icon: Boxes },
   { title: "Situation Room", url: "/situation-room", icon: Radar },
   { title: "Vision", url: "/vision", icon: Eye },

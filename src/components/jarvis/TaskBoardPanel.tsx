@@ -4,12 +4,21 @@
 // schema already) — this just gives it a board instead of a flat list. The
 // full-featured /tasks page (filters, archive) stays as the deep-dive view;
 // this is the at-a-glance summary that belongs on the command dashboard.
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { Plus } from "lucide-react";
 import { HudPanel } from "./HudPanel";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useHudNavigate } from "./TransitionContext";
-import { listTasks, updateTask, type Task, type TaskStatus } from "@/lib/tasks/tasks.functions";
+import {
+  listTasks,
+  createTask,
+  updateTask,
+  type Task,
+  type TaskStatus,
+} from "@/lib/tasks/tasks.functions";
 import { toast } from "sonner";
 
 const COLUMNS: { status: TaskStatus; label: string; color: string }[] = [
@@ -71,12 +80,29 @@ export function TaskBoardPanel({ index = 0 }: { index?: number }) {
   const { go } = useHudNavigate();
   const qc = useQueryClient();
   const fetchTasks = useServerFn(listTasks);
+  const create = useServerFn(createTask);
   const update = useServerFn(updateTask);
+
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [priority, setPriority] = useState(3);
 
   const { data: tasks = [], isFetching } = useQuery({
     queryKey: ["tasks", "all"],
     queryFn: () => fetchTasks({ data: { scope: "all" } }),
     refetchInterval: 10_000,
+  });
+
+  const createMut = useMutation({
+    mutationFn: (input: { title: string; priority: number }) => create({ data: input }),
+    onSuccess: () => {
+      setTitle("");
+      setPriority(3);
+      setOpen(false);
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      toast.success("Zadanie dodane");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
   });
 
   const byStatus = useMemo(() => {
@@ -99,16 +125,70 @@ export function TaskBoardPanel({ index = 0 }: { index?: number }) {
       tone="quiet"
       title="TASK BOARD // AGENT QUEUE"
       rightSlot={
-        <button
-          type="button"
-          onClick={() => go("/tasks")}
-          className="font-display text-[10px] uppercase tracking-[0.25em] text-primary/70 hover:text-primary"
-        >
-          pełny widok →
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="font-display flex items-center gap-1 text-[10px] uppercase tracking-[0.25em] text-primary/70 hover:text-primary"
+          >
+            <Plus className="h-3 w-3" strokeWidth={2} />
+            {open ? "zamknij" : "nowe zadanie"}
+          </button>
+          <button
+            type="button"
+            onClick={() => go("/tasks")}
+            className="font-display text-[10px] uppercase tracking-[0.25em] text-primary/70 hover:text-primary"
+          >
+            pełny widok →
+          </button>
+        </div>
       }
       className="p-4"
     >
+      {open && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 border border-primary/25 bg-primary/[0.03] p-2.5">
+          <Input
+            placeholder="Tytuł nowego zadania…"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            maxLength={200}
+            className="min-w-[180px] flex-1 font-mono text-xs"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && title.trim() && !createMut.isPending) {
+                createMut.mutate({ title: title.trim(), priority });
+              }
+            }}
+          />
+          <div className="flex items-center gap-1">
+            {[1, 2, 3, 4, 5].map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPriority(p)}
+                className="font-display h-6 w-6 shrink-0 text-[9px] uppercase tracking-widest transition"
+                style={{
+                  color: priority === p ? priorityColor(p) : "var(--muted-foreground)",
+                  border: `1px solid ${priority === p ? priorityColor(p) : "color-mix(in oklab, var(--muted-foreground) 40%, transparent)"}`,
+                  background:
+                    priority === p
+                      ? "color-mix(in oklab, var(--primary) 10%, transparent)"
+                      : "transparent",
+                }}
+              >
+                P{p}
+              </button>
+            ))}
+          </div>
+          <Button
+            size="sm"
+            disabled={!title.trim() || createMut.isPending}
+            onClick={() => createMut.mutate({ title: title.trim(), priority })}
+          >
+            {createMut.isPending ? "Dodaję…" : "Dodaj"}
+          </Button>
+        </div>
+      )}
+
       {isFetching && tasks.length === 0 ? (
         <p className="mt-2 font-display text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
           ▸ Ładowanie zadań…

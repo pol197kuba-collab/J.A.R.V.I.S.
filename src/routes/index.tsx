@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { HudPanel } from "@/components/jarvis/HudPanel";
+import { CockpitHero } from "@/components/jarvis/CockpitHero";
 import { SystemPulsePanel } from "@/components/jarvis/SystemPulsePanel";
 import { TaskBoardPanel } from "@/components/jarvis/TaskBoardPanel";
 import { ArcReactorTriangle } from "@/components/jarvis/ArcReactorTriangle";
@@ -41,21 +42,9 @@ function Index() {
               "radial-gradient(circle at center, oklch(0.85 0.18 210 / 0.35), transparent 70%)",
           }}
         />
-        <div className="relative flex flex-wrap items-center justify-between gap-8 landscape:max-md:gap-1">
-          <div className="max-w-2xl space-y-3 landscape:max-md:space-y-1">
-            <p className="font-display text-[10px] uppercase tracking-[0.4em] text-primary/70 landscape:max-md:text-[8px]">
-              ▸ Stark Industries · Operating System
-            </p>
-            <h1 className="font-display text-4xl font-bold leading-tight tracking-[0.14em] text-foreground landscape:max-md:text-[11px] landscape:max-md:leading-none landscape:max-md:tracking-[0.1em]">
-              SYSTEM OPERATIONAL
-              <span className="block text-primary/90 mt-1 text-2xl tracking-[0.2em] landscape:max-md:mt-0 landscape:max-md:text-[10px]">
-                WELCOME, MR. SLAWINSKY
-              </span>
-            </h1>
-            <p className="max-w-md text-sm leading-relaxed text-muted-foreground landscape:max-md:text-[9px] landscape:max-md:leading-tight">
-              All subsystems are operating within acceptable parameters. Standing by for next
-              directive.
-            </p>
+        <div className="relative flex flex-wrap items-start justify-between gap-8 landscape:max-md:gap-1">
+          <div className="min-w-0 flex-1 landscape:max-md:space-y-1">
+            <CockpitHero />
           </div>
           <div
             aria-hidden

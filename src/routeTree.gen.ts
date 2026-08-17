@@ -18,7 +18,9 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SchemaRouteImport } from './routes/schema'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as McpRouteImport } from './routes/mcp'
+import { Route as NotesRouteImport } from './routes/notes'
 import { Route as JarvisRouteImport } from './routes/jarvis'
+import { Route as FeedRouteImport } from './routes/feed'
 import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as CommandsRouteImport } from './routes/commands'
 import { Route as AgentHubRouteImport } from './routes/agent-hub'
@@ -74,9 +76,19 @@ const McpRoute = McpRouteImport.update({
   path: '/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NotesRoute = NotesRouteImport.update({
+  id: '/notes',
+  path: '/notes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const JarvisRoute = JarvisRouteImport.update({
   id: '/jarvis',
   path: '/jarvis',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FeedRoute = FeedRouteImport.update({
+  id: '/feed',
+  path: '/feed',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocumentsRoute = DocumentsRouteImport.update({
@@ -133,8 +145,10 @@ export interface FileRoutesByFullPath {
   '/agent-hub': typeof AgentHubRoute
   '/commands': typeof CommandsRoute
   '/documents': typeof DocumentsRoute
+  '/feed': typeof FeedRoute
   '/jarvis': typeof JarvisRoute
   '/mcp': typeof McpRoute
+  '/notes': typeof NotesRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schema': typeof SchemaRoute
   '/settings': typeof SettingsRoute
@@ -154,8 +168,10 @@ export interface FileRoutesByTo {
   '/agent-hub': typeof AgentHubRoute
   '/commands': typeof CommandsRoute
   '/documents': typeof DocumentsRoute
+  '/feed': typeof FeedRoute
   '/jarvis': typeof JarvisRoute
   '/mcp': typeof McpRoute
+  '/notes': typeof NotesRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schema': typeof SchemaRoute
   '/settings': typeof SettingsRoute
@@ -176,8 +192,10 @@ export interface FileRoutesById {
   '/agent-hub': typeof AgentHubRoute
   '/commands': typeof CommandsRoute
   '/documents': typeof DocumentsRoute
+  '/feed': typeof FeedRoute
   '/jarvis': typeof JarvisRoute
   '/mcp': typeof McpRoute
+  '/notes': typeof NotesRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schema': typeof SchemaRoute
   '/settings': typeof SettingsRoute
@@ -199,8 +217,10 @@ export interface FileRouteTypes {
     | '/agent-hub'
     | '/commands'
     | '/documents'
+    | '/feed'
     | '/jarvis'
     | '/mcp'
+    | '/notes'
     | '/reset-password'
     | '/schema'
     | '/settings'
@@ -220,8 +240,10 @@ export interface FileRouteTypes {
     | '/agent-hub'
     | '/commands'
     | '/documents'
+    | '/feed'
     | '/jarvis'
     | '/mcp'
+    | '/notes'
     | '/reset-password'
     | '/schema'
     | '/settings'
@@ -241,8 +263,10 @@ export interface FileRouteTypes {
     | '/agent-hub'
     | '/commands'
     | '/documents'
+    | '/feed'
     | '/jarvis'
     | '/mcp'
+    | '/notes'
     | '/reset-password'
     | '/schema'
     | '/settings'
@@ -263,8 +287,10 @@ export interface RootRouteChildren {
   AgentHubRoute: typeof AgentHubRoute
   CommandsRoute: typeof CommandsRoute
   DocumentsRoute: typeof DocumentsRoute
+  FeedRoute: typeof FeedRoute
   JarvisRoute: typeof JarvisRoute
   McpRoute: typeof McpRoute
+  NotesRoute: typeof NotesRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SchemaRoute: typeof SchemaRoute
   SettingsRoute: typeof SettingsRoute
@@ -345,11 +371,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof McpRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/notes': {
+      id: '/notes'
+      path: '/notes'
+      fullPath: '/notes'
+      preLoaderRoute: typeof NotesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/jarvis': {
       id: '/jarvis'
       path: '/jarvis'
       fullPath: '/jarvis'
       preLoaderRoute: typeof JarvisRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/feed': {
+      id: '/feed'
+      path: '/feed'
+      fullPath: '/feed'
+      preLoaderRoute: typeof FeedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/documents': {
@@ -423,8 +463,10 @@ const rootRouteChildren: RootRouteChildren = {
   AgentHubRoute: AgentHubRoute,
   CommandsRoute: CommandsRoute,
   DocumentsRoute: DocumentsRoute,
+  FeedRoute: FeedRoute,
   JarvisRoute: JarvisRoute,
   McpRoute: McpRoute,
+  NotesRoute: NotesRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SchemaRoute: SchemaRoute,
   SettingsRoute: SettingsRoute,

@@ -147,3 +147,101 @@ export const getSystemPulse = createServerFn({ method: "GET" })
       perAgent,
     };
   });
+
+// ---------------------------------------------------------------------------
+// Kokpit startowy — "what's waiting for you right now", the dynamic hero
+// that replaced the static welcome banner. Deliberately forward-looking
+// (overdue/upcoming tasks, files ready to grab, unread notifications)
+// rather than retrospective — that's what the Living Feed and System Pulse
+// are for.
+// ---------------------------------------------------------------------------
+
+export type CockpitTask = {
+  id: string;
+  title: string;
+  priority: number;
+  dueAt: string | null;
+  overdue: boolean;
+};
+
+export type CockpitFile = {
+  id: string;
+  filename: string;
+  format: string;
+  title: string | null;
+  createdAt: string;
+  downloadUrl: string | null;
+};
+
+export type Cockpit = {
+  overdueTasks: CockpitTask[];
+  upcomingTasks: CockpitTask[];
+  recentFiles: CockpitFile[];
+  unreadNotifications: number;
+};
+
+const COCKPIT_SIGNED_URL_TTL_SECONDS = 3600;
+
+export const getCockpit = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<Cockpit> => {
+    const { supabase, userId } = context;
+    const nowIso = new Date().toISOString();
+
+    const [tasksRes, filesRes, unreadRes] = await Promise.all([
+      supabase
+        .from("tasks")
+        .select("id, title, priority, due_at")
+        .eq("user_id", userId)
+        .in("status", ["todo", "in_progress"])
+        .order("priority", { ascending: true })
+        .order("due_at", { ascending: true, nullsFirst: false })
+        .limit(20),
+      supabase
+        .from("generated_files")
+        .select("id, filename, format, title, storage_path, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(5),
+      supabase
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("owner_id", userId)
+        .eq("read", false),
+    ]);
+
+    const allOpenTasks: CockpitTask[] = (tasksRes.data ?? []).map((t) => ({
+      id: t.id,
+      title: t.title,
+      priority: t.priority,
+      dueAt: t.due_at,
+      overdue: t.due_at != null && t.due_at < nowIso,
+    }));
+    const overdueTasks = allOpenTasks.filter((t) => t.overdue).slice(0, 5);
+    const upcomingTasks = allOpenTasks.filter((t) => !t.overdue).slice(0, 5);
+
+    const recentFiles: CockpitFile[] = await Promise.all(
+      (filesRes.data ?? []).map(async (f) => {
+        const { data: signed } = await supabase.storage
+          .from("generated")
+          .createSignedUrl(f.storage_path, COCKPIT_SIGNED_URL_TTL_SECONDS, {
+            download: f.filename,
+          });
+        return {
+          id: f.id,
+          filename: f.filename,
+          format: f.format,
+          title: f.title,
+          createdAt: f.created_at,
+          downloadUrl: signed?.signedUrl ?? null,
+        };
+      }),
+    );
+
+    return {
+      overdueTasks,
+      upcomingTasks,
+      recentFiles,
+      unreadNotifications: unreadRes.count ?? 0,
+    };
+  });
