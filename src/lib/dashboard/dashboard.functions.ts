@@ -18,6 +18,10 @@ export type AgentPulseRow = {
   successRate: number | null;
   lastRunStatus: string | null;
   lastRunAt: string | null;
+  /** 24 hourly buckets (oldest → newest), this agent only. */
+  sparkline24h: number[];
+  /** 7 daily buckets (oldest → newest), this agent only. */
+  sparkline7d: number[];
 };
 
 export type SystemPulse = {
@@ -30,9 +34,31 @@ export type SystemPulse = {
   activeAgents: number;
   totalAgents: number;
   /** 24 hourly buckets (oldest → newest), all agents combined. */
-  sparkline: number[];
+  sparkline24h: number[];
+  /** 7 daily buckets (oldest → newest), all agents combined. */
+  sparkline7d: number[];
   perAgent: AgentPulseRow[];
 };
+
+function hourlyBuckets(runs: { created_at: string }[], now: number): number[] {
+  const buckets = Array<number>(24).fill(0);
+  for (const r of runs) {
+    const hoursAgo = Math.floor((now - new Date(r.created_at).getTime()) / 3600_000);
+    if (hoursAgo < 0 || hoursAgo >= 24) continue;
+    buckets[23 - hoursAgo] += 1;
+  }
+  return buckets;
+}
+
+function dailyBuckets(runs: { created_at: string }[], now: number): number[] {
+  const buckets = Array<number>(7).fill(0);
+  for (const r of runs) {
+    const daysAgo = Math.floor((now - new Date(r.created_at).getTime()) / 86_400_000);
+    if (daysAgo < 0 || daysAgo >= 7) continue;
+    buckets[6 - daysAgo] += 1;
+  }
+  return buckets;
+}
 
 export const getSystemPulse = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -70,13 +96,6 @@ export const getSystemPulse = createServerFn({ method: "GET" })
     const sumTokens = (list: typeof runs, key: "tokens_input" | "tokens_output") =>
       list.reduce((sum, r) => sum + ((r[key] as number | null) ?? 0), 0);
 
-    const sparkline = Array<number>(24).fill(0);
-    for (const r of runs24h) {
-      const hoursAgo = Math.floor((now - ts(r)) / 3600_000);
-      const idx = 23 - Math.min(23, Math.max(0, hoursAgo));
-      sparkline[idx] += 1;
-    }
-
     const perAgent: AgentPulseRow[] = roster.map((a) => {
       const mine = runs.filter((r) => r.agent_id === a.id);
       const mine24h = mine.filter((r) => ts(r) >= H24);
@@ -93,6 +112,8 @@ export const getSystemPulse = createServerFn({ method: "GET" })
         successRate: mineClosed24h > 0 ? mineDone24h / mineClosed24h : null,
         lastRunStatus: last?.status ?? null,
         lastRunAt: last?.created_at ?? null,
+        sparkline24h: hourlyBuckets(mine, now),
+        sparkline7d: dailyBuckets(mine, now),
       };
     });
 
@@ -105,7 +126,8 @@ export const getSystemPulse = createServerFn({ method: "GET" })
       tokensOut24h: sumTokens(runs24h, "tokens_output"),
       activeAgents: roster.filter((a) => a.is_enabled && a.status === "busy").length,
       totalAgents: roster.length,
-      sparkline,
+      sparkline24h: hourlyBuckets(runs, now),
+      sparkline7d: dailyBuckets(runs, now),
       perAgent,
     };
   });
