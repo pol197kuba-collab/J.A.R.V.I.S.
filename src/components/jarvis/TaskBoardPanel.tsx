@@ -152,40 +152,42 @@ export function TaskBoardPanel({ index = 0 }: { index?: number }) {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             maxLength={200}
-            className="min-w-[180px] flex-1 font-mono text-xs"
+            className="min-w-[120px] flex-1 font-mono text-xs @max-[380px]:w-full @max-[380px]:flex-none"
             onKeyDown={(e) => {
               if (e.key === "Enter" && title.trim() && !createMut.isPending) {
                 createMut.mutate({ title: title.trim(), priority });
               }
             }}
           />
-          <div className="flex items-center gap-1">
-            {[1, 2, 3, 4, 5].map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setPriority(p)}
-                className="font-display h-6 w-6 shrink-0 text-[9px] uppercase tracking-widest transition"
-                style={{
-                  color: priority === p ? priorityColor(p) : "var(--muted-foreground)",
-                  border: `1px solid ${priority === p ? priorityColor(p) : "color-mix(in oklab, var(--muted-foreground) 40%, transparent)"}`,
-                  background:
-                    priority === p
-                      ? "color-mix(in oklab, var(--primary) 10%, transparent)"
-                      : "transparent",
-                }}
-              >
-                P{p}
-              </button>
-            ))}
+          <div className="flex flex-1 flex-wrap items-center justify-between gap-2 @max-[380px]:flex-none @max-[380px]:w-full">
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPriority(p)}
+                  className="font-display h-6 w-6 shrink-0 text-[9px] uppercase tracking-widest transition"
+                  style={{
+                    color: priority === p ? priorityColor(p) : "var(--muted-foreground)",
+                    border: `1px solid ${priority === p ? priorityColor(p) : "color-mix(in oklab, var(--muted-foreground) 40%, transparent)"}`,
+                    background:
+                      priority === p
+                        ? "color-mix(in oklab, var(--primary) 10%, transparent)"
+                        : "transparent",
+                  }}
+                >
+                  P{p}
+                </button>
+              ))}
+            </div>
+            <Button
+              size="sm"
+              disabled={!title.trim() || createMut.isPending}
+              onClick={() => createMut.mutate({ title: title.trim(), priority })}
+            >
+              {createMut.isPending ? "Dodaję…" : "Dodaj"}
+            </Button>
           </div>
-          <Button
-            size="sm"
-            disabled={!title.trim() || createMut.isPending}
-            onClick={() => createMut.mutate({ title: title.trim(), priority })}
-          >
-            {createMut.isPending ? "Dodaję…" : "Dodaj"}
-          </Button>
         </div>
       )}
 
@@ -194,7 +196,7 @@ export function TaskBoardPanel({ index = 0 }: { index?: number }) {
           ▸ Ładowanie zadań…
         </p>
       ) : (
-        <div className="mt-2 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="mt-2 grid grid-cols-1 gap-3 @[480px]:grid-cols-2 @[860px]:grid-cols-4">
           {COLUMNS.map((col) => {
             const items = byStatus.get(col.status) ?? [];
             return (

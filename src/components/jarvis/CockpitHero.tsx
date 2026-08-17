@@ -81,7 +81,7 @@ export function CockpitHero() {
           ▸ Ładowanie kokpitu…
         </p>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 @[480px]:grid-cols-2 @[860px]:grid-cols-3">
           <div>
             <ColumnLabel icon={AlertTriangle}>
               Zaległe {cockpit.overdueTasks.length > 0 && `(${cockpit.overdueTasks.length})`}

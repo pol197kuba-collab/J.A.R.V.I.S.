@@ -157,12 +157,12 @@ export function GithubActivityPulse({ index = 0 }: { index?: number }) {
       }
       className="flex flex-col"
     >
-      <div className="p-3 landscape:max-md:p-2">
+      <div className="p-3 @max-[420px]:p-2">
         <ul className="space-y-2">
           {rows.map((it, i) => (
             <li
               key={it.id}
-              className="flex min-w-0 gap-3 border-l-2 border-primary/50 pl-2 font-mono text-[11px] uppercase leading-snug text-foreground/85 landscape:max-md:text-[9px]"
+              className="flex min-w-0 gap-3 border-l-2 border-primary/50 pl-2 font-mono text-[11px] uppercase leading-snug text-foreground/85 @max-[420px]:text-[9px]"
               style={{ animation: `fade-up 0.45s ease-out ${i * 80}ms both` }}
             >
               <span className="shrink-0 text-primary/80">[{it.time}]</span>

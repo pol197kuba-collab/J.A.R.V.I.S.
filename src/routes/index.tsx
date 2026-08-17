@@ -28,27 +28,27 @@ function Index() {
   const status = useAgentStatus();
 
   return (
-    <div className="relative space-y-6 p-6 landscape:max-md:max-h-full landscape:max-md:space-y-1.5 landscape:max-md:overflow-hidden landscape:max-md:p-1.5">
+    <div className="relative space-y-6 p-6 @max-[420px]:space-y-4 @max-[420px]:p-4">
       <HudPanel
         index={0}
         title="COMMAND // OVERVIEW"
-        className="relative overflow-hidden p-8 landscape:max-md:p-2"
+        className="relative overflow-hidden p-8 @max-[420px]:p-4"
       >
         <div
           aria-hidden
-          className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full opacity-60 blur-3xl landscape:max-md:hidden"
+          className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full opacity-60 blur-3xl"
           style={{
             background:
               "radial-gradient(circle at center, oklch(0.85 0.18 210 / 0.35), transparent 70%)",
           }}
         />
-        <div className="relative flex flex-wrap items-start justify-between gap-8 landscape:max-md:gap-1">
-          <div className="min-w-0 flex-1 landscape:max-md:space-y-1">
+        <div className="relative flex flex-wrap items-start justify-between gap-8 @max-[420px]:gap-4">
+          <div className="min-w-0 flex-1">
             <CockpitHero />
           </div>
           <div
             aria-hidden
-            className="pointer-events-none hidden shrink-0 flex-col items-center gap-2 md:flex"
+            className="pointer-events-none hidden shrink-0 flex-col items-center gap-2 @[640px]:flex"
           >
             <ArcReactorTriangle className="!w-[150px]" />
             <span

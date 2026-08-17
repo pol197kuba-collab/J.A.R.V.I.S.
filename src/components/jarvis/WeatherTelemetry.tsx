@@ -154,7 +154,7 @@ export function WeatherTelemetry({
       title={`WEATHER // ${place ?? "LOCATING…"}`}
       className="flex flex-col"
     >
-      <div className="flex gap-3 p-3 landscape:max-md:gap-2 landscape:max-md:p-2">
+      <div className="flex gap-3 p-3 @max-[420px]:gap-2 @max-[420px]:p-2">
         {isLoading && (
           <p className="flex-1 font-display text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
             ▸ acquiring telemetry…
@@ -169,7 +169,7 @@ export function WeatherTelemetry({
           </p>
         )}
         {data && (
-          <ul className="flex-1 space-y-1 font-display text-[10px] uppercase tracking-[0.2em] text-foreground/85 landscape:max-md:text-[8px]">
+          <ul className="flex-1 space-y-1 font-display text-[10px] uppercase tracking-[0.2em] text-foreground/85 @max-[420px]:text-[8px]">
             {rows.map(([k, v]) => (
               <li
                 key={k}
@@ -189,7 +189,7 @@ export function WeatherTelemetry({
 
 function WeatherRadar() {
   return (
-    <div className="relative aspect-square w-20 shrink-0 border border-[color:var(--success)]/40 bg-black/50 landscape:max-md:w-14">
+    <div className="relative aspect-square w-20 shrink-0 border border-[color:var(--success)]/40 bg-black/50 @max-[420px]:w-14">
       <svg
         viewBox="0 0 100 100"
         className="absolute inset-0 h-full w-full text-[color:var(--success)]"

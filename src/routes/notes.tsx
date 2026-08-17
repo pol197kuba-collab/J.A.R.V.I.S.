@@ -104,7 +104,7 @@ function NotesPage() {
   }, [notes, search]);
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-6 @max-[420px]:space-y-4 @max-[420px]:p-4">
       <HudPanel index={0} title="ARCHIVE // NOTES" className="p-5">
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
           <h1 className="font-display text-3xl font-bold tracking-[0.18em]">NOTES</h1>
@@ -185,7 +185,7 @@ function NotesPage() {
           </div>
         )}
 
-        <div className="no-scrollbar grid max-h-[65vh] min-h-0 grid-cols-1 gap-2 overflow-y-auto overflow-x-hidden pr-1 md:grid-cols-2">
+        <div className="no-scrollbar grid max-h-[65vh] min-h-0 grid-cols-1 gap-2 overflow-y-auto overflow-x-hidden pr-1 @[640px]:grid-cols-2">
           {filtered.map((n) => (
             <article
               key={n.id}
