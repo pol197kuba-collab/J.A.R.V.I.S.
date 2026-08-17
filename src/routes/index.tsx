@@ -1,25 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ChatPanel } from "@/components/jarvis/ChatPanel";
-import { AgentFlowTree } from "@/components/jarvis/AgentFlowTree";
 import { HudPanel } from "@/components/jarvis/HudPanel";
-import { NotesWidget } from "@/components/jarvis/NotesWidget";
-import { TasksWidget } from "@/components/jarvis/TasksWidget";
-import { AgentOpsFeed } from "@/components/jarvis/AgentOpsFeed";
+import { SystemPulsePanel } from "@/components/jarvis/SystemPulsePanel";
+import { TaskBoardPanel } from "@/components/jarvis/TaskBoardPanel";
 import { ArcReactorTriangle } from "@/components/jarvis/ArcReactorTriangle";
 import { useAgentStatus } from "@/components/jarvis/useAgentStatus";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "JARVIS // Dashboard" },
+      { title: "JARVIS // Command Center" },
       {
         name: "description",
-        content: "Real-time command dashboard for the JARVIS personal AI assistant.",
+        content: "System pulse and agent task board for the JARVIS personal AI assistant.",
       },
-      { property: "og:title", content: "JARVIS // Dashboard" },
+      { property: "og:title", content: "JARVIS // Command Center" },
       {
         property: "og:description",
-        content: "Real-time command dashboard for the JARVIS personal AI assistant.",
+        content: "System pulse and agent task board for the JARVIS personal AI assistant.",
       },
     ],
   }),
@@ -75,18 +72,9 @@ function Index() {
         </div>
       </HudPanel>
 
-      <AgentFlowTree index={1} />
+      <SystemPulsePanel index={1} />
 
-      <HudPanel index={2} title="CONVERSATION STREAM" className="flex flex-col">
-        <ChatPanel />
-      </HudPanel>
-
-      <AgentOpsFeed index={3} />
-
-      <div className="grid gap-6 lg:grid-cols-2 landscape:max-md:grid-cols-2 landscape:max-md:gap-2">
-        <NotesWidget index={4} />
-        <TasksWidget index={5} />
-      </div>
+      <TaskBoardPanel index={2} />
     </div>
   );
 }
