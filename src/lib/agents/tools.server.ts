@@ -1361,6 +1361,167 @@ const searchDocumentsTool: Tool = {
   },
 };
 
+const readDocumentTool: Tool = {
+  declaration: {
+    name: "read_document",
+    description:
+      "Return the FULL text of one uploaded document (all its chunks, concatenated in order) — use for summarizing, comparing sections, or any question that needs the whole document rather than a handful of matching fragments from search_documents. Find the id with list_documents first. Very long documents are truncated; the response says so when it happens.",
+    parameters: {
+      type: "object",
+      properties: {
+        document_id: { type: "string", description: "The document id, from list_documents." },
+      },
+      required: ["document_id"],
+    },
+  },
+  async execute(args, ctx) {
+    const documentId = String(args.document_id ?? "").trim();
+    if (!documentId) return { error: "missing_document_id" };
+
+    const { data: doc, error: docErr } = await ctx.supabase
+      .from("documents")
+      .select("id, filename, status")
+      .eq("id", documentId)
+      .eq("user_id", ctx.userId)
+      .maybeSingle();
+    if (docErr) {
+      await ctx.logEvent("error", "tool.read_document", docErr.message, {
+        document_id: documentId,
+      } as Json);
+      return { error: docErr.message };
+    }
+    if (!doc) return { error: "document_not_found" };
+
+    const { data: chunks, error: chunksErr } = await ctx.supabase
+      .from("document_chunks")
+      .select("chunk_index, content")
+      .eq("document_id", documentId)
+      .eq("user_id", ctx.userId)
+      .order("chunk_index", { ascending: true });
+    if (chunksErr) {
+      await ctx.logEvent("error", "tool.read_document", chunksErr.message, {
+        document_id: documentId,
+      } as Json);
+      return { error: chunksErr.message };
+    }
+
+    const MAX_CHARS = 60_000;
+    let content = (chunks ?? []).map((c) => c.content).join("\n\n");
+    let truncated = false;
+    if (content.length > MAX_CHARS) {
+      content = content.slice(0, MAX_CHARS);
+      truncated = true;
+    }
+
+    await ctx.logEvent("info", "tool.read_document", `read: ${doc.filename}`, {
+      document_id: documentId,
+      chars: content.length,
+      truncated,
+    } as Json);
+    return { filename: doc.filename, status: doc.status, truncated, content };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// M.E.T.R.I.C. tools — read access to F.O.R.G.E.'s output. generated_files is
+// a separate table from documents/document_chunks (no chunking/embedding —
+// F.O.R.G.E. writes it, never the user), so this needed its own pair of
+// tools rather than reusing list_documents/search_documents.
+// ---------------------------------------------------------------------------
+
+const listGeneratedFilesTool: Tool = {
+  declaration: {
+    name: "list_generated_files",
+    description:
+      "List presentations/documents F.O.R.G.E. has generated for the user (pptx/docx/pdf), with title, format and section count. Use to check what's available before read_generated_file, or to answer 'what files/decks have I generated'. Separate from list_documents, which is for files the user uploaded, not ones F.O.R.G.E. built.",
+    parameters: {
+      type: "object",
+      properties: {
+        limit: { type: "integer", description: "Max results (default 20, max 50)." },
+      },
+    },
+  },
+  async execute(args, ctx) {
+    const limit = clampInt(args.limit, 1, 50, 20);
+    const { data, error } = await ctx.supabase
+      .from("generated_files")
+      .select("id, filename, format, title, section_count, image_status, created_at")
+      .eq("user_id", ctx.userId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) {
+      await ctx.logEvent("error", "tool.list_generated_files", error.message);
+      return { error: error.message };
+    }
+    return { count: data?.length ?? 0, files: data ?? [] };
+  },
+};
+
+const readGeneratedFileTool: Tool = {
+  declaration: {
+    name: "read_generated_file",
+    description:
+      "Return the text content (title + each section's heading/paragraph/bullets) of a presentation/document F.O.R.G.E. generated, for analysis, summarizing or answering questions about it. Find the id with list_generated_files first. Files generated before this tool existed may have no stored content — the response says so rather than guessing.",
+    parameters: {
+      type: "object",
+      properties: {
+        file_id: {
+          type: "string",
+          description: "The generated file's id, from list_generated_files.",
+        },
+      },
+      required: ["file_id"],
+    },
+  },
+  async execute(args, ctx) {
+    const fileId = String(args.file_id ?? "").trim();
+    if (!fileId) return { error: "missing_file_id" };
+
+    const { data: file, error } = await ctx.supabase
+      .from("generated_files")
+      .select("id, filename, format, title, spec")
+      .eq("id", fileId)
+      .eq("user_id", ctx.userId)
+      .maybeSingle();
+    if (error) {
+      await ctx.logEvent("error", "tool.read_generated_file", error.message, {
+        file_id: fileId,
+      } as Json);
+      return { error: error.message };
+    }
+    if (!file) return { error: "file_not_found" };
+
+    const spec = file.spec as {
+      title?: string;
+      subtitle?: string;
+      sections?: { heading?: string; content?: string; bullets?: string[] }[];
+    } | null;
+
+    if (!spec?.sections) {
+      return {
+        filename: file.filename,
+        format: file.format,
+        title: file.title,
+        content_available: false,
+        note: "Treść tego pliku nie została zarchiwizowana do analizy — dostępne są tylko metadane (tytuł, format).",
+      };
+    }
+
+    return {
+      filename: file.filename,
+      format: file.format,
+      title: spec.title ?? file.title,
+      subtitle: spec.subtitle ?? null,
+      content_available: true,
+      sections: spec.sections.map((s) => ({
+        heading: s.heading ?? "",
+        content: s.content ?? "",
+        bullets: s.bullets ?? [],
+      })),
+    };
+  },
+};
+
 // ---------------------------------------------------------------------------
 // F.O.R.G.E. tool — generate a downloadable document (pptx/docx/pdf)
 // ---------------------------------------------------------------------------
@@ -1579,8 +1740,10 @@ const generateDocumentTool: Tool = {
       }
     }
 
-    // Does the spec ask for any graphics? If so, mark it 'pending' and store
-    // the spec so enrichment can rebuild the exact same document with images.
+    // Does the spec ask for any graphics? If so, mark it 'pending' so
+    // enrichment can rebuild the exact same document with images. The spec
+    // itself is stored either way — it's also M.E.T.R.I.C.'s only source of
+    // text content for read_generated_file, independent of the image pass.
     const wantsImages = specHasImagePrompts(spec);
     const documentId = crypto.randomUUID();
     const { error: idxErr } = await ctx.supabase.from("generated_files").insert({
@@ -1595,7 +1758,7 @@ const generateDocumentTool: Tool = {
       section_count: spec.sections.length,
       image_count: 0,
       image_status: wantsImages ? "pending" : "none",
-      spec: wantsImages ? (spec as unknown as Json) : null,
+      spec: spec as unknown as Json,
       run_id: ctx.runId,
     });
     if (idxErr) {
@@ -1793,6 +1956,9 @@ export const ALL_TOOLS: Tool[] = [
   runLocalAction,
   listDocumentsTool,
   searchDocumentsTool,
+  readDocumentTool,
+  listGeneratedFilesTool,
+  readGeneratedFileTool,
   queueDocumentJob,
   generateDocumentTool,
   openDocumentTool,
