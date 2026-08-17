@@ -139,7 +139,7 @@ function FeedPage() {
   }, [items]);
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-6 @max-[420px]:space-y-4 @max-[420px]:p-4">
       <HudPanel
         index={0}
         title="LIVING FEED // CO SIĘ DZIAŁO"

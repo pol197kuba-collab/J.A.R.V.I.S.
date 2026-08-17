@@ -107,13 +107,9 @@ function SituationRoomPage() {
         : "● FALLBACK GRID";
 
   return (
-    <div className="space-y-3 p-3 landscape:max-md:space-y-2 landscape:max-md:p-2">
-      <HudPanel
-        index={0}
-        title="SITUATION ROOM // ORBITAL UPLINK"
-        className="p-3 landscape:max-md:p-2"
-      >
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1 pt-2 font-display text-[10px] uppercase tracking-[0.2em] landscape:max-md:text-[9px]">
+    <div className="space-y-3 p-3 @max-[420px]:space-y-2 @max-[420px]:p-2">
+      <HudPanel index={0} title="SITUATION ROOM // ORBITAL UPLINK" className="p-3">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 pt-2 font-display text-[10px] uppercase tracking-[0.2em] @max-[380px]:text-[9px]">
           <Row
             label="SIGNATURE"
             value={signatureLabel}
@@ -195,7 +191,7 @@ function SituationRoomPage() {
         </div>
       </HudPanel>
 
-      <div className="grid gap-3 lg:grid-cols-3 landscape:max-md:grid-cols-3 landscape:max-md:gap-2">
+      <div className="grid grid-cols-1 gap-3 @[640px]:grid-cols-3 @max-[420px]:gap-2">
         <WeatherTelemetry index={2} lat={fix.lat} lon={fix.lon} />
         <GithubActivityPulse index={3} />
         <SystemPulseStream index={4} />

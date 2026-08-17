@@ -102,7 +102,17 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
         </header>
         <main
           className={
-            "relative min-h-0 flex-1 overflow-hidden portrait:overflow-y-auto landscape:max-md:overflow-auto short:overflow-auto" +
+            // @container: the page-level container context — route content
+            // outside any HudPanel (hero rows, page wrappers) sizes off this
+            // (nearest ancestor wins; a nested HudPanel's own @container
+            // shadows this for its own children). Always scrollable: routes
+            // that genuinely need a fixed, non-scrolling "windowed" viewport
+            // (e.g. /jarvis's 3D canvas) enforce that themselves via their
+            // own definite height + overflow-hidden wrapper, so this doesn't
+            // fight them — it only matters when a route's content is taller
+            // than the viewport, which used to get silently clipped instead
+            // of scrollable in landscape/short orientations.
+            "@container relative min-h-0 flex-1 overflow-y-auto" +
             (transition === "dematerialize" ? " animate-hud-dematerialize" : "") +
             (isDiagnosticRunning ? " ark-dimmed" : "")
           }

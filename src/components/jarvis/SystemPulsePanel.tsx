@@ -37,7 +37,7 @@ function StatTile({
           ? "var(--destructive)"
           : "var(--foreground)";
   return (
-    <div className="min-w-0 flex-1 border-l border-primary/15 pl-3 first:border-l-0 first:pl-0">
+    <div className="min-w-0 border-l border-primary/15 pl-3 first:border-l-0 first:pl-0">
       <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
         {label}
       </p>
@@ -242,7 +242,7 @@ export function SystemPulsePanel({ index = 0 }: { index?: number }) {
         </p>
       ) : (
         <div className="mt-3 space-y-4">
-          <div className="flex flex-wrap gap-4">
+          <div className="grid grid-cols-2 gap-4 @[480px]:grid-cols-3 @[760px]:grid-cols-6">
             <StatTile label="Uruchomienia 24h" value={String(pulse.runs24h)} />
             <StatTile
               label="Skuteczność 24h"
