@@ -48,6 +48,27 @@ export const SHOWCASE_SEQUENCE: ShowcaseStep[] = [
     flourish: "agent-orbit",
   },
   {
+    id: "feed",
+    path: "/feed",
+    label: "FEED",
+    narration:
+      "Dziennik na żywo — uruchomienia agentów, wygenerowane pliki, powiadomienia i błędy, wszystko w jednej chronologicznej osi czasu, z filtrami po typie i zakresie.",
+  },
+  {
+    id: "tasks",
+    path: "/tasks",
+    label: "TASKS",
+    narration:
+      "Kolejka zadań całego zespołu — sam je zakładam w trakcie pracy, przypisuję do kolegów, i odhaczam, gdy robota jest skończona.",
+  },
+  {
+    id: "notes",
+    path: "/notes",
+    label: "NOTES",
+    narration:
+      "A tutaj trafia wszystko, o co Pan poprosi, bym zapamiętał — archiwum notatek, gotowe do przeszukania w każdej chwili.",
+  },
+  {
     id: "sub-systems",
     path: "/sub-systems",
     label: "SUB-SYSTEMS",
