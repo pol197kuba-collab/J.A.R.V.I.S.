@@ -1,11 +1,20 @@
 // Command-center overview — aggregate stats across the whole agent roster,
 // replacing the old per-widget Dashboard. Single accent hue throughout (the
-// bar chart is one series — runs per bucket, scoped by the filter row — so
+// area chart is one series — runs per bucket, scoped by the filter row — so
 // no legend is needed); status colors (success/warning/destructive) are
 // reserved for actual state, never reused as decoration.
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  type TooltipProps,
+} from "recharts";
 import { HudPanel } from "./HudPanel";
 import { getSystemPulse, type AgentPulseRow } from "@/lib/dashboard/dashboard.functions";
 import { cn } from "@/lib/utils";
@@ -58,63 +67,70 @@ function bucketLabels(range: Range): string[] {
   });
 }
 
+type ChartPoint = { label: string; value: number };
+
+function ChartTooltip({ active, payload }: TooltipProps<number, string>) {
+  if (!active || !payload?.length) return null;
+  const point = payload[0].payload as ChartPoint;
+  return (
+    <div className="pointer-events-none rounded border border-primary/30 bg-popover px-2 py-1 text-center shadow-lg">
+      <p className="font-display text-[8px] uppercase tracking-widest text-muted-foreground">
+        {point.label}
+      </p>
+      <p className="font-mono text-[11px] font-bold text-primary">{point.value}</p>
+    </div>
+  );
+}
+
 function RunsChart({ values, range }: { values: number[]; range: Range }) {
-  const [hover, setHover] = useState<number | null>(null);
   const labels = useMemo(() => bucketLabels(range), [range]);
-  const max = Math.max(1, ...values);
+  const data = useMemo<ChartPoint[]>(
+    () => values.map((value, i) => ({ label: labels[i], value })),
+    [values, labels],
+  );
   const total = values.reduce((a, b) => a + b, 0);
 
   return (
-    <div className="relative">
-      <div
-        className="flex h-24 items-end gap-[2px]"
-        onMouseLeave={() => setHover(null)}
-        role="img"
-        aria-label={`${total} uruchomień w wybranym okresie`}
-      >
-        {values.map((v, i) => {
-          const heightPct = v === 0 ? 0 : Math.max(6, (v / max) * 100);
-          const isHovered = hover === i;
-          return (
-            <div
-              key={i}
-              className="group relative flex h-full min-w-0 flex-1 items-end"
-              onMouseEnter={() => setHover(i)}
-              onFocus={() => setHover(i)}
-              onBlur={() => setHover(null)}
-              tabIndex={0}
-            >
-              {/* Hit target extends the full column height, well past the painted bar. */}
-              <div
-                className="rounded-[3px] transition-[opacity,background-color]"
-                style={{
-                  height: `${Math.max(2, heightPct)}%`,
-                  width: "100%",
-                  background:
-                    v === 0
-                      ? "color-mix(in oklab, var(--muted-foreground) 25%, transparent)"
-                      : isHovered
-                        ? "var(--primary)"
-                        : "color-mix(in oklab, var(--primary) 70%, transparent)",
-                  borderRadius: "3px 3px 1px 1px",
-                }}
-              />
-              {isHovered && (
-                <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded border border-primary/30 bg-popover px-2 py-1 text-center shadow-lg">
-                  <p className="font-display text-[8px] uppercase tracking-widest text-muted-foreground">
-                    {labels[i]}
-                  </p>
-                  <p className="font-mono text-[11px] font-bold text-primary">{v}</p>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      <div className="mt-1 flex items-center justify-between font-mono text-[8px] text-muted-foreground/60">
-        <span>{labels[0]}</span>
-        <span>{labels[labels.length - 1]}</span>
-      </div>
+    <div className="h-28" role="img" aria-label={`${total} uruchomień w wybranym okresie`}>
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: 4 }}>
+          <defs>
+            <linearGradient id="pulseAreaFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.35} />
+              <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid vertical={false} stroke="var(--muted-foreground)" strokeOpacity={0.12} />
+          <XAxis
+            dataKey="label"
+            tick={{
+              fontSize: 8,
+              fill: "var(--muted-foreground)",
+              fontFamily: '"Share Tech Mono", monospace',
+            }}
+            tickLine={false}
+            axisLine={false}
+            interval={range === "24h" ? 3 : 0}
+            minTickGap={12}
+          />
+          <Tooltip
+            content={<ChartTooltip />}
+            cursor={{ stroke: "var(--primary)", strokeOpacity: 0.35 }}
+          />
+          <Area
+            type="monotone"
+            dataKey="value"
+            stroke="var(--primary)"
+            strokeWidth={2}
+            fill="url(#pulseAreaFill)"
+            dot={false}
+            activeDot={{ r: 4, stroke: "var(--surface-1)", strokeWidth: 2 }}
+            isAnimationActive
+            animationDuration={450}
+            animationEasing="ease-out"
+          />
+        </AreaChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -244,9 +260,14 @@ export function SystemPulsePanel({ index = 0 }: { index?: number }) {
               }
             />
             <StatTile
-              label="Błędy 24h"
-              value={String(pulse.errors24h)}
-              tone={pulse.errors24h > 0 ? "destructive" : "success"}
+              label="Zdarzenia 24h"
+              value={String(pulse.warnEvents24h)}
+              tone={pulse.warnEvents24h > 0 ? "warning" : "success"}
+            />
+            <StatTile
+              label="Nieudane uruchomienia 24h"
+              value={String(pulse.failedRuns24h)}
+              tone={pulse.failedRuns24h > 0 ? "destructive" : "success"}
             />
             <StatTile
               label="Tokeny 24h"
