@@ -63,7 +63,7 @@ function SystemLogs() {
       </HudPanel>
       <HudPanel index={1} title="LOG STREAM // CORE" className="overflow-hidden">
         <div className="font-mono text-xs">
-          <div className="grid grid-cols-[140px_80px_140px_1fr] gap-3 border-b border-primary/30 bg-primary/5 px-4 py-2 font-display text-[10px] uppercase tracking-widest text-primary/80">
+          <div className="hidden @[560px]:grid @[560px]:grid-cols-[110px_70px_130px_1fr] @[560px]:gap-3 border-b border-primary/30 bg-primary/5 px-4 py-2 font-display text-[10px] uppercase tracking-widest text-primary/80">
             <span>TIMESTAMP</span>
             <span>LEVEL</span>
             <span>SOURCE</span>
@@ -82,22 +82,26 @@ function SystemLogs() {
               ▸ no events yet. Ask J.A.R.V.I.S. something to populate the log.
             </div>
           )}
-          {events.map((e) => (
-            <div
-              key={e.id}
-              className="grid grid-cols-[140px_80px_140px_1fr] gap-3 border-b border-primary/10 px-4 py-2 last:border-0 hover:bg-primary/10"
-            >
-              <span className="text-muted-foreground">{formatTs(e.createdAt)}</span>
-              <span
-                style={{ color: levelColor[e.level] ?? "var(--muted-foreground)" }}
-                className="font-display tracking-widest"
+          <div className="no-scrollbar max-h-[65vh] min-h-0 overflow-y-auto overflow-x-hidden">
+            {events.map((e) => (
+              <div
+                key={e.id}
+                className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b border-primary/10 px-4 py-2 last:border-0 hover:bg-primary/10 @[560px]:grid @[560px]:grid-cols-[110px_70px_130px_1fr] @[560px]:items-start @[560px]:gap-y-0"
               >
-                ▸ {e.level.toUpperCase()}
-              </span>
-              <span className="text-primary/80">{e.source}</span>
-              <span className="text-foreground">{e.message}</span>
-            </div>
-          ))}
+                <span className="shrink-0 text-muted-foreground">{formatTs(e.createdAt)}</span>
+                <span
+                  style={{ color: levelColor[e.level] ?? "var(--muted-foreground)" }}
+                  className="shrink-0 font-display tracking-widest"
+                >
+                  ▸ {e.level.toUpperCase()}
+                </span>
+                <span className="min-w-0 truncate text-primary/80">{e.source}</span>
+                <span className="min-w-0 basis-full break-words text-foreground @[560px]:basis-auto">
+                  {e.message}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </HudPanel>
     </div>

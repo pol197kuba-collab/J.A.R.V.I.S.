@@ -553,6 +553,7 @@ export function VisionScanner() {
       <HudPanel
         index={0}
         title="OPTICAL FEED // LIVE"
+        wrapperClassName="flex min-h-0 flex-1 flex-col"
         className="flex min-h-0 flex-1 flex-col overflow-hidden"
       >
         <div className="relative mx-auto w-full min-w-0 portrait:flex portrait:min-h-0 portrait:flex-1">

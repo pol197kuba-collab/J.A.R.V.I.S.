@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { Users } from "lucide-react";
+import { Users, X } from "lucide-react";
 import { listAgentTools, type AgentSummary } from "@/lib/agents/runtime.functions";
 import { FORCED_TOOLS_BY_SLUG } from "@/lib/constants/agentSlugs";
 
@@ -12,14 +13,46 @@ import { FORCED_TOOLS_BY_SLUG } from "@/lib/constants/agentSlugs";
 // invisible here even though the agent always has them at runtime).
 const MAX_INLINE_TOOLS = 2;
 
+// Both this and HudOverlay's twin panel default COLLAPSED — a small
+// left/right icon button over the 3D canvas — because at 220-260px wide
+// EACH, having both open at once on anything narrower than ~600px makes
+// them collide with each other and with the canvas's own node labels.
+// Tapping the button expands the full panel; tapping again (or the ✕)
+// collapses it back.
 export function AgentRegistryPanel({ agents }: { agents: AgentSummary[] }) {
+  const [open, setOpen] = useState(false);
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Open agent registry"
+        className="pointer-events-auto absolute left-4 top-16 flex items-center gap-1.5 rounded-lg border border-cyan-400/25 bg-black/60 px-2.5 py-1.5 shadow-[0_0_30px_-10px_rgba(77,216,255,0.5)] backdrop-blur-md transition hover:border-cyan-400/50 sm:left-6 sm:top-20"
+      >
+        <Users className="h-3 w-3 text-cyan-300" strokeWidth={1.5} />
+        <span className="font-display text-[9px] uppercase tracking-[0.25em] text-cyan-300/90">
+          Registry ({agents.length})
+        </span>
+      </button>
+    );
+  }
+
   return (
     <div className="pointer-events-auto absolute left-4 top-16 flex max-h-[50%] w-[220px] flex-col overflow-hidden rounded-lg border border-cyan-400/25 bg-black/60 shadow-[0_0_30px_-10px_rgba(77,216,255,0.5)] backdrop-blur-md sm:left-6 sm:top-20 sm:w-[260px]">
       <div className="flex shrink-0 items-center gap-1.5 border-b border-cyan-400/20 px-3 py-2">
         <Users className="h-3 w-3 text-cyan-300" strokeWidth={1.5} />
-        <span className="font-display text-[9px] uppercase tracking-[0.25em] text-cyan-300/90">
+        <span className="min-w-0 flex-1 truncate font-display text-[9px] uppercase tracking-[0.25em] text-cyan-300/90">
           Agent Registry
         </span>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          aria-label="Close agent registry"
+          className="shrink-0 text-cyan-300/60 hover:text-cyan-300"
+        >
+          <X className="h-3 w-3" strokeWidth={1.75} />
+        </button>
       </div>
       <div className="no-scrollbar min-h-0 flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden p-2">
         {agents.length === 0 ? (
