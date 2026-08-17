@@ -7,6 +7,7 @@ import { usePhase } from "./PhaseContext";
 export function HudPanel({
   children,
   className,
+  wrapperClassName,
   index = 0,
   tagSeed,
   showTag = true,
@@ -16,6 +17,17 @@ export function HudPanel({
 }: {
   children: ReactNode;
   className?: string;
+  /**
+   * Classes for the OUTER wrapper div — the element that actually
+   * participates in the parent's flex/grid layout (corner brackets and
+   * the HUD tag are its siblings, not `.hud-panel`'s). `className` only
+   * reaches the inner `.hud-panel`, so a consumer that needs the whole
+   * panel to grow/shrink in a flex column (`flex-1`, `min-h-0`, `h-full`)
+   * must pass those here too, or the outer wrapper stays auto-sized and
+   * the inner flex-1 has nothing definite to grow into — it silently
+   * collapses to content size instead of filling available space.
+   */
+  wrapperClassName?: string;
   index?: number;
   tagSeed?: number;
   showTag?: boolean;
@@ -49,6 +61,7 @@ export function HudPanel({
         "@container relative",
         elevated && materializing && "animate-hud-shell-in",
         elevated && dematerializing && "animate-hud-shell-out",
+        wrapperClassName,
       )}
       style={{
         animationDelay: elevated && materializing ? `${index * 110}ms` : undefined,

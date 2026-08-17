@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Activity } from "lucide-react";
+import { Activity, X } from "lucide-react";
 import { listSystemEvents, type SystemEvent } from "@/lib/system/events.functions";
 
 // Plain absolutely-positioned HTML chrome laid OVER the <JarvisCanvas>
@@ -39,6 +40,10 @@ export function HudOverlay({
     queryFn: () => fetchEvents({ data: { limit: 12 } }),
     refetchInterval: 4000,
   });
+  // Collapsed by default — same reasoning as AgentRegistryPanel's twin: two
+  // 220-260px side panels don't both fit next to each other (or the canvas's
+  // own node labels) on anything narrower than ~600px.
+  const [open, setOpen] = useState(false);
 
   return (
     <div className="pointer-events-none absolute inset-0 flex flex-col p-4 sm:p-6">
@@ -54,37 +59,59 @@ export function HudOverlay({
         </div>
       </div>
 
-      {/* Right log panel */}
-      <div className="pointer-events-auto absolute right-4 top-16 flex max-h-[50%] w-[220px] flex-col overflow-hidden rounded-lg border border-cyan-400/25 bg-black/60 shadow-[0_0_30px_-10px_rgba(77,216,255,0.5)] backdrop-blur-md sm:right-6 sm:top-20 sm:w-[260px]">
-        <div className="flex shrink-0 items-center gap-1.5 border-b border-cyan-400/20 px-3 py-2">
+      {/* Right log panel — collapsed to a button by default, see `open` above. */}
+      {open ? (
+        <div className="pointer-events-auto absolute right-4 top-16 flex max-h-[50%] w-[220px] flex-col overflow-hidden rounded-lg border border-cyan-400/25 bg-black/60 shadow-[0_0_30px_-10px_rgba(77,216,255,0.5)] backdrop-blur-md sm:right-6 sm:top-20 sm:w-[260px]">
+          <div className="flex shrink-0 items-center gap-1.5 border-b border-cyan-400/20 px-3 py-2">
+            <Activity className="h-3 w-3 text-cyan-300" strokeWidth={1.5} />
+            <span className="min-w-0 flex-1 truncate font-display text-[9px] uppercase tracking-[0.25em] text-cyan-300/90">
+              Recent Network Assignments
+            </span>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              aria-label="Close network log"
+              className="shrink-0 text-cyan-300/60 hover:text-cyan-300"
+            >
+              <X className="h-3 w-3" strokeWidth={1.75} />
+            </button>
+          </div>
+          <div className="no-scrollbar min-h-0 flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden p-2">
+            {events.length === 0 ? (
+              <p className="px-1 py-2 font-mono text-[9px] uppercase tracking-widest text-white/30">
+                ▸ awaiting activity…
+              </p>
+            ) : (
+              events.map((e) => (
+                <div
+                  key={e.id}
+                  className="border-l-2 pl-2"
+                  style={{ borderColor: LEVEL_COLOR[e.level] }}
+                >
+                  <p className="font-mono text-[8px] text-white/40">
+                    {timeOf(e.createdAt)} · {formatSource(e.source)}
+                  </p>
+                  <p className="line-clamp-2 font-mono text-[10px] leading-snug text-white/85">
+                    {e.message}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label="Open network log"
+          className="pointer-events-auto absolute right-4 top-16 flex items-center gap-1.5 rounded-lg border border-cyan-400/25 bg-black/60 px-2.5 py-1.5 shadow-[0_0_30px_-10px_rgba(77,216,255,0.5)] backdrop-blur-md transition hover:border-cyan-400/50 sm:right-6 sm:top-20"
+        >
           <Activity className="h-3 w-3 text-cyan-300" strokeWidth={1.5} />
           <span className="font-display text-[9px] uppercase tracking-[0.25em] text-cyan-300/90">
-            Recent Network Assignments
+            Network ({events.length})
           </span>
-        </div>
-        <div className="no-scrollbar min-h-0 flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden p-2">
-          {events.length === 0 ? (
-            <p className="px-1 py-2 font-mono text-[9px] uppercase tracking-widest text-white/30">
-              ▸ awaiting activity…
-            </p>
-          ) : (
-            events.map((e) => (
-              <div
-                key={e.id}
-                className="border-l-2 pl-2"
-                style={{ borderColor: LEVEL_COLOR[e.level] }}
-              >
-                <p className="font-mono text-[8px] text-white/40">
-                  {timeOf(e.createdAt)} · {formatSource(e.source)}
-                </p>
-                <p className="line-clamp-2 font-mono text-[10px] leading-snug text-white/85">
-                  {e.message}
-                </p>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
+        </button>
+      )}
 
       {/* Bottom status bar */}
       <div className="pointer-events-auto mt-auto flex flex-wrap items-center justify-between gap-2 rounded-lg border border-cyan-400/15 bg-black/40 px-4 py-2 backdrop-blur-sm">
