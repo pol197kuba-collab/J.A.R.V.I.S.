@@ -13,6 +13,8 @@ import {
   Database,
   FileText,
   Command,
+  StickyNote,
+  Rss,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -25,8 +27,10 @@ import { speak } from "@/lib/audio/speak";
 const items = [
   { title: "JARVIS", url: "/jarvis", icon: Hexagon },
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Feed", url: "/feed", icon: Rss },
   { title: "Agents", url: "/agent-hub", icon: Bot },
   { title: "Tasks", url: "/tasks", icon: ListChecks },
+  { title: "Notes", url: "/notes", icon: StickyNote },
   { title: "Systems", url: "/sub-systems", icon: Boxes },
   { title: "Situation", url: "/situation-room", icon: Radar },
   { title: "Vision", url: "/vision", icon: Eye },
