@@ -28,7 +28,15 @@ export type SystemPulse = {
   runs24h: number;
   runs7d: number;
   successRate24h: number | null;
-  errors24h: number;
+  /** Failed agent_runs in 24h — hard failures only (a run that never recovered). */
+  failedRuns24h: number;
+  /**
+   * system_events at level warn/error in 24h — the same query S.H.I.E.L.D.'s
+   * guardian_scan_errors tool runs. Catches things like a provider fallback
+   * (Gemini -> Groq) that a run recovered from, so it never shows up as a
+   * failed run but is still worth flagging.
+   */
+  warnEvents24h: number;
   tokensIn24h: number;
   tokensOut24h: number;
   activeAgents: number;
@@ -87,11 +95,18 @@ export const getSystemPulse = createServerFn({ method: "GET" })
       .limit(5000);
     const runs = runsRaw ?? [];
 
+    const { count: warnEvents24h } = await supabase
+      .from("system_events")
+      .select("id", { count: "exact", head: true })
+      .eq("owner_id", userId)
+      .in("level", ["warn", "error"])
+      .gte("created_at", new Date(H24).toISOString());
+
     const ts = (r: (typeof runs)[number]) => new Date(r.created_at).getTime();
     const runs24h = runs.filter((r) => ts(r) >= H24);
-    const errors24h = runs24h.filter((r) => r.status === "error").length;
+    const failedRuns24h = runs24h.filter((r) => r.status === "error").length;
     const done24h = runs24h.filter((r) => r.status === "done").length;
-    const closed24h = done24h + errors24h;
+    const closed24h = done24h + failedRuns24h;
 
     const sumTokens = (list: typeof runs, key: "tokens_input" | "tokens_output") =>
       list.reduce((sum, r) => sum + ((r[key] as number | null) ?? 0), 0);
@@ -121,7 +136,8 @@ export const getSystemPulse = createServerFn({ method: "GET" })
       runs24h: runs24h.length,
       runs7d: runs.length,
       successRate24h: closed24h > 0 ? done24h / closed24h : null,
-      errors24h,
+      failedRuns24h,
+      warnEvents24h: warnEvents24h ?? 0,
       tokensIn24h: sumTokens(runs24h, "tokens_input"),
       tokensOut24h: sumTokens(runs24h, "tokens_output"),
       activeAgents: roster.filter((a) => a.is_enabled && a.status === "busy").length,
