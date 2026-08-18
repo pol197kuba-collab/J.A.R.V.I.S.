@@ -8,14 +8,17 @@ import { useHudNavigate } from "@/components/jarvis/TransitionContext";
 import { useServerFn } from "@tanstack/react-start";
 import {
   deleteGeminiKey,
+  deleteGithubToken,
   deleteGoogleCseCredentials,
   deleteGroqKey,
   getGeminiKeyStatus,
+  getGithubTokenStatus,
   getGoogleCseStatus,
   getGroqKeyStatus,
   getUserSettings,
   listAgentTools,
   saveGeminiKey,
+  saveGithubToken,
   saveGoogleCseCredentials,
   saveGroqKey,
   setAgentToolEnabled,
@@ -89,6 +92,20 @@ function Settings() {
   const [cseBusy, setCseBusy] = useState(false);
   const [cseErrorMsg, setCseErrorMsg] = useState<string | null>(null);
 
+  // GitHub Personal Access Token — Dev Wing / D.R.O.I.D. only, server-side.
+  // No browser consumer at all (unlike Gemini), so like Groq/CSE there's no
+  // localStorage mirror — the server copy is the only one that matters.
+  const fetchGithubStatus = useServerFn(getGithubTokenStatus);
+  const persistGithubToken = useServerFn(saveGithubToken);
+  const clearGithubToken = useServerFn(deleteGithubToken);
+  const [githubToken, setGithubToken] = useState("");
+  const [githubStatus, setGithubStatus] = useState<"loading" | "linked" | "empty" | "error">(
+    "loading",
+  );
+  const [githubPreview, setGithubPreview] = useState<string | null>(null);
+  const [githubBusy, setGithubBusy] = useState(false);
+  const [githubErrorMsg, setGithubErrorMsg] = useState<string | null>(null);
+
   const fetchAgentTools = useServerFn(listAgentTools);
   const persistAgentTool = useServerFn(setAgentToolEnabled);
   const [tools, setTools] = useState<AgentToolSummary[] | null>(null);
@@ -160,6 +177,40 @@ function Settings() {
   useEffect(() => {
     void refreshCseState();
   }, [refreshCseState]);
+
+  const refreshGithubState = useCallback(async () => {
+    try {
+      const status = await fetchGithubStatus();
+      setGithubStatus(status.linked ? "linked" : "empty");
+      setGithubPreview(status.preview);
+    } catch (err) {
+      console.warn("[settings] github token refresh failed", err);
+      setGithubStatus("error");
+    }
+  }, [fetchGithubStatus]);
+
+  useEffect(() => {
+    void refreshGithubState();
+  }, [refreshGithubState]);
+
+  const handleSaveGithubToken = async () => {
+    const trimmed = githubToken.trim();
+    setGithubBusy(true);
+    setGithubErrorMsg(null);
+    try {
+      if (trimmed) {
+        await persistGithubToken({ data: { key: trimmed } });
+      } else {
+        await clearGithubToken();
+      }
+      audio.playClick();
+      await refreshGithubState();
+    } catch (err) {
+      setGithubErrorMsg(err instanceof Error ? err.message : "Server sync failed");
+    } finally {
+      setGithubBusy(false);
+    }
+  };
 
   const handleSaveCse = async () => {
     const trimmedKey = cseApiKey.trim();
@@ -533,6 +584,68 @@ function Settings() {
             trafność. Załóż darmowy klucz na console.cloud.google.com (Custom Search JSON API, 100
             zapytań/dzień gratis) i własną wyszukiwarkę na programmablesearchengine.google.com, żeby
             dostać jej "cx" ID. Puste oba pola + zapis = usunięcie danych.
+          </p>
+        </div>
+      </HudPanel>
+      <HudPanel index={2} title="D.R.O.I.D. // GITHUB ACCESS" className="p-5">
+        <div className="mt-4 space-y-3">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            GITHUB PERSONAL ACCESS TOKEN // WYMAGANE DLA ZADAŃ PROGRAMISTYCZNYCH
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              value={githubToken}
+              onChange={(e) => setGithubToken(e.target.value)}
+              placeholder="Wklej GitHub Personal Access Token (ghp_... lub github_pat_...)..."
+              className="font-mono flex-1 border border-primary/60 bg-black/40 px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+            />
+            <button
+              type="button"
+              disabled={githubBusy}
+              onClick={handleSaveGithubToken}
+              className="font-display border border-primary/60 bg-primary/20 px-4 py-2 text-[10px] uppercase tracking-widest text-primary hover:bg-primary/30 disabled:opacity-50"
+            >
+              SYNC TO AGENT RUNTIME
+            </button>
+          </div>
+          <div className="flex items-center justify-between border-t border-primary/20 pt-2">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              AGENT RUNTIME
+            </span>
+            <span
+              className="font-display text-[10px] uppercase tracking-widest"
+              style={{
+                color:
+                  githubStatus === "linked"
+                    ? "var(--success)"
+                    : githubStatus === "error"
+                      ? "var(--destructive)"
+                      : "var(--muted-foreground)",
+              }}
+            >
+              {githubStatus === "linked"
+                ? `● LINKED ${githubPreview ?? ""}`
+                : githubStatus === "error"
+                  ? "✕ UNREACHABLE"
+                  : githubStatus === "loading"
+                    ? "… CHECKING"
+                    : "○ NOT SYNCED"}
+            </span>
+          </div>
+          {githubErrorMsg && (
+            <p className="font-mono text-[10px]" style={{ color: "var(--destructive)" }}>
+              ✕ {githubErrorMsg}
+            </p>
+          )}
+          <p className="font-mono text-[10px] text-muted-foreground/70">
+            ℹ Potrzebny, żeby D.R.O.I.D. mógł zakładać issue z zadaniami programistycznymi w
+            repozytoriach podpiętych do Twoich projektów. Załóż fine-grained token na
+            github.com/settings/personal-access-tokens z uprawnieniem „Issues: Read and write" (i
+            „Contents: Read" jeśli chcesz też podgląd repo) ograniczonym tylko do konkretnych
+            repozytoriów. Puste pole + zapis = usunięcie tokena.
           </p>
         </div>
       </HudPanel>
