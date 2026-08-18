@@ -310,6 +310,69 @@ export type Database = {
         };
         Relationships: [];
       };
+      dev_sessions: {
+        Row: {
+          created_at: string;
+          finished_at: string | null;
+          id: string;
+          issue_number: number | null;
+          issue_url: string | null;
+          owner_id: string;
+          pr_number: number | null;
+          pr_url: string | null;
+          project_id: string;
+          started_at: string;
+          status: string;
+          summary: string | null;
+          task_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          finished_at?: string | null;
+          id?: string;
+          issue_number?: number | null;
+          issue_url?: string | null;
+          owner_id: string;
+          pr_number?: number | null;
+          pr_url?: string | null;
+          project_id: string;
+          started_at?: string;
+          status?: string;
+          summary?: string | null;
+          task_id: string;
+        };
+        Update: {
+          created_at?: string;
+          finished_at?: string | null;
+          id?: string;
+          issue_number?: number | null;
+          issue_url?: string | null;
+          owner_id?: string;
+          pr_number?: number | null;
+          pr_url?: string | null;
+          project_id?: string;
+          started_at?: string;
+          status?: string;
+          summary?: string | null;
+          task_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "dev_sessions_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "dev_sessions_task_id_fkey";
+            columns: ["task_id"];
+            isOneToOne: false;
+            referencedRelation: "tasks";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       document_chunks: {
         Row: {
           chunk_index: number;
@@ -757,6 +820,45 @@ export type Database = {
         };
         Relationships: [];
       };
+      projects: {
+        Row: {
+          context_doc: string | null;
+          created_at: string;
+          description: string | null;
+          id: string;
+          name: string;
+          owner_id: string;
+          repo_name: string | null;
+          repo_owner: string | null;
+          status: string;
+          updated_at: string;
+        };
+        Insert: {
+          context_doc?: string | null;
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          name: string;
+          owner_id: string;
+          repo_name?: string | null;
+          repo_owner?: string | null;
+          status?: string;
+          updated_at?: string;
+        };
+        Update: {
+          context_doc?: string | null;
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          name?: string;
+          owner_id?: string;
+          repo_name?: string | null;
+          repo_owner?: string | null;
+          status?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       system_events: {
         Row: {
           created_at: string;
@@ -797,6 +899,7 @@ export type Database = {
           due_at: string | null;
           id: string;
           priority: number;
+          project_id: string | null;
           result: string | null;
           status: string;
           tags: string[];
@@ -813,6 +916,7 @@ export type Database = {
           due_at?: string | null;
           id?: string;
           priority?: number;
+          project_id?: string | null;
           result?: string | null;
           status?: string;
           tags?: string[];
@@ -829,6 +933,7 @@ export type Database = {
           due_at?: string | null;
           id?: string;
           priority?: number;
+          project_id?: string | null;
           result?: string | null;
           status?: string;
           tags?: string[];
@@ -842,6 +947,13 @@ export type Database = {
             columns: ["created_by_agent"];
             isOneToOne: false;
             referencedRelation: "agents";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tasks_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
             referencedColumns: ["id"];
           },
         ];
@@ -907,6 +1019,7 @@ export type Database = {
         Row: {
           created_at: string;
           gemini_api_key: string | null;
+          github_token: string | null;
           google_cse_api_key: string | null;
           google_cse_cx: string | null;
           groq_api_key: string | null;
@@ -916,6 +1029,7 @@ export type Database = {
         Insert: {
           created_at?: string;
           gemini_api_key?: string | null;
+          github_token?: string | null;
           google_cse_api_key?: string | null;
           google_cse_cx?: string | null;
           groq_api_key?: string | null;
@@ -925,6 +1039,7 @@ export type Database = {
         Update: {
           created_at?: string;
           gemini_api_key?: string | null;
+          github_token?: string | null;
           google_cse_api_key?: string | null;
           google_cse_cx?: string | null;
           groq_api_key?: string | null;

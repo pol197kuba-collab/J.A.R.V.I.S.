@@ -350,6 +350,58 @@ export const deleteGoogleCseCredentials = createServerFn({ method: "POST" })
   });
 
 // ---------------------------------------------------------------------------
+// user_secrets (GitHub Personal Access Token — Dev Wing / D.R.O.I.D. only,
+// server-side use to create issues in whichever repo a project points at)
+// ---------------------------------------------------------------------------
+
+export const getGithubTokenStatus = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { data, error } = await supabase
+      .from("user_secrets")
+      .select("github_token")
+      .eq("owner_id", userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const key = data?.github_token?.trim() ?? "";
+    return {
+      linked: key.length > 0,
+      preview: key ? `••••••••${key.slice(-4)}` : null,
+    };
+  });
+
+export const saveGithubToken = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => SaveKeyInput.parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { error } = await supabase
+      .from("user_secrets")
+      .upsert({ owner_id: userId, github_token: data.key.trim() }, { onConflict: "owner_id" });
+    if (error) {
+      await logServerError(supabase, userId, "settings.github_token", error);
+      throw new Error(error.message);
+    }
+    return { ok: true as const };
+  });
+
+export const deleteGithubToken = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { error } = await supabase
+      .from("user_secrets")
+      .update({ github_token: null })
+      .eq("owner_id", userId);
+    if (error) {
+      await logServerError(supabase, userId, "settings.github_token", error);
+      throw new Error(error.message);
+    }
+    return { ok: true as const };
+  });
+
+// ---------------------------------------------------------------------------
 // user_settings
 // ---------------------------------------------------------------------------
 
