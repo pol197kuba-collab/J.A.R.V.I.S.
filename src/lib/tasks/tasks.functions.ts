@@ -113,6 +113,7 @@ const CreateInput = z.object({
   assigneeSlug: z.string().min(1).max(60).optional(),
   dueAt: z.string().datetime().optional(),
   tags: z.array(z.string().min(1).max(40)).max(20).optional().default([]),
+  projectId: z.string().uuid().optional(),
 });
 
 export const createTask = createServerFn({ method: "POST" })
@@ -130,6 +131,7 @@ export const createTask = createServerFn({ method: "POST" })
         assignee_slug: data.assigneeSlug ?? null,
         due_at: data.dueAt ?? null,
         tags: data.tags,
+        project_id: data.projectId ?? null,
       })
       .select(SELECT)
       .single();
@@ -142,10 +144,13 @@ export const createTask = createServerFn({ method: "POST" })
 
 const UpdateInput = z.object({
   id: z.string().uuid(),
+  title: z.string().min(1).max(200).optional(),
   status: z.enum(["todo", "in_progress", "done", "cancelled"]).optional(),
   result: z.string().max(20_000).optional(),
   priority: z.number().int().min(1).max(5).optional(),
   details: z.string().max(20_000).optional(),
+  assigneeSlug: z.string().max(60).nullable().optional(),
+  projectId: z.string().uuid().nullable().optional(),
 });
 
 export const updateTask = createServerFn({ method: "POST" })
@@ -154,6 +159,7 @@ export const updateTask = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<Task> => {
     const { supabase, userId } = context;
     const patch: Database["public"]["Tables"]["tasks"]["Update"] = {};
+    if (data.title !== undefined) patch.title = data.title.trim();
     if (data.status !== undefined) {
       patch.status = data.status;
       // Mirror the update_task tool: stamp/clear completion time with state.
@@ -163,6 +169,8 @@ export const updateTask = createServerFn({ method: "POST" })
     if (data.result !== undefined) patch.result = data.result;
     if (data.priority !== undefined) patch.priority = data.priority;
     if (data.details !== undefined) patch.details = data.details;
+    if (data.assigneeSlug !== undefined) patch.assignee_slug = data.assigneeSlug?.trim() || null;
+    if (data.projectId !== undefined) patch.project_id = data.projectId;
 
     const { data: row, error } = await supabase
       .from("tasks")
