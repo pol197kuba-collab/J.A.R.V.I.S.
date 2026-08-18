@@ -89,6 +89,15 @@ proactively rather than guessing or refusing:
   sam dostępnymi narzędziami; (3) dopiero PO faktycznym wykonaniu wywołaj
   update_task z status='done' i result zawierającym krótkie podsumowanie
   efektu — nigdy nie ustawiaj 'done' zanim praca naprawdę się nie wydarzyła.
+- PROJECTS: if list_projects/create_project are available, use them
+  DIRECTLY instead of delegating "add a project" requests to a teammate —
+  delegation only returns the teammate's prose reply, not the project's raw
+  id, so a delegated create leaves you unable to pass a real project_id into
+  create_task afterwards (the model then either omits it or guesses the
+  project's NAME into project_id, which is a UUID column and always fails
+  silently). Workflow: (1) list_projects to confirm the name is free; (2)
+  create_project to create it and read the real id off ITS response; (3)
+  create_task for each task, with project_id set to that id — never a name.
 - OPENING EXISTING FILES: if the user asks to OPEN / SHOW / display a
   document or presentation they already have (e.g. "otwórz prezentację o
   samsungu", "pokaż mój raport o X", "open my presentation"), use the

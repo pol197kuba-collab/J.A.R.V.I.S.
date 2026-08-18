@@ -2,20 +2,32 @@ import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Bot, Trash2 } from "lucide-react";
+import { Bot, Trash2, Pencil, Plus, Check, X } from "lucide-react";
 
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import {
   listTasks,
+  createTask,
   updateTask,
   deleteTask,
   type Task,
   type TaskStatus,
 } from "@/lib/tasks/tasks.functions";
+import { listProjects, createProject } from "@/lib/projects/projects.functions";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 const GENERAL_GROUP_KEY = "__general__";
+const NO_PROJECT = "__none__";
 
 type TaskGroup = { key: string; label: string; tasks: Task[] };
 
@@ -74,9 +86,48 @@ function priorityColor(p: number): string {
   return p <= 2 ? "var(--warning)" : "var(--primary)";
 }
 
+/** Small project picker shared by the "new task" form and inline edit —
+ * NO_PROJECT maps to null project_id ("General"). */
+function ProjectSelect({
+  value,
+  onChange,
+  projects,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  projects: { id: string; name: string }[];
+}) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="h-8 min-w-[140px] font-mono text-xs">
+        <SelectValue placeholder="Project…" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={NO_PROJECT}>General (no project)</SelectItem>
+        {projects.map((p) => (
+          <SelectItem key={p.id} value={p.id}>
+            {p.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+type EditState = {
+  title: string;
+  details: string;
+  priority: number;
+  assigneeSlug: string;
+  projectId: string;
+};
+
 function TasksPage() {
   const qc = useQueryClient();
   const fetchTasks = useServerFn(listTasks);
+  const fetchProjects = useServerFn(listProjects);
+  const create = useServerFn(createTask);
+  const createProj = useServerFn(createProject);
   const update = useServerFn(updateTask);
   const remove = useServerFn(deleteTask);
   const [scope, setScope] = useState<Scope>("open");
@@ -92,7 +143,14 @@ function TasksPage() {
     refetchInterval: 8000,
   });
 
+  const { data: projects = [] } = useQuery({
+    queryKey: ["projects", "list"],
+    queryFn: () => fetchProjects(),
+    refetchInterval: 15000,
+  });
+
   const invalidate = () => qc.invalidateQueries({ queryKey: ["tasks"] });
+  const invalidateProjects = () => qc.invalidateQueries({ queryKey: ["projects"] });
 
   const groups = useMemo(() => groupByProject(tasks), [tasks]);
 
@@ -108,6 +166,87 @@ function TasksPage() {
     onSuccess: () => {
       invalidate();
       toast.success("Task deleted");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
+  });
+
+  // ---------- + New task ----------
+  const [taskFormOpen, setTaskFormOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newPriority, setNewPriority] = useState(3);
+  const [newProjectId, setNewProjectId] = useState(NO_PROJECT);
+
+  const createTaskMut = useMutation({
+    mutationFn: (input: { title: string; priority: number; projectId?: string }) =>
+      create({ data: input }),
+    onSuccess: () => {
+      setNewTitle("");
+      setNewPriority(3);
+      setNewProjectId(NO_PROJECT);
+      setTaskFormOpen(false);
+      invalidate();
+      toast.success("Task added");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
+  });
+
+  // ---------- + New project ----------
+  const [projectFormOpen, setProjectFormOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+
+  const createProjectMut = useMutation({
+    mutationFn: (input: { name: string }) => createProj({ data: input }),
+    onSuccess: () => {
+      setNewProjectName("");
+      setProjectFormOpen(false);
+      invalidateProjects();
+      toast.success("Project created");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
+  });
+
+  // ---------- inline edit ----------
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [edit, setEdit] = useState<EditState | null>(null);
+
+  const startEdit = (t: Task) => {
+    setEditingId(t.id);
+    setEdit({
+      title: t.title,
+      details: t.details ?? "",
+      priority: t.priority,
+      assigneeSlug: t.assigneeSlug ?? "",
+      projectId: t.projectId ?? NO_PROJECT,
+    });
+  };
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEdit(null);
+  };
+
+  const editMut = useMutation({
+    mutationFn: (input: {
+      id: string;
+      title: string;
+      details: string;
+      priority: number;
+      assigneeSlug: string;
+      projectId: string;
+    }) =>
+      update({
+        data: {
+          id: input.id,
+          title: input.title,
+          details: input.details,
+          priority: input.priority,
+          assigneeSlug: input.assigneeSlug || null,
+          projectId: input.projectId === NO_PROJECT ? null : input.projectId,
+        },
+      }),
+    onSuccess: () => {
+      invalidate();
+      cancelEdit();
+      toast.success("Task updated");
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
   });
@@ -135,7 +274,104 @@ function TasksPage() {
           <span className="ml-2 text-xs uppercase tracking-[0.3em] text-muted-foreground">
             {tasks.length} TASKS {isFetching ? "// syncing…" : ""}
           </span>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setProjectFormOpen((v) => !v)}
+              className="font-display flex items-center gap-1 text-[10px] uppercase tracking-[0.25em] text-primary/70 hover:text-primary"
+            >
+              <Plus className="h-3 w-3" strokeWidth={2} />
+              {projectFormOpen ? "close" : "new project"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setTaskFormOpen((v) => !v)}
+              className="font-display flex items-center gap-1 text-[10px] uppercase tracking-[0.25em] text-primary/70 hover:text-primary"
+            >
+              <Plus className="h-3 w-3" strokeWidth={2} />
+              {taskFormOpen ? "close" : "new task"}
+            </button>
+          </div>
         </div>
+
+        {projectFormOpen && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 border border-primary/25 bg-primary/[0.03] p-2.5">
+            <Input
+              placeholder="Project name…"
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              maxLength={200}
+              className="min-w-[160px] flex-1 font-mono text-xs @max-[420px]:w-full @max-[420px]:flex-none"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newProjectName.trim() && !createProjectMut.isPending) {
+                  createProjectMut.mutate({ name: newProjectName.trim() });
+                }
+              }}
+            />
+            <Button
+              size="sm"
+              disabled={!newProjectName.trim() || createProjectMut.isPending}
+              onClick={() => createProjectMut.mutate({ name: newProjectName.trim() })}
+            >
+              {createProjectMut.isPending ? "Creating…" : "Create"}
+            </Button>
+          </div>
+        )}
+
+        {taskFormOpen && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 border border-primary/25 bg-primary/[0.03] p-2.5">
+            <Input
+              placeholder="New task title…"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              maxLength={200}
+              className="min-w-[160px] flex-1 font-mono text-xs @max-[420px]:w-full @max-[420px]:flex-none"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newTitle.trim() && !createTaskMut.isPending) {
+                  createTaskMut.mutate({
+                    title: newTitle.trim(),
+                    priority: newPriority,
+                    projectId: newProjectId === NO_PROJECT ? undefined : newProjectId,
+                  });
+                }
+              }}
+            />
+            <ProjectSelect value={newProjectId} onChange={setNewProjectId} projects={projects} />
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setNewPriority(p)}
+                  className="font-display h-6 w-6 shrink-0 text-[9px] uppercase tracking-widest transition"
+                  style={{
+                    color: newPriority === p ? priorityColor(p) : "var(--muted-foreground)",
+                    border: `1px solid ${newPriority === p ? priorityColor(p) : "color-mix(in oklab, var(--muted-foreground) 40%, transparent)"}`,
+                    background:
+                      newPriority === p
+                        ? "color-mix(in oklab, var(--primary) 10%, transparent)"
+                        : "transparent",
+                  }}
+                >
+                  P{p}
+                </button>
+              ))}
+            </div>
+            <Button
+              size="sm"
+              disabled={!newTitle.trim() || createTaskMut.isPending}
+              onClick={() =>
+                createTaskMut.mutate({
+                  title: newTitle.trim(),
+                  priority: newPriority,
+                  projectId: newProjectId === NO_PROJECT ? undefined : newProjectId,
+                })
+              }
+            >
+              {createTaskMut.isPending ? "Adding…" : "Add"}
+            </Button>
+          </div>
+        )}
       </HudPanel>
 
       {isLoading && (
@@ -169,84 +405,183 @@ function TasksPage() {
           >
             <div className="overflow-x-auto">
               <div className="min-w-[860px] font-mono text-xs">
-                <div className="grid grid-cols-[90px_40px_1fr_120px_130px_120px] gap-3 border-b border-primary/30 bg-primary/5 px-4 py-2 font-display text-[10px] uppercase tracking-widest text-primary/80">
+                <div className="grid grid-cols-[90px_40px_1fr_120px_130px_120px_60px] gap-3 border-b border-primary/30 bg-primary/5 px-4 py-2 font-display text-[10px] uppercase tracking-widest text-primary/80">
                   <span>STATUS</span>
                   <span>P</span>
                   <span>TITLE / DETAILS</span>
                   <span>ASSIGNEE</span>
                   <span>CREATED BY</span>
                   <span>DUE / DONE</span>
+                  <span />
                 </div>
 
-                {g.tasks.map((t) => (
-                  <div
-                    key={t.id}
-                    className="group grid grid-cols-[90px_40px_1fr_120px_130px_120px] gap-3 border-b border-primary/10 px-4 py-2 last:border-0 hover:bg-primary/10"
-                  >
-                    <span
-                      className="font-display tracking-widest"
-                      style={{ color: statusColor[t.status] }}
+                {g.tasks.map((t) =>
+                  editingId === t.id && edit ? (
+                    <div
+                      key={t.id}
+                      className="border-b border-primary/10 bg-primary/5 px-4 py-3 last:border-0"
                     >
-                      ▸ {t.status.replace("_", " ")}
-                    </span>
-                    <span
-                      className="font-display font-semibold"
-                      style={{ color: priorityColor(t.priority) }}
-                    >
-                      P{t.priority}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-foreground">{t.title}</p>
-                      {t.details && (
-                        <p className="mt-0.5 whitespace-pre-wrap break-words text-[11px] text-muted-foreground">
-                          {t.details}
-                        </p>
-                      )}
-                      {t.result && (
-                        <p className="mt-0.5 text-[11px] text-[color:var(--success)]/80">
-                          → {t.result}
-                        </p>
-                      )}
+                      <div className="flex flex-col gap-2">
+                        <Input
+                          value={edit.title}
+                          onChange={(e) => setEdit({ ...edit, title: e.target.value })}
+                          maxLength={200}
+                          className="font-mono text-xs"
+                          placeholder="Title…"
+                        />
+                        <Input
+                          value={edit.details}
+                          onChange={(e) => setEdit({ ...edit, details: e.target.value })}
+                          className="font-mono text-[11px]"
+                          placeholder="Details (optional)…"
+                        />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <ProjectSelect
+                            value={edit.projectId}
+                            onChange={(v) => setEdit({ ...edit, projectId: v })}
+                            projects={projects}
+                          />
+                          <Input
+                            value={edit.assigneeSlug}
+                            onChange={(e) => setEdit({ ...edit, assigneeSlug: e.target.value })}
+                            className="h-8 w-[120px] font-mono text-xs"
+                            placeholder="assignee slug…"
+                          />
+                          <div className="flex items-center gap-1">
+                            {[1, 2, 3, 4, 5].map((p) => (
+                              <button
+                                key={p}
+                                type="button"
+                                onClick={() => setEdit({ ...edit, priority: p })}
+                                className="font-display h-6 w-6 shrink-0 text-[9px] uppercase tracking-widest transition"
+                                style={{
+                                  color:
+                                    edit.priority === p
+                                      ? priorityColor(p)
+                                      : "var(--muted-foreground)",
+                                  border: `1px solid ${edit.priority === p ? priorityColor(p) : "color-mix(in oklab, var(--muted-foreground) 40%, transparent)"}`,
+                                  background:
+                                    edit.priority === p
+                                      ? "color-mix(in oklab, var(--primary) 10%, transparent)"
+                                      : "transparent",
+                                }}
+                              >
+                                P{p}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="ml-auto flex items-center gap-2">
+                            <button
+                              type="button"
+                              aria-label="Save"
+                              disabled={!edit.title.trim() || editMut.isPending}
+                              onClick={() =>
+                                editMut.mutate({
+                                  id: t.id,
+                                  title: edit.title.trim(),
+                                  details: edit.details.trim(),
+                                  priority: edit.priority,
+                                  assigneeSlug: edit.assigneeSlug.trim(),
+                                  projectId: edit.projectId,
+                                })
+                              }
+                              className="flex items-center gap-1 font-display text-[9px] uppercase tracking-widest text-[color:var(--success)] hover:underline disabled:opacity-50"
+                            >
+                              <Check className="h-3.5 w-3.5" strokeWidth={2} /> save
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Cancel"
+                              onClick={cancelEdit}
+                              className="flex items-center gap-1 font-display text-[9px] uppercase tracking-widest text-muted-foreground hover:underline"
+                            >
+                              <X className="h-3.5 w-3.5" strokeWidth={2} /> cancel
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <span className="truncate text-muted-foreground">{t.assigneeSlug ?? "—"}</span>
-                    <span className="flex items-center gap-1 truncate text-muted-foreground">
-                      {t.createdByAgent ? (
-                        <>
-                          <Bot className="h-3 w-3 shrink-0" strokeWidth={1.5} /> {t.createdByAgent}
-                        </>
-                      ) : (
-                        "manual"
-                      )}
-                    </span>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-muted-foreground">
-                        {t.status === "done" || t.status === "cancelled"
-                          ? t.completedAt
-                            ? new Date(t.completedAt).toLocaleDateString()
-                            : "—"
-                          : t.dueAt
-                            ? new Date(t.dueAt).toLocaleDateString()
-                            : "—"}
+                  ) : (
+                    <div
+                      key={t.id}
+                      className="group grid grid-cols-[90px_40px_1fr_120px_130px_120px_60px] gap-3 border-b border-primary/10 px-4 py-2 last:border-0 hover:bg-primary/10"
+                    >
+                      <span
+                        className="font-display tracking-widest"
+                        style={{ color: statusColor[t.status] }}
+                      >
+                        ▸ {t.status.replace("_", " ")}
                       </span>
-                      <div className="flex shrink-0 items-center gap-2 opacity-0 transition group-hover:opacity-100">
-                        {(t.status === "todo" || t.status === "in_progress") && (
-                          <button
-                            type="button"
-                            onClick={() => statusMut.mutate({ id: t.id, status: "done" })}
-                            className="font-display text-[9px] uppercase tracking-widest text-[color:var(--success)] hover:underline"
-                          >
-                            done
-                          </button>
+                      <span
+                        className="font-display font-semibold"
+                        style={{ color: priorityColor(t.priority) }}
+                      >
+                        P{t.priority}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-foreground">{t.title}</p>
+                        {t.details && (
+                          <p className="mt-0.5 whitespace-pre-wrap break-words text-[11px] text-muted-foreground">
+                            {t.details}
+                          </p>
                         )}
-                        {(t.status === "done" || t.status === "cancelled") && (
-                          <button
-                            type="button"
-                            onClick={() => statusMut.mutate({ id: t.id, status: "todo" })}
-                            className="font-display text-[9px] uppercase tracking-widest text-primary hover:underline"
-                          >
-                            reopen
-                          </button>
+                        {t.result && (
+                          <p className="mt-0.5 text-[11px] text-[color:var(--success)]/80">
+                            → {t.result}
+                          </p>
                         )}
+                      </div>
+                      <span className="truncate text-muted-foreground">
+                        {t.assigneeSlug ?? "—"}
+                      </span>
+                      <span className="flex items-center gap-1 truncate text-muted-foreground">
+                        {t.createdByAgent ? (
+                          <>
+                            <Bot className="h-3 w-3 shrink-0" strokeWidth={1.5} />{" "}
+                            {t.createdByAgent}
+                          </>
+                        ) : (
+                          "manual"
+                        )}
+                      </span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">
+                          {t.status === "done" || t.status === "cancelled"
+                            ? t.completedAt
+                              ? new Date(t.completedAt).toLocaleDateString()
+                              : "—"
+                            : t.dueAt
+                              ? new Date(t.dueAt).toLocaleDateString()
+                              : "—"}
+                        </span>
+                        <div className="flex shrink-0 items-center gap-2 opacity-0 transition group-hover:opacity-100">
+                          {(t.status === "todo" || t.status === "in_progress") && (
+                            <button
+                              type="button"
+                              onClick={() => statusMut.mutate({ id: t.id, status: "done" })}
+                              className="font-display text-[9px] uppercase tracking-widest text-[color:var(--success)] hover:underline"
+                            >
+                              done
+                            </button>
+                          )}
+                          {(t.status === "done" || t.status === "cancelled") && (
+                            <button
+                              type="button"
+                              onClick={() => statusMut.mutate({ id: t.id, status: "todo" })}
+                              className="font-display text-[9px] uppercase tracking-widest text-primary hover:underline"
+                            >
+                              reopen
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-end gap-2 opacity-0 transition group-hover:opacity-100">
+                        <button type="button" aria-label="Edit task" onClick={() => startEdit(t)}>
+                          <Pencil
+                            className="h-3.5 w-3.5 text-muted-foreground hover:text-primary"
+                            strokeWidth={1.5}
+                          />
+                        </button>
                         <button
                           type="button"
                           aria-label="Delete task"
@@ -261,8 +596,8 @@ function TasksPage() {
                         </button>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ),
+                )}
               </div>
             </div>
           </HudPanel>
