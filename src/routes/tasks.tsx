@@ -1,13 +1,50 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Bot, Trash2 } from "lucide-react";
 
 import { HudPanel } from "@/components/jarvis/HudPanel";
-import { listTasks, updateTask, deleteTask, type TaskStatus } from "@/lib/tasks/tasks.functions";
+import {
+  listTasks,
+  updateTask,
+  deleteTask,
+  type Task,
+  type TaskStatus,
+} from "@/lib/tasks/tasks.functions";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+
+const GENERAL_GROUP_KEY = "__general__";
+
+type TaskGroup = { key: string; label: string; tasks: Task[] };
+
+/** One section per project (alphabetical), plus a trailing "General" section
+ * for tasks with no project_id — replaces the old flat list so a project's
+ * tasks read together instead of interleaved with everything else. */
+function groupByProject(tasks: Task[]): TaskGroup[] {
+  const byProject = new Map<string, TaskGroup>();
+  const general: Task[] = [];
+
+  for (const t of tasks) {
+    if (!t.projectId) {
+      general.push(t);
+      continue;
+    }
+    const existing = byProject.get(t.projectId);
+    if (existing) existing.tasks.push(t);
+    else
+      byProject.set(t.projectId, {
+        key: t.projectId,
+        label: t.projectName ?? "Untitled project",
+        tasks: [t],
+      });
+  }
+
+  const groups = [...byProject.values()].sort((a, b) => a.label.localeCompare(b.label));
+  if (general.length > 0) groups.push({ key: GENERAL_GROUP_KEY, label: "General", tasks: general });
+  return groups;
+}
 
 export const Route = createFileRoute("/tasks")({
   head: () => ({
@@ -57,6 +94,8 @@ function TasksPage() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["tasks"] });
 
+  const groups = useMemo(() => groupByProject(tasks), [tasks]);
+
   const statusMut = useMutation({
     mutationFn: (input: { id: string; status: TaskStatus }) =>
       update({ data: { id: input.id, status: input.status } }),
@@ -99,118 +138,135 @@ function TasksPage() {
         </div>
       </HudPanel>
 
-      <HudPanel index={1} title="QUEUE // CORE" className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <div className="min-w-[860px] font-mono text-xs">
-            <div className="grid grid-cols-[90px_40px_1fr_120px_130px_120px] gap-3 border-b border-primary/30 bg-primary/5 px-4 py-2 font-display text-[10px] uppercase tracking-widest text-primary/80">
-              <span>STATUS</span>
-              <span>P</span>
-              <span>TITLE / DETAILS</span>
-              <span>ASSIGNEE</span>
-              <span>CREATED BY</span>
-              <span>DUE / DONE</span>
-            </div>
+      {isLoading && (
+        <HudPanel index={1} title="QUEUE // CORE" className="p-4">
+          <span className="text-xs text-muted-foreground">▸ loading tasks…</span>
+        </HudPanel>
+      )}
+      {error && (
+        <HudPanel index={1} title="QUEUE // CORE" className="p-4">
+          <span className="text-xs" style={{ color: "var(--destructive)" }}>
+            ✕ task queue unreachable — {error instanceof Error ? error.message : String(error)}
+          </span>
+        </HudPanel>
+      )}
+      {!isLoading && !error && tasks.length === 0 && (
+        <HudPanel index={1} title="QUEUE // CORE" className="p-4">
+          <span className="text-xs text-muted-foreground">
+            ▸ nothing here. Ask J.A.R.V.I.S. to create or track a task.
+          </span>
+        </HudPanel>
+      )}
 
-            {isLoading && <div className="px-4 py-3 text-muted-foreground">▸ loading tasks…</div>}
-            {error && (
-              <div className="px-4 py-3" style={{ color: "var(--destructive)" }}>
-                ✕ task queue unreachable — {error instanceof Error ? error.message : String(error)}
-              </div>
-            )}
-            {!isLoading && !error && tasks.length === 0 && (
-              <div className="px-4 py-6 text-center text-muted-foreground">
-                ▸ nothing here. Ask J.A.R.V.I.S. to create or track a task.
-              </div>
-            )}
-
-            {tasks.map((t) => (
-              <div
-                key={t.id}
-                className="group grid grid-cols-[90px_40px_1fr_120px_130px_120px] gap-3 border-b border-primary/10 px-4 py-2 last:border-0 hover:bg-primary/10"
-              >
-                <span
-                  className="font-display tracking-widest"
-                  style={{ color: statusColor[t.status] }}
-                >
-                  ▸ {t.status.replace("_", " ")}
-                </span>
-                <span
-                  className="font-display font-semibold"
-                  style={{ color: priorityColor(t.priority) }}
-                >
-                  P{t.priority}
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-foreground">{t.title}</p>
-                  {t.details && (
-                    <p className="mt-0.5 whitespace-pre-wrap break-words text-[11px] text-muted-foreground">
-                      {t.details}
-                    </p>
-                  )}
-                  {t.result && (
-                    <p className="mt-0.5 text-[11px] text-[color:var(--success)]/80">
-                      → {t.result}
-                    </p>
-                  )}
+      {!isLoading &&
+        !error &&
+        groups.map((g, i) => (
+          <HudPanel
+            key={g.key}
+            index={i + 1}
+            title={`QUEUE // ${g.label.toUpperCase()}`}
+            className="overflow-hidden"
+          >
+            <div className="overflow-x-auto">
+              <div className="min-w-[860px] font-mono text-xs">
+                <div className="grid grid-cols-[90px_40px_1fr_120px_130px_120px] gap-3 border-b border-primary/30 bg-primary/5 px-4 py-2 font-display text-[10px] uppercase tracking-widest text-primary/80">
+                  <span>STATUS</span>
+                  <span>P</span>
+                  <span>TITLE / DETAILS</span>
+                  <span>ASSIGNEE</span>
+                  <span>CREATED BY</span>
+                  <span>DUE / DONE</span>
                 </div>
-                <span className="truncate text-muted-foreground">{t.assigneeSlug ?? "—"}</span>
-                <span className="flex items-center gap-1 truncate text-muted-foreground">
-                  {t.createdByAgent ? (
-                    <>
-                      <Bot className="h-3 w-3 shrink-0" strokeWidth={1.5} /> {t.createdByAgent}
-                    </>
-                  ) : (
-                    "manual"
-                  )}
-                </span>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">
-                    {t.status === "done" || t.status === "cancelled"
-                      ? t.completedAt
-                        ? new Date(t.completedAt).toLocaleDateString()
-                        : "—"
-                      : t.dueAt
-                        ? new Date(t.dueAt).toLocaleDateString()
-                        : "—"}
-                  </span>
-                  <div className="flex shrink-0 items-center gap-2 opacity-0 transition group-hover:opacity-100">
-                    {(t.status === "todo" || t.status === "in_progress") && (
-                      <button
-                        type="button"
-                        onClick={() => statusMut.mutate({ id: t.id, status: "done" })}
-                        className="font-display text-[9px] uppercase tracking-widest text-[color:var(--success)] hover:underline"
-                      >
-                        done
-                      </button>
-                    )}
-                    {(t.status === "done" || t.status === "cancelled") && (
-                      <button
-                        type="button"
-                        onClick={() => statusMut.mutate({ id: t.id, status: "todo" })}
-                        className="font-display text-[9px] uppercase tracking-widest text-primary hover:underline"
-                      >
-                        reopen
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      aria-label="Delete task"
-                      onClick={() => {
-                        if (window.confirm(`Delete task "${t.title}"?`)) deleteMut.mutate(t.id);
-                      }}
+
+                {g.tasks.map((t) => (
+                  <div
+                    key={t.id}
+                    className="group grid grid-cols-[90px_40px_1fr_120px_130px_120px] gap-3 border-b border-primary/10 px-4 py-2 last:border-0 hover:bg-primary/10"
+                  >
+                    <span
+                      className="font-display tracking-widest"
+                      style={{ color: statusColor[t.status] }}
                     >
-                      <Trash2
-                        className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive"
-                        strokeWidth={1.5}
-                      />
-                    </button>
+                      ▸ {t.status.replace("_", " ")}
+                    </span>
+                    <span
+                      className="font-display font-semibold"
+                      style={{ color: priorityColor(t.priority) }}
+                    >
+                      P{t.priority}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-foreground">{t.title}</p>
+                      {t.details && (
+                        <p className="mt-0.5 whitespace-pre-wrap break-words text-[11px] text-muted-foreground">
+                          {t.details}
+                        </p>
+                      )}
+                      {t.result && (
+                        <p className="mt-0.5 text-[11px] text-[color:var(--success)]/80">
+                          → {t.result}
+                        </p>
+                      )}
+                    </div>
+                    <span className="truncate text-muted-foreground">{t.assigneeSlug ?? "—"}</span>
+                    <span className="flex items-center gap-1 truncate text-muted-foreground">
+                      {t.createdByAgent ? (
+                        <>
+                          <Bot className="h-3 w-3 shrink-0" strokeWidth={1.5} /> {t.createdByAgent}
+                        </>
+                      ) : (
+                        "manual"
+                      )}
+                    </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">
+                        {t.status === "done" || t.status === "cancelled"
+                          ? t.completedAt
+                            ? new Date(t.completedAt).toLocaleDateString()
+                            : "—"
+                          : t.dueAt
+                            ? new Date(t.dueAt).toLocaleDateString()
+                            : "—"}
+                      </span>
+                      <div className="flex shrink-0 items-center gap-2 opacity-0 transition group-hover:opacity-100">
+                        {(t.status === "todo" || t.status === "in_progress") && (
+                          <button
+                            type="button"
+                            onClick={() => statusMut.mutate({ id: t.id, status: "done" })}
+                            className="font-display text-[9px] uppercase tracking-widest text-[color:var(--success)] hover:underline"
+                          >
+                            done
+                          </button>
+                        )}
+                        {(t.status === "done" || t.status === "cancelled") && (
+                          <button
+                            type="button"
+                            onClick={() => statusMut.mutate({ id: t.id, status: "todo" })}
+                            className="font-display text-[9px] uppercase tracking-widest text-primary hover:underline"
+                          >
+                            reopen
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          aria-label="Delete task"
+                          onClick={() => {
+                            if (window.confirm(`Delete task "${t.title}"?`)) deleteMut.mutate(t.id);
+                          }}
+                        >
+                          <Trash2
+                            className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive"
+                            strokeWidth={1.5}
+                          />
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      </HudPanel>
+            </div>
+          </HudPanel>
+        ))}
     </div>
   );
 }
