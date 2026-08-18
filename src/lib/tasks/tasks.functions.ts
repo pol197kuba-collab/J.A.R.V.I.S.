@@ -26,10 +26,12 @@ export type Task = {
   completedAt: string | null;
   /** Display name of the agent that created it, or null for manual entries. */
   createdByAgent: string | null;
+  projectId: string | null;
+  projectName: string | null;
 };
 
 const SELECT =
-  "id, title, details, status, priority, assignee_slug, due_at, tags, result, created_at, completed_at, author:agents!tasks_created_by_agent_fkey(name)";
+  "id, title, details, status, priority, assignee_slug, due_at, tags, result, created_at, completed_at, project_id, author:agents!tasks_created_by_agent_fkey(name), project:projects(name)";
 
 type Row = {
   id: string;
@@ -43,11 +45,14 @@ type Row = {
   result: string | null;
   created_at: string;
   completed_at: string | null;
+  project_id: string | null;
   author: { name: string } | { name: string }[] | null;
+  project: { name: string } | { name: string }[] | null;
 };
 
 function mapRow(r: Row): Task {
   const author = Array.isArray(r.author) ? r.author[0] : r.author;
+  const project = Array.isArray(r.project) ? r.project[0] : r.project;
   return {
     id: r.id,
     title: r.title,
@@ -61,6 +66,8 @@ function mapRow(r: Row): Task {
     createdAt: r.created_at,
     completedAt: r.completed_at,
     createdByAgent: author?.name ?? null,
+    projectId: r.project_id,
+    projectName: project?.name ?? null,
   };
 }
 

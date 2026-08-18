@@ -1325,7 +1325,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // logged into the same account sees the same conversation. Only for
     // top-level calls — delegated sub-runs don't own a conversation row.
     if (resolvedConversationId) {
-      await supabase.from("messages").insert([
+      const { error: messagesErr } = await supabase.from("messages").insert([
         {
           user_id: userId,
           conversation_id: resolvedConversationId,
@@ -1338,9 +1338,25 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           conversation_id: resolvedConversationId,
           run_id: runId,
           role: "jarvis",
-          content: finalText,
+          content: finalText || " ",
         },
       ]);
+      if (messagesErr) {
+        // Was previously unchecked — a failed insert here left the reply
+        // visible in the client's chat bus but nothing in the DB, so the
+        // turn silently vanished on the next getActiveConversation refetch
+        // (e.g. navigating away from /jarvis and back). Log it instead of
+        // swallowing it so a recurrence is diagnosable from System Logs.
+        await logEvent(
+          "error",
+          AGENT_SLUGS.JARVIS,
+          `message persist failed: ${messagesErr.message}`,
+          {
+            run_id: runId,
+            conversation_id: resolvedConversationId,
+          } as Json,
+        );
+      }
       await supabase
         .from("conversations")
         .update({ updated_at: new Date().toISOString() })
