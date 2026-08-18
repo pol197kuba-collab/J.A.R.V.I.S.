@@ -31,9 +31,9 @@ const NO_PROJECT = "__none__";
 
 type TaskGroup = { key: string; label: string; tasks: Task[] };
 
-/** One section per project (alphabetical), plus a trailing "General" section
- * for tasks with no project_id — replaces the old flat list so a project's
- * tasks read together instead of interleaved with everything else. */
+/** One group per project (alphabetical), plus a trailing "General" group for
+ * tasks with no project_id. Projects render as small cards (3-up grid);
+ * General keeps the original full-width table — see TasksPage below. */
 function groupByProject(tasks: Task[]): TaskGroup[] {
   const byProject = new Map<string, TaskGroup>();
   const general: Task[] = [];
@@ -122,6 +122,168 @@ type EditState = {
   projectId: string;
 };
 
+type EditFormProps = {
+  edit: EditState;
+  setEdit: (e: EditState) => void;
+  projects: { id: string; name: string }[];
+  onSave: () => void;
+  onCancel: () => void;
+  saving: boolean;
+};
+
+/** Shared inline edit form — used both inside a General table row and
+ * inside a compact project card, so the two views stay in sync. */
+function TaskEditForm({ edit, setEdit, projects, onSave, onCancel, saving }: EditFormProps) {
+  return (
+    <div className="flex flex-col gap-2">
+      <Input
+        value={edit.title}
+        onChange={(e) => setEdit({ ...edit, title: e.target.value })}
+        maxLength={200}
+        className="font-mono text-xs"
+        placeholder="Title…"
+      />
+      <Input
+        value={edit.details}
+        onChange={(e) => setEdit({ ...edit, details: e.target.value })}
+        className="font-mono text-[11px]"
+        placeholder="Details (optional)…"
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <ProjectSelect
+          value={edit.projectId}
+          onChange={(v) => setEdit({ ...edit, projectId: v })}
+          projects={projects}
+        />
+        <Input
+          value={edit.assigneeSlug}
+          onChange={(e) => setEdit({ ...edit, assigneeSlug: e.target.value })}
+          className="h-8 w-[120px] font-mono text-xs"
+          placeholder="assignee slug…"
+        />
+        <div className="flex items-center gap-1">
+          {[1, 2, 3, 4, 5].map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => setEdit({ ...edit, priority: p })}
+              className="font-display h-6 w-6 shrink-0 text-[9px] uppercase tracking-widest transition"
+              style={{
+                color: edit.priority === p ? priorityColor(p) : "var(--muted-foreground)",
+                border: `1px solid ${edit.priority === p ? priorityColor(p) : "color-mix(in oklab, var(--muted-foreground) 40%, transparent)"}`,
+                background:
+                  edit.priority === p
+                    ? "color-mix(in oklab, var(--primary) 10%, transparent)"
+                    : "transparent",
+              }}
+            >
+              P{p}
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            aria-label="Save"
+            disabled={!edit.title.trim() || saving}
+            onClick={onSave}
+            className="flex items-center gap-1 font-display text-[9px] uppercase tracking-widest text-[color:var(--success)] hover:underline disabled:opacity-50"
+          >
+            <Check className="h-3.5 w-3.5" strokeWidth={2} /> save
+          </button>
+          <button
+            type="button"
+            aria-label="Cancel"
+            onClick={onCancel}
+            className="flex items-center gap-1 font-display text-[9px] uppercase tracking-widest text-muted-foreground hover:underline"
+          >
+            <X className="h-3.5 w-3.5" strokeWidth={2} /> cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type RowActions = {
+  editingId: string | null;
+  edit: EditState | null;
+  setEdit: (e: EditState) => void;
+  startEdit: (t: Task) => void;
+  cancelEdit: () => void;
+  saveEdit: (id: string) => void;
+  editSaving: boolean;
+  onAdvanceDone: (id: string) => void;
+  onReopen: (id: string) => void;
+  onDelete: (t: Task) => void;
+  projects: { id: string; name: string }[];
+};
+
+/** Compact single-task row for a project card — a status dot + title +
+ * priority/assignee, expanding into TaskEditForm when being edited. */
+function CompactTaskRow({ t, actions }: { t: Task; actions: RowActions }) {
+  if (actions.editingId === t.id && actions.edit) {
+    return (
+      <div className="rounded border border-primary/20 bg-primary/5 p-2">
+        <TaskEditForm
+          edit={actions.edit}
+          setEdit={actions.setEdit}
+          projects={actions.projects}
+          onSave={() => actions.saveEdit(t.id)}
+          onCancel={actions.cancelEdit}
+          saving={actions.editSaving}
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="group/task flex items-start gap-2 rounded border border-primary/10 bg-[color:var(--surface-1)]/40 px-2 py-1.5">
+      <span
+        className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full"
+        style={{ background: statusColor[t.status] }}
+      />
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-mono text-[11px] text-foreground/90">{t.title}</p>
+        <div className="mt-0.5 flex items-center gap-2 font-display text-[8px] uppercase tracking-widest text-muted-foreground">
+          <span style={{ color: priorityColor(t.priority) }}>P{t.priority}</span>
+          <span className="truncate">{t.assigneeSlug ?? "—"}</span>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5 opacity-0 transition group-hover/task:opacity-100">
+        {(t.status === "todo" || t.status === "in_progress") && (
+          <button
+            type="button"
+            aria-label="Mark done"
+            onClick={() => actions.onAdvanceDone(t.id)}
+            className="font-display text-[8px] uppercase tracking-widest text-[color:var(--success)] hover:underline"
+          >
+            done
+          </button>
+        )}
+        {(t.status === "done" || t.status === "cancelled") && (
+          <button
+            type="button"
+            aria-label="Reopen"
+            onClick={() => actions.onReopen(t.id)}
+            className="font-display text-[8px] uppercase tracking-widest text-primary hover:underline"
+          >
+            reopen
+          </button>
+        )}
+        <button type="button" aria-label="Edit task" onClick={() => actions.startEdit(t)}>
+          <Pencil className="h-3 w-3 text-muted-foreground hover:text-primary" strokeWidth={1.5} />
+        </button>
+        <button type="button" aria-label="Delete task" onClick={() => actions.onDelete(t)}>
+          <Trash2
+            className="h-3 w-3 text-muted-foreground hover:text-destructive"
+            strokeWidth={1.5}
+          />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function TasksPage() {
   const qc = useQueryClient();
   const fetchTasks = useServerFn(listTasks);
@@ -153,6 +315,8 @@ function TasksPage() {
   const invalidateProjects = () => qc.invalidateQueries({ queryKey: ["projects"] });
 
   const groups = useMemo(() => groupByProject(tasks), [tasks]);
+  const projectGroups = useMemo(() => groups.filter((g) => g.key !== GENERAL_GROUP_KEY), [groups]);
+  const generalGroup = useMemo(() => groups.find((g) => g.key === GENERAL_GROUP_KEY), [groups]);
 
   const statusMut = useMutation({
     mutationFn: (input: { id: string; status: TaskStatus }) =>
@@ -250,6 +414,34 @@ function TasksPage() {
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
   });
+
+  const saveEdit = (id: string) => {
+    if (!edit) return;
+    editMut.mutate({
+      id,
+      title: edit.title.trim(),
+      details: edit.details.trim(),
+      priority: edit.priority,
+      assigneeSlug: edit.assigneeSlug.trim(),
+      projectId: edit.projectId,
+    });
+  };
+
+  const rowActions: RowActions = {
+    editingId,
+    edit,
+    setEdit,
+    startEdit,
+    cancelEdit,
+    saveEdit,
+    editSaving: editMut.isPending,
+    onAdvanceDone: (id) => statusMut.mutate({ id, status: "done" }),
+    onReopen: (id) => statusMut.mutate({ id, status: "todo" }),
+    onDelete: (t) => {
+      if (window.confirm(`Delete task "${t.title}"?`)) deleteMut.mutate(t.id);
+    },
+    projects,
+  };
 
   return (
     <div className="space-y-6 p-6">
@@ -394,214 +586,158 @@ function TasksPage() {
         </HudPanel>
       )}
 
-      {!isLoading &&
-        !error &&
-        groups.map((g, i) => (
-          <HudPanel
-            key={g.key}
-            index={i + 1}
-            title={`QUEUE // ${g.label.toUpperCase()}`}
-            className="overflow-hidden"
-          >
-            <div className="overflow-x-auto">
-              <div className="min-w-[860px] font-mono text-xs">
-                <div className="grid grid-cols-[90px_40px_1fr_120px_130px_120px_60px] gap-3 border-b border-primary/30 bg-primary/5 px-4 py-2 font-display text-[10px] uppercase tracking-widest text-primary/80">
-                  <span>STATUS</span>
-                  <span>P</span>
-                  <span>TITLE / DETAILS</span>
-                  <span>ASSIGNEE</span>
-                  <span>CREATED BY</span>
-                  <span>DUE / DONE</span>
-                  <span />
-                </div>
-
-                {g.tasks.map((t) =>
-                  editingId === t.id && edit ? (
-                    <div
-                      key={t.id}
-                      className="border-b border-primary/10 bg-primary/5 px-4 py-3 last:border-0"
-                    >
-                      <div className="flex flex-col gap-2">
-                        <Input
-                          value={edit.title}
-                          onChange={(e) => setEdit({ ...edit, title: e.target.value })}
-                          maxLength={200}
-                          className="font-mono text-xs"
-                          placeholder="Title…"
-                        />
-                        <Input
-                          value={edit.details}
-                          onChange={(e) => setEdit({ ...edit, details: e.target.value })}
-                          className="font-mono text-[11px]"
-                          placeholder="Details (optional)…"
-                        />
-                        <div className="flex flex-wrap items-center gap-2">
-                          <ProjectSelect
-                            value={edit.projectId}
-                            onChange={(v) => setEdit({ ...edit, projectId: v })}
-                            projects={projects}
-                          />
-                          <Input
-                            value={edit.assigneeSlug}
-                            onChange={(e) => setEdit({ ...edit, assigneeSlug: e.target.value })}
-                            className="h-8 w-[120px] font-mono text-xs"
-                            placeholder="assignee slug…"
-                          />
-                          <div className="flex items-center gap-1">
-                            {[1, 2, 3, 4, 5].map((p) => (
-                              <button
-                                key={p}
-                                type="button"
-                                onClick={() => setEdit({ ...edit, priority: p })}
-                                className="font-display h-6 w-6 shrink-0 text-[9px] uppercase tracking-widest transition"
-                                style={{
-                                  color:
-                                    edit.priority === p
-                                      ? priorityColor(p)
-                                      : "var(--muted-foreground)",
-                                  border: `1px solid ${edit.priority === p ? priorityColor(p) : "color-mix(in oklab, var(--muted-foreground) 40%, transparent)"}`,
-                                  background:
-                                    edit.priority === p
-                                      ? "color-mix(in oklab, var(--primary) 10%, transparent)"
-                                      : "transparent",
-                                }}
-                              >
-                                P{p}
-                              </button>
-                            ))}
-                          </div>
-                          <div className="ml-auto flex items-center gap-2">
-                            <button
-                              type="button"
-                              aria-label="Save"
-                              disabled={!edit.title.trim() || editMut.isPending}
-                              onClick={() =>
-                                editMut.mutate({
-                                  id: t.id,
-                                  title: edit.title.trim(),
-                                  details: edit.details.trim(),
-                                  priority: edit.priority,
-                                  assigneeSlug: edit.assigneeSlug.trim(),
-                                  projectId: edit.projectId,
-                                })
-                              }
-                              className="flex items-center gap-1 font-display text-[9px] uppercase tracking-widest text-[color:var(--success)] hover:underline disabled:opacity-50"
-                            >
-                              <Check className="h-3.5 w-3.5" strokeWidth={2} /> save
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="Cancel"
-                              onClick={cancelEdit}
-                              className="flex items-center gap-1 font-display text-[9px] uppercase tracking-widest text-muted-foreground hover:underline"
-                            >
-                              <X className="h-3.5 w-3.5" strokeWidth={2} /> cancel
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div
-                      key={t.id}
-                      className="group grid grid-cols-[90px_40px_1fr_120px_130px_120px_60px] gap-3 border-b border-primary/10 px-4 py-2 last:border-0 hover:bg-primary/10"
-                    >
-                      <span
-                        className="font-display tracking-widest"
-                        style={{ color: statusColor[t.status] }}
-                      >
-                        ▸ {t.status.replace("_", " ")}
-                      </span>
-                      <span
-                        className="font-display font-semibold"
-                        style={{ color: priorityColor(t.priority) }}
-                      >
-                        P{t.priority}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-foreground">{t.title}</p>
-                        {t.details && (
-                          <p className="mt-0.5 whitespace-pre-wrap break-words text-[11px] text-muted-foreground">
-                            {t.details}
-                          </p>
-                        )}
-                        {t.result && (
-                          <p className="mt-0.5 text-[11px] text-[color:var(--success)]/80">
-                            → {t.result}
-                          </p>
-                        )}
-                      </div>
-                      <span className="truncate text-muted-foreground">
-                        {t.assigneeSlug ?? "—"}
-                      </span>
-                      <span className="flex items-center gap-1 truncate text-muted-foreground">
-                        {t.createdByAgent ? (
-                          <>
-                            <Bot className="h-3 w-3 shrink-0" strokeWidth={1.5} />{" "}
-                            {t.createdByAgent}
-                          </>
-                        ) : (
-                          "manual"
-                        )}
-                      </span>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-muted-foreground">
-                          {t.status === "done" || t.status === "cancelled"
-                            ? t.completedAt
-                              ? new Date(t.completedAt).toLocaleDateString()
-                              : "—"
-                            : t.dueAt
-                              ? new Date(t.dueAt).toLocaleDateString()
-                              : "—"}
-                        </span>
-                        <div className="flex shrink-0 items-center gap-2 opacity-0 transition group-hover:opacity-100">
-                          {(t.status === "todo" || t.status === "in_progress") && (
-                            <button
-                              type="button"
-                              onClick={() => statusMut.mutate({ id: t.id, status: "done" })}
-                              className="font-display text-[9px] uppercase tracking-widest text-[color:var(--success)] hover:underline"
-                            >
-                              done
-                            </button>
-                          )}
-                          {(t.status === "done" || t.status === "cancelled") && (
-                            <button
-                              type="button"
-                              onClick={() => statusMut.mutate({ id: t.id, status: "todo" })}
-                              className="font-display text-[9px] uppercase tracking-widest text-primary hover:underline"
-                            >
-                              reopen
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-end gap-2 opacity-0 transition group-hover:opacity-100">
-                        <button type="button" aria-label="Edit task" onClick={() => startEdit(t)}>
-                          <Pencil
-                            className="h-3.5 w-3.5 text-muted-foreground hover:text-primary"
-                            strokeWidth={1.5}
-                          />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label="Delete task"
-                          onClick={() => {
-                            if (window.confirm(`Delete task "${t.title}"?`)) deleteMut.mutate(t.id);
-                          }}
-                        >
-                          <Trash2
-                            className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive"
-                            strokeWidth={1.5}
-                          />
-                        </button>
-                      </div>
-                    </div>
-                  ),
-                )}
+      {/* Projects: compact cards, up to 3 per row. */}
+      {!isLoading && !error && projectGroups.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 @[680px]:grid-cols-2 @[1020px]:grid-cols-3">
+          {projectGroups.map((g, i) => (
+            <HudPanel
+              key={g.key}
+              index={i + 1}
+              title={`PROJECT // ${g.label.toUpperCase()}`}
+              className="p-3"
+            >
+              <div className="no-scrollbar flex max-h-80 min-h-0 flex-col gap-1.5 overflow-y-auto overflow-x-hidden">
+                {g.tasks.map((t) => (
+                  <CompactTaskRow key={t.id} t={t} actions={rowActions} />
+                ))}
               </div>
+            </HudPanel>
+          ))}
+        </div>
+      )}
+
+      {/* General: unchanged full-width table for tasks with no project. */}
+      {!isLoading && !error && generalGroup && (
+        <HudPanel
+          index={projectGroups.length + 1}
+          title="QUEUE // GENERAL"
+          className="overflow-hidden"
+        >
+          <div className="overflow-x-auto">
+            <div className="min-w-[860px] font-mono text-xs">
+              <div className="grid grid-cols-[90px_40px_1fr_120px_130px_120px_60px] gap-3 border-b border-primary/30 bg-primary/5 px-4 py-2 font-display text-[10px] uppercase tracking-widest text-primary/80">
+                <span>STATUS</span>
+                <span>P</span>
+                <span>TITLE / DETAILS</span>
+                <span>ASSIGNEE</span>
+                <span>CREATED BY</span>
+                <span>DUE / DONE</span>
+                <span />
+              </div>
+
+              {generalGroup.tasks.map((t) =>
+                editingId === t.id && edit ? (
+                  <div
+                    key={t.id}
+                    className="border-b border-primary/10 bg-primary/5 px-4 py-3 last:border-0"
+                  >
+                    <TaskEditForm
+                      edit={edit}
+                      setEdit={setEdit}
+                      projects={projects}
+                      onSave={() => saveEdit(t.id)}
+                      onCancel={cancelEdit}
+                      saving={editMut.isPending}
+                    />
+                  </div>
+                ) : (
+                  <div
+                    key={t.id}
+                    className="group grid grid-cols-[90px_40px_1fr_120px_130px_120px_60px] gap-3 border-b border-primary/10 px-4 py-2 last:border-0 hover:bg-primary/10"
+                  >
+                    <span
+                      className="font-display tracking-widest"
+                      style={{ color: statusColor[t.status] }}
+                    >
+                      ▸ {t.status.replace("_", " ")}
+                    </span>
+                    <span
+                      className="font-display font-semibold"
+                      style={{ color: priorityColor(t.priority) }}
+                    >
+                      P{t.priority}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-foreground">{t.title}</p>
+                      {t.details && (
+                        <p className="mt-0.5 whitespace-pre-wrap break-words text-[11px] text-muted-foreground">
+                          {t.details}
+                        </p>
+                      )}
+                      {t.result && (
+                        <p className="mt-0.5 text-[11px] text-[color:var(--success)]/80">
+                          → {t.result}
+                        </p>
+                      )}
+                    </div>
+                    <span className="truncate text-muted-foreground">{t.assigneeSlug ?? "—"}</span>
+                    <span className="flex items-center gap-1 truncate text-muted-foreground">
+                      {t.createdByAgent ? (
+                        <>
+                          <Bot className="h-3 w-3 shrink-0" strokeWidth={1.5} /> {t.createdByAgent}
+                        </>
+                      ) : (
+                        "manual"
+                      )}
+                    </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">
+                        {t.status === "done" || t.status === "cancelled"
+                          ? t.completedAt
+                            ? new Date(t.completedAt).toLocaleDateString()
+                            : "—"
+                          : t.dueAt
+                            ? new Date(t.dueAt).toLocaleDateString()
+                            : "—"}
+                      </span>
+                      <div className="flex shrink-0 items-center gap-2 opacity-0 transition group-hover:opacity-100">
+                        {(t.status === "todo" || t.status === "in_progress") && (
+                          <button
+                            type="button"
+                            onClick={() => statusMut.mutate({ id: t.id, status: "done" })}
+                            className="font-display text-[9px] uppercase tracking-widest text-[color:var(--success)] hover:underline"
+                          >
+                            done
+                          </button>
+                        )}
+                        {(t.status === "done" || t.status === "cancelled") && (
+                          <button
+                            type="button"
+                            onClick={() => statusMut.mutate({ id: t.id, status: "todo" })}
+                            className="font-display text-[9px] uppercase tracking-widest text-primary hover:underline"
+                          >
+                            reopen
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-end gap-2 opacity-0 transition group-hover:opacity-100">
+                      <button type="button" aria-label="Edit task" onClick={() => startEdit(t)}>
+                        <Pencil
+                          className="h-3.5 w-3.5 text-muted-foreground hover:text-primary"
+                          strokeWidth={1.5}
+                        />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Delete task"
+                        onClick={() => {
+                          if (window.confirm(`Delete task "${t.title}"?`)) deleteMut.mutate(t.id);
+                        }}
+                      >
+                        <Trash2
+                          className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive"
+                          strokeWidth={1.5}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                ),
+              )}
             </div>
-          </HudPanel>
-        ))}
+          </div>
+        </HudPanel>
+      )}
     </div>
   );
 }
