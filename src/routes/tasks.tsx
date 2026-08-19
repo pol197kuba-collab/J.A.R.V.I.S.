@@ -13,7 +13,7 @@ import {
   type Task,
   type TaskStatus,
 } from "@/lib/tasks/tasks.functions";
-import { listProjects, createProject } from "@/lib/projects/projects.functions";
+import { listProjects, createProject, deleteProject } from "@/lib/projects/projects.functions";
 import { runAgent } from "@/lib/agents/runtime.functions";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { Input } from "@/components/ui/input";
@@ -308,6 +308,7 @@ function TasksPage() {
   const fetchProjects = useServerFn(listProjects);
   const create = useServerFn(createTask);
   const createProj = useServerFn(createProject);
+  const removeProject = useServerFn(deleteProject);
   const update = useServerFn(updateTask);
   const remove = useServerFn(deleteTask);
   const runAgentFn = useServerFn(runAgent);
@@ -384,6 +385,16 @@ function TasksPage() {
       setProjectFormOpen(false);
       invalidateProjects();
       toast.success("Project created");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
+  });
+
+  const deleteProjectMut = useMutation({
+    mutationFn: (id: string) => removeProject({ data: { id } }),
+    onSuccess: () => {
+      invalidate();
+      invalidateProjects();
+      toast.success("Project deleted");
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
   });
@@ -787,6 +798,26 @@ function TasksPage() {
               index={i + 2}
               title={`PROJECT // ${g.label.toUpperCase()}`}
               className="p-3"
+              rightSlot={
+                <button
+                  type="button"
+                  aria-label={`Delete project ${g.label}`}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Delete project "${g.label}"? Its ${g.tasks.length} task(s) will move to General, not be deleted.`,
+                      )
+                    ) {
+                      deleteProjectMut.mutate(g.key);
+                    }
+                  }}
+                >
+                  <Trash2
+                    className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive"
+                    strokeWidth={1.5}
+                  />
+                </button>
+              }
             >
               <div className="no-scrollbar flex max-h-80 min-h-0 flex-col gap-1.5 overflow-y-auto overflow-x-hidden">
                 {g.tasks.map((t) => (
