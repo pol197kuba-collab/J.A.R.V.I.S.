@@ -86,3 +86,26 @@ export const createProject = createServerFn({ method: "POST" })
     }
     return mapRow(row as Row);
   });
+
+const DeleteInput = z.object({ id: z.string().uuid() });
+
+export const deleteProject = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => DeleteInput.parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    // Tasks keep existing (tasks.project_id -> ON DELETE SET NULL, they fall
+    // back to "General"); dev_sessions for this project cascade-delete.
+    const { error } = await supabase
+      .from("projects")
+      .delete()
+      .eq("owner_id", userId)
+      .eq("id", data.id);
+    if (error) {
+      await logServerError(supabase, userId, "projects.delete", error, {
+        project_id: data.id,
+      } as Json);
+      throw new Error(error.message);
+    }
+    return { ok: true as const };
+  });
