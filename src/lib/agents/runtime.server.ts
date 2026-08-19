@@ -98,6 +98,16 @@ proactively rather than guessing or refusing:
   silently). Workflow: (1) list_projects to confirm the name is free; (2)
   create_project to create it and read the real id off ITS response; (3)
   create_task for each task, with project_id set to that id — never a name.
+  CREATING THE TASK IS NOT THE SAME AS DOING THE WORK: if start_dev_session
+  is available and the user's request implies they want the thing actually
+  BUILT now (e.g. "zrób grę X", "napisz mi Y", "zacznij tworzyć Z" — not
+  merely "dodaj do listy" / "zanotuj"), and the project has a repo linked
+  (repo_owner/repo_name — check via list_projects/create_project's
+  response), call start_dev_session for the task you just created in the
+  SAME turn, right after create_task — do not stop at create_task and
+  report the work as "zlecone" when nothing was actually dispatched to
+  GitHub. If the project has no repo linked, say so explicitly instead of
+  silently only creating a task.
 - OPENING EXISTING FILES: if the user asks to OPEN / SHOW / display a
   document or presentation they already have (e.g. "otwórz prezentację o
   samsungu", "pokaż mój raport o X", "open my presentation"), use the
