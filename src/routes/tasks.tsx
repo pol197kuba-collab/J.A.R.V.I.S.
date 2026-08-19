@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Bot, Trash2, Pencil, Plus, Check, X } from "lucide-react";
+import { Bot, Trash2, Pencil, Plus, Check, X, Rocket } from "lucide-react";
 
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import {
@@ -14,6 +14,8 @@ import {
   type TaskStatus,
 } from "@/lib/tasks/tasks.functions";
 import { listProjects, createProject } from "@/lib/projects/projects.functions";
+import { runAgent } from "@/lib/agents/runtime.functions";
+import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -216,6 +218,8 @@ type RowActions = {
   onAdvanceDone: (id: string) => void;
   onReopen: (id: string) => void;
   onDelete: (t: Task) => void;
+  onRun: (t: Task) => void;
+  runningId: string | null;
   projects: { id: string; name: string }[];
 };
 
@@ -270,6 +274,20 @@ function CompactTaskRow({ t, actions }: { t: Task; actions: RowActions }) {
             reopen
           </button>
         )}
+        {(t.status === "todo" || t.status === "in_progress") && (
+          <button
+            type="button"
+            aria-label="Run via J.A.R.V.I.S."
+            title="Wypuść do J.A.R.V.I.S."
+            disabled={actions.runningId === t.id}
+            onClick={() => actions.onRun(t)}
+          >
+            <Rocket
+              className="h-3 w-3 text-muted-foreground hover:text-primary disabled:opacity-40"
+              strokeWidth={1.5}
+            />
+          </button>
+        )}
         <button type="button" aria-label="Edit task" onClick={() => actions.startEdit(t)}>
           <Pencil className="h-3 w-3 text-muted-foreground hover:text-primary" strokeWidth={1.5} />
         </button>
@@ -292,6 +310,7 @@ function TasksPage() {
   const createProj = useServerFn(createProject);
   const update = useServerFn(updateTask);
   const remove = useServerFn(deleteTask);
+  const runAgentFn = useServerFn(runAgent);
   const [scope, setScope] = useState<Scope>("open");
 
   const {
@@ -427,6 +446,34 @@ function TasksPage() {
     });
   };
 
+  // ---------- run via JARVIS ----------
+  // Hands the task straight to the JARVIS orchestrator as a "do this now"
+  // instruction — it looks the task up by title (already unique enough for
+  // the model's own list_tasks lookup) and routes it to the right teammate
+  // per the existing "WYKONYWANIE ISTNIEJĄCEGO ZADANIA" prompt behavior.
+  const [runningId, setRunningId] = useState<string | null>(null);
+  const runMut = useMutation({
+    mutationFn: (t: Task) => {
+      setRunningId(t.id);
+      return runAgentFn({
+        data: {
+          agentSlug: AGENT_SLUGS.JARVIS,
+          input: `Wykonaj zadanie: "${t.title}"`,
+        },
+      });
+    },
+    onSuccess: (result) => {
+      invalidate();
+      if (result.status === "done") {
+        toast.success(result.output ? result.output.slice(0, 140) : "Zlecono J.A.R.V.I.S.-owi");
+      } else {
+        toast.error(result.error ?? "Nie udało się zlecić zadania");
+      }
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
+    onSettled: () => setRunningId(null),
+  });
+
   const rowActions: RowActions = {
     editingId,
     edit,
@@ -440,6 +487,8 @@ function TasksPage() {
     onDelete: (t) => {
       if (window.confirm(`Delete task "${t.title}"?`)) deleteMut.mutate(t.id);
     },
+    onRun: (t) => runMut.mutate(t),
+    runningId,
     projects,
   };
 
@@ -586,33 +635,9 @@ function TasksPage() {
         </HudPanel>
       )}
 
-      {/* Projects: compact cards, up to 3 per row. */}
-      {!isLoading && !error && projectGroups.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 @[680px]:grid-cols-2 @[1020px]:grid-cols-3">
-          {projectGroups.map((g, i) => (
-            <HudPanel
-              key={g.key}
-              index={i + 1}
-              title={`PROJECT // ${g.label.toUpperCase()}`}
-              className="p-3"
-            >
-              <div className="no-scrollbar flex max-h-80 min-h-0 flex-col gap-1.5 overflow-y-auto overflow-x-hidden">
-                {g.tasks.map((t) => (
-                  <CompactTaskRow key={t.id} t={t} actions={rowActions} />
-                ))}
-              </div>
-            </HudPanel>
-          ))}
-        </div>
-      )}
-
       {/* General: unchanged full-width table for tasks with no project. */}
       {!isLoading && !error && generalGroup && (
-        <HudPanel
-          index={projectGroups.length + 1}
-          title="QUEUE // GENERAL"
-          className="overflow-hidden"
-        >
+        <HudPanel index={1} title="QUEUE // GENERAL" className="overflow-hidden">
           <div className="overflow-x-auto">
             <div className="min-w-[860px] font-mono text-xs">
               <div className="grid grid-cols-[90px_40px_1fr_120px_130px_120px_60px] gap-3 border-b border-primary/30 bg-primary/5 px-4 py-2 font-display text-[10px] uppercase tracking-widest text-primary/80">
@@ -712,6 +737,20 @@ function TasksPage() {
                       </div>
                     </div>
                     <div className="flex items-center justify-end gap-2 opacity-0 transition group-hover:opacity-100">
+                      {(t.status === "todo" || t.status === "in_progress") && (
+                        <button
+                          type="button"
+                          aria-label="Run via J.A.R.V.I.S."
+                          title="Wypuść do J.A.R.V.I.S."
+                          disabled={runningId === t.id}
+                          onClick={() => runMut.mutate(t)}
+                        >
+                          <Rocket
+                            className="h-3.5 w-3.5 text-muted-foreground hover:text-primary disabled:opacity-40"
+                            strokeWidth={1.5}
+                          />
+                        </button>
+                      )}
                       <button type="button" aria-label="Edit task" onClick={() => startEdit(t)}>
                         <Pencil
                           className="h-3.5 w-3.5 text-muted-foreground hover:text-primary"
@@ -737,6 +776,26 @@ function TasksPage() {
             </div>
           </div>
         </HudPanel>
+      )}
+
+      {/* Projects: compact cards, up to 3 per row. */}
+      {!isLoading && !error && projectGroups.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 @[680px]:grid-cols-2 @[1020px]:grid-cols-3">
+          {projectGroups.map((g, i) => (
+            <HudPanel
+              key={g.key}
+              index={i + 2}
+              title={`PROJECT // ${g.label.toUpperCase()}`}
+              className="p-3"
+            >
+              <div className="no-scrollbar flex max-h-80 min-h-0 flex-col gap-1.5 overflow-y-auto overflow-x-hidden">
+                {g.tasks.map((t) => (
+                  <CompactTaskRow key={t.id} t={t} actions={rowActions} />
+                ))}
+              </div>
+            </HudPanel>
+          ))}
+        </div>
       )}
     </div>
   );
