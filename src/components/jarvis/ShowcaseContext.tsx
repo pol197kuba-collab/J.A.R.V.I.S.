@@ -29,7 +29,12 @@ import {
 } from "@/lib/showcase/sequence";
 import { estimateNarrationMs } from "@/lib/showcase/timing";
 
-export type ShowcasePhase = "idle" | "coldopen" | "building" | "step" | "outro";
+export type ShowcasePhase = "idle" | "intro" | "coldopen" | "building" | "step" | "outro";
+
+// Cinematic cold-open bumper played once before the scripted sequence.
+// Kept generous but bounded — the video runs ~8-10s; this is only a
+// safety net in case `onEnded` never fires (autoplay quirk, corrupt file).
+const INTRO_VIDEO_FALLBACK_MS = 12000;
 
 type Ctx = {
   isRunning: boolean;
@@ -40,6 +45,7 @@ type Ctx = {
   agents: AgentSummary[];
   start: () => void;
   skip: () => void;
+  completeIntro: () => void;
 };
 
 const ShowcaseCtx = createContext<Ctx>({
@@ -51,6 +57,7 @@ const ShowcaseCtx = createContext<Ctx>({
   agents: [],
   start: () => {},
   skip: () => {},
+  completeIntro: () => {},
 });
 
 export const useShowcase = () => useContext(ShowcaseCtx);
@@ -143,19 +150,13 @@ export function ShowcaseProvider({ children }: { children: ReactNode }) {
     }
   }, [clearTimers, router]);
 
-  const start = useCallback(() => {
-    if (runningRef.current || isDiagnosticRunning) return;
-    runningRef.current = true;
-    setRunning(true);
+  // Runs the existing coldopen -> steps -> outro timeline. Split out of
+  // start() so the cinematic intro video can play first without touching
+  // any of this sequence's own timing math.
+  const beginSequence = useCallback(() => {
+    if (!runningRef.current) return;
     setPhase("coldopen");
     setStepIndex(-1);
-
-    // Real agent roster for the Agent Hub flourish — best-effort, the demo
-    // still runs (with a generic placeholder set) if this fails or the
-    // account has none registered yet.
-    fetchAgents()
-      .then(setAgents)
-      .catch(() => setAgents([]));
 
     playShowcaseChime();
     speak(SHOWCASE_COLD_OPEN.narration);
@@ -207,7 +208,33 @@ export function ShowcaseProvider({ children }: { children: ReactNode }) {
         setStepIndex(-1);
       }, t),
     );
-  }, [fetchAgents, isDiagnosticRunning, router, triggerAgentMatrixDemo]);
+  }, [router, triggerAgentMatrixDemo]);
+
+  // Ends the intro-video phase (on the video's `onEnded`, or the fallback
+  // timer below) and hands off into the scripted sequence.
+  const completeIntro = useCallback(() => {
+    if (!runningRef.current) return;
+    clearTimers();
+    beginSequence();
+  }, [clearTimers, beginSequence]);
+
+  const start = useCallback(() => {
+    if (runningRef.current || isDiagnosticRunning) return;
+    runningRef.current = true;
+    setRunning(true);
+    setPhase("intro");
+    setStepIndex(-1);
+
+    // Real agent roster for the Agent Hub flourish — best-effort, the demo
+    // still runs (with a generic placeholder set) if this fails or the
+    // account has none registered yet.
+    fetchAgents()
+      .then(setAgents)
+      .catch(() => setAgents([]));
+
+    // Safety net in case the intro video's `onEnded` never fires.
+    timersRef.current.push(setTimeout(completeIntro, INTRO_VIDEO_FALLBACK_MS));
+  }, [completeIntro, fetchAgents, isDiagnosticRunning]);
 
   // Voice/text bridge — VoiceCommandProvider is mounted above this provider
   // and dispatches this event for the demo_showcase action, same pattern
@@ -244,6 +271,7 @@ export function ShowcaseProvider({ children }: { children: ReactNode }) {
         agents,
         start,
         skip,
+        completeIntro,
       }}
     >
       {children}
