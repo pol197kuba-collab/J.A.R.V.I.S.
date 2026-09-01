@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { useShowcase } from "./ShowcaseContext";
 import { ArcReactorTriangle } from "./ArcReactorTriangle";
@@ -8,7 +8,8 @@ import type { AgentSummary } from "@/lib/agents/runtime.functions";
 const FALLBACK_AGENTS = ["Orchestrator", "Analityk", "Strateg", "Strażnik", "Skryba"];
 
 export function ShowcaseOverlay() {
-  const { isRunning, phase, current, stepIndex, stepCount, agents, skip } = useShowcase();
+  const { isRunning, phase, current, stepIndex, stepCount, agents, skip, completeIntro } =
+    useShowcase();
   const [flashKey, setFlashKey] = useState(0);
 
   useEffect(() => {
@@ -30,6 +31,8 @@ export function ShowcaseOverlay() {
         <X className="h-3 w-3" strokeWidth={2} />
         Skip <span className="opacity-60">// Esc</span>
       </button>
+
+      {phase === "intro" && <IntroVideo onEnded={completeIntro} />}
 
       {(phase === "coldopen" || phase === "outro") && (
         <BookendScreen
@@ -71,6 +74,38 @@ export function ShowcaseOverlay() {
           {current.flourish === "agent-orbit" && <AgentOrbit agents={agents} />}
         </>
       )}
+    </div>
+  );
+}
+
+/** Cinematic cold-open bumper. `object-cover` + black backdrop means any
+ *  window/screen aspect ratio just crops the sides — the video's own
+ *  background is pure black, so the crop is invisible. Attempts unmuted
+ *  playback first (start() only ever fires from a real user gesture —
+ *  button click or voice command) and falls back to muted if the browser's
+ *  autoplay policy blocks it. */
+function IntroVideo({ onEnded }: { onEnded: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.play().catch(() => {
+      video.muted = true;
+      video.play().catch(() => onEnded());
+    });
+  }, [onEnded]);
+
+  return (
+    <div className="absolute inset-0 bg-black">
+      <video
+        ref={videoRef}
+        src="/intro.mp4"
+        className="h-full w-full object-cover"
+        playsInline
+        onEnded={onEnded}
+        onError={onEnded}
+      />
     </div>
   );
 }
