@@ -22,6 +22,11 @@
 > dependency on this arc either way. Section numbers themselves are left
 > unchanged (already referenced in pushed commit messages) — only the
 > build order is reprioritized here, not the file's physical layout.
+>
+> **Priority reset (2026-09-14):** items 1-15 have all shipped. The live
+> queue is now items **16 → 17 → 18 → 19** ("four usefulness pillars"),
+> defined near the bottom of this file; items 8-10 are superseded by or
+> folded into item 19. Start there, not at the top.
 
 ## 1. [UI] Dashboard redesign — holo-panels with depth — **shipped 2026-07-16, confirmed working**
 
@@ -1271,19 +1276,19 @@ tsc/eslint/build gate run once dependencies install cleanly**.
 the deployed map after this fix — closes out the whole flight-radar arc
 that started at item 7's second follow-up.
 
-## 8. [F] Concierge agent (calendar / email) — new agent proposal
+## 8. [F] Concierge agent (calendar / email) — new agent proposal — **superseded by item 19 (2026-09-14)**
 
 Cheap to add: prompt-only persona like Marketer, no new architecture,
 bound to the calendar/email OAuth tools below once they exist. Natural
 pairing rather than a standalone "tools" item with no agent to use them.
 
-## 9. [F] Calendar / email tools
+## 9. [F] Calendar / email tools — **superseded by item 19 (2026-09-14): OAuth replaced by secret ICS + local IMAP**
 
 OAuth-backed tools via the existing tool-registry pattern
 (`public.tools` + per-agent binding) — same shape as `web_search`/
 `fetch_url`, no new architecture. Ships together with Concierge (#8).
 
-## 10. [F] Cleanup backlog (low priority, batch together)
+## 10. [F] Cleanup backlog (low priority, batch together) — **folded into item 19**
 
 - `user_settings.default_model` is dead — nothing reads it (`agents.model`
   always wins). Wire it up as a real fallback once multi-provider routing
@@ -1703,6 +1708,127 @@ docx/pptx already handle JPEG. Persona + tool-schema migration
 **Needs migration SQL + live check**: "zrób prezentację o samsungu s26"
 now embeds real photos (via Openverse) instead of failing on the AI model;
 `/documents` "grafiki w toku" → real images appear.
+
+## Priority reset 2026-09-14 — four usefulness pillars (items 16-19)
+
+Everything above this line shipped. Items 16-19 come from a direct question
+from the user — _"what do we add or change so JARVIS becomes genuinely
+useful day to day, or at least as a hobby tool?"_ — and they take priority
+over the still-open items 8/9/10, which are folded into them (see 19).
+
+Two constraints settled with the user up front, binding on all four:
+
+- **No work data.** Company exports, client documents and work mail must
+  not reach Supabase or Gemini/Groq. Anything touching them goes through
+  `local-worker`, on the user's own machine, or doesn't get built.
+- **Ecosystem: Gmail + Google Calendar + Excel**, personal accounts.
+
+Order (alternating [F]/[W], as the cadence principle requires):
+**16 → 17 → 18 → 19**. Build 16 in slices — the whole point of putting it
+first is getting one proactive loop running end to end before scaling it.
+
+## 16. [F] Proactive layer — slice 1: due-date reminders
+
+The gap, audited 2026-09-14 (full writeup in `CODEX.md` → Proactivity):
+nothing in this system runs unless a browser tab is open. `tasks.due_at`
+is written and displayed but fires nothing, and every existing background
+path (`runDocumentJobFn`) is fire-and-forgotten *by the client*.
+
+**Slice 1 deliberately uses no LLM and no HTTP.** A `pg_cron` job calls a
+plpgsql function that inserts rows into the existing `public.notifications`
+table; `NotificationBell.tsx` already renders any `kind` over Realtime.
+That means the first proactive feature adds **zero** model cost, zero new
+services, and no new failure mode beyond "cron didn't run" — and it proves
+the delivery path before anything expensive rides on it.
+
+- [x] `public.task_reminders` — one row per (task, stage), UNIQUE, so a
+      reminder is emitted exactly once even though the cron runs every 5
+      minutes. Separate table rather than columns on `tasks`, so deleting a
+      notification never resurrects a reminder and `tasks` keeps its shape.
+- [x] `public.dispatch_due_task_reminders()` — SECURITY DEFINER, scans all
+      users' open tasks, emits three stages: `due_24h`, `due_1h`,
+      `overdue`.
+- [x] pg_cron schedule, every 5 minutes.
+- [x] `user_settings.timezone` (default `Europe/Warsaw`) + times rendered
+      with `AT TIME ZONE`. **Found by running the function against a real
+      Postgres 16, not by review**: bodies were rendered in the database's
+      timezone, so a task due 09:33 Polish time announced itself as
+      "Zaplanowane na 07:33" — wrong by two hours, on the single piece of
+      information the feature exists to deliver. A named zone, not a fixed
+      offset, so DST is Postgres's problem. Every later slice needs this
+      column anyway (a briefing "at 7:30" is meaningless without whose).
+- [x] `NotificationBell` stops playing the success chime for reminder
+      kinds (a deadline is not an achievement) — tone mapping extracted to
+      `src/lib/notifications/notificationKinds.ts` with unit tests, plus an
+      "Otwórz zadania" link on reminder rows.
+- [x] Verified against a throwaway Postgres 16 cluster with a fixture
+      schema: dedupe across re-runs, stage supersession, the 7-day floor,
+      closed/undated tasks ignored, per-owner `system_events`, and the full
+      24h → 1h → overdue lifecycle emitting exactly three notifications.
+- [ ] **Live verification** — needs the migration pasted into Supabase and
+      `pg_cron` enabled in the project's extensions.
+
+Later slices, explicitly NOT part of this one: morning briefing (7:30,
+tasks + weather + GitHub + one memory), weekly S.H.I.E.L.D. self-check.
+Both need a real LLM call from the database side (pg_net → an app endpoint
+with a shared secret), which is a strictly bigger step — including a
+per-day call budget in `user_settings`, since proactive runs spend Gemini
+quota with nobody watching.
+
+## 17. [W] Telegram bridge
+
+Delivery channel off the HUD plus a second input surface: JARVIS stops
+requiring that the cinematic UI be open to be useful. Bot token via the
+established BYOK pattern (`user_secrets`, same as Groq/GitHub/Google CSE).
+Outbound: `notifications` → phone. Inbound: webhook → the existing runtime.
+
+**Nothing exists yet** — no bot, no token. Creating it via @BotFather is
+part of this item, not a prerequisite the user already has.
+
+## 18. [F] Datasets — CSV/XLSX → real tables → SQL
+
+The analyst pillar, and the reason `ALLOWED_EXTENSIONS` (`.txt`, `.md`,
+`.markdown`, `.pdf`) is currently a wall: there is no way to get a
+spreadsheet into this system at all.
+
+**Do not route this through the RAG pipeline.** Chunking and embedding a
+table of numbers yields invented answers — the model recalls rows instead
+of computing over them, so "sum of Q3 sales" comes back as a plausible
+hallucination. Upload parses (SheetJS) into real tables in a `datasets`
+schema; a new `query_dataset` tool lets M.E.T.R.I.C. write SQL executed by
+a **read-only** role scoped to that schema, with `statement_timeout` and a
+`LIMIT`. Deterministic, auditable, and citable. Results render through
+`ui/chart.tsx` (Recharts, already present) and feed F.O.R.G.E. for a deck.
+
+Pairs with a small, obvious gap: `generate_document` builds pptx/docx/pdf
+but **not xlsx** — one more builder in `producer.server.ts`. The user works
+in VBA, so an xlsx with named ranges is directly consumable by their own
+macros.
+
+## 19. [W] Concierge — calendar + mail (supersedes items 8 and 9)
+
+Items 8/9 assumed Google OAuth. For a single private account that is the
+worst available option and the plan changes here: test-mode refresh tokens
+expire after **7 days** (the integration breaks weekly), and Gmail's scopes
+are "restricted", i.e. a verification audit for a hobby project.
+
+Cheaper routes, same value:
+
+- **Calendar: the private secret ICS URL.** A plain server-side fetch plus
+  an ICS parser, no OAuth at all. Read-only, which is most of the value
+  ("what's on today", "when am I free"); creating events would still need
+  OAuth and is out of scope for the first pass.
+- **Mail: IMAP inside `local-worker`.** App password, ~30 lines of
+  `imaplib`. Message bodies never leave the user's machine — the worker
+  returns only what the tool asked for. This is also the answer to the
+  no-work-data constraint: the private path already exists and today has
+  only two actions (`list_dir`, `read_text_file`); extending it is the same
+  amount of work as a cloud integration with a far better privacy profile.
+
+Item 10 (cleanup backlog) folds in here as the tail of this run, plus two
+new entries: `droid` missing from `AGENT_SLUGS`, and splitting this file's
+shipped items into a `CHANGELOG.md` (it is past 100 KB and is now an
+archive, not a queue).
 
 ## Long-shot / not scheduled
 

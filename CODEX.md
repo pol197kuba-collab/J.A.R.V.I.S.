@@ -56,7 +56,46 @@ real next step for **our** architecture:
   wake-word-per-utterance design.
 - Web dashboard — the HUD itself; already ~30 components deep.
 
-### Natural next steps (fit our stack directly)
+### Roadmap decision 2026-09-14 — four usefulness pillars
+
+Re-scoped after a direct question from the user: _"what do we add or change
+so JARVIS becomes genuinely useful in daily work, or at least as a hobby
+tool?"_ The audit behind this answer is recorded under
+[Proactivity](#proactivity-none-until-2026-09-14) below. Two user
+decisions constrain everything that follows and must not be quietly
+re-litigated in a later session:
+
+- **No work data, ever.** Company exports, client documents and work email
+  must not reach Supabase or Gemini/Groq. Anything touching that class of
+  data goes through `local-worker` (the user's own machine) or doesn't get
+  built. Target use is private/hobby.
+- **Ecosystem is Gmail + Google Calendar + Excel** (personal accounts).
+
+Ordered, alternating Fundament/Wow per the cadence principle:
+
+1. **[F] Proactive layer** — `scheduled_jobs` + pg_cron, so JARVIS acts
+   without the user opening the HUD. Being built incrementally, smallest
+   slice first: due-date reminders (TODO.md item 16), then a morning
+   briefing, then a weekly S.H.I.E.L.D. self-check.
+2. **[W] Telegram** — delivery channel off the HUD, plus a second input
+   surface. Nothing exists yet (no bot, no token) — setup is part of the
+   work, not a prerequisite the user already has.
+3. **[F] Datasets (CSV/XLSX → SQL)** — the analyst pillar. Deliberately
+   **not** routed through the existing RAG pipeline: chunking + embedding a
+   table of numbers produces invented answers, because the model recalls
+   rows instead of computing over them. Spreadsheets become real tables
+   queried by a read-only role, not vectors.
+4. **[W] Concierge (Calendar + Mail)** — supersedes TODO items 8/9's OAuth
+   assumption. For a single private account, full Google OAuth is the worst
+   available option: test-mode refresh tokens expire after 7 days, and
+   Gmail's scopes are "restricted" (verification audit). Cheaper paths with
+   the same value: **calendar via the private secret ICS URL** (plain
+   server-side fetch, no OAuth at all — read-only, which covers most of the
+   value) and **mail via IMAP inside `local-worker`** (app password, ~30
+   lines of `imaplib`, and message bodies never leave the user's machine —
+   which is also what satisfies the no-work-data constraint above).
+
+### Natural next steps (2026-07-16 benchmark — historical, superseded by the pillars above)
 
 1. **Multi-provider AI routing — increment 1 shipped, see Milestone 7.**
    Gemini is still the primary reasoning engine for every agent's main
@@ -121,7 +160,7 @@ Concretely, this means:
 
 # Current State (Living)
 
-> Last audited: 2026-07-16. This section reflects the **actual live state**
+> Last audited: 2026-09-14. This section reflects the **actual live state**
 > (git repo + Supabase data export), not the original plan. Update it after
 > every phase or major architectural change — do not let it go stale again.
 
@@ -168,17 +207,58 @@ Concretely, this means:
   it straight into Supabase — don't assume merging the PR was the last
   step.
 
-## Agent registry (live, as of 2026-07-22, post-Producer)
+## Agent registry (as of 2026-09-14, from migrations)
 
-| slug                  | status  | model            | tools bound                                                                                                                               | notes                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| --------------------- | ------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `orchestrator`        | enabled | gemini-2.5-flash | 11 tools (web_search, fetch_url, save_note, list_notes, delete_note, remember, recall, create_task, list_tasks, update_task, delete_task) | Default agent, auto-seeded per user via `handle_new_user()`. `config.system_prompt` empty — uses code-level `DEFAULT_SYSTEM_PROMPT` as-is.                                                                                                                                                                                                                                                                             |
-| `marketer`            | enabled | gemini-2.5-flash | web_search                                                                                                                                | Created via app UI (not a migration). Fixed 2026-07-10: `config.system_prompt` now contains **only** the Marketer specialization, no identity/language text — that comes exclusively from `persona.ts`. This is the pattern to follow for every future agent.                                                                                                                                                          |
-| `guardian` (Strażnik) | enabled | gemini-2.5-flash | 3 tools (guardian_scan_errors, guardian_run_stats, guardian_check_delegation)                                                             | Added 2026-07-16 via migration (`20260716150000_guardian_agent.sql`) for every existing + future user — the "seed through a migration, not the UI" lesson from `marketer` applied. Read-only system-health monitoring + active smoke-tests over `event_log`/`agent_runs`. Explicitly **no** code/filesystem access and **no** UI/voice test automation — see TODO.md for why that's out of scope for any in-app agent. |
-| `analityk`            | enabled | gemini-2.5-flash | list_documents, search_documents                                                                                                          | Added 2026-07-20 via migrations (`20260720120000_documents_rag.sql` + `20260720120500_analityk_agent.sql`). RAG over the user's uploaded documents (`documents`/`document_chunks` + `match_document_chunks`). Confirmed working live 2026-07-21 — see TODO.md item 6.                                                                                                                                                  |
-| `researcher`          | enabled | gemini-2.5-flash | web_search, fetch_url, list_documents, search_documents                                                                                   | Added 2026-07-22 via migration (`20260722120000_researcher_agent.sql`) — TODO.md item 11. Deep multi-step research: several search/fetch rounds, cross-checking sources, synthesis with a source list, grounded in the user's own documents via the Analityk RAG tools. No new tools seeded — reuses 4 existing ones. Config: max_tool_iterations 10, max_output_tokens 2400, temperature 0.4.                         |
+**Identities were renamed wholesale on 2026-08-11**
+(`20260811120000_agent_identity_refactor.sql`). Every slug in the table
+below is the current one; the old names (`orchestrator`, `marketer`,
+`guardian`, `analityk`, `researcher`, `producer`) survive only in historical
+Milestone/TODO entries and in **tool** slugs (`guardian_scan_errors` etc.,
+deliberately left alone). `src/lib/constants/agentSlugs.ts` is the code-side
+source of truth for these.
 
-| `producer` | enabled | gemini-2.5-flash | generate_document | Added 2026-07-22 via migration (`20260722160000_producer_agent.sql`) — TODO.md item 12. Compiles content into downloadable files (pptx/docx/pdf — pptxgenjs/docx/pdf-lib, builders in `producer.server.ts`). First file-producing tool in the app: bytes go to the private `generated` Storage bucket, user gets a 7-day signed URL rendered as a clickable link in chat (`LinkifiedText`). PDF embeds a subsetted Unicode font for Polish diacritics. |
+| slug      | name         | role                          | seeded by                                                    | notes                                                                                                                         |
+| --------- | ------------ | ----------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `jarvis`  | J.A.R.V.I.S. | Primary Brain / Core          | `handle_new_user()`, was `orchestrator`                       | Default agent. Owns `delegate_to_agent` (forced in `FORCED_TOOLS_BY_SLUG`), `queue_document_job` and the project/dispatch tools. |
+| `shield`  | S.H.I.E.L.D. | Security & Compliance         | `20260716150000_guardian_agent.sql`, renamed                  | Read-only system health: `guardian_scan_errors`, `guardian_run_stats`, `guardian_check_delegation`. Never asked anything unless the user asks — see Proactivity below. |
+| `metric`  | M.E.T.R.I.C. | Performance Insights          | `20260720120500_analityk_agent.sql`, renamed                  | RAG over uploaded documents; reach expanded 2026-08-17 (`20260817120000_metric_analysis_expansion.sql`) to F.O.R.G.E. files, full-doc reads, notes/tasks. Natural owner of the Datasets pillar. |
+| `insight` | I.N.S.I.G.H.T. | Deep Research               | `20260722120000_researcher_agent.sql`, renamed                | Multi-step web research grounded in the user's own documents.                                                                  |
+| `forge`   | F.O.R.G.E.   | Content Creation / Execution  | `20260722160000_producer_agent.sql`, renamed                  | File production (pptx/docx/pdf). `generate_document` is forced in `FORCED_TOOLS_BY_SLUG`. **No xlsx builder yet** — the obvious gap for an analyst, queued with the Datasets pillar. |
+| `herald`  | H.E.R.A.L.D. | Strategy & Content            | originally created via the app UI as `marketer`, renamed      | Prompt-only specialist, `web_search`.                                                                                          |
+| `droid`   | D.R.O.I.D.   | Software Delivery             | `20260817220000_droid_agent.sql`                              | Dispatches real coding work to Claude Code via a GitHub issue (`start_dev_session`) and tracks the PR (`check_dev_session`). Never merges — auto-merge is always off. |
+
+**Tools: 27 declared in `tools.server.ts`** — web/fetch, notes, tasks,
+memory, documents/RAG, generated files, document jobs, local-worker
+(`run_local_action`), projects and dev sessions.
+
+## Proactivity: none until 2026-09-14
+
+Audited 2026-09-14 while scoping the pillars above; write it down because
+it is invisible from any single file:
+
+- `grep -riE "cron|pg_cron|schedule|reminder|recurring"` over
+  `supabase/migrations` + `src/lib` returns **nothing**. There is no
+  scheduler of any kind.
+- `tasks.due_at` is written (`tools.server.ts`), read for display
+  (`dashboard.functions.ts`) and **triggers nothing**.
+- Every "background" path in the app is still **client-triggered**:
+  `runDocumentJobFn` is fire-and-forgotten *by the browser*
+  (`useAgentChatChannel.ts`). Close the tab and nothing in this system
+  runs. This is the single most important architectural fact for anyone
+  planning proactive features — a TanStack server function is not a
+  background worker, it only exists while a request does.
+- `public.notifications` (Realtime-enabled, `kind` deliberately open-ended:
+  _"future kinds (local jobs, tasks...)"_) plus `NotificationBell.tsx`
+  already form a complete, generic delivery path that only document jobs
+  ever used. Reuse it; do not build a second one.
+
+The first proactive slice (TODO.md item 16) therefore runs **entirely in
+Postgres** — pg_cron calling a plpgsql function that inserts notification
+rows — with no HTTP call, no model call and no new service. Later slices
+(briefing, weekly check) need an LLM and will have to reach the app over
+pg_net; that is a strictly bigger step and is intentionally not taken
+first.
+
 `delegate_to_agent` tool-calling exists in `runtime.server.ts` and was
 **verified end-to-end 2026-07-10** (orchestrator run `eb968ad8` →
 `delegate_to_agent(slug: "marketer", ...)` → marketer run `115fb1fc`
@@ -198,6 +278,20 @@ instead of by a documentation audit next time.
 - Commit history on the connected branch is mostly generic ("Changes") from
   Lovable auto-sync. Not urgent, but write clearer commit messages going
   forward for anything done directly in github.dev.
+- **`droid` is missing from `AGENT_SLUGS`** (`src/lib/constants/agentSlugs.ts`)
+  even though the agent has existed live since `20260817220000_droid_agent.sql`.
+  The constant exists precisely to stop slug typos spreading through the
+  codebase, so a live agent absent from it defeats its purpose. Nothing
+  currently compares against a `"droid"` literal, so this is latent, not
+  broken — fix it the next time D.R.O.I.D. is touched.
+- **This file and `TODO.md` had gone a full identity behind** (they still
+  described `orchestrator`/`marketer`/`guardian`/`analityk`/`producer` a
+  month after the 2026-08-11 rename), which matters more here than in a
+  normal repo: these two files _are_ the context every AI session starts
+  from, so stale docs mean every agent begins with a wrong model of the
+  system. Fixed 2026-09-14. `TODO.md` is also past 100 KB and has become an
+  archive rather than a queue — splitting shipped items into a
+  `CHANGELOG.md` is queued in the cleanup backlog.
 
 ## Milestone log
 

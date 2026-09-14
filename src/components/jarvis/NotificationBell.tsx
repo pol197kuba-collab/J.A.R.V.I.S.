@@ -1,10 +1,14 @@
-// Visible half of the background-job notification system. A background
-// document job (documentJobs.functions.ts) inserts a row into
-// public.notifications on completion — success OR failure, never silent —
-// and this component picks it up over Supabase Realtime the instant it
-// lands, regardless of what screen the user is on.
+// Visible half of the notification system. Two producers write to
+// public.notifications today: a background document job
+// (documentJobs.functions.ts), and the proactive layer's due-date scan
+// (dispatch_due_task_reminders(), run by pg_cron —
+// 20260914120000_task_due_reminders.sql). This component picks either up
+// over Supabase Realtime the instant it lands, regardless of what screen
+// the user is on; how a given `kind` should look and sound lives in
+// notificationKinds.ts, not here.
 import { useEffect, useRef, useState, type TouchEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Bell, X } from "lucide-react";
 import { toast } from "sonner";
@@ -21,6 +25,11 @@ import {
   deleteNotification,
   type AppNotification,
 } from "@/lib/notifications/notifications.functions";
+import {
+  isTaskReminder,
+  notificationTone,
+  notificationToneColor,
+} from "@/lib/notifications/notificationKinds";
 
 // How far (px) a swipe-left has to travel before release counts as "delete"
 // rather than snapping back — short enough to feel responsive on a phone,
@@ -58,10 +67,19 @@ export function NotificationBell() {
         (payload) => {
           const row = payload.new as { kind: string; title: string; body: string | null };
           qc.invalidateQueries({ queryKey: ["notifications", "list"] });
-          const failed = row.kind === "document_failed";
           toast(row.title, { description: row.body ?? undefined });
-          if (failed) audio.playAccessDenied();
-          else audio.playAccessGranted();
+          // A missed deadline must not sound like an achievement — see
+          // notificationKinds.ts.
+          switch (notificationTone(row.kind)) {
+            case "danger":
+              audio.playAccessDenied();
+              break;
+            case "warning":
+              audio.playBeep();
+              break;
+            default:
+              audio.playAccessGranted();
+          }
         },
       )
       .subscribe();
@@ -140,7 +158,6 @@ function NotificationRow({
   notification: AppNotification;
   onDelete: () => void;
 }) {
-  const failed = notification.kind === "document_failed";
   const payload =
     notification.payload &&
     typeof notification.payload === "object" &&
@@ -148,6 +165,7 @@ function NotificationRow({
       ? (notification.payload as Record<string, unknown>)
       : undefined;
   const downloadUrl = typeof payload?.download_url === "string" ? payload.download_url : undefined;
+  const linksToTasks = isTaskReminder(notification.kind) && typeof payload?.task_id === "string";
 
   // Swipe-left-to-delete (mobile): tracks the raw touch delta rather than
   // reading e.target — a dropdown-menu content area can intercept touch
@@ -214,7 +232,7 @@ function NotificationRow({
         <div className="flex items-center justify-between gap-2">
           <p
             className="min-w-0 flex-1 truncate font-display text-[11px] uppercase tracking-wide"
-            style={{ color: failed ? "var(--destructive)" : "var(--success)" }}
+            style={{ color: notificationToneColor(notification.kind) }}
           >
             {notification.title}
           </p>
@@ -237,6 +255,14 @@ function NotificationRow({
           <p className="mt-1 min-w-0 break-words text-[11px] leading-snug text-white/70">
             {notification.body}
           </p>
+        )}
+        {linksToTasks && (
+          <Link
+            to="/tasks"
+            className="mt-1 inline-block font-mono text-[10px] uppercase tracking-wide text-primary underline underline-offset-2"
+          >
+            Otwórz zadania
+          </Link>
         )}
         {downloadUrl && (
           <a
