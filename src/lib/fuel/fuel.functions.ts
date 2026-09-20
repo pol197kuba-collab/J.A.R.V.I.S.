@@ -26,7 +26,7 @@ import type { Impact } from "./news";
 // Tylko typ — import jest wymazywany, więc ten plik nie wciąga
 // ingest.server.ts do bundla klienta.
 import type { Db } from "./ingest.server";
-import { fetchAllPages } from "./paginate";
+import { fetchAllPages } from "@/lib/db/paginate";
 
 // ------------------------------------------------------------- typy ----
 

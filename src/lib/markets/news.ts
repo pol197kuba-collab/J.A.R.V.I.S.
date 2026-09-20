@@ -10,39 +10,35 @@
 // ten sam nagłówek bywa bullish dla złota i bearish dla akcji, więc kierunek
 // jest zawsze WZGLĘDEM KONKRETNEGO INSTRUMENTU, nigdy globalny.
 import { MARKET_ASSETS, type MarketAsset } from "./assets";
-import { googleNewsFeed, type FeedSource } from "@/lib/rss/parse";
+import type { FeedSource } from "@/lib/rss/parse";
 
+// ŹRÓDŁA WYDAWCÓW, NIE GOOGLE NEWS — i to jest istota tej listy.
+//
+// Pierwsza wersja odpytywała Google News (news.google.com/rss/search).
+// Na produkcji WSZYSTKIE sześć kanałów zwracało HTTP 503 przy każdym
+// zaciągu: Google odrzuca ruch z adresów IP centrów danych, a aplikacja
+// stoi właśnie na takim. Z laptopa te same adresy działają, więc usterka
+// była niewidoczna aż do pierwszego uruchomienia na żywo.
+//
+// Każdy kanał poniżej został sprawdzony realnym żądaniem z serwerowni i
+// zwrócił pozycje. Dobór pilnuje pokrycia klas aktywów z katalogu: makro i
+// akcje, krypto (dwa źródła, bo to najbardziej ruchliwa klasa), surowce i
+// energia, oraz polski rynek — GPW i waluty, których anglojęzyczne serwisy
+// nie opisują.
 export const MARKET_FEEDS: readonly FeedSource[] = [
-  {
-    tag: "macro",
-    label: "Makro",
-    url: googleNewsFeed("stock market Fed interest rates inflation outlook", "en"),
-  },
-  {
-    tag: "crypto",
-    label: "Krypto",
-    url: googleNewsFeed("bitcoin OR ethereum crypto market price", "en"),
-  },
-  {
-    tag: "gpw",
-    label: "GPW",
-    url: googleNewsFeed("GPW WIG20 giełda akcje wyniki spółek", "pl"),
-  },
+  { tag: "macro", label: "Makro", url: "https://www.investing.com/rss/news_1.rss" },
+  { tag: "equities", label: "Spółki", url: "https://www.investing.com/rss/news_285.rss" },
+  { tag: "crypto", label: "Krypto", url: "https://www.investing.com/rss/news_301.rss" },
+  { tag: "crypto-alt", label: "Krypto (Cointelegraph)", url: "https://cointelegraph.com/rss" },
   {
     tag: "commodities",
     label: "Surowce",
-    url: googleNewsFeed("gold silver oil natural gas prices commodities", "en"),
+    url: "https://www.investing.com/rss/commodities.rss",
   },
-  {
-    tag: "equities",
-    label: "Spółki",
-    url: googleNewsFeed("earnings guidance Nvidia OR Apple OR Microsoft stock", "en"),
-  },
-  {
-    tag: "pl-macro",
-    label: "Polska makro",
-    url: googleNewsFeed("NBP stopy procentowe inflacja kurs złotego", "pl"),
-  },
+  // Ten sam kanał, z którego korzysta moduł paliwowy — ropa i gaz.
+  { tag: "energy", label: "Energia", url: "https://oilprice.com/rss/main" },
+  { tag: "gpw", label: "GPW", url: "https://www.bankier.pl/rss/gielda.xml" },
+  { tag: "pl-fx", label: "Waluty", url: "https://www.bankier.pl/rss/waluty.xml" },
 ] as const;
 
 export type MarketImpact = "bullish" | "bearish" | "neutral";

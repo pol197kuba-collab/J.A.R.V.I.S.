@@ -27,7 +27,7 @@ import {
   type SeriesPoint,
 } from "./market";
 import { FEEDS, dedupeNews, parseRss, type NewsItem } from "./news";
-import { fetchAllPages } from "./paginate";
+import { fetchAllPages } from "@/lib/db/paginate";
 import { classifyNewsImpact } from "./news.server";
 
 export type Db = SupabaseClient<Database>;

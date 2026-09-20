@@ -681,8 +681,10 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
   // different model than the one configured would be the worse failure.
   const parsedModel = parseModelRef(modelRef);
   const missingAnthropicKey = parsedModel.provider === "anthropic" && !anthropicApiKey;
-  const modelProvider = missingAnthropicKey ? "gemini" : parsedModel.provider;
-  const model = missingAnthropicKey ? DEFAULT_GEMINI_MODEL : parsedModel.modelId;
+  // Oba są zmienne, bo tura potrafi zjechać z Claude na Gemini w trakcie
+  // runu — patrz obsługa błędu w pętli narzędziowej niżej.
+  let modelProvider = missingAnthropicKey ? "gemini" : parsedModel.provider;
+  let model = missingAnthropicKey ? DEFAULT_GEMINI_MODEL : parsedModel.modelId;
 
   const clampNum = (v: unknown, min: number, max: number, fallback: number) =>
     typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
@@ -1075,6 +1077,32 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         // way (see providers/groq.ts), so subsequent iterations still try
         // Gemini first — this is a per-turn retry, not a permanent switch.
         const geminiMsg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
+
+        // Claude padł → powtórz TĘ SAMĄ turę na Gemini, zanim w ogóle
+        // rozważymy Groq.
+        //
+        // Powód jest konkretny: klucz Anthropic bez środków na koncie
+        // odpowiada błędem przy każdym wywołaniu. Bez tej ścieżki agent
+        // ustawiony na Claude przewracał cały run — mimo że klucz Gemini
+        // jest w tej aplikacji obowiązkowy i działa. Degradacja jakości
+        // modelu jest nieporównanie lepsza niż martwy agent, a ostrzeżenie
+        // w System Logs mówi wprost, co się stało.
+        if (modelProvider === "anthropic") {
+          await logEvent(
+            "warn",
+            AGENT_SLUGS.JARVIS,
+            `Claude (${model}) nie odpowiedział — ta tura i reszta runu idą na ${DEFAULT_GEMINI_MODEL}: ${geminiMsg}`,
+            { run_id: runId, iter, configured_model: modelRef } as Json,
+          );
+          modelProvider = "gemini";
+          model = DEFAULT_GEMINI_MODEL;
+          // Powtórka tego samego kroku pętli: `iter` wróci do bieżącej
+          // wartości po inkrementacji. Nie zapętli się, bo provider jest
+          // już przestawiony.
+          iter -= 1;
+          continue;
+        }
+
         if (!groqApiKey) throw geminiErr;
         await logEvent(
           "warn",

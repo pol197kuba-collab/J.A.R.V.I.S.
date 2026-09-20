@@ -1,5 +1,10 @@
 // Odczyt serii dłuższych niż limit wierszy PostgREST.
 //
+// Wspólny dla modułów, które czytają długie serie z Supabase (paliwa,
+// rynki). Wydzielony z src/lib/fuel/, gdzie powstał po realnej awarii
+// opisanej niżej — moduł rynkowy powielał dokładnie ten sam błąd, więc
+// druga kopia helpera byłaby drugą okazją do jego powtórzenia.
+//
 // Supabase domyślnie zwraca maksymalnie 1000 wierszy na zapytanie
 // (Settings → API → Max rows) i robi to CICHO: nadmiar znika, `error`
 // zostaje `null`. Dla tego modułu to trafia w samo sedno — rok historii

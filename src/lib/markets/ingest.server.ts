@@ -23,6 +23,7 @@ import {
   type SignalDriver,
 } from "./signals";
 import { percentChange, resolveOutcome, type PredictionDirection } from "./scoreboard";
+import { fetchAllPages } from "@/lib/db/paginate";
 
 /** Klient Supabase — sesja użytkownika albo service_role, zależnie od tego, kto woła. */
 export type Db = SupabaseClient<Database>;
@@ -269,13 +270,27 @@ export async function buildOutlook(
   // Świeżość zapewnia ingestQuotes — na stronie woła je getMarketGrid,
   // w nocnym jobie osobny krok przed tym.
   const since = new Date(Date.now() - 200 * 86_400_000).toISOString().slice(0, 10);
-  const { data: quoteRows, error: quoteErr } = await supabase
-    .from("market_quotes")
-    .select("symbol, quote_date, close")
-    .in("symbol", symbols)
-    .gte("quote_date", since)
-    .order("quote_date", { ascending: true });
-  if (quoteErr) throw new Error(quoteErr.message);
+  // STRONICOWANE. Supabase oddaje maksymalnie 1000 wierszy na zapytanie i
+  // robi to CICHO — `error` zostaje null, a nadmiar znika. Dwadzieścia
+  // instrumentów razy 200 dni to ~4000 wierszy, więc bez tego sygnały
+  // liczyłyby się z najstarszego wycinka historii i wyglądałyby wiarygodnie
+  // mimo że opisują stan sprzed miesięcy. Moduł paliwowy przerobił dokładnie
+  // tę awarię (patrz src/lib/db/paginate.ts).
+  //
+  // Sortowanie MUSI być jednoznaczne: sama data powtarza się dla każdego z
+  // instrumentów, a przy niejednoznacznej kolejności strony potrafią gubić
+  // i dublować wiersze.
+  const quoteRows = await fetchAllPages<{ symbol: string; quote_date: string; close: number }>(
+    (from, to) =>
+      supabase
+        .from("market_quotes")
+        .select("symbol, quote_date, close")
+        .in("symbol", symbols)
+        .gte("quote_date", since)
+        .order("quote_date", { ascending: true })
+        .order("symbol", { ascending: true })
+        .range(from, to),
+  );
 
   const pointsBySymbol = new Map<string, PricePoint[]>();
   for (const row of quoteRows ?? []) {
@@ -368,6 +383,21 @@ export async function buildOutlook(
   await recordPredictions(supabase, userId, rows, forecast.model);
 
   await recordPredictions(supabase, userId, rows, forecast.model);
+
+  // Pusty typer wygląda w UI tak samo, niezależnie od przyczyny: braku
+  // notowań w cache'u, zbyt krótkich serii czy pustej watchlisty. Bez tego
+  // wpisu diagnoza sprowadzała się do zgadywania — stąd liczby, które
+  // rozstrzygają, gdzie urwał się łańcuch.
+  if (rows.length === 0) {
+    await logEvent(
+      supabase,
+      userId,
+      "warn",
+      `Typer nie policzył żadnego sygnału: ${assets.length} instrumentów na watchliście, ` +
+        `${quoteRows.length} wierszy notowań w cache, ${pointsBySymbol.size} instrumentów z jakimkolwiek notowaniem`,
+      { symbols } as Json,
+    );
+  }
 
   return {
     // Najmocniejsze sygnały na górze, niezależnie od kierunku.
