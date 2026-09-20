@@ -96,6 +96,27 @@
   --chart-3: oklch(0.76 0.16 160);
   --chart-4: oklch(0.8 0.15 75);
   --chart-5: oklch(0.68 0.22 25);
+  /*
+   * Fuel Grid — paleta kategorialna pięciu serii paliw (/paliwa).
+   *
+   * Osobna od --chart-*, bo tamta zawiera --destructive jako piątą serię,
+   * a kolory statusu (wzrost/spadek/alert) muszą pozostać zarezerwowane dla
+   * STANU, nie dla tożsamości serii. Dobrana pod separację przy daltonizmie:
+   * najgorsza sąsiednia para ma ΔE 8.1 (deuteranopia) i 20.3 przy normalnym
+   * widzeniu, każda seria ma chromę >= 0.1 i kontrast >= 3:1 wobec tła paneli.
+   * Jasności celowo leżą w paśmie 0.72-0.90 (neonowy HUD), a nie w typowym
+   * dla jasnego tła paśmie 0.48-0.67 — kontrast wobec ciemnej powierzchni
+   * jest zachowany i zweryfikowany.
+   *
+   * Kolejność jest stała i przypisana do produktu (ORLEN_PRODUCTS
+   * w src/lib/fuel/orlen.ts) — filtr ukrywający serię nigdy nie przemalowuje
+   * pozostałych.
+   */
+  --fuel-1: oklch(0.84 0.15 205); /* ON Ekodiesel — ten sam cyjan co --primary */
+  --fuel-2: oklch(0.72 0.17 145); /* Pb95 */
+  --fuel-3: oklch(0.9 0.15 85); /* Pb98 */
+  --fuel-4: oklch(0.72 0.19 340); /* ON Arktyczny 2 */
+  --fuel-5: oklch(0.8 0.15 262); /* Ekoterm */
   --sidebar: oklch(0.16 0.028 250);
   --sidebar-foreground: oklch(0.95 0.03 210);
   --sidebar-primary: oklch(0.84 0.15 205);

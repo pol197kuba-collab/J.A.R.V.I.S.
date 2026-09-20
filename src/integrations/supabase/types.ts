@@ -536,6 +536,87 @@ export type Database = {
         };
         Relationships: [];
       };
+      fuel_news_items: {
+        Row: {
+          classified_by: string | null;
+          feed_tag: string | null;
+          fetched_at: string;
+          guid: string;
+          id: string;
+          impact: string | null;
+          impact_score: number | null;
+          link: string;
+          published_at: string | null;
+          source: string | null;
+          summary_pl: string | null;
+          title: string;
+        };
+        Insert: {
+          classified_by?: string | null;
+          feed_tag?: string | null;
+          fetched_at?: string;
+          guid: string;
+          id?: string;
+          impact?: string | null;
+          impact_score?: number | null;
+          link: string;
+          published_at?: string | null;
+          source?: string | null;
+          summary_pl?: string | null;
+          title: string;
+        };
+        Update: {
+          classified_by?: string | null;
+          feed_tag?: string | null;
+          fetched_at?: string;
+          guid?: string;
+          id?: string;
+          impact?: string | null;
+          impact_score?: number | null;
+          link?: string;
+          published_at?: string | null;
+          source?: string | null;
+          summary_pl?: string | null;
+          title?: string;
+        };
+        Relationships: [];
+      };
+      fuel_price_alerts: {
+        Row: {
+          created_at: string;
+          id: string;
+          is_enabled: boolean;
+          kind: string;
+          last_triggered_at: string | null;
+          owner_id: string;
+          product_id: number;
+          threshold: number;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          is_enabled?: boolean;
+          kind: string;
+          last_triggered_at?: string | null;
+          owner_id: string;
+          product_id: number;
+          threshold: number;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          is_enabled?: boolean;
+          kind?: string;
+          last_triggered_at?: string | null;
+          owner_id?: string;
+          product_id?: number;
+          threshold?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       generated_files: {
         Row: {
           created_at: string;
@@ -793,6 +874,69 @@ export type Database = {
           payload?: Json;
           read?: boolean;
           title?: string;
+        };
+        Relationships: [];
+      };
+      orlen_fuel_prices: {
+        Row: {
+          created_at: string;
+          id: string;
+          is_gap_fill: boolean;
+          price_date: string;
+          price_per_m3: number;
+          product_code: string;
+          product_id: number;
+          source: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          is_gap_fill?: boolean;
+          price_date: string;
+          price_per_m3: number;
+          product_code: string;
+          product_id: number;
+          source?: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          is_gap_fill?: boolean;
+          price_date?: string;
+          price_per_m3?: number;
+          product_code?: string;
+          product_id?: number;
+          source?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      orlen_market_series: {
+        Row: {
+          created_at: string;
+          id: string;
+          series_date: string;
+          symbol: string;
+          updated_at: string;
+          value: number;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          series_date: string;
+          symbol: string;
+          updated_at?: string;
+          value: number;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          series_date?: string;
+          symbol?: string;
+          updated_at?: string;
+          value?: number;
         };
         Relationships: [];
       };

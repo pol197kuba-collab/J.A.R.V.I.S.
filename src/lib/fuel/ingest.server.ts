@@ -1,0 +1,374 @@
+// Warstwa I/O modułu paliwowego: pobranie danych ze źródeł i zapis do cache.
+//
+// Klient Supabase jest PARAMETREM, nie importem — ten sam kod obsługuje
+// server function (supabaseAdmin z Nitro) i nocny job GitHub Actions
+// (własny klient zbudowany z sekretów repo). Dzięki temu harmonogram
+// i lazy refresh nie mogą się rozjechać logiką zapisu.
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
+import {
+  ORLEN_PRODUCTS,
+  ORLEN_HISTORY_START,
+  buildOrlenUrl,
+  fillGaps,
+  parseOrlenResponse,
+  todayIso,
+  type OrlenProduct,
+  type OrlenPricePoint,
+} from "./orlen";
+import {
+  BRENT_SYMBOL,
+  USDPLN_SYMBOL,
+  YAHOO_BRENT_TICKER,
+  buildNbpUsdUrl,
+  buildYahooChartUrl,
+  parseNbpRates,
+  parseYahooChart,
+  type SeriesPoint,
+} from "./market";
+import { FEEDS, dedupeNews, parseRss, type NewsItem } from "./news";
+import { classifyNewsImpact } from "./news.server";
+
+export type Db = SupabaseClient<Database>;
+
+const FETCH_TIMEOUT_MS = 30_000;
+const UPSERT_CHUNK = 1000;
+const USER_AGENT = "JARVIS-FuelGrid/1.0";
+
+async function fetchJson(url: string): Promise<unknown> {
+  const response = await fetch(url, {
+    headers: { Accept: "application/json", "User-Agent": USER_AGENT },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) throw new Error(`${url} → HTTP ${response.status}`);
+  return response.json();
+}
+
+async function fetchText(url: string): Promise<string> {
+  const response = await fetch(url, {
+    headers: { Accept: "application/rss+xml, application/xml, text/xml", "User-Agent": USER_AGENT },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) throw new Error(`${url} → HTTP ${response.status}`);
+  return response.text();
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+function addDaysIso(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// ---------------------------------------------------------------- ceny ----
+
+export async function fetchProductPrices(
+  product: OrlenProduct,
+  from: string,
+  to: string,
+): Promise<{ points: OrlenPricePoint[]; rejected: number }> {
+  const payload = await fetchJson(buildOrlenUrl(product.id, from, to));
+  const { prices, rejected } = parseOrlenResponse(payload, product);
+  return { points: prices, rejected: rejected.length };
+}
+
+export type PriceIngestSummary = {
+  product: string;
+  fetched: number;
+  written: number;
+  rejected: number;
+  error?: string;
+};
+
+/** Najświeższa data w cache dla danego produktu (null, gdy pusto). */
+export async function latestPriceDate(db: Db, productId: number): Promise<string | null> {
+  const { data } = await db
+    .from("orlen_fuel_prices")
+    .select("price_date")
+    .eq("product_id", productId)
+    .order("price_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.price_date ?? null;
+}
+
+/**
+ * Dociąga cennik i zapisuje do cache.
+ *
+ * Tryb inkrementalny startuje 7 dni przed ostatnią zapisaną datą, a nie od
+ * niej — Orlen bywa, że koryguje wstecz opublikowaną cenę, a upsert po
+ * (product_id, price_date) i tak nadpisze tylko to, co się zmieniło.
+ *
+ * Luki (weekendy, święta) domykamy `fillGaps` DOPIERO przy zapisie do
+ * dzisiaj, żeby wykres i średnie miały ciągłą serię dzienną; te wiersze są
+ * oznaczone `is_gap_fill`.
+ */
+export async function ingestPrices(
+  db: Db,
+  opts: { full?: boolean; now?: Date } = {},
+): Promise<PriceIngestSummary[]> {
+  const to = todayIso(opts.now);
+  const summaries: PriceIngestSummary[] = [];
+
+  for (const product of ORLEN_PRODUCTS) {
+    try {
+      const last = opts.full ? null : await latestPriceDate(db, product.id);
+      const from = opts.full || !last ? ORLEN_HISTORY_START : addDaysIso(last, -7);
+
+      const { points, rejected } = await fetchProductPrices(product, from, to);
+      if (points.length === 0) {
+        summaries.push({ product: product.code, fetched: 0, written: 0, rejected });
+        continue;
+      }
+
+      const rows = fillGaps(points, to).map((p) => ({
+        product_id: p.productId,
+        product_code: p.productCode,
+        price_date: p.date,
+        price_per_m3: p.price,
+        is_gap_fill: p.isGapFill,
+        source: p.isGapFill ? "Auto-uzupełnione" : "Orlen API",
+      }));
+
+      let written = 0;
+      for (const batch of chunk(rows, UPSERT_CHUNK)) {
+        const { error } = await db
+          .from("orlen_fuel_prices")
+          .upsert(batch, { onConflict: "product_id,price_date" });
+        if (error) throw new Error(error.message);
+        written += batch.length;
+      }
+
+      summaries.push({ product: product.code, fetched: points.length, written, rejected });
+    } catch (err) {
+      summaries.push({
+        product: product.code,
+        fetched: 0,
+        written: 0,
+        rejected: 0,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return summaries;
+}
+
+// -------------------------------------------------------------- rynek ----
+
+export type MarketIngestSummary = { brent: number; usdPln: number; error?: string };
+
+export async function ingestMarket(
+  db: Db,
+  opts: { days?: number } = {},
+): Promise<MarketIngestSummary> {
+  const days = opts.days ?? 365;
+  try {
+    const range = days > 300 ? "2y" : days > 90 ? "1y" : "6mo";
+    const [brentPayload, nbpPayload] = await Promise.all([
+      fetchJson(buildYahooChartUrl(YAHOO_BRENT_TICKER, range)),
+      fetchJson(buildNbpUsdUrl(Math.min(255, days))),
+    ]);
+
+    const brent = parseYahooChart(brentPayload);
+    const usdPln = parseNbpRates(nbpPayload);
+
+    const rows = [
+      ...brent.map((p) => ({ symbol: BRENT_SYMBOL, series_date: p.date, value: p.value })),
+      ...usdPln.map((p) => ({ symbol: USDPLN_SYMBOL, series_date: p.date, value: p.value })),
+    ];
+
+    for (const batch of chunk(rows, UPSERT_CHUNK)) {
+      const { error } = await db
+        .from("orlen_market_series")
+        .upsert(batch, { onConflict: "symbol,series_date" });
+      if (error) throw new Error(error.message);
+    }
+
+    return { brent: brent.length, usdPln: usdPln.length };
+  } catch (err) {
+    return { brent: 0, usdPln: 0, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export async function readMarketSeries(
+  db: Db,
+  fromDate: string,
+): Promise<{ brent: SeriesPoint[]; usdPln: SeriesPoint[] }> {
+  const { data } = await db
+    .from("orlen_market_series")
+    .select("symbol, series_date, value")
+    .gte("series_date", fromDate)
+    .order("series_date", { ascending: true });
+
+  const brent: SeriesPoint[] = [];
+  const usdPln: SeriesPoint[] = [];
+  for (const row of data ?? []) {
+    const point = { date: row.series_date, value: Number(row.value) };
+    if (row.symbol === BRENT_SYMBOL) brent.push(point);
+    else if (row.symbol === USDPLN_SYMBOL) usdPln.push(point);
+  }
+  return { brent, usdPln };
+}
+
+// -------------------------------------------------------------- newsy ----
+
+export type NewsIngestSummary = {
+  fetched: number;
+  fresh: number;
+  classifiedBy: string;
+  error?: string;
+};
+
+/** Ile newsów oceniamy jednym wywołaniem modelu — reszta czeka na kolejny przebieg. */
+const NEWS_CLASSIFY_LIMIT = 30;
+
+export async function ingestNews(db: Db, geminiKey: string | null): Promise<NewsIngestSummary> {
+  try {
+    const settled = await Promise.allSettled(
+      FEEDS.map(async (feed) => parseRss(await fetchText(feed.url), feed)),
+    );
+    const all: NewsItem[] = [];
+    for (const result of settled) if (result.status === "fulfilled") all.push(...result.value);
+
+    // Kanał, który padł, nie może wywrócić całego odświeżenia — ale gdy
+    // padły wszystkie, to nie jest „zero newsów", tylko awaria.
+    if (all.length === 0) throw new Error("all feeds failed or returned no items");
+
+    const deduped = dedupeNews(all).slice(0, 120);
+
+    const { data: known } = await db
+      .from("fuel_news_items")
+      .select("guid")
+      .in(
+        "guid",
+        deduped.map((i) => i.guid),
+      );
+    const knownGuids = new Set((known ?? []).map((r) => r.guid));
+
+    const fresh = deduped.filter((i) => !knownGuids.has(i.guid)).slice(0, NEWS_CLASSIFY_LIMIT);
+    if (fresh.length === 0) {
+      return {
+        fetched: deduped.length,
+        fresh: 0,
+        classifiedBy: geminiKey ? "gemini" : "heuristic",
+      };
+    }
+
+    const verdicts = await classifyNewsImpact(fresh, geminiKey);
+    const rows = fresh.map((item, i) => ({
+      guid: item.guid,
+      title: item.title,
+      link: item.link,
+      source: item.source,
+      published_at: item.publishedAt,
+      feed_tag: item.feedTag,
+      impact: verdicts[i].impact,
+      impact_score: verdicts[i].score,
+      summary_pl: verdicts[i].summaryPl,
+      classified_by: verdicts[i].classifiedBy,
+    }));
+
+    const { error } = await db.from("fuel_news_items").upsert(rows, { onConflict: "guid" });
+    if (error) throw new Error(error.message);
+
+    return {
+      fetched: deduped.length,
+      fresh: rows.length,
+      classifiedBy: verdicts[0]?.classifiedBy ?? "heuristic",
+    };
+  } catch (err) {
+    return {
+      fetched: 0,
+      fresh: 0,
+      classifiedBy: "none",
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+// ------------------------------------------------------------- alerty ----
+
+export type AlertHit = {
+  ownerId: string;
+  productId: number;
+  kind: string;
+  threshold: number;
+  price: number;
+  change: number;
+  alertId: string;
+};
+
+/**
+ * Sprawdza progi wszystkich użytkowników po świeżym zaciągu i zwraca
+ * trafienia. Dni uzupełnione (`is_gap_fill`) są pomijane przy liczeniu
+ * zmiany — inaczej każdy poniedziałek raportowałby „zmiana 0" albo,
+ * gorzej, dublował piątkowy skok.
+ */
+export async function evaluateAlerts(db: Db, now: Date = new Date()): Promise<AlertHit[]> {
+  const { data: alerts } = await db
+    .from("fuel_price_alerts")
+    .select("id, owner_id, product_id, kind, threshold, last_triggered_at")
+    .eq("is_enabled", true);
+  if (!alerts || alerts.length === 0) return [];
+
+  const dayAgo = new Date(now.getTime() - 24 * 3600_000).toISOString();
+  const hits: AlertHit[] = [];
+  const priceCache = new Map<number, { price: number; change: number } | null>();
+
+  for (const alert of alerts) {
+    if (alert.last_triggered_at && alert.last_triggered_at > dayAgo) continue;
+
+    if (!priceCache.has(alert.product_id)) {
+      const { data: rows } = await db
+        .from("orlen_fuel_prices")
+        .select("price_per_m3, price_date")
+        .eq("product_id", alert.product_id)
+        .eq("is_gap_fill", false)
+        .order("price_date", { ascending: false })
+        .limit(2);
+      priceCache.set(
+        alert.product_id,
+        rows && rows.length > 0
+          ? {
+              price: Number(rows[0].price_per_m3),
+              change:
+                rows.length > 1 ? Number(rows[0].price_per_m3) - Number(rows[1].price_per_m3) : 0,
+            }
+          : null,
+      );
+    }
+
+    const snapshot = priceCache.get(alert.product_id);
+    if (!snapshot) continue;
+
+    const threshold = Number(alert.threshold);
+    const triggered =
+      alert.kind === "daily_change_abs"
+        ? Math.abs(snapshot.change) >= threshold
+        : alert.kind === "level_above"
+          ? snapshot.price >= threshold
+          : alert.kind === "level_below"
+            ? snapshot.price <= threshold
+            : false;
+
+    if (triggered) {
+      hits.push({
+        ownerId: alert.owner_id,
+        productId: alert.product_id,
+        kind: alert.kind,
+        threshold,
+        price: snapshot.price,
+        change: Math.round(snapshot.change * 100) / 100,
+        alertId: alert.id,
+      });
+    }
+  }
+
+  return hits;
+}

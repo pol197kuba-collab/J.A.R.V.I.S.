@@ -69,6 +69,13 @@ export const SHOWCASE_SEQUENCE: ShowcaseStep[] = [
       "A tutaj trafia wszystko, o co Pan poprosi, bym zapamiętał — archiwum notatek, gotowe do przeszukania w każdej chwili.",
   },
   {
+    id: "paliwa",
+    path: "/paliwa",
+    label: "PALIWA",
+    narration:
+      "Cennik hurtowy Orlenu, prosto ze źródła i odświeżany automatycznie — pięć paliw, kontekst ropy Brent i kursu dolara, prognoza na najbliższe dni oraz newsy ze świata, które tą ceną ruszają.",
+  },
+  {
     id: "sub-systems",
     path: "/sub-systems",
     label: "SUB-SYSTEMS",
