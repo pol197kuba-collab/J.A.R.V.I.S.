@@ -31,20 +31,32 @@ GRANT INSERT, UPDATE ON public.fuel_news_items TO authenticated;
 
 -- Upsert wymaga OBU polityk: INSERT dla nowych dni i UPDATE dla korekt
 -- ceny już zapisanej (Orlen potrafi poprawić opublikowany cennik wstecz).
+--
+-- Każda poprzedzona DROP ... IF EXISTS, bo migracje w tym projekcie wkleja
+-- się ręcznie do SQL editora (patrz CODEX.md) — a wtedy jeden błąd składni
+-- wycofuje całą transakcję i skrypt leci od nowa. Bez tego druga próba
+-- wykładałaby się na „policy already exists" dla polityk, które zdążyły
+-- powstać za pierwszym razem.
+DROP POLICY IF EXISTS "Fuel prices: signed-in users refresh cache" ON public.orlen_fuel_prices;
 CREATE POLICY "Fuel prices: signed-in users refresh cache" ON public.orlen_fuel_prices
   FOR INSERT TO authenticated WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Fuel prices: signed-in users correct cache" ON public.orlen_fuel_prices;
 CREATE POLICY "Fuel prices: signed-in users correct cache" ON public.orlen_fuel_prices
   FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Market series: signed-in users refresh cache" ON public.orlen_market_series;
 CREATE POLICY "Market series: signed-in users refresh cache" ON public.orlen_market_series
   FOR INSERT TO authenticated WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Market series: signed-in users correct cache" ON public.orlen_market_series;
 CREATE POLICY "Market series: signed-in users correct cache" ON public.orlen_market_series
   FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Fuel news: signed-in users refresh cache" ON public.fuel_news_items;
 CREATE POLICY "Fuel news: signed-in users refresh cache" ON public.fuel_news_items
   FOR INSERT TO authenticated WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Fuel news: signed-in users correct cache" ON public.fuel_news_items;
 CREATE POLICY "Fuel news: signed-in users correct cache" ON public.fuel_news_items
-  FOR UPDATE TO authenticated WITH CHECK (true) USING (true);
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
