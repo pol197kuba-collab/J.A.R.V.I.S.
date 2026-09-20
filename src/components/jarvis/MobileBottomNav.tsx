@@ -15,6 +15,7 @@ import {
   Command,
   StickyNote,
   Rss,
+  CandlestickChart,
   Fuel,
 } from "lucide-react";
 
@@ -30,6 +31,7 @@ const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Feed", url: "/feed", icon: Rss },
   { title: "Paliwa", url: "/paliwa", icon: Fuel },
+  { title: "Rynki", url: "/rynki", icon: CandlestickChart },
   { title: "Agents", url: "/agent-hub", icon: Bot },
   { title: "Tasks", url: "/tasks", icon: ListChecks },
   { title: "Notes", url: "/notes", icon: StickyNote },

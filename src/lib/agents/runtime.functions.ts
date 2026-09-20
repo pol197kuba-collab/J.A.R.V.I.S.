@@ -12,7 +12,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import type { Json } from "@/integrations/supabase/types";
-import { DEFAULT_GEMINI_MODEL } from "./models";
+import { DEFAULT_GEMINI_MODEL, RECOMMENDED_AGENT_MODELS } from "./models";
 import { logServerError } from "@/lib/system/logServerError";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
@@ -282,6 +282,101 @@ export const deleteGroqKey = createServerFn({ method: "POST" })
       throw new Error(error.message);
     }
     return { ok: true as const };
+  });
+
+// ---------------------------------------------------------------------------
+// user_secrets (Anthropic API key — optional, unlocks Claude as the primary
+// reasoning engine for agents whose model is "anthropic:"-prefixed)
+// ---------------------------------------------------------------------------
+
+export const getAnthropicKeyStatus = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { data, error } = await supabase
+      .from("user_secrets")
+      .select("anthropic_api_key")
+      .eq("owner_id", userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const key = data?.anthropic_api_key?.trim() ?? "";
+    return {
+      linked: key.length > 0,
+      preview: key ? `••••••••${key.slice(-4)}` : null,
+    };
+  });
+
+export const saveAnthropicKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => SaveKeyInput.parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { error } = await supabase
+      .from("user_secrets")
+      .upsert({ owner_id: userId, anthropic_api_key: data.key.trim() }, { onConflict: "owner_id" });
+    if (error) {
+      await logServerError(supabase, userId, "settings.anthropic_key", error);
+      throw new Error(error.message);
+    }
+    return { ok: true as const };
+  });
+
+export const deleteAnthropicKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { error } = await supabase
+      .from("user_secrets")
+      .update({ anthropic_api_key: null })
+      .eq("owner_id", userId);
+    if (error) {
+      await logServerError(supabase, userId, "settings.anthropic_key", error);
+      throw new Error(error.message);
+    }
+    return { ok: true as const };
+  });
+
+/**
+ * Applies RECOMMENDED_AGENT_MODELS to this user's agents in one pass —
+ * reasoning-heavy agents onto Claude, mechanical ones onto the cheaper tier,
+ * anything not in the map left exactly as it is.
+ *
+ * Only agents that exist for this owner are touched, and the result names
+ * every change so Settings can show what actually happened rather than a
+ * silent "done". Reversible from the Agent Console (per-agent dropdown) or by
+ * flipping each agent back to "inherit".
+ */
+export const applyRecommendedAgentModels = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+
+    const { data: agents, error: listErr } = await supabase
+      .from("agents")
+      .select("id, slug, name, model")
+      .eq("owner_id", userId);
+    if (listErr) {
+      await logServerError(supabase, userId, "settings.recommended_models", listErr);
+      throw new Error(listErr.message);
+    }
+
+    const changes: Array<{ slug: string; name: string; from: string | null; to: string }> = [];
+    for (const agent of agents ?? []) {
+      const target = RECOMMENDED_AGENT_MODELS[agent.slug];
+      if (!target || agent.model === target) continue;
+      const { error: updErr } = await supabase
+        .from("agents")
+        .update({ model: target })
+        .eq("id", agent.id)
+        .eq("owner_id", userId);
+      if (updErr) {
+        await logServerError(supabase, userId, "settings.recommended_models", updErr);
+        throw new Error(updErr.message);
+      }
+      changes.push({ slug: agent.slug, name: agent.name, from: agent.model, to: target });
+    }
+
+    return { changed: changes.length, changes };
   });
 
 // ---------------------------------------------------------------------------

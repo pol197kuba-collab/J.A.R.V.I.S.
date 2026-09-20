@@ -16,6 +16,7 @@ import { Route as SubSystemsRouteImport } from './routes/sub-systems'
 import { Route as SituationRoomRouteImport } from './routes/situation-room'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SchemaRouteImport } from './routes/schema'
+import { Route as RynkiRouteImport } from './routes/rynki'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as PaliwaRouteImport } from './routes/paliwa'
 import { Route as NotesRouteImport } from './routes/notes'
@@ -65,6 +66,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const SchemaRoute = SchemaRouteImport.update({
   id: '/schema',
   path: '/schema',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RynkiRoute = RynkiRouteImport.update({
+  id: '/rynki',
+  path: '/rynki',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -157,6 +163,7 @@ export interface FileRoutesByFullPath {
   '/notes': typeof NotesRoute
   '/paliwa': typeof PaliwaRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/rynki': typeof RynkiRoute
   '/schema': typeof SchemaRoute
   '/settings': typeof SettingsRoute
   '/situation-room': typeof SituationRoomRoute
@@ -181,6 +188,7 @@ export interface FileRoutesByTo {
   '/notes': typeof NotesRoute
   '/paliwa': typeof PaliwaRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/rynki': typeof RynkiRoute
   '/schema': typeof SchemaRoute
   '/settings': typeof SettingsRoute
   '/situation-room': typeof SituationRoomRoute
@@ -206,6 +214,7 @@ export interface FileRoutesById {
   '/notes': typeof NotesRoute
   '/paliwa': typeof PaliwaRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/rynki': typeof RynkiRoute
   '/schema': typeof SchemaRoute
   '/settings': typeof SettingsRoute
   '/situation-room': typeof SituationRoomRoute
@@ -232,6 +241,7 @@ export interface FileRouteTypes {
     | '/notes'
     | '/paliwa'
     | '/reset-password'
+    | '/rynki'
     | '/schema'
     | '/settings'
     | '/situation-room'
@@ -256,6 +266,7 @@ export interface FileRouteTypes {
     | '/notes'
     | '/paliwa'
     | '/reset-password'
+    | '/rynki'
     | '/schema'
     | '/settings'
     | '/situation-room'
@@ -280,6 +291,7 @@ export interface FileRouteTypes {
     | '/notes'
     | '/paliwa'
     | '/reset-password'
+    | '/rynki'
     | '/schema'
     | '/settings'
     | '/situation-room'
@@ -305,6 +317,7 @@ export interface RootRouteChildren {
   NotesRoute: typeof NotesRoute
   PaliwaRoute: typeof PaliwaRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  RynkiRoute: typeof RynkiRoute
   SchemaRoute: typeof SchemaRoute
   SettingsRoute: typeof SettingsRoute
   SituationRoomRoute: typeof SituationRoomRoute
@@ -368,6 +381,13 @@ declare module '@tanstack/react-router' {
       path: '/schema'
       fullPath: '/schema'
       preLoaderRoute: typeof SchemaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rynki': {
+      id: '/rynki'
+      path: '/rynki'
+      fullPath: '/rynki'
+      preLoaderRoute: typeof RynkiRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -489,6 +509,7 @@ const rootRouteChildren: RootRouteChildren = {
   NotesRoute: NotesRoute,
   PaliwaRoute: PaliwaRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  RynkiRoute: RynkiRoute,
   SchemaRoute: SchemaRoute,
   SettingsRoute: SettingsRoute,
   SituationRoomRoute: SituationRoomRoute,

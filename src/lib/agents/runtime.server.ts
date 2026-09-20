@@ -14,7 +14,9 @@ import {
   DEFAULT_GEMINI_MODEL,
   DEFAULT_GROQ_CLASSIFIER_MODEL,
   DEFAULT_GROQ_FALLBACK_MODEL,
+  parseModelRef,
 } from "./models";
+import { callAnthropic } from "./providers/anthropic";
 import { callGroq } from "./providers/groq";
 import type { GeminiContent, GeminiPart } from "./providers/types";
 import { AGENT_SLUGS, isToolForcedForAgent } from "@/lib/constants/agentSlugs";
@@ -546,7 +548,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
   // failover, never as the primary reasoning engine) from user_secrets.
   const { data: secret } = await supabase
     .from("user_secrets")
-    .select("gemini_api_key, groq_api_key")
+    .select("gemini_api_key, groq_api_key, anthropic_api_key")
     .eq("owner_id", userId)
     .maybeSingle();
   const apiKey = secret?.gemini_api_key?.trim();
@@ -556,6 +558,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     );
   }
   const groqApiKey = secret?.groq_api_key?.trim() || null;
+  const anthropicApiKey = secret?.anthropic_api_key?.trim() || null;
 
   const configObj: Record<string, unknown> =
     agent.config && typeof agent.config === "object" && !Array.isArray(agent.config)
@@ -657,15 +660,29 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
   const systemPrompt = `${basePrompt}${rosterBlock}${uiActionInstructions}${dateInstructions}`;
 
   // Model resolution: agent override → user default → hardcoded fallback.
-  let model = agent.model?.trim() ?? "";
-  if (!model) {
+  let modelRef = agent.model?.trim() ?? "";
+  if (!modelRef) {
     const { data: prefs } = await supabase
       .from("user_settings")
       .select("default_model")
       .eq("owner_id", userId)
       .maybeSingle();
-    model = prefs?.default_model?.trim() || DEFAULT_GEMINI_MODEL;
+    modelRef = prefs?.default_model?.trim() || DEFAULT_GEMINI_MODEL;
   }
+
+  // An "anthropic:"-prefixed model routes this turn to Claude. The Gemini key
+  // stays mandatory either way — web_search grounding and the memory
+  // embeddings are Gemini-only tools and run regardless of who serves the
+  // conversational turn.
+  //
+  // Choosing Claude without a key must not brick the agent: degrade to the
+  // Gemini default instead. The warning it deserves is emitted further down,
+  // once logEvent (which needs the run row) exists — silently running a
+  // different model than the one configured would be the worse failure.
+  const parsedModel = parseModelRef(modelRef);
+  const missingAnthropicKey = parsedModel.provider === "anthropic" && !anthropicApiKey;
+  const modelProvider = missingAnthropicKey ? "gemini" : parsedModel.provider;
+  const model = missingAnthropicKey ? DEFAULT_GEMINI_MODEL : parsedModel.modelId;
 
   const clampNum = (v: unknown, min: number, max: number, fallback: number) =>
     typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
@@ -750,6 +767,15 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     agent: agentSlug,
     input_preview: input.slice(0, 120),
   } as Json);
+
+  if (missingAnthropicKey) {
+    await logEvent(
+      "warn",
+      AGENT_SLUGS.JARVIS,
+      `agent ${agentSlug}: model ${modelRef} wymaga klucza Anthropic (Ustawienia → Claude) — używam ${DEFAULT_GEMINI_MODEL}`,
+      { run_id: runId, agent: agentSlug, configured_model: modelRef } as Json,
+    );
+  }
 
   // 4. Call Gemini with function-calling loop.
   try {
@@ -885,132 +911,160 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       let functionCalls: Array<{ name: string; args: Record<string, unknown> }>;
       let textOut: string;
       try {
-        const requestBody = JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          generationConfig: {
+        if (modelProvider === "anthropic") {
+          // Claude path — same canonical `contents`, same tool declarations,
+          // same forced-tool pin as the Gemini path below. The adapter owns
+          // the shape translation; everything after this block is identical
+          // regardless of who served the turn.
+          const claudeResult = await callAnthropic({
+            apiKey: anthropicApiKey as string,
+            model,
+            systemPrompt,
+            contents,
+            toolDeclarations: toolDeclarations.length > 0 ? toolDeclarations : undefined,
+            forceToolName: forceGenerateDocument ? GENERATE_DOCUMENT_TOOL : undefined,
             temperature,
             maxOutputTokens,
-            // gemini-2.5-flash "thinks" by default, and those thinking
-            // tokens are deducted from the SAME maxOutputTokens budget as
-            // the actual response — for a forced structured call this can
-            // starve the function-call JSON of budget mid-generation,
-            // truncating it into invalid JSON (finishReason:
-            // MALFORMED_FUNCTION_CALL, 0 usable calls). Live failure
-            // (2026-08-14): generate_document forced via toolConfig ANY for
-            // a 10-slide deck came back empty on repeated attempts with
-            // exactly that finish reason. This call is pure mechanical
-            // structuring, not reasoning, so thinking buys nothing — turning
-            // it off frees the entire budget for the actual output. Must
-            // live INSIDE generationConfig — Gemini 400s on it as a
-            // top-level field ("Unknown name \"thinkingConfig\"").
-            ...(forceGenerateDocument ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
-          },
-          safetySettings: GEMINI_SAFETY_SETTINGS,
-          // Gemini rejects an empty functionDeclarations array, and an
-          // agent may legitimately have zero tools enabled (all toggled
-          // off in Settings) — omit the `tools` key entirely in that case.
-          ...(toolDeclarations.length > 0
-            ? { tools: [{ functionDeclarations: toolDeclarations }] }
-            : {}),
-          ...(forceGenerateDocument
-            ? {
-                toolConfig: {
-                  functionCallingConfig: {
-                    mode: "ANY",
-                    allowedFunctionNames: [GENERATE_DOCUMENT_TOOL],
+          });
+          totalTokensIn += claudeResult.tokensIn;
+          totalTokensOut += claudeResult.tokensOut;
+          functionCalls = claudeResult.functionCalls;
+          textOut = claudeResult.text;
+          if (functionCalls.length === 0 && !textOut) {
+            await logEvent("warn", AGENT_SLUGS.JARVIS, "empty Anthropic response", {
+              run_id: runId,
+              iter,
+              model,
+            } as Json);
+          }
+        } else {
+          const requestBody = JSON.stringify({
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            generationConfig: {
+              temperature,
+              maxOutputTokens,
+              // gemini-2.5-flash "thinks" by default, and those thinking
+              // tokens are deducted from the SAME maxOutputTokens budget as
+              // the actual response — for a forced structured call this can
+              // starve the function-call JSON of budget mid-generation,
+              // truncating it into invalid JSON (finishReason:
+              // MALFORMED_FUNCTION_CALL, 0 usable calls). Live failure
+              // (2026-08-14): generate_document forced via toolConfig ANY for
+              // a 10-slide deck came back empty on repeated attempts with
+              // exactly that finish reason. This call is pure mechanical
+              // structuring, not reasoning, so thinking buys nothing — turning
+              // it off frees the entire budget for the actual output. Must
+              // live INSIDE generationConfig — Gemini 400s on it as a
+              // top-level field ("Unknown name \"thinkingConfig\"").
+              ...(forceGenerateDocument ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+            },
+            safetySettings: GEMINI_SAFETY_SETTINGS,
+            // Gemini rejects an empty functionDeclarations array, and an
+            // agent may legitimately have zero tools enabled (all toggled
+            // off in Settings) — omit the `tools` key entirely in that case.
+            ...(toolDeclarations.length > 0
+              ? { tools: [{ functionDeclarations: toolDeclarations }] }
+              : {}),
+            ...(forceGenerateDocument
+              ? {
+                  toolConfig: {
+                    functionCallingConfig: {
+                      mode: "ANY",
+                      allowedFunctionNames: [GENERATE_DOCUMENT_TOOL],
+                    },
                   },
+                }
+              : {}),
+            contents,
+          });
+
+          // Gemini's shared-capacity models return HTTP 503 "high demand" in
+          // bursts (observed live 2026-07-22: a 503 storm broke every
+          // presentation run for minutes). Those are transient and usually
+          // clear within a second or two, so retry the SAME request a few
+          // times with backoff BEFORE falling over to Groq — the Groq failover
+          // can't reliably handle our tool-calling shape (it 400s on
+          // delegate_to_agent), so exhausting a quick retry against Gemini is
+          // far more likely to succeed than switching providers.
+          let res: Response | null = null;
+          for (let attempt = 0; attempt <= GEMINI_MAX_RETRIES; attempt++) {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 45_000);
+            try {
+              res = await fetch(
+                `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+                {
+                  method: "POST",
+                  signal: ctrl.signal,
+                  headers: { "Content-Type": "application/json" },
+                  body: requestBody,
                 },
-              }
-            : {}),
-          contents,
-        });
-
-        // Gemini's shared-capacity models return HTTP 503 "high demand" in
-        // bursts (observed live 2026-07-22: a 503 storm broke every
-        // presentation run for minutes). Those are transient and usually
-        // clear within a second or two, so retry the SAME request a few
-        // times with backoff BEFORE falling over to Groq — the Groq failover
-        // can't reliably handle our tool-calling shape (it 400s on
-        // delegate_to_agent), so exhausting a quick retry against Gemini is
-        // far more likely to succeed than switching providers.
-        let res: Response | null = null;
-        for (let attempt = 0; attempt <= GEMINI_MAX_RETRIES; attempt++) {
-          const ctrl = new AbortController();
-          const timer = setTimeout(() => ctrl.abort(), 45_000);
-          try {
-            res = await fetch(
-              `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-              {
-                method: "POST",
-                signal: ctrl.signal,
-                headers: { "Content-Type": "application/json" },
-                body: requestBody,
-              },
-            );
-          } finally {
-            clearTimeout(timer);
-          }
-          if (
-            res.ok ||
-            !GEMINI_RETRYABLE_STATUS.has(res.status) ||
-            attempt === GEMINI_MAX_RETRIES
-          ) {
-            break;
-          }
-          await logEvent(
-            "warn",
-            AGENT_SLUGS.JARVIS,
-            `gemini HTTP ${res.status}, retry ${attempt + 1}/${GEMINI_MAX_RETRIES}`,
-            { run_id: runId, iter } as Json,
-          );
-          await new Promise((r) => setTimeout(r, GEMINI_RETRY_BACKOFF_MS * (attempt + 1)));
-        }
-
-        if (!res || !res.ok) {
-          const bodyText = res ? await res.text().catch(() => "") : "";
-          throw new Error(`Gemini HTTP ${res?.status ?? "network"}: ${bodyText.slice(0, 300)}`);
-        }
-
-        const data = (await res.json()) as {
-          candidates?: Array<{
-            content?: { role?: string; parts?: GeminiPart[] };
-            finishReason?: string;
-          }>;
-          promptFeedback?: { blockReason?: string };
-          usageMetadata?: {
-            promptTokenCount?: number;
-            candidatesTokenCount?: number;
-          };
-        };
-        totalTokensIn += data.usageMetadata?.promptTokenCount ?? 0;
-        totalTokensOut += data.usageMetadata?.candidatesTokenCount ?? 0;
-
-        const parts = data.candidates?.[0]?.content?.parts ?? [];
-        functionCalls = parts.flatMap((p) =>
-          "functionCall" in p && p.functionCall ? [p.functionCall] : [],
-        );
-        textOut = parts
-          .flatMap((p) => ("text" in p && p.text ? [p.text] : []))
-          .join("")
-          .trim();
-
-        // A turn that comes back with nothing at all (no function call, no
-        // text) is otherwise silent — from the caller's perspective it looks
-        // identical to "the model chose to stop", when it's almost always
-        // Gemini's safety filter discarding the response server-side. Log
-        // the real reason so a stuck run (e.g. forceGenerateDocument ending
-        // with 0 tool calls) is diagnosable from System Logs instead of a
-        // guessing game.
-        if (functionCalls.length === 0 && !textOut) {
-          const finishReason = data.candidates?.[0]?.finishReason;
-          const blockReason = data.promptFeedback?.blockReason;
-          if (finishReason || blockReason) {
+              );
+            } finally {
+              clearTimeout(timer);
+            }
+            if (
+              res.ok ||
+              !GEMINI_RETRYABLE_STATUS.has(res.status) ||
+              attempt === GEMINI_MAX_RETRIES
+            ) {
+              break;
+            }
             await logEvent(
               "warn",
               AGENT_SLUGS.JARVIS,
-              `empty Gemini response · finishReason=${finishReason ?? "?"} blockReason=${blockReason ?? "?"}`,
-              { run_id: runId, iter, forceGenerateDocument } as Json,
+              `gemini HTTP ${res.status}, retry ${attempt + 1}/${GEMINI_MAX_RETRIES}`,
+              { run_id: runId, iter } as Json,
             );
+            await new Promise((r) => setTimeout(r, GEMINI_RETRY_BACKOFF_MS * (attempt + 1)));
+          }
+
+          if (!res || !res.ok) {
+            const bodyText = res ? await res.text().catch(() => "") : "";
+            throw new Error(`Gemini HTTP ${res?.status ?? "network"}: ${bodyText.slice(0, 300)}`);
+          }
+
+          const data = (await res.json()) as {
+            candidates?: Array<{
+              content?: { role?: string; parts?: GeminiPart[] };
+              finishReason?: string;
+            }>;
+            promptFeedback?: { blockReason?: string };
+            usageMetadata?: {
+              promptTokenCount?: number;
+              candidatesTokenCount?: number;
+            };
+          };
+          totalTokensIn += data.usageMetadata?.promptTokenCount ?? 0;
+          totalTokensOut += data.usageMetadata?.candidatesTokenCount ?? 0;
+
+          const parts = data.candidates?.[0]?.content?.parts ?? [];
+          functionCalls = parts.flatMap((p) =>
+            "functionCall" in p && p.functionCall ? [p.functionCall] : [],
+          );
+          textOut = parts
+            .flatMap((p) => ("text" in p && p.text ? [p.text] : []))
+            .join("")
+            .trim();
+
+          // A turn that comes back with nothing at all (no function call, no
+          // text) is otherwise silent — from the caller's perspective it looks
+          // identical to "the model chose to stop", when it's almost always
+          // Gemini's safety filter discarding the response server-side. Log
+          // the real reason so a stuck run (e.g. forceGenerateDocument ending
+          // with 0 tool calls) is diagnosable from System Logs instead of a
+          // guessing game.
+          if (functionCalls.length === 0 && !textOut) {
+            const finishReason = data.candidates?.[0]?.finishReason;
+            const blockReason = data.promptFeedback?.blockReason;
+            if (finishReason || blockReason) {
+              await logEvent(
+                "warn",
+                AGENT_SLUGS.JARVIS,
+                `empty Gemini response · finishReason=${finishReason ?? "?"} blockReason=${blockReason ?? "?"}`,
+                { run_id: runId, iter, forceGenerateDocument } as Json,
+              );
+            }
           }
         }
       } catch (geminiErr) {
@@ -1025,7 +1079,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         await logEvent(
           "warn",
           AGENT_SLUGS.JARVIS,
-          `gemini call failed, failing over to groq: ${geminiMsg}`,
+          `${modelProvider} call failed, failing over to groq: ${geminiMsg}`,
           {
             run_id: runId,
             iter,

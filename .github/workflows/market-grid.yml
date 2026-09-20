@@ -1,0 +1,69 @@
+name: Market Grid
+
+# Zaciąg notowań, newsów i prognoz modułu /rynki do cache w Supabase.
+# Moduł dociąga dane też sam przy wejściu na stronę, ale tylko ten job
+# gwarantuje trzy rzeczy, których wejście na stronę zagwarantować nie może:
+# historia bez dziur w dni, gdy nikt nie otworzył aplikacji; rozliczenie
+# prognozy W JEJ TERMINIE, a nie przy następnej wizycie; i regularną,
+# codzienną próbkę prognoz zamiast zlepka dni, w które ktoś akurat zajrzał.
+on:
+  schedule:
+    # Po zamknięciu sesji w Warszawie i przed otwarciem w USA — wtedy dzień
+    # giełdowy w Europie jest domknięty, a notowania z USA są z poprzedniej
+    # sesji. Jeden przebieg dziennie: horyzont prognoz to tydzień, a
+    # notowania dzienne nie zmieniają się częściej niż raz na sesję.
+    - cron: "0 18 * * 1-5" # 20:00 CEST
+    # Weekendowy przebieg wyłącznie dla krypto (chodzi 24/7) i rozliczeń,
+    # którym termin wypadł w sobotę lub niedzielę.
+    - cron: "0 18 * * 0,6"
+  workflow_dispatch:
+
+# Dwa przebiegi na raz zapisywałyby te same wiersze — upsert by to przeżył,
+# ale nie ma powodu płacić za wyścig ani za podwójne wywołanie modelu.
+concurrency:
+  group: market-grid
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    name: zaciąg notowań, newsów i prognoz
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # npm (nie bun) — tak jak w ci.yml i orlen-prices.yml:
+      # package-lock.json jest lockfile'em, który weryfikuje `npm ci`.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Ingest
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          # Dwie drogi uwierzytelnienia — wystarczy wypełnić jedną (patrz
+          # scripts/markets-daily.ts). service_role jest prostszy, ale nie
+          # każda instalacja ma do niego dostęp; wtedy job loguje się kontem.
+          #
+          # UWAGA: watchlista i prognozy są per użytkownik, więc to konto (albo
+          # JARVIS_OWNER_ID) decyduje, czyje instrumenty są zaciągane i czyje
+          # prognozy rozliczane.
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          JARVIS_OWNER_ID: ${{ secrets.JARVIS_OWNER_ID }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          JARVIS_EMAIL: ${{ secrets.JARVIS_EMAIL }}
+          JARVIS_PASSWORD: ${{ secrets.JARVIS_PASSWORD }}
+          # Oba opcjonalne. Bez nich newsy dostają ocenę heurystyczną, a typer
+          # zapisuje wyłącznie prognozę sygnałową — job i tak kończy się
+          # sukcesem, bo uboższy wynik to nie awaria.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        # tsx CELOWO nie jest zależnością projektu, tylko wersją przypiętą
+        # tutaj — ten sam powód co w orlen-prices.yml: dopisanie go do
+        # package.json podbijało esbuild w całym drzewie i rozjeżdżało
+        # bun.lock z package-lock.json, a bunem buduje Lovable.
+        run: npx --yes tsx@4.21.0 scripts/markets-daily.ts

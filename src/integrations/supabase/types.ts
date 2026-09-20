@@ -710,6 +710,178 @@ export type Database = {
         };
         Relationships: [];
       };
+      market_news_items: {
+        Row: {
+          classified_by: string | null;
+          feed_tag: string | null;
+          fetched_at: string;
+          guid: string;
+          id: string;
+          impact: string | null;
+          impact_score: number | null;
+          link: string;
+          published_at: string | null;
+          source: string | null;
+          summary_pl: string | null;
+          symbols: string[];
+          title: string;
+        };
+        Insert: {
+          classified_by?: string | null;
+          feed_tag?: string | null;
+          fetched_at?: string;
+          guid: string;
+          id?: string;
+          impact?: string | null;
+          impact_score?: number | null;
+          link: string;
+          published_at?: string | null;
+          source?: string | null;
+          summary_pl?: string | null;
+          symbols?: string[];
+          title: string;
+        };
+        Update: {
+          classified_by?: string | null;
+          feed_tag?: string | null;
+          fetched_at?: string;
+          guid?: string;
+          id?: string;
+          impact?: string | null;
+          impact_score?: number | null;
+          link?: string;
+          published_at?: string | null;
+          source?: string | null;
+          summary_pl?: string | null;
+          symbols?: string[];
+          title?: string;
+        };
+        Relationships: [];
+      };
+      market_predictions: {
+        Row: {
+          actual_change_pct: number | null;
+          confidence: number;
+          direction: string;
+          due_at: string;
+          horizon_days: number;
+          id: string;
+          made_at: string;
+          made_on: string;
+          model: string | null;
+          outcome: string | null;
+          owner_id: string;
+          price_at_prediction: number;
+          price_at_resolution: number | null;
+          rationale_pl: string | null;
+          resolved_at: string | null;
+          sentiment_score: number | null;
+          source: string;
+          symbol: string;
+          technical_score: number | null;
+        };
+        Insert: {
+          actual_change_pct?: number | null;
+          confidence: number;
+          direction: string;
+          due_at: string;
+          horizon_days: number;
+          id?: string;
+          made_at?: string;
+          model?: string | null;
+          outcome?: string | null;
+          owner_id: string;
+          price_at_prediction: number;
+          price_at_resolution?: number | null;
+          rationale_pl?: string | null;
+          resolved_at?: string | null;
+          sentiment_score?: number | null;
+          source: string;
+          symbol: string;
+          technical_score?: number | null;
+        };
+        Update: {
+          actual_change_pct?: number | null;
+          confidence?: number;
+          direction?: string;
+          due_at?: string;
+          horizon_days?: number;
+          id?: string;
+          made_at?: string;
+          model?: string | null;
+          outcome?: string | null;
+          owner_id?: string;
+          price_at_prediction?: number;
+          price_at_resolution?: number | null;
+          rationale_pl?: string | null;
+          resolved_at?: string | null;
+          sentiment_score?: number | null;
+          source?: string;
+          symbol?: string;
+          technical_score?: number | null;
+        };
+        Relationships: [];
+      };
+      market_quotes: {
+        Row: {
+          close: number;
+          created_at: string;
+          currency: string;
+          id: string;
+          quote_date: string;
+          source: string;
+          symbol: string;
+          updated_at: string;
+        };
+        Insert: {
+          close: number;
+          created_at?: string;
+          currency: string;
+          id?: string;
+          quote_date: string;
+          source: string;
+          symbol: string;
+          updated_at?: string;
+        };
+        Update: {
+          close?: number;
+          created_at?: string;
+          currency?: string;
+          id?: string;
+          quote_date?: string;
+          source?: string;
+          symbol?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      market_watchlist: {
+        Row: {
+          created_at: string;
+          id: string;
+          owner_id: string;
+          position: number;
+          symbol: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          owner_id: string;
+          position?: number;
+          symbol: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          owner_id?: string;
+          position?: number;
+          symbol?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       memories: {
         Row: {
           agent_id: string | null;
@@ -1161,6 +1333,7 @@ export type Database = {
       };
       user_secrets: {
         Row: {
+          anthropic_api_key: string | null;
           created_at: string;
           gemini_api_key: string | null;
           github_token: string | null;
@@ -1171,6 +1344,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          anthropic_api_key?: string | null;
           created_at?: string;
           gemini_api_key?: string | null;
           github_token?: string | null;
@@ -1181,6 +1355,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          anthropic_api_key?: string | null;
           created_at?: string;
           gemini_api_key?: string | null;
           github_token?: string | null;

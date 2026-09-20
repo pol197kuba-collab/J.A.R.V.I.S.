@@ -5,29 +5,35 @@ import { useAudioSettings } from "@/lib/audio/useAudioSettings";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 import { useHudNavigate } from "@/components/jarvis/TransitionContext";
+import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
   deleteGeminiKey,
   deleteGithubToken,
   deleteGoogleCseCredentials,
+  deleteAnthropicKey,
   deleteGroqKey,
   getGeminiKeyStatus,
   getGithubTokenStatus,
   getGoogleCseStatus,
+  getAnthropicKeyStatus,
   getGroqKeyStatus,
   getUserSettings,
   listAgentTools,
   saveGeminiKey,
   saveGithubToken,
   saveGoogleCseCredentials,
+  saveAnthropicKey,
   saveGroqKey,
+  applyRecommendedAgentModels,
   setAgentToolEnabled,
   updateUserSettings,
   type AgentToolSummary,
   type UserSettings,
 } from "@/lib/agents/runtime.functions";
 import { setServerRuntimePreference } from "@/lib/ai/jarvisBrain";
-import { GEMINI_MODELS } from "@/lib/agents/models";
+import { useModelCatalog, MODEL_CATALOG_QUERY_KEY } from "@/lib/agents/useModelCatalog";
+import { invalidateModelCatalog } from "@/lib/agents/models.functions";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
 const GEMINI_LS_KEY = "jarvis_gemini_api_key";
@@ -35,6 +41,16 @@ const GEMINI_LS_KEY = "jarvis_gemini_api_key";
 // purely so the input field doesn't look empty/"lost" every time Settings
 // reloads, even though the real, functional copy already lives server-side.
 const GROQ_LS_KEY = "jarvis_groq_api_key";
+// Same reasoning as GROQ_LS_KEY — no browser-side consumer, local copy only
+// so the field doesn't read as empty after a reload.
+const ANTHROPIC_LS_KEY = "jarvis_anthropic_api_key";
+
+const CATALOG_STATUS_LABEL: Record<string, string> = {
+  live: "z API",
+  fallback: "zapasowa (API nie odpowiedziało)",
+  no_key: "zapasowa (brak klucza)",
+  loading: "ładowanie…",
+};
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -79,6 +95,28 @@ function Settings() {
   const [groqBusy, setGroqBusy] = useState(false);
   const [groqErrorMsg, setGroqErrorMsg] = useState<string | null>(null);
 
+  // Anthropic — optional, unlocks Claude as the primary reasoning engine for
+  // any agent whose model is "anthropic:"-prefixed. Server-side only, like
+  // Groq: no browser code ever calls Anthropic directly.
+  // Lista modeli pochodzi z API dostawców, nie ze słownika w repo —
+  // statyczne listy zostają tylko jako zapas (patrz useModelCatalog).
+  const qc = useQueryClient();
+  const catalog = useModelCatalog();
+  const dropModelCatalogCache = useServerFn(invalidateModelCatalog);
+  const fetchAnthropicStatus = useServerFn(getAnthropicKeyStatus);
+  const persistAnthropicKey = useServerFn(saveAnthropicKey);
+  const clearAnthropicKey = useServerFn(deleteAnthropicKey);
+  const applyRecommendedModels = useServerFn(applyRecommendedAgentModels);
+  const [anthropicApiKey, setAnthropicApiKey] = useState("");
+  const [anthropicStatus, setAnthropicStatus] = useState<"loading" | "linked" | "empty" | "error">(
+    "loading",
+  );
+  const [anthropicPreview, setAnthropicPreview] = useState<string | null>(null);
+  const [anthropicBusy, setAnthropicBusy] = useState(false);
+  const [anthropicErrorMsg, setAnthropicErrorMsg] = useState<string | null>(null);
+  const [tieringMsg, setTieringMsg] = useState<string | null>(null);
+  const [tieringBusy, setTieringBusy] = useState(false);
+
   // Google Custom Search — optional, self-serve upgrade for real-photo
   // lookup in generated documents. No client-side consumer, so (like Groq)
   // the server copy is the only one that matters; no localStorage mirror.
@@ -122,6 +160,7 @@ function Settings() {
     }
     try {
       setGroqApiKey(window.localStorage.getItem(GROQ_LS_KEY) ?? "");
+      setAnthropicApiKey(window.localStorage.getItem(ANTHROPIC_LS_KEY) ?? "");
     } catch {
       /* ignore */
     }
@@ -161,6 +200,21 @@ function Settings() {
   useEffect(() => {
     void refreshGroqState();
   }, [refreshGroqState]);
+
+  const refreshAnthropicState = useCallback(async () => {
+    try {
+      const status = await fetchAnthropicStatus();
+      setAnthropicStatus(status.linked ? "linked" : "empty");
+      setAnthropicPreview(status.preview);
+    } catch (err) {
+      console.warn("[settings] anthropic refresh failed", err);
+      setAnthropicStatus("error");
+    }
+  }, [fetchAnthropicStatus]);
+
+  useEffect(() => {
+    void refreshAnthropicState();
+  }, [refreshAnthropicState]);
 
   const refreshCseState = useCallback(async () => {
     try {
@@ -232,6 +286,66 @@ function Settings() {
       setCseErrorMsg(err instanceof Error ? err.message : "Server sync failed");
     } finally {
       setCseBusy(false);
+    }
+  };
+
+  // Zmiana klucza zmienia to, co API dostawcy w ogóle wylistuje, więc
+  // cache katalogu modeli (serwerowy i klienta) musi pójść razem z nią.
+  const refreshModelCatalog = async () => {
+    try {
+      await dropModelCatalogCache();
+      await qc.invalidateQueries({ queryKey: MODEL_CATALOG_QUERY_KEY });
+    } catch (err) {
+      console.warn("[settings] model catalog refresh failed", err);
+    }
+  };
+
+  const handleSaveAnthropicKey = async () => {
+    const trimmed = anthropicApiKey.trim();
+    setAnthropicBusy(true);
+    setAnthropicErrorMsg(null);
+    try {
+      if (trimmed) {
+        await persistAnthropicKey({ data: { key: trimmed } });
+      } else {
+        await clearAnthropicKey();
+      }
+      try {
+        if (trimmed) {
+          window.localStorage.setItem(ANTHROPIC_LS_KEY, trimmed);
+        } else {
+          window.localStorage.removeItem(ANTHROPIC_LS_KEY);
+        }
+      } catch {
+        /* ignore — cosmetic only, server sync above is what actually matters */
+      }
+      audio.playClick();
+      await refreshAnthropicState();
+      await refreshModelCatalog();
+    } catch (err) {
+      setAnthropicErrorMsg(err instanceof Error ? err.message : "Server sync failed");
+    } finally {
+      setAnthropicBusy(false);
+    }
+  };
+
+  const handleApplyRecommendedModels = async () => {
+    setTieringBusy(true);
+    setTieringMsg(null);
+    try {
+      const result = await applyRecommendedModels();
+      audio.playClick();
+      setTieringMsg(
+        result.changed === 0
+          ? "Wszyscy agenci już mają rekomendowane modele."
+          : `Zmieniono ${result.changed}: ${result.changes
+              .map((c) => `${c.name} → ${c.to.replace("anthropic:", "")}`)
+              .join(", ")}`,
+      );
+    } catch (err) {
+      setTieringMsg(err instanceof Error ? err.message : "Nie udało się zastosować.");
+    } finally {
+      setTieringBusy(false);
     }
   };
 
@@ -333,6 +447,7 @@ function Settings() {
       }
       audio.playClick();
       await refreshServerState();
+      await refreshModelCatalog();
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Server sync failed");
     } finally {
@@ -451,6 +566,89 @@ function Settings() {
             ℹ „Save local" trzyma klucz tylko w tej przeglądarce. „Sync to Agent Runtime" wysyła go
             zaszyfrowanym połączeniem na serwer, gdzie używa go J.A.R.V.I.S. — nadal Twój klucz,
             Twój ruch, darmowy tier Gemini. Puste pole + zapis = usunięcie klucza.
+          </p>
+        </div>
+      </HudPanel>
+      <HudPanel index={1} title="ANTHROPIC // CLAUDE REASONING CORE" className="p-5">
+        <div className="mt-4 space-y-3">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            ANTHROPIC API KEY // OPCJONALNY, PŁATNY
+          </p>
+          <div className="flex flex-col gap-2 @[520px]:flex-row">
+            <input
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              value={anthropicApiKey}
+              onChange={(e) => setAnthropicApiKey(e.target.value)}
+              placeholder="Wklej Anthropic API Key..."
+              className="font-mono min-w-0 flex-1 border border-primary/60 bg-black/40 px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+            />
+            <button
+              type="button"
+              disabled={anthropicBusy}
+              onClick={handleSaveAnthropicKey}
+              className="font-display border border-primary/60 bg-primary/20 px-4 py-2 text-[10px] uppercase tracking-widest text-primary hover:bg-primary/30 disabled:opacity-50"
+            >
+              SYNC TO AGENT RUNTIME
+            </button>
+          </div>
+          <div className="flex items-center justify-between border-t border-primary/20 pt-2">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              AGENT RUNTIME
+            </span>
+            <span
+              className="font-display text-[10px] uppercase tracking-widest"
+              style={{
+                color:
+                  anthropicStatus === "linked"
+                    ? "var(--success)"
+                    : anthropicStatus === "error"
+                      ? "var(--destructive)"
+                      : "var(--muted-foreground)",
+              }}
+            >
+              {anthropicStatus === "linked"
+                ? `● LINKED ${anthropicPreview ?? ""}`
+                : anthropicStatus === "error"
+                  ? "✕ UNREACHABLE"
+                  : anthropicStatus === "loading"
+                    ? "… CHECKING"
+                    : "○ NOT SYNCED"}
+            </span>
+          </div>
+          {anthropicErrorMsg && (
+            <p className="font-mono text-[10px]" style={{ color: "var(--destructive)" }}>
+              ✕ {anthropicErrorMsg}
+            </p>
+          )}
+          <div className="flex flex-col gap-2 border-t border-primary/20 pt-3 @[520px]:flex-row @[520px]:items-center @[520px]:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm text-foreground">Rekomendowany podział modeli</p>
+              <p className="text-xs text-muted-foreground">
+                Agenci rozumujący (J.A.R.V.I.S., Insight, Metric) → Opus 5; wykonawczy (Forge,
+                Herald, Shield) → Sonnet 5. Resztę zostawia bez zmian.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={tieringBusy || anthropicStatus !== "linked"}
+              onClick={handleApplyRecommendedModels}
+              className="font-display shrink-0 border border-primary/60 px-3 py-1.5 text-[10px] uppercase tracking-widest text-primary hover:bg-primary/20 disabled:opacity-40"
+            >
+              {tieringBusy ? "…" : "ZASTOSUJ"}
+            </button>
+          </div>
+          {tieringMsg && (
+            <p className="font-mono text-[10px] break-words text-primary/80">{tieringMsg}</p>
+          )}
+          <p className="font-mono text-[10px] text-muted-foreground/70">
+            ℹ Klucz z console.anthropic.com — płatny, rozliczany za tokeny (Opus 5: $5 za 1M wejścia
+            / $25 za 1M wyjścia, Sonnet 5: $2 / $10). Używany tylko dla agentów, którym ustawisz
+            model „Claude…" w Centrum Agentów. Gemini pozostaje wymagany — web_search i pamięć
+            semantyczna działają na jego API niezależnie od tego, kto prowadzi rozmowę. Bez tego
+            klucza agent ustawiony na Claude degraduje się do Gemini z ostrzeżeniem w System Logs.
+            Puste pole + zapis = usunięcie klucza.
           </p>
         </div>
       </HudPanel>
@@ -682,6 +880,20 @@ function Settings() {
               <p className="text-xs text-muted-foreground">
                 Model używany przez J.A.R.V.I.S.-a dla każdego runu.
               </p>
+              {/* Skąd pochodzi lista — bez tego „widzę stare modele" wygląda
+                  identycznie jak „nie ma klucza". */}
+              <p className="font-mono mt-1 text-[10px] text-muted-foreground/70">
+                Lista: Gemini {CATALOG_STATUS_LABEL[catalog.geminiStatus]} · Claude{" "}
+                {CATALOG_STATUS_LABEL[catalog.anthropicStatus]}
+              </p>
+              {catalog.errors.length > 0 && (
+                <p
+                  className="font-mono mt-1 break-words text-[10px]"
+                  style={{ color: "var(--warning)" }}
+                >
+                  {catalog.errors.join(" · ")}
+                </p>
+              )}
             </div>
             <select
               disabled={busy || !prefs}
@@ -689,14 +901,24 @@ function Settings() {
               onChange={(e) => updatePref({ defaultModel: e.target.value })}
               className="font-mono min-w-[220px] border border-primary/60 bg-black/60 px-3 py-1.5 text-xs text-primary outline-none focus:border-primary disabled:opacity-40"
             >
-              {prefs && !GEMINI_MODELS.some((m) => m.id === prefs.defaultModel) && (
-                <option value={prefs.defaultModel}>{prefs.defaultModel} (custom)</option>
+              {prefs && !catalog.models.some((m) => m.id === prefs.defaultModel) && (
+                <option value={prefs.defaultModel}>{prefs.defaultModel} (spoza listy)</option>
               )}
-              {GEMINI_MODELS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label} — {m.id}
-                </option>
-              ))}
+              <optgroup label="Google Gemini">
+                {catalog.gemini.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label} — {m.id}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Anthropic Claude (wymaga klucza)">
+                {catalog.anthropic.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                    {m.hint ? ` — ${m.hint}` : ""}
+                  </option>
+                ))}
+              </optgroup>
             </select>
           </div>
           <div className="flex items-start justify-between gap-4 border-t border-primary/20 pt-3">

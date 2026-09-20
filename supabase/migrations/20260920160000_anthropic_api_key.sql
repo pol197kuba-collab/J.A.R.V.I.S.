@@ -1,0 +1,11 @@
+-- Multi-provider AI routing, step 2: BYOK storage for an Anthropic API key,
+-- mirroring the existing gemini_api_key / groq_api_key columns exactly (same
+-- table, same RLS policy already covers it — no new grants/policies needed).
+--
+-- Agents opt into Claude by storing an "anthropic:"-prefixed model id in
+-- public.agents.model (e.g. 'anthropic:claude-opus-5'); unprefixed ids keep
+-- meaning Gemini, so no existing row needs migrating. Nothing is switched
+-- over here on purpose — a key has to exist first, and the runtime degrades
+-- a Claude-configured agent back to the Gemini default (with a warning in
+-- System Logs) until it does.
+ALTER TABLE public.user_secrets ADD COLUMN IF NOT EXISTS anthropic_api_key TEXT;
