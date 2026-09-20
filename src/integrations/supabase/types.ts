@@ -1161,6 +1161,7 @@ export type Database = {
       };
       user_secrets: {
         Row: {
+          anthropic_api_key: string | null;
           created_at: string;
           gemini_api_key: string | null;
           github_token: string | null;
@@ -1171,6 +1172,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          anthropic_api_key?: string | null;
           created_at?: string;
           gemini_api_key?: string | null;
           github_token?: string | null;
@@ -1181,6 +1183,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          anthropic_api_key?: string | null;
           created_at?: string;
           gemini_api_key?: string | null;
           github_token?: string | null;
