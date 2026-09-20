@@ -710,6 +710,66 @@ export type Database = {
         };
         Relationships: [];
       };
+      market_quotes: {
+        Row: {
+          close: number;
+          created_at: string;
+          currency: string;
+          id: string;
+          quote_date: string;
+          source: string;
+          symbol: string;
+          updated_at: string;
+        };
+        Insert: {
+          close: number;
+          created_at?: string;
+          currency: string;
+          id?: string;
+          quote_date: string;
+          source: string;
+          symbol: string;
+          updated_at?: string;
+        };
+        Update: {
+          close?: number;
+          created_at?: string;
+          currency?: string;
+          id?: string;
+          quote_date?: string;
+          source?: string;
+          symbol?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      market_watchlist: {
+        Row: {
+          created_at: string;
+          id: string;
+          owner_id: string;
+          position: number;
+          symbol: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          owner_id: string;
+          position?: number;
+          symbol: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          owner_id?: string;
+          position?: number;
+          symbol?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       memories: {
         Row: {
           agent_id: string | null;

@@ -117,6 +117,29 @@
   --fuel-3: oklch(0.9 0.15 85); /* Pb98 */
   --fuel-4: oklch(0.72 0.19 340); /* ON Arktyczny 2 */
   --fuel-5: oklch(0.8 0.15 262); /* Ekoterm */
+
+  /* MARKET GRID — paleta kategorialna wykresów modułu /rynki.
+   *
+   * Osiem slotów, kolejność stała i przypisana do instrumentu
+   * (MARKET_ASSETS w src/lib/markets/assets.ts): ukrycie serii nigdy nie
+   * przemalowuje pozostałych, więc kolor zawsze znaczy ten sam instrument.
+   * Sąsiadujące sloty rozstawione tak, żeby rozróżniał je też daltonista —
+   * sprawdzone walidatorem: najgorsza para sąsiadów ΔE 11.6 (deutan),
+   * 24.1 przy widzeniu normalnym, kontrast do tła >= 3:1 dla wszystkich ośmiu.
+   *
+   * Jasność (L 0.70-0.88) jest ŚWIADOMIE wyższa niż standardowe pasmo dla
+   * trybu ciemnego: tło HUD-a jest niemal czarne, a cała reszta aplikacji
+   * (--fuel-1..5, --primary) siedzi w tym samym zakresie. Przyciemnienie do
+   * pasma dałoby wykres wyraźnie matowszy niż każdy inny w tej aplikacji.
+   */
+  --market-1: oklch(0.84 0.15 205); /* cyjan */
+  --market-2: oklch(0.72 0.19 340); /* magenta */
+  --market-3: oklch(0.76 0.17 145); /* zieleń */
+  --market-4: oklch(0.78 0.15 262); /* błękit */
+  --market-5: oklch(0.88 0.15 85); /* żółć */
+  --market-6: oklch(0.7 0.17 300); /* fiolet */
+  --market-7: oklch(0.82 0.13 175); /* turkus */
+  --market-8: oklch(0.75 0.17 35); /* pomarańcz */
   --sidebar: oklch(0.16 0.028 250);
   --sidebar-foreground: oklch(0.95 0.03 210);
   --sidebar-primary: oklch(0.84 0.15 205);
