@@ -44,8 +44,15 @@ jobs:
       - name: Ingest
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          # Dwie drogi uwierzytelnienia — wystarczy wypełnić jedną (patrz
+          # scripts/orlen-daily.ts). service_role jest prostszy, ale nie każda
+          # instalacja ma do niego dostęp; wtedy job loguje się kontem, tak jak
+          # local-worker.
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           JARVIS_OWNER_ID: ${{ secrets.JARVIS_OWNER_ID }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          JARVIS_EMAIL: ${{ secrets.JARVIS_EMAIL }}
+          JARVIS_PASSWORD: ${{ secrets.JARVIS_PASSWORD }}
           # Opcjonalny: bez niego newsy dostają ocenę heurystyczną zamiast
           # streszczeń po polsku, a job i tak kończy się sukcesem.
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
