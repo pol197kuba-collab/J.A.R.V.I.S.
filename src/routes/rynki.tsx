@@ -1,8 +1,9 @@
 // MARKET GRID — monitoring cen akcji, krypto, surowców, indeksów i walut.
 //
-// Etap 1 modułu: dane, cache, wykresy i watchlista. Ocena newsów i sygnały
-// predykcyjne dochodzą w kolejnych etapach — układ paneli jest pod nie
-// przygotowany, ale świadomie nie ma tu jeszcze żadnych „typów".
+// Etap 1: dane, cache, wykresy i watchlista. Etap 2: newsy z oceną wpływu i
+// wypadkowy wydźwięk per instrument. Sygnały predykcyjne („co urośnie")
+// świadomie NIE są jeszcze częścią modułu — wydźwięk newsów jest
+// podsumowaniem tego, co napisano, nie prognozą ceny.
 //
 // Strona odpytuje jedną server function z interwałem 5 minut. Serwer i tak
 // nie wypuści żądania do zewnętrznych API częściej niż pozwala próg
@@ -19,11 +20,14 @@ import { HudPanel } from "@/components/jarvis/HudPanel";
 import { Chips, EmptyState, LiveDot, PanelHint, StatTile } from "@/components/jarvis/fuel/chrome";
 import { MarketChart, type ChartMode } from "@/components/jarvis/markets/MarketChart";
 import { MarketWatchRail } from "@/components/jarvis/markets/MarketWatchRail";
+import { MarketNewsPanel } from "@/components/jarvis/markets/MarketNewsPanel";
+import { SentimentPanel } from "@/components/jarvis/markets/SentimentPanel";
 import { AssetPicker } from "@/components/jarvis/markets/AssetPicker";
 import { formatPercent, formatPrice } from "@/lib/markets/series";
 import {
   addToWatchlist,
   getMarketGrid,
+  getMarketNews,
   removeFromWatchlist,
   type MarketSeries,
 } from "@/lib/markets/markets.functions";
@@ -70,12 +74,24 @@ function MarketsPage() {
   const [range, setRange] = useState<number>(90);
   const [mode, setMode] = useState<ChartMode>("price");
   const [visibleSymbols, setVisibleSymbols] = useState<string[]>([]);
+  const [newsSymbol, setNewsSymbol] = useState<string | null>(null);
 
   const grid = useQuery({
     queryKey: ["market-grid", range],
     queryFn: () => fetchGrid({ data: { days: range } }),
     refetchInterval: 5 * 60_000,
     staleTime: 60_000,
+  });
+
+  // Newsy mają własne zapytanie i własny interwał: kanały RSS żyją szybciej
+  // niż notowania dzienne, a filtr po instrumencie nie może przeładowywać
+  // całej siatki cen.
+  const fetchNews = useServerFn(getMarketNews);
+  const news = useQuery({
+    queryKey: ["market-news", newsSymbol],
+    queryFn: () => fetchNews({ data: newsSymbol ? { symbol: newsSymbol } : {} }),
+    refetchInterval: 10 * 60_000,
+    staleTime: 2 * 60_000,
   });
 
   const series = useMemo<MarketSeries[]>(() => grid.data?.series ?? [], [grid.data]);
@@ -257,6 +273,32 @@ function MarketsPage() {
           </PanelHint>
         </HudPanel>
       )}
+
+      <div className="grid gap-6 @[900px]:grid-cols-[1fr_360px]">
+        <HudPanel index={3} title="MARKET GRID // NEWSY" className="min-w-0 p-5">
+          {news.isLoading ? (
+            <EmptyState>Ładowanie newsów…</EmptyState>
+          ) : (
+            <MarketNewsPanel
+              items={news.data?.items ?? []}
+              aiCount={news.data?.aiCount ?? 0}
+              filterSymbol={newsSymbol}
+              onClearFilter={() => setNewsSymbol(null)}
+            />
+          )}
+        </HudPanel>
+
+        <HudPanel index={3} title="MARKET GRID // WYDŹWIĘK" tone="quiet" className="min-w-0 p-5">
+          {news.isLoading ? (
+            <EmptyState>Liczenie…</EmptyState>
+          ) : (
+            <SentimentPanel
+              rows={news.data?.sentiment ?? []}
+              onSelect={(symbol) => setNewsSymbol((prev) => (prev === symbol ? null : symbol))}
+            />
+          )}
+        </HudPanel>
+      </div>
 
       <HudPanel index={4} title="MARKET GRID // DODAJ INSTRUMENT" tone="quiet" className="p-5">
         <AssetPicker

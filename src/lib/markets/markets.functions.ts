@@ -29,18 +29,29 @@ import {
   type SeriesStats,
 } from "./series";
 import type { QuoteSource } from "./quotes.server";
+import {
+  aggregateSentiment,
+  type MarketImpact,
+  type MarketNewsItem,
+  type SymbolSentiment,
+} from "./news";
 
 // Notowania dzienne zmieniają się raz na sesję, więc częstsze odpytywanie
 // darmowych API nic nie wnosi poza zużyciem limitu. Krypto chodzi 24/7,
 // stąd krótszy próg dla niego.
 const MIN_REFRESH_MS = 30 * 60_000;
 const MIN_REFRESH_CRYPTO_MS = 10 * 60_000;
+// Kanały RSS aktualizują się częściej niż notowania dzienne, ale ocena
+// każdej paczki kosztuje wywołanie modelu — stąd osobny, dłuższy próg.
+const MIN_NEWS_REFRESH_MS = 15 * 60_000;
 
 // Odświeżenie jest współdzielone między równoległych czytelników: pięciu
 // jednoczesnych użytkowników (albo pięć zakładek) ma wywołać jeden zaciąg,
 // nie pięć. Ten sam wzorzec co `inFlight` w module paliwowym.
 const lastRefreshAt = new Map<string, number>();
 let refreshInFlight: Promise<void> | null = null;
+let lastNewsIngestAt = 0;
+let newsInFlight: Promise<void> | null = null;
 
 export type MarketSeries = {
   symbol: string;
@@ -340,6 +351,135 @@ export const getMarketGrid = createServerFn({ method: "GET" })
       missing,
       refreshedAt: new Date().toISOString(),
       didFetch,
+    };
+  });
+
+// ------------------------------------------------------------- newsy ----
+
+export type MarketNews = {
+  items: MarketNewsItem[];
+  /** Wypadkowy wydźwięk newsów per instrument — NIE jest to prognoza ceny. */
+  sentiment: SymbolSentiment[];
+  /** Ile pozycji oceniło AI (reszta: heurystyka słownikowa). */
+  aiCount: number;
+  refreshedAt: string;
+};
+
+const NewsInput = z
+  .object({
+    limit: z.number().int().min(5).max(200).optional().default(60),
+    /** Zawęża do newsów dotyczących jednego instrumentu. */
+    symbol: z.string().min(1).max(32).optional(),
+  })
+  .optional();
+
+/**
+ * Zaciąga kanały, ocenia wpływ i zapisuje do współdzielonego cache'u.
+ * Nigdy nie rzuca w górę — padnięty kanał ma zostawić ślad w System Logs i
+ * pozwolić pokazać to, co już jest w bazie.
+ */
+async function refreshNews(
+  supabase: Db,
+  userId: string,
+  assets: MarketAsset[],
+  force: boolean,
+): Promise<void> {
+  if (!force && Date.now() - lastNewsIngestAt < MIN_NEWS_REFRESH_MS) return;
+
+  const { data: secret } = await supabase
+    .from("user_secrets")
+    .select("gemini_api_key, anthropic_api_key")
+    .eq("owner_id", userId)
+    .maybeSingle();
+
+  const { ingestMarketNews } = await import("./news.server");
+  const { items, errors } = await ingestMarketNews(assets, {
+    anthropicApiKey: secret?.anthropic_api_key?.trim() || null,
+    geminiApiKey: secret?.gemini_api_key?.trim() || null,
+  });
+
+  for (const err of errors) {
+    await logEvent(supabase, userId, "warn", `Kanał newsów: ${err}`, {} as Json);
+  }
+  if (items.length === 0) return;
+
+  // Upsert po guid: ten sam news wraca przy każdym zaciągu, a ponowna ocena
+  // (np. po dodaniu klucza AI) ma poprawić wiersz, nie dołożyć drugi.
+  const rows = items.map((i) => ({
+    guid: i.guid,
+    title: i.title,
+    link: i.link,
+    source: i.source,
+    published_at: i.publishedAt,
+    feed_tag: i.feedTag,
+    symbols: i.symbols,
+    impact: i.impact,
+    impact_score: i.impactScore,
+    summary_pl: i.summaryPl,
+    classified_by: i.classifiedBy,
+  }));
+  const { error } = await supabase.from("market_news_items").upsert(rows, { onConflict: "guid" });
+  if (error) {
+    await logEvent(supabase, userId, "error", `Zapis newsów: ${error.message}`, {} as Json);
+    return;
+  }
+  lastNewsIngestAt = Date.now();
+}
+
+export const getMarketNews = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => NewsInput.parse(input))
+  .handler(async ({ data, context }): Promise<MarketNews> => {
+    const limit = data?.limit ?? 60;
+    const { supabase, userId } = context;
+
+    const symbols = await loadWatchlist(supabase, userId);
+    const assets = symbols.map(assetBySymbol).filter((a): a is MarketAsset => Boolean(a));
+
+    // Jeden zaciąg naraz na proces — równolegli czytelnicy czekają na ten
+    // sam przebieg zamiast mnożyć wywołania modelu.
+    newsInFlight ??= refreshNews(supabase, userId, assets, false).finally(() => {
+      newsInFlight = null;
+    });
+    await newsInFlight.catch(() => undefined);
+
+    // Czytamy szerzej niż `limit`, bo wydźwięk MUSI być liczony z całego
+    // strumienia, a nie z tego, co zostało po filtrze — inaczej kliknięcie
+    // „pokaż newsy dla BTC" przeliczałoby wydźwięk wszystkich instrumentów
+    // na podstawie samych newsów o BTC.
+    const scanLimit = Math.min(limit * 3, 200);
+    const { data: rows, error } = await supabase
+      .from("market_news_items")
+      .select(
+        "id, guid, title, link, source, published_at, feed_tag, symbols, impact, impact_score, summary_pl, classified_by",
+      )
+      .order("published_at", { ascending: false, nullsFirst: false })
+      .limit(scanLimit);
+    if (error) throw new Error(error.message);
+
+    const all: MarketNewsItem[] = (rows ?? []).map((r) => ({
+      guid: r.guid,
+      title: r.title,
+      link: r.link,
+      source: r.source,
+      publishedAt: r.published_at,
+      feedTag: r.feed_tag ?? "",
+      symbols: r.symbols ?? [],
+      impact: (r.impact as MarketImpact | null) ?? "neutral",
+      impactScore: r.impact_score ?? 0,
+      summaryPl: r.summary_pl,
+      classifiedBy: r.classified_by === "ai" ? "ai" : "heuristic",
+    }));
+
+    const wanted = data?.symbol?.trim().toUpperCase();
+    const items = wanted ? all.filter((i) => i.symbols.includes(wanted)) : all;
+
+    return {
+      items: items.slice(0, limit),
+      // Zawsze z pełnego strumienia — patrz komentarz przy scanLimit.
+      sentiment: aggregateSentiment(all),
+      aiCount: items.slice(0, limit).filter((i) => i.classifiedBy === "ai").length,
+      refreshedAt: new Date().toISOString(),
     };
   });
 

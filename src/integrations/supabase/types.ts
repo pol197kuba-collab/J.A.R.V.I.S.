@@ -710,6 +710,54 @@ export type Database = {
         };
         Relationships: [];
       };
+      market_news_items: {
+        Row: {
+          classified_by: string | null;
+          feed_tag: string | null;
+          fetched_at: string;
+          guid: string;
+          id: string;
+          impact: string | null;
+          impact_score: number | null;
+          link: string;
+          published_at: string | null;
+          source: string | null;
+          summary_pl: string | null;
+          symbols: string[];
+          title: string;
+        };
+        Insert: {
+          classified_by?: string | null;
+          feed_tag?: string | null;
+          fetched_at?: string;
+          guid: string;
+          id?: string;
+          impact?: string | null;
+          impact_score?: number | null;
+          link: string;
+          published_at?: string | null;
+          source?: string | null;
+          summary_pl?: string | null;
+          symbols?: string[];
+          title: string;
+        };
+        Update: {
+          classified_by?: string | null;
+          feed_tag?: string | null;
+          fetched_at?: string;
+          guid?: string;
+          id?: string;
+          impact?: string | null;
+          impact_score?: number | null;
+          link?: string;
+          published_at?: string | null;
+          source?: string | null;
+          summary_pl?: string | null;
+          symbols?: string[];
+          title?: string;
+        };
+        Relationships: [];
+      };
       market_quotes: {
         Row: {
           close: number;
