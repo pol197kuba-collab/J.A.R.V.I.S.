@@ -11,6 +11,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { assetBySymbol, MARKET_ASSETS, type MarketAsset } from "./assets";
+import { fetchAllPages } from "@/lib/db/paginate";
 import {
   computeSeriesStats,
   normalizeSeries,
@@ -181,13 +182,26 @@ export const getMarketGrid = createServerFn({ method: "GET" })
     }
 
     const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
-    const { data: rows, error } = await supabase
-      .from("market_quotes")
-      .select("symbol, quote_date, close, source")
-      .in("symbol", symbols)
-      .gte("quote_date", since)
-      .order("quote_date", { ascending: true });
-    if (error) throw new Error(error.message);
+    // STRONICOWANE z tego samego powodu co w buildOutlook: dwadzieścia
+    // instrumentów razy 120 dni przekracza limit 1000 wierszy, który
+    // Supabase egzekwuje bez zgłaszania błędu. Bez tego wykresy pokazywały
+    // najstarszy wycinek historii i wyglądały, jakby dane urwały się kilka
+    // tygodni temu — ta sama awaria, którą przerobił moduł paliwowy.
+    const rows = await fetchAllPages<{
+      symbol: string;
+      quote_date: string;
+      close: number;
+      source: string;
+    }>((from, to) =>
+      supabase
+        .from("market_quotes")
+        .select("symbol, quote_date, close, source")
+        .in("symbol", symbols)
+        .gte("quote_date", since)
+        .order("quote_date", { ascending: true })
+        .order("symbol", { ascending: true })
+        .range(from, to),
+    );
 
     const bySymbol = new Map<string, Array<{ date: string; close: number; source: string }>>();
     for (const row of rows ?? []) {
