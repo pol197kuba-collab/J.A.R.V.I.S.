@@ -1704,6 +1704,127 @@ docx/pptx already handle JPEG. Persona + tool-schema migration
 now embeds real photos (via Openverse) instead of failing on the AI model;
 `/documents` "grafiki w toku" → real images appear.
 
+## 16. [F] Anthropic Claude as a second provider + live model lists — **shipped 2026-09-20**
+
+Follow-up to #5, which had to stop at Groq because Claude was claude.ai-only
+at the time. An API console key is now available, so the adapter boundary
+#5 established (`providers/types.ts` as the canonical Gemini-shaped turn)
+finally carries a second _reasoning_ provider, not just a failover tier.
+
+Audit that started it: **every agent was on `gemini-2.5-flash`** — the
+per-agent `model` column, `user_settings.default_model`, and every seed
+migration all pointed at it, so a one-word UI classification and a
+multi-step research run were served by the same model.
+
+Shipped:
+
+- `providers/anthropic.ts` — Messages API adapter. Reconnects each
+  `tool_result` to its `tool_use` via the same call/response pairing
+  invariant the Groq adapter relies on (Gemini has no such ids, so they're
+  synthesized). Omits `temperature` for the models that hard-400 on it
+  (Opus 5, Sonnet 5) — that guard is what keeps the per-agent temperature
+  slider from breaking every Claude run. Carries F.O.R.G.E.'s forced-tool
+  pin through as `tool_choice`, and raises a safety decline as an error so
+  the existing Groq failover handles it like any other provider failure.
+- Model ids now take an optional provider prefix (`anthropic:claude-opus-5`).
+  **A bare id still means Gemini**, so no stored `agents.model` /
+  `default_model` value needed migrating.
+- `user_secrets.anthropic_api_key` (migration `20260920160000`), same BYOK
+  pattern as Gemini/Groq. An agent configured for Claude with no key stored
+  degrades to the Gemini default and logs a warning — it does not fail.
+- Settings: Claude panel + one-click recommended tiering (reasoning agents
+  on Opus 5, executing agents on Sonnet 5).
+- **Model dropdowns are no longer maintained by hand.** They come from
+  `GET /v1beta/models` (Gemini) and `GET /v1/models` (Anthropic), keyed by
+  the user's own keys, parsed in `modelCatalog.ts` (tested on captured
+  samples), cached 15 min server-side. The parser drops anything without
+  `generateContent` _and_ models that declare it but aren't conversational
+  (image generators, embeddings, `live` variants).
+
+  This existed because the hand-kept list had already drifted into a
+  migration: `20260710061408` rolled users off `gemini-3.5-flash`, an id
+  the API didn't accept. Both guessed preview ids are gone from the
+  fallback list; new models now appear on their own once a key sees them.
+  The static lists survive only as a fallback (loading, no key, API down),
+  and are _merged_ with the live list rather than replaced — a manually
+  set model never disappears from the dropdown just because a key is
+  missing. Settings states which source each provider's list came from.
+
+Gemini stays mandatory: `web_search` grounding and the memory embeddings
+are Gemini-specific capabilities and run regardless of who serves the turn.
+
+## 17. [W] Market Grid — `/rynki` — **shipped 2026-09-20, stages 1-3**
+
+Monitoring of stocks, crypto, commodities, indices and FX, with news,
+signals and — the part that makes it more than a toy — a measurement of
+whether its own calls are any good. Same architecture as the fuel module:
+server-side ingest (no source sends CORS headers), Supabase cache, pure
+analytics in separate tested files.
+
+**Stage 1 — data, cache, charts, watchlist.** 20 instruments. No single
+free source for equities is reliable from a server: Stooq answers with an
+anti-bot HTML page when it decides the client is a robot, and Yahoo rate-
+limits whole datacenter IP ranges. Each alone is unreliable, both at once
+rarely — so equities/indices/commodities go through a **provider chain**
+(Stooq → Yahoo) that always reports which provider actually answered.
+Crypto comes from CoinGecko, FX from Frankfurter. An empty response counts
+as a failure, not as "no quotes" — that is exactly what the anti-bot page
+parses to. Charts have **one axis**: comparing several instruments is only
+possible in "index 100" mode, because a second axis lets you manufacture
+any correlation by picking ranges. Palette `--market-1..8`, fixed order
+per instrument, adjacent-pair CVD separation validated (worst ΔE 11.6
+deutan, 24.1 normal vision).
+
+Known data limitation, documented in `assets.ts`: **Yahoo serves only the
+latest quote for WIG20**, so its history depends on Stooq alone. The
+WIG20TR ETF is in the catalog as a full-history alternative.
+
+**Stage 2 — news + impact.** Six feeds. Unlike the fuel module, direction
+is always **relative to the instruments named on the headline** — the same
+story is bullish for gold and bearish for equities — so each row carries a
+`symbols` array; empty means "market-wide", not "unassigned". Classified
+through the same adapters as agent conversations (Claude → Gemini →
+dictionary heuristic), so there is no third copy of a model call. Keyword
+matching is word-boundary based after a real false positive on live feeds:
+"Bitcoin **Gold**en Cross" was landing on gold. Polish inflection uses an
+explicit prefix form (`złot*`).
+
+**Stage 3 — signals, the tipster, and accuracy.** All numbers (Wilder RSI,
+momentum, moving averages, volatility, range position) are computed in
+deterministic TS and handed to the model **already calculated** — an LLM
+asked to compute RSI returns a plausible-looking number that is sometimes
+wrong, and the prompt says so explicitly.
+
+Design bug caught by its own test, worth recording: the first scoring pass
+treated RSI as a separate, opposing contribution. Under it, an unbroken
+uptrend scored 14 and was labelled "no direction", because the overbought
+penalty nearly cancelled trend and momentum. The strongest possible trend
+read as no signal is a defect, not caution. Now direction comes from trend
+and momentum, while RSI and range position **dampen** it by at most 45% and
+never invert it — to reverse the direction, the price has to turn.
+
+Every forecast is stored with the price at prediction time and settled after
+a week against the first quote **not earlier than** its due date — not the
+latest quote available, which would settle a two-month-old call on a
+completely different horizon. An "up" call counts as a hit only on a real
+≥1% move. Two rows per instrument (`signals` and `ai`) so the scoreboard
+answers the only question that matters: does the model beat plain
+arithmetic, or merely describe it better. Below 20 settled forecasts the
+panel greys the numbers out and says they mean nothing yet.
+
+Migrations `20260920170000` (quotes + watchlist), `20260920180000` (news),
+`20260920190000` (predictions).
+
+**Nightly job** `.github/workflows/market-grid.yml` +
+`scripts/markets-daily.ts` — thin, like `orlen-daily.ts`, over the shared
+core in `markets/ingest.server.ts`. It exists for three things a page visit
+cannot do: keep the history gap-free on days nobody opens the app, settle a
+forecast **in its own window** rather than whenever someone next visits,
+and produce one prediction per instrument per day instead of a clump of
+whichever days someone happened to look. Watchlist and predictions are
+per-user, so the job's account (or `JARVIS_OWNER_ID`) decides whose
+instruments are fetched and whose forecasts are settled.
+
 ## Long-shot / not scheduled
 
 - **Local device bridge** (desktop automation, local Ollama) — needs a new
