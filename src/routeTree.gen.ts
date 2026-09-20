@@ -17,8 +17,9 @@ import { Route as SituationRoomRouteImport } from './routes/situation-room'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SchemaRouteImport } from './routes/schema'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
-import { Route as McpRouteImport } from './routes/mcp'
+import { Route as PaliwaRouteImport } from './routes/paliwa'
 import { Route as NotesRouteImport } from './routes/notes'
+import { Route as McpRouteImport } from './routes/mcp'
 import { Route as JarvisRouteImport } from './routes/jarvis'
 import { Route as FeedRouteImport } from './routes/feed'
 import { Route as DocumentsRouteImport } from './routes/documents'
@@ -71,14 +72,19 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
   path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
-const McpRoute = McpRouteImport.update({
-  id: '/mcp',
-  path: '/mcp',
+const PaliwaRoute = PaliwaRouteImport.update({
+  id: '/paliwa',
+  path: '/paliwa',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NotesRoute = NotesRouteImport.update({
   id: '/notes',
   path: '/notes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const JarvisRoute = JarvisRouteImport.update({
@@ -149,6 +155,7 @@ export interface FileRoutesByFullPath {
   '/jarvis': typeof JarvisRoute
   '/mcp': typeof McpRoute
   '/notes': typeof NotesRoute
+  '/paliwa': typeof PaliwaRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schema': typeof SchemaRoute
   '/settings': typeof SettingsRoute
@@ -172,6 +179,7 @@ export interface FileRoutesByTo {
   '/jarvis': typeof JarvisRoute
   '/mcp': typeof McpRoute
   '/notes': typeof NotesRoute
+  '/paliwa': typeof PaliwaRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schema': typeof SchemaRoute
   '/settings': typeof SettingsRoute
@@ -196,6 +204,7 @@ export interface FileRoutesById {
   '/jarvis': typeof JarvisRoute
   '/mcp': typeof McpRoute
   '/notes': typeof NotesRoute
+  '/paliwa': typeof PaliwaRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schema': typeof SchemaRoute
   '/settings': typeof SettingsRoute
@@ -221,6 +230,7 @@ export interface FileRouteTypes {
     | '/jarvis'
     | '/mcp'
     | '/notes'
+    | '/paliwa'
     | '/reset-password'
     | '/schema'
     | '/settings'
@@ -244,6 +254,7 @@ export interface FileRouteTypes {
     | '/jarvis'
     | '/mcp'
     | '/notes'
+    | '/paliwa'
     | '/reset-password'
     | '/schema'
     | '/settings'
@@ -267,6 +278,7 @@ export interface FileRouteTypes {
     | '/jarvis'
     | '/mcp'
     | '/notes'
+    | '/paliwa'
     | '/reset-password'
     | '/schema'
     | '/settings'
@@ -291,6 +303,7 @@ export interface RootRouteChildren {
   JarvisRoute: typeof JarvisRoute
   McpRoute: typeof McpRoute
   NotesRoute: typeof NotesRoute
+  PaliwaRoute: typeof PaliwaRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SchemaRoute: typeof SchemaRoute
   SettingsRoute: typeof SettingsRoute
@@ -364,11 +377,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/mcp': {
-      id: '/mcp'
-      path: '/mcp'
-      fullPath: '/mcp'
-      preLoaderRoute: typeof McpRouteImport
+    '/paliwa': {
+      id: '/paliwa'
+      path: '/paliwa'
+      fullPath: '/paliwa'
+      preLoaderRoute: typeof PaliwaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/notes': {
@@ -376,6 +389,13 @@ declare module '@tanstack/react-router' {
       path: '/notes'
       fullPath: '/notes'
       preLoaderRoute: typeof NotesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/jarvis': {
@@ -467,6 +487,7 @@ const rootRouteChildren: RootRouteChildren = {
   JarvisRoute: JarvisRoute,
   McpRoute: McpRoute,
   NotesRoute: NotesRoute,
+  PaliwaRoute: PaliwaRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SchemaRoute: SchemaRoute,
   SettingsRoute: SettingsRoute,

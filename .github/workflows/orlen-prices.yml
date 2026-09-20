@@ -1,0 +1,53 @@
+name: Orlen Fuel Grid
+
+# Zaciąg cennika hurtowego Orlenu, notowań Brent/USD-PLN i newsów rynkowych
+# do cache w Supabase. Moduł /paliwa dociąga dane też sam przy wejściu na
+# stronę, ale tylko ten job gwarantuje, że przy zamkniętej aplikacji historia
+# nie ma dziur, a progi alertów w ogóle mają kiedy zadziałać.
+on:
+  schedule:
+    # Orlen publikuje cennik raz dziennie w dni robocze. Dwa przebiegi:
+    # rano (domknięcie wczorajszego dnia) i po południu (świeża publikacja).
+    - cron: "30 5 * * 1-5" # 07:30 CEST
+    - cron: "30 13 * * 1-5" # 15:30 CEST
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: "Pełna archiwizacja od 2004 (~26 tys. wierszy)"
+        type: boolean
+        default: false
+
+# Dwa przebiegi na raz zapisywałyby te same wiersze — upsert by to przeżył,
+# ale nie ma powodu płacić za wyścig.
+concurrency:
+  group: orlen-fuel-grid
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    name: zaciąg cen, rynku i newsów
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # npm (nie bun) — tak jak w ci.yml: package-lock.json jest lockfile'em,
+      # który weryfikuje `npm ci`.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Ingest
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          JARVIS_OWNER_ID: ${{ secrets.JARVIS_OWNER_ID }}
+          # Opcjonalny: bez niego newsy dostają ocenę heurystyczną zamiast
+          # streszczeń po polsku, a job i tak kończy się sukcesem.
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ORLEN_BACKFILL: ${{ inputs.backfill }}
+        run: npx tsx scripts/orlen-daily.ts

@@ -15,6 +15,7 @@ import {
   Command,
   StickyNote,
   Rss,
+  Fuel,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -28,6 +29,7 @@ const items = [
   { title: "JARVIS", url: "/jarvis", icon: Hexagon },
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Feed", url: "/feed", icon: Rss },
+  { title: "Paliwa", url: "/paliwa", icon: Fuel },
   { title: "Agents", url: "/agent-hub", icon: Bot },
   { title: "Tasks", url: "/tasks", icon: ListChecks },
   { title: "Notes", url: "/notes", icon: StickyNote },

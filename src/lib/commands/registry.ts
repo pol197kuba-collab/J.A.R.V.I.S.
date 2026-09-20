@@ -71,6 +71,30 @@ export const COMMAND_REGISTRY = [
     phrases: ["Open JARVIS panel", "Jarvis, otwórz panel JARVIS", "Jarvis, pokaż JARVISA"],
     description: "Opens the dedicated J.A.R.V.I.S. core panel.",
   },
+  // MUSI stać przed `open_fuel`: VoiceCommandContext bierze PIERWSZE
+  // dopasowanie z tablicy, a "open fuel prices" pasuje też do tamtego
+  // wzorca (`open\s+fuel`). Kolejność rozstrzyga to na korzyść cennika —
+  // kto mówi „fuel prices", chce wykresów, nie ramki z sub-systemem.
+  {
+    id: "open_fuel_prices",
+    category: "Navigation",
+    kind: { type: "route", path: "/paliwa" },
+    pattern:
+      // `orlen(?:a|u|em|ie)?` — polska odmiana: "ceny Orlenu", "cennik
+      // Orlenu", "co z Orlenem". Samo `orlen\b` nie złapałoby żadnej z nich,
+      // bo granica słowa wypada dopiero za końcówką.
+      /\b(fuel\s+prices|wholesale\s+fuel|ceny\s+paliw|ceny\s+hurtowe|hurtowe\s+ceny|cennik\s+hurtowy|orlen(?:a|u|em|ie)?)\b/i,
+    confirmation: "Otwieram monitoring hurtowych cen paliw, Panie Sławiński.",
+    label: "Open Fuel Prices",
+    phrases: [
+      "Jarvis, ceny paliw",
+      "Show fuel prices",
+      "Jarvis, pokaż cennik hurtowy",
+      "Jarvis, ceny Orlenu",
+    ],
+    description:
+      "Opens the Orlen wholesale fuel price monitor: price charts for five fuels, Brent and USD/PLN context, a short-term forecast and market news.",
+  },
   {
     id: "open_fuel",
     category: "Navigation",
