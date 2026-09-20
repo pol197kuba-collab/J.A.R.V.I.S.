@@ -45,7 +45,7 @@ const MIN_OUTLOOK_REFRESH_MS = 60 * 60_000;
 
 let refreshInFlight: Promise<void> | null = null;
 let lastNewsIngestAt = 0;
-let newsInFlight: Promise<void> | null = null;
+let newsInFlight: Promise<string[]> | null = null;
 let lastOutlookAt = 0;
 let outlookCache: MarketOutlook | null = null;
 
@@ -234,6 +234,8 @@ export type MarketNews = {
   sentiment: SymbolSentiment[];
   /** Ile pozycji oceniło AI (reszta: heurystyka słownikowa). */
   aiCount: number;
+  /** Czemu zaciąg nic nie przyniósł — puste, gdy wszystko poszło dobrze. */
+  errors: string[];
   refreshedAt: string;
 };
 
@@ -259,16 +261,23 @@ export const getMarketNews = createServerFn({ method: "GET" })
     // Jeden zaciąg naraz na proces i nie częściej niż co próg — kanały RSS
     // żyją szybciej niż notowania, ale ocena każdej paczki kosztuje
     // wywołanie modelu.
+    let ingestErrors: string[] = [];
     if (Date.now() - lastNewsIngestAt > MIN_NEWS_REFRESH_MS) {
       const keys = await loadModelKeys(supabase, userId);
       newsInFlight ??= ingestNews(supabase, userId, assets, keys)
-        .then(() => {
+        .then((result) => {
           lastNewsIngestAt = Date.now();
+          return result.errors;
         })
         .finally(() => {
           newsInFlight = null;
         });
-      await newsInFlight.catch(() => undefined);
+      // Uchwyt trzymamy lokalnie: `finally` powyżej zeruje pole, więc
+      // odczytanie go po await bywałoby już nullem.
+      const pending = newsInFlight;
+      ingestErrors = await pending.catch((err: unknown) => [
+        err instanceof Error ? err.message : String(err),
+      ]);
     }
 
     // Czytamy szerzej niż `limit`, bo wydźwięk MUSI być liczony z całego
@@ -308,6 +317,9 @@ export const getMarketNews = createServerFn({ method: "GET" })
       // Zawsze z pełnego strumienia — patrz komentarz przy scanLimit.
       sentiment: aggregateSentiment(all),
       aiCount: page.filter((i) => i.classifiedBy === "ai").length,
+      // Powody pokazujemy tylko wtedy, gdy nie ma czego pokazać — przy
+      // działającym strumieniu pojedynczy padnięty kanał to szum.
+      errors: all.length === 0 ? ingestErrors : [],
       refreshedAt: new Date().toISOString(),
     };
   });
@@ -333,7 +345,17 @@ export const getMarketOutlook = createServerFn({ method: "GET" })
 
     // Przeliczenie kosztuje wywołanie modelu, a horyzont prognozy to
     // tydzień — częstsze liczenie nic nie wnosi poza rachunkiem.
-    if (!force && outlookCache && Date.now() - lastOutlookAt < MIN_OUTLOOK_REFRESH_MS) {
+    // Pusty wynik NIE jest cache'owany. Na pierwszym wejściu na stronę typer
+    // i zaciąg notowań startują równolegle, więc typer potrafi odczytać
+    // jeszcze pusty cache notowań — zapamiętanie tego na godzinę zostawiało
+    // panel z komunikatem „za mało notowań" długo po tym, jak notowania już
+    // były w bazie. (Zaobserwowane na żywo przy pierwszym uruchomieniu.)
+    if (
+      !force &&
+      outlookCache &&
+      outlookCache.rows.length > 0 &&
+      Date.now() - lastOutlookAt < MIN_OUTLOOK_REFRESH_MS
+    ) {
       return outlookCache;
     }
 
@@ -347,8 +369,11 @@ export const getMarketOutlook = createServerFn({ method: "GET" })
       model,
       generatedAt: new Date().toISOString(),
     };
-    outlookCache = result;
-    lastOutlookAt = Date.now();
+    // Jak wyżej: zapamiętujemy tylko wynik, który cokolwiek zawiera.
+    if (result.rows.length > 0) {
+      outlookCache = result;
+      lastOutlookAt = Date.now();
+    }
     return result;
   });
 

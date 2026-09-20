@@ -200,14 +200,23 @@ export async function ingestNews(
   userId: string,
   assets: MarketAsset[],
   keys: ModelKeys,
-): Promise<{ written: number; aiCount: number }> {
+): Promise<{ written: number; aiCount: number; errors: string[] }> {
   const { ingestMarketNews } = await import("./news.server");
   const { items, errors } = await ingestMarketNews(assets, keys);
 
   for (const err of errors) {
     await logEvent(supabase, userId, "warn", `Kanał newsów: ${err}`, {} as Json);
   }
-  if (items.length === 0) return { written: 0, aiCount: 0 };
+  // Powód pustego zaciągu wraca do wywołującego, a nie tylko do logów:
+  // „brak newsów" bez przyczyny wygląda identycznie jak „jeszcze się nie
+  // zaciągnęły", a to dwie zupełnie różne sytuacje.
+  if (items.length === 0) {
+    return {
+      written: 0,
+      aiCount: 0,
+      errors: errors.length > 0 ? errors : ["żaden kanał nie zwrócił pozycji"],
+    };
+  }
 
   // Upsert po guid: ten sam news wraca przy każdym zaciągu, a ponowna ocena
   // (np. po dodaniu klucza AI) ma poprawić wiersz, nie dołożyć drugi.
@@ -227,9 +236,13 @@ export async function ingestNews(
   const { error } = await supabase.from("market_news_items").upsert(rows, { onConflict: "guid" });
   if (error) {
     await logEvent(supabase, userId, "error", `Zapis newsów: ${error.message}`, {} as Json);
-    return { written: 0, aiCount: 0 };
+    return { written: 0, aiCount: 0, errors: [`zapis do bazy: ${error.message}`] };
   }
-  return { written: items.length, aiCount: items.filter((i) => i.classifiedBy === "ai").length };
+  return {
+    written: items.length,
+    aiCount: items.filter((i) => i.classifiedBy === "ai").length,
+    errors,
+  };
 }
 
 // ------------------------------------------------------------- typer ----

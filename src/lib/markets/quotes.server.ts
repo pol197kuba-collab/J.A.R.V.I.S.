@@ -117,8 +117,12 @@ export async function fetchAssetSeries(asset: MarketAsset, days = 120): Promise<
   const attempts: Array<{ source: QuoteSource; run: () => Promise<PricePoint[]> }> = [];
 
   if (asset.source.kind === "coingecko") {
-    const { id } = asset.source;
+    const { id, yahoo } = asset.source;
     attempts.push({ source: "coingecko", run: () => fetchCoinGecko(id, days) });
+    // Darmowy tier CoinGecko liczy limit na adres IP, a hosting aplikacji ten
+    // adres dzieli — HTTP 429 nie jest tu rzadkością. Yahoo notuje te same
+    // pary (BTC-USD itd.), więc jest sensownym drugim podejściem.
+    if (yahoo) attempts.push({ source: "yahoo", run: () => fetchYahoo(yahoo, days) });
   } else if (asset.source.kind === "fx") {
     const { base, quote } = asset.source;
     attempts.push({ source: "frankfurter", run: () => fetchFx(base, quote, days) });

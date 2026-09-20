@@ -65,3 +65,20 @@ describe("searchAssets", () => {
     expect(searchAssets("   ")).toHaveLength(MARKET_ASSETS.length);
   });
 });
+
+describe("fallback providers", () => {
+  it("gives crypto a second provider too", () => {
+    // Regresja na realną awarię na produkcji: CoinGecko zwrócił HTTP 429
+    // (limit liczony na adres IP, który hosting dzieli) i Bitcoin z Ethereum
+    // zniknęły z watchlisty, mimo że reszta zaciągnęła się poprawnie.
+    for (const asset of MARKET_ASSETS) {
+      if (asset.source.kind !== "coingecko") continue;
+      expect(asset.source.yahoo, `${asset.symbol} bez fallbacku`).toBeTruthy();
+    }
+  });
+
+  it("leaves FX with its single source, which is not rate-limited per IP", () => {
+    const fx = MARKET_ASSETS.filter((a) => a.source.kind === "fx");
+    expect(fx.length).toBeGreaterThan(0);
+  });
+});

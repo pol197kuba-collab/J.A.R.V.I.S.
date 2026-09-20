@@ -20,9 +20,15 @@ export type AssetClass = "crypto" | "equity" | "index" | "commodity" | "fx";
  * rate-limitowany po IP. Żadne z tych dwóch darmowych źródeł nie jest
  * niezawodne samo w sobie, więc łańcuch próbuje po kolei i raportuje, które
  * faktycznie odpowiedziało.
+ *
+ * `coingecko` niesie zapasowy ticker z tego samego powodu: darmowy tier
+ * CoinGecko liczy limit na adres IP, a hosting aplikacji ten adres dzieli.
+ * Na pierwszym uruchomieniu na produkcji Bitcoin i Ethereum wróciły z
+ * HTTP 429 i zniknęły z watchlisty, mimo że reszta instrumentów zaciągnęła
+ * się poprawnie — jeden dostawca na klasę aktywów okazał się za mało.
  */
 export type AssetSource =
-  | { kind: "coingecko"; id: string }
+  | { kind: "coingecko"; id: string; yahoo?: string }
   | { kind: "stooq"; ticker: string; yahoo?: string }
   | { kind: "fx"; base: string; quote: string };
 
@@ -47,7 +53,7 @@ export const MARKET_ASSETS: MarketAsset[] = [
     assetClass: "crypto",
     currency: "USD",
     colorToken: "var(--market-1)",
-    source: { kind: "coingecko", id: "bitcoin" },
+    source: { kind: "coingecko", id: "bitcoin", yahoo: "BTC-USD" },
     hint: "Największa kryptowaluta, wyznacza kierunek całego rynku",
   },
   {
@@ -56,7 +62,7 @@ export const MARKET_ASSETS: MarketAsset[] = [
     assetClass: "crypto",
     currency: "USD",
     colorToken: "var(--market-2)",
-    source: { kind: "coingecko", id: "ethereum" },
+    source: { kind: "coingecko", id: "ethereum", yahoo: "ETH-USD" },
     hint: "Druga kapitalizacja, platforma smart kontraktów",
   },
   {
@@ -65,7 +71,7 @@ export const MARKET_ASSETS: MarketAsset[] = [
     assetClass: "crypto",
     currency: "USD",
     colorToken: "var(--market-3)",
-    source: { kind: "coingecko", id: "solana" },
+    source: { kind: "coingecko", id: "solana", yahoo: "SOL-USD" },
   },
   {
     symbol: "XRP",
@@ -73,7 +79,7 @@ export const MARKET_ASSETS: MarketAsset[] = [
     assetClass: "crypto",
     currency: "USD",
     colorToken: "var(--market-4)",
-    source: { kind: "coingecko", id: "ripple" },
+    source: { kind: "coingecko", id: "ripple", yahoo: "XRP-USD" },
   },
   // ---------------------------------------------------------------- akcje
   {
