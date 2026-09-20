@@ -27,6 +27,7 @@ import {
   type SeriesPoint,
 } from "./market";
 import { FEEDS, dedupeNews, parseRss, type NewsItem } from "./news";
+import { fetchAllPages } from "./paginate";
 import { classifyNewsImpact } from "./news.server";
 
 export type Db = SupabaseClient<Database>;
@@ -200,15 +201,22 @@ export async function readMarketSeries(
   db: Db,
   fromDate: string,
 ): Promise<{ brent: SeriesPoint[]; usdPln: SeriesPoint[] }> {
-  const { data } = await db
-    .from("orlen_market_series")
-    .select("symbol, series_date, value")
-    .gte("series_date", fromDate)
-    .order("series_date", { ascending: true });
+  // Dwa symbole na dzień, więc dwa lata notowań to ~1460 wierszy — ponad
+  // limit strony w Supabase. `symbol` jako drugi klucz sortowania, bo datę
+  // dzielą obie serie (patrz komentarz w paginate.ts).
+  const data = await fetchAllPages((from, to) =>
+    db
+      .from("orlen_market_series")
+      .select("symbol, series_date, value")
+      .gte("series_date", fromDate)
+      .order("series_date", { ascending: true })
+      .order("symbol", { ascending: true })
+      .range(from, to),
+  );
 
   const brent: SeriesPoint[] = [];
   const usdPln: SeriesPoint[] = [];
-  for (const row of data ?? []) {
+  for (const row of data) {
     const point = { date: row.series_date, value: Number(row.value) };
     if (row.symbol === BRENT_SYMBOL) brent.push(point);
     else if (row.symbol === USDPLN_SYMBOL) usdPln.push(point);

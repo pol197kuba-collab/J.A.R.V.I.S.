@@ -26,6 +26,7 @@ import type { Impact } from "./news";
 // Tylko typ — import jest wymazywany, więc ten plik nie wciąga
 // ingest.server.ts do bundla klienta.
 import type { Db } from "./ingest.server";
+import { fetchAllPages } from "./paginate";
 
 // ------------------------------------------------------------- typy ----
 
@@ -217,21 +218,36 @@ export const getFuelGrid = createServerFn({ method: "GET" })
       }
     }
 
-    const { data: rows, error } = await supabase
-      .from("orlen_fuel_prices")
-      .select("product_id, price_date, price_per_m3, is_gap_fill")
-      .gte("price_date", isoDaysAgo(days))
-      .order("price_date", { ascending: true });
-
-    if (error) {
-      await logFailure({ supabase, userId }, `Fuel cache read failed: ${error.message}`, {
+    // Stronicowane, bo rok historii pięciu paliw to 1825 wierszy, a pięć lat
+    // ponad 9000 — powyżej limitu, który Supabase ucina bez błędu.
+    // `product_id` jako drugi klucz sortowania: datę dzieli pięć produktów,
+    // a przy podziale na strony niejednoznaczna kolejność gubi wiersze.
+    let rows: Array<{
+      product_id: number;
+      price_date: string;
+      price_per_m3: number;
+      is_gap_fill: boolean;
+    }>;
+    try {
+      rows = await fetchAllPages((from, to) =>
+        supabase
+          .from("orlen_fuel_prices")
+          .select("product_id, price_date, price_per_m3, is_gap_fill")
+          .gte("price_date", isoDaysAgo(days))
+          .order("price_date", { ascending: true })
+          .order("product_id", { ascending: true })
+          .range(from, to),
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await logFailure({ supabase, userId }, `Fuel cache read failed: ${message}`, {
         days,
       } as unknown as Json);
-      throw new Error(error.message);
+      throw err;
     }
 
     const byProduct = new Map<number, PricePoint[]>();
-    for (const row of rows ?? []) {
+    for (const row of rows) {
       const list = byProduct.get(row.product_id) ?? [];
       list.push({
         date: row.price_date,
@@ -336,16 +352,20 @@ export const getMarketOverlay = createServerFn({ method: "GET" })
     const { joinSeries } = await import("./market");
     const points = joinSeries(brent, usdPln);
 
-    const { data: priceRows } = await supabase
-      .from("orlen_fuel_prices")
-      .select("price_date, price_per_m3")
-      .eq("product_id", productId)
-      .gte("price_date", fromDate)
-      .order("price_date", { ascending: true });
-
-    const priceByDate = new Map(
-      (priceRows ?? []).map((r) => [r.price_date, Number(r.price_per_m3)]),
+    // Jeden produkt, ale zakres sięga 2000 dni — też ponad limit strony.
+    // `price_date` jest tu unikalne (filtr po product_id), więc wystarcza
+    // jako jedyny klucz sortowania.
+    const priceRows = await fetchAllPages((from, to) =>
+      supabase
+        .from("orlen_fuel_prices")
+        .select("price_date, price_per_m3")
+        .eq("product_id", productId)
+        .gte("price_date", fromDate)
+        .order("price_date", { ascending: true })
+        .range(from, to),
     );
+
+    const priceByDate = new Map(priceRows.map((r) => [r.price_date, Number(r.price_per_m3)]));
 
     // Korelacja liczona tylko na dniach, w których mamy OBIE wartości —
     // inaczej weekend (jest cennik, nie ma sesji) przesuwałby serie
