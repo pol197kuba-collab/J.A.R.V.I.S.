@@ -4,7 +4,14 @@
 // nagłówku, nigdy nastroju rynku ogólnie — ten sam news bywa dobry dla
 // złota i zły dla akcji. Panel pokazuje te symbole przy każdej pozycji
 // właśnie po to, żeby tej dwuznaczności nie dało się przeoczyć.
-import { ArrowDownRight, ArrowUpRight, ExternalLink, Minus, Sparkles } from "lucide-react";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  ExternalLink,
+  Minus,
+  Sparkles,
+  TriangleAlert,
+} from "lucide-react";
 import { EmptyState, PanelHint } from "@/components/jarvis/fuel/chrome";
 import type { MarketNewsItem } from "@/lib/markets/news";
 
@@ -27,15 +34,49 @@ function relativeTime(iso: string | null): string {
 export function MarketNewsPanel({
   items,
   aiCount,
+  errors,
   filterSymbol,
   onClearFilter,
 }: {
   items: MarketNewsItem[];
   aiCount: number;
+  /** Powody pustego zaciągu — puste, gdy strumień działa. */
+  errors: string[];
   filterSymbol: string | null;
   onClearFilter: () => void;
 }) {
   if (items.length === 0) {
+    // „Brak newsów" bez powodu wygląda identycznie jak „jeszcze się nie
+    // zaciągnęły", a to dwie różne sytuacje — jedna wymaga czekania, druga
+    // naprawy. Skoro serwer zna przyczynę, panel ma ją pokazać.
+    if (!filterSymbol && errors.length > 0) {
+      return (
+        <div className="mt-3 space-y-1.5">
+          <div className="flex min-w-0 items-start gap-2">
+            <TriangleAlert
+              className="mt-0.5 h-3.5 w-3.5 shrink-0"
+              style={{ color: "var(--warning)" }}
+            />
+            <p className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">
+              Zaciąg newsów nie przyniósł nic
+            </p>
+          </div>
+          {errors.map((err) => (
+            <p
+              key={err}
+              className="min-w-0 break-words pl-5 font-mono text-[10px] leading-relaxed text-muted-foreground"
+            >
+              {err}
+            </p>
+          ))}
+          <PanelHint>
+            Kanały RSS są pobierane przez serwer aplikacji. Najczęstsza przyczyna to blokada ruchu
+            po adresie IP hostingu albo chwilowa niedostępność Google News — pełne komunikaty
+            trafiają też do System Logs. Moduł ponowi próbę przy kolejnym odświeżeniu.
+          </PanelHint>
+        </div>
+      );
+    }
     return (
       <EmptyState>
         {filterSymbol ? `Brak newsów dla ${filterSymbol}` : "Brak newsów — poczekaj na zaciąg"}

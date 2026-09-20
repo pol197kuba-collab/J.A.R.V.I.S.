@@ -332,6 +332,7 @@ function MarketsPage() {
             <MarketNewsPanel
               items={news.data?.items ?? []}
               aiCount={news.data?.aiCount ?? 0}
+              errors={news.data?.errors ?? []}
               filterSymbol={newsSymbol}
               onClearFilter={() => setNewsSymbol(null)}
             />
