@@ -1,11 +1,13 @@
 // ORLEN FUEL GRID — server functions modułu monitoringu hurtowych cen paliw.
 //
-// Pobieranie idzie przez serwer z dwóch powodów: tool.orlen.pl nie wystawia
-// Access-Control-Allow-Origin (przeglądarka dostanie ścianę CORS), a zapis do
-// cache wymaga service_role, bo tabele cen są read-only dla `authenticated`.
-// Ten sam powód i ten sam wzorzec co src/lib/geo/flightRadar.functions.ts —
-// łącznie z logowaniem awarii do system_events, żeby były widoczne w
-// /system-logs bez zaglądania do devtools.
+// Pobieranie idzie przez serwer, bo tool.orlen.pl nie wystawia nagłówka
+// Access-Control-Allow-Origin — przeglądarka dostałaby ścianę CORS. Ten sam
+// powód i ten sam wzorzec co src/lib/geo/flightRadar.functions.ts, łącznie
+// z logowaniem awarii do system_events, żeby były widoczne w /system-logs
+// bez zaglądania do devtools.
+//
+// Zapisuje `resolveWriter` (niżej): service_role, gdy aplikacja go ma, a poza
+// tym sesja zalogowanego użytkownika.
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
@@ -44,10 +46,11 @@ export type FuelGrid = {
   /** true, gdy to wywołanie faktycznie odpytało Orlen (a nie tylko cache). */
   didFetch: boolean;
   /**
-   * false, gdy aplikacja nie ma klucza service_role — moduł działa wtedy
-   * w trybie tylko do odczytu, a dane odświeża wyłącznie nocny job.
+   * Czym moduł zapisał cache przy tym żądaniu: kluczem service_role
+   * (gdy aplikacja go ma) czy sesją zalogowanego użytkownika. Wpływa tylko
+   * na to, co pokazuje panel diagnostyczny — dane są w obu trybach te same.
    */
-  writable: boolean;
+  writeMode: "service_role" | "session";
 };
 
 export type MarketOverlay = {
@@ -136,26 +139,43 @@ async function logEvent(
 const logFailure = (context: LogContext, message: string, meta: Json) =>
   logEvent(context, "error", message, meta);
 
-// -------------------------------------------- opcjonalny klucz zapisu ----
+// ------------------------------------------------------- kto zapisuje ----
 
-/** Klient service_role albo `null` — patrz writeAccess.server.ts. */
-async function loadAdmin(): Promise<Db | null> {
+/**
+ * Klient, którym moduł zapisuje do cache'u.
+ *
+ * Pierwszy wybór to service_role — omija RLS i nie zależy od tego, kto
+ * akurat jest zalogowany. Ale w tej instalacji Supabase jest zarządzany
+ * przez Lovable i ten klucz jest poza zasięgiem właściciela, więc drugim
+ * wyborem jest klient bieżącego użytkownika: migracja
+ * 20260920140000_fuel_grid_authenticated_writes.sql daje zalogowanym prawo
+ * zapisu do trzech tabel cache. Ten sam wybór co w local-worker/worker.py,
+ * który celowo loguje się kluczem anon zamiast service role.
+ *
+ * Zwraca też `viaServiceRole`, bo to rozróżnienie decyduje, czy operacja
+ * ciężka (pełna archiwizacja) ma sens z poziomu przeglądarki.
+ */
+async function resolveWriter(context: LogContext): Promise<{ db: Db; viaServiceRole: boolean }> {
   const { resolveWriteClient } = await import("./writeAccess.server");
-  return (await resolveWriteClient()) as Db | null;
+  const admin = (await resolveWriteClient()) as Db | null;
+  if (admin) return { db: admin, viaServiceRole: true };
+
+  await noteSessionWrites(context);
+  return { db: context.supabase as Db, viaServiceRole: false };
 }
 
-// Ostrzeżenie o braku klucza ma sens raz na proces — inaczej zalałoby
+// Informacja o trybie zapisu ma sens raz na proces — inaczej zalałaby
 // System Logs przy każdym odświeżeniu co pięć minut.
-let readOnlyWarned = false;
+let sessionWritesNoted = false;
 
-async function warnReadOnly(context: LogContext): Promise<void> {
-  if (readOnlyWarned) return;
-  readOnlyWarned = true;
+async function noteSessionWrites(context: LogContext): Promise<void> {
+  if (sessionWritesNoted) return;
+  sessionWritesNoted = true;
   await logEvent(
     context,
     "warn",
-    "Brak SUPABASE_SERVICE_ROLE_KEY w środowisku aplikacji — moduł paliwowy czyta cache, " +
-      "a dane odświeża wyłącznie workflow „Orlen Fuel Grid”.",
+    "Brak SUPABASE_SERVICE_ROLE_KEY — moduł paliwowy zapisuje cache sesją zalogowanego " +
+      "użytkownika (polityki z migracji 20260920140000).",
     {} as Json,
   );
 }
@@ -175,13 +195,12 @@ export const getFuelGrid = createServerFn({ method: "GET" })
     const days = data?.days ?? 365;
     const { supabase, userId } = context;
 
-    const admin = await loadAdmin();
-    if (!admin) await warnReadOnly({ supabase, userId });
+    const writer = await resolveWriter({ supabase, userId });
 
     let didFetch = false;
-    if (admin && Date.now() - lastPriceIngest > MIN_PRICE_REFRESH_MS) {
+    if (Date.now() - lastPriceIngest > MIN_PRICE_REFRESH_MS) {
       const { ingestPrices } = await import("./ingest.server");
-      priceInFlight ??= ingestPrices(admin).finally(() => {
+      priceInFlight ??= ingestPrices(writer.db).finally(() => {
         priceInFlight = null;
         lastPriceIngest = Date.now();
       });
@@ -249,7 +268,7 @@ export const getFuelGrid = createServerFn({ method: "GET" })
       lastPublished,
       refreshedAt: new Date().toISOString(),
       didFetch,
-      writable: admin !== null,
+      writeMode: writer.viaServiceRole ? "service_role" : "session",
     };
   });
 
@@ -261,18 +280,10 @@ export const getFuelGrid = createServerFn({ method: "GET" })
 export const backfillFuelHistory = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<{ written: number; errors: string[] }> => {
-    const admin = await loadAdmin();
-    if (!admin) {
-      // Bez klucza nie ma czego udawać — ale komunikat ma powiedzieć, gdzie
-      // ta sama operacja jest dostępna, zamiast zostawiać surowy błąd env.
-      throw new Error(
-        "Pełna archiwizacja wymaga klucza service_role w środowisku aplikacji. " +
-          "Uruchom zamiast tego workflow „Orlen Fuel Grid” w GitHub Actions z opcją backfill.",
-      );
-    }
+    const writer = await resolveWriter(context);
     const { ingestPrices } = await import("./ingest.server");
 
-    const summaries = await ingestPrices(admin, { full: true });
+    const summaries = await ingestPrices(writer.db, { full: true });
     lastPriceIngest = Date.now();
 
     const errors = summaries.filter((s) => s.error).map((s) => `${s.product}: ${s.error}`);
@@ -301,10 +312,10 @@ export const getMarketOverlay = createServerFn({ method: "GET" })
     const productId = data?.productId ?? DEFAULT_PRODUCT_ID;
     const { supabase, userId } = context;
 
-    const admin = await loadAdmin();
-    if (admin && Date.now() - lastMarketIngest > MIN_MARKET_REFRESH_MS) {
+    if (Date.now() - lastMarketIngest > MIN_MARKET_REFRESH_MS) {
+      const writer = await resolveWriter({ supabase, userId });
       const { ingestMarket } = await import("./ingest.server");
-      marketInFlight ??= ingestMarket(admin, { days }).finally(() => {
+      marketInFlight ??= ingestMarket(writer.db, { days }).finally(() => {
         marketInFlight = null;
         lastMarketIngest = Date.now();
       });
@@ -421,8 +432,8 @@ export const getFuelNews = createServerFn({ method: "GET" })
     const limit = data?.limit ?? 40;
     const { supabase, userId } = context;
 
-    const admin = await loadAdmin();
-    if (admin && Date.now() - lastNewsIngest > MIN_NEWS_REFRESH_MS) {
+    if (Date.now() - lastNewsIngest > MIN_NEWS_REFRESH_MS) {
+      const writer = await resolveWriter({ supabase, userId });
       // Klucz Gemini jest BYOK (user_secrets) — bez niego newsy dalej
       // działają, tylko z oceną heurystyczną zamiast streszczeń po polsku.
       const { data: secret } = await supabase
@@ -432,7 +443,7 @@ export const getFuelNews = createServerFn({ method: "GET" })
         .maybeSingle();
 
       const { ingestNews } = await import("./ingest.server");
-      newsInFlight ??= ingestNews(admin, secret?.gemini_api_key?.trim() || null).finally(() => {
+      newsInFlight ??= ingestNews(writer.db, secret?.gemini_api_key?.trim() || null).finally(() => {
         newsInFlight = null;
         lastNewsIngest = Date.now();
       });
