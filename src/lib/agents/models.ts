@@ -32,6 +32,11 @@ export type GeminiModelOption = ModelOption;
 
 export const ANTHROPIC_PREFIX = "anthropic:";
 
+// LISTA ZAPASOWA, nie źródło prawdy. Prawdziwą listę pobiera
+// listAvailableModels z API dostawcy (patrz ./modelCatalog.ts); te wpisy
+// pokazują się tylko na czas ładowania, przy braku klucza albo gdy API nie
+// odpowiada — i dlatego zawierają wyłącznie identyfikatory, o których
+// wiadomo, że API je przyjmowało.
 export const GEMINI_MODELS: ModelOption[] = [
   {
     id: "gemini-flash-latest",
@@ -75,21 +80,17 @@ export const GEMINI_MODELS: ModelOption[] = [
     hint: "Najtańszy Flash",
     provider: "gemini",
   },
-  {
-    id: "gemini-3.5-flash",
-    label: "Gemini 3.5 Flash (preview)",
-    hint: "Wymaga dostępu preview",
-    provider: "gemini",
-  },
-  {
-    id: "gemini-3-pro-latest",
-    label: "Gemini 3 Pro (preview)",
-    hint: "Wymaga dostępu preview",
-    provider: "gemini",
-  },
 ];
 
-// Anthropic Claude — wymaga własnego klucza (Ustawienia → Claude). Ceny
+// USUNIĘTE ŚWIADOMIE: "gemini-3.5-flash" i "gemini-3-pro-latest". Pierwszy
+// był na tej liście i okazał się nieprzyjmowany przez API — migracja
+// 20260710061408 musiała cofnąć użytkowników na 2.5-flash. Zgadywanie
+// identyfikatorów przyszłych modeli jest dokładnie tym, co ta lista ma
+// przestać robić: modele spoza tej listy pojawią się w dropdownie same,
+// gdy API klucza je wymieni (listAvailableModels + modelCatalog.ts).
+
+// Anthropic Claude — jak wyżej, lista zapasowa. Wymaga własnego klucza
+// (Ustawienia → Claude). Ceny
 // podane jako $ za 1M tokenów wejścia → wyjścia, żeby wybór w dropdownie był
 // świadomy: Claude jest o rząd wielkości droższy od Gemini Flash i ma sens
 // tam, gdzie liczy się jakość rozumowania i wieloetapowe użycie narzędzi.

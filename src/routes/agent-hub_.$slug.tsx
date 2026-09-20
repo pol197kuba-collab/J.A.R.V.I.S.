@@ -18,12 +18,8 @@ import {
   type AgentToolSummary,
 } from "@/lib/agents/runtime.functions";
 import { audio } from "@/lib/audio/AudioEngine";
-import {
-  ALL_MODELS,
-  ANTHROPIC_MODELS,
-  GEMINI_MODELS,
-  DEFAULT_GEMINI_MODEL,
-} from "@/lib/agents/models";
+import { DEFAULT_GEMINI_MODEL } from "@/lib/agents/models";
+import { useModelCatalog } from "@/lib/agents/useModelCatalog";
 
 export const Route = createFileRoute("/agent-hub_/$slug")({
   head: ({ params }) => ({
@@ -599,6 +595,9 @@ function SettingsPanel({
   useEffect(() => setMaxOutTokens(b.maxOutputTokens ?? 1600), [b.maxOutputTokens]);
   useEffect(() => setMaxToolIter(b.maxToolIterations ?? 6), [b.maxToolIterations]);
 
+  // Lista modeli z API dostawców — patrz useModelCatalog.
+  const catalog = useModelCatalog();
+
   const modelInherit = a.model === null;
   const currentModel = a.model ?? data.effectiveModel;
 
@@ -662,18 +661,18 @@ function SettingsPanel({
               onChange={(e) => savePartial({ model: e.target.value })}
               className="font-mono w-full max-w-md border border-primary/60 bg-black/60 px-3 py-1.5 text-xs text-primary outline-none focus:border-primary"
             >
-              {!ALL_MODELS.some((m) => m.id === currentModel) && (
-                <option value={currentModel}>{currentModel} (custom)</option>
+              {!catalog.models.some((m) => m.id === currentModel) && (
+                <option value={currentModel}>{currentModel} (spoza listy)</option>
               )}
               <optgroup label="Google Gemini">
-                {GEMINI_MODELS.map((m) => (
+                {catalog.gemini.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.label} — {m.id}
                   </option>
                 ))}
               </optgroup>
               <optgroup label="Anthropic Claude (wymaga klucza)">
-                {ANTHROPIC_MODELS.map((m) => (
+                {catalog.anthropic.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.label}
                     {m.hint ? ` — ${m.hint}` : ""}

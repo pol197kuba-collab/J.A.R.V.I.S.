@@ -5,6 +5,7 @@ import { useAudioSettings } from "@/lib/audio/useAudioSettings";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 import { useHudNavigate } from "@/components/jarvis/TransitionContext";
+import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
   deleteGeminiKey,
@@ -31,7 +32,8 @@ import {
   type UserSettings,
 } from "@/lib/agents/runtime.functions";
 import { setServerRuntimePreference } from "@/lib/ai/jarvisBrain";
-import { ALL_MODELS, ANTHROPIC_MODELS, GEMINI_MODELS } from "@/lib/agents/models";
+import { useModelCatalog, MODEL_CATALOG_QUERY_KEY } from "@/lib/agents/useModelCatalog";
+import { invalidateModelCatalog } from "@/lib/agents/models.functions";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
 const GEMINI_LS_KEY = "jarvis_gemini_api_key";
@@ -42,6 +44,13 @@ const GROQ_LS_KEY = "jarvis_groq_api_key";
 // Same reasoning as GROQ_LS_KEY — no browser-side consumer, local copy only
 // so the field doesn't read as empty after a reload.
 const ANTHROPIC_LS_KEY = "jarvis_anthropic_api_key";
+
+const CATALOG_STATUS_LABEL: Record<string, string> = {
+  live: "z API",
+  fallback: "zapasowa (API nie odpowiedziało)",
+  no_key: "zapasowa (brak klucza)",
+  loading: "ładowanie…",
+};
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -89,6 +98,11 @@ function Settings() {
   // Anthropic — optional, unlocks Claude as the primary reasoning engine for
   // any agent whose model is "anthropic:"-prefixed. Server-side only, like
   // Groq: no browser code ever calls Anthropic directly.
+  // Lista modeli pochodzi z API dostawców, nie ze słownika w repo —
+  // statyczne listy zostają tylko jako zapas (patrz useModelCatalog).
+  const qc = useQueryClient();
+  const catalog = useModelCatalog();
+  const dropModelCatalogCache = useServerFn(invalidateModelCatalog);
   const fetchAnthropicStatus = useServerFn(getAnthropicKeyStatus);
   const persistAnthropicKey = useServerFn(saveAnthropicKey);
   const clearAnthropicKey = useServerFn(deleteAnthropicKey);
@@ -275,6 +289,17 @@ function Settings() {
     }
   };
 
+  // Zmiana klucza zmienia to, co API dostawcy w ogóle wylistuje, więc
+  // cache katalogu modeli (serwerowy i klienta) musi pójść razem z nią.
+  const refreshModelCatalog = async () => {
+    try {
+      await dropModelCatalogCache();
+      await qc.invalidateQueries({ queryKey: MODEL_CATALOG_QUERY_KEY });
+    } catch (err) {
+      console.warn("[settings] model catalog refresh failed", err);
+    }
+  };
+
   const handleSaveAnthropicKey = async () => {
     const trimmed = anthropicApiKey.trim();
     setAnthropicBusy(true);
@@ -296,6 +321,7 @@ function Settings() {
       }
       audio.playClick();
       await refreshAnthropicState();
+      await refreshModelCatalog();
     } catch (err) {
       setAnthropicErrorMsg(err instanceof Error ? err.message : "Server sync failed");
     } finally {
@@ -421,6 +447,7 @@ function Settings() {
       }
       audio.playClick();
       await refreshServerState();
+      await refreshModelCatalog();
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Server sync failed");
     } finally {
@@ -853,6 +880,20 @@ function Settings() {
               <p className="text-xs text-muted-foreground">
                 Model używany przez J.A.R.V.I.S.-a dla każdego runu.
               </p>
+              {/* Skąd pochodzi lista — bez tego „widzę stare modele" wygląda
+                  identycznie jak „nie ma klucza". */}
+              <p className="font-mono mt-1 text-[10px] text-muted-foreground/70">
+                Lista: Gemini {CATALOG_STATUS_LABEL[catalog.geminiStatus]} · Claude{" "}
+                {CATALOG_STATUS_LABEL[catalog.anthropicStatus]}
+              </p>
+              {catalog.errors.length > 0 && (
+                <p
+                  className="font-mono mt-1 break-words text-[10px]"
+                  style={{ color: "var(--warning)" }}
+                >
+                  {catalog.errors.join(" · ")}
+                </p>
+              )}
             </div>
             <select
               disabled={busy || !prefs}
@@ -860,18 +901,18 @@ function Settings() {
               onChange={(e) => updatePref({ defaultModel: e.target.value })}
               className="font-mono min-w-[220px] border border-primary/60 bg-black/60 px-3 py-1.5 text-xs text-primary outline-none focus:border-primary disabled:opacity-40"
             >
-              {prefs && !ALL_MODELS.some((m) => m.id === prefs.defaultModel) && (
-                <option value={prefs.defaultModel}>{prefs.defaultModel} (custom)</option>
+              {prefs && !catalog.models.some((m) => m.id === prefs.defaultModel) && (
+                <option value={prefs.defaultModel}>{prefs.defaultModel} (spoza listy)</option>
               )}
               <optgroup label="Google Gemini">
-                {GEMINI_MODELS.map((m) => (
+                {catalog.gemini.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.label} — {m.id}
                   </option>
                 ))}
               </optgroup>
               <optgroup label="Anthropic Claude (wymaga klucza)">
-                {ANTHROPIC_MODELS.map((m) => (
+                {catalog.anthropic.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.label}
                     {m.hint ? ` — ${m.hint}` : ""}
