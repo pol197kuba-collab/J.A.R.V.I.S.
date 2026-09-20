@@ -758,6 +758,70 @@ export type Database = {
         };
         Relationships: [];
       };
+      market_predictions: {
+        Row: {
+          actual_change_pct: number | null;
+          confidence: number;
+          direction: string;
+          due_at: string;
+          horizon_days: number;
+          id: string;
+          made_at: string;
+          made_on: string;
+          model: string | null;
+          outcome: string | null;
+          owner_id: string;
+          price_at_prediction: number;
+          price_at_resolution: number | null;
+          rationale_pl: string | null;
+          resolved_at: string | null;
+          sentiment_score: number | null;
+          source: string;
+          symbol: string;
+          technical_score: number | null;
+        };
+        Insert: {
+          actual_change_pct?: number | null;
+          confidence: number;
+          direction: string;
+          due_at: string;
+          horizon_days: number;
+          id?: string;
+          made_at?: string;
+          model?: string | null;
+          outcome?: string | null;
+          owner_id: string;
+          price_at_prediction: number;
+          price_at_resolution?: number | null;
+          rationale_pl?: string | null;
+          resolved_at?: string | null;
+          sentiment_score?: number | null;
+          source: string;
+          symbol: string;
+          technical_score?: number | null;
+        };
+        Update: {
+          actual_change_pct?: number | null;
+          confidence?: number;
+          direction?: string;
+          due_at?: string;
+          horizon_days?: number;
+          id?: string;
+          made_at?: string;
+          model?: string | null;
+          outcome?: string | null;
+          owner_id?: string;
+          price_at_prediction?: number;
+          price_at_resolution?: number | null;
+          rationale_pl?: string | null;
+          resolved_at?: string | null;
+          sentiment_score?: number | null;
+          source?: string;
+          symbol?: string;
+          technical_score?: number | null;
+        };
+        Relationships: [];
+      };
       market_quotes: {
         Row: {
           close: number;

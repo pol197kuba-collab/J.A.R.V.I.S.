@@ -35,6 +35,21 @@ import {
   type MarketNewsItem,
   type SymbolSentiment,
 } from "./news";
+import {
+  combineOutlook,
+  computeSignals,
+  scoreSignals,
+  type SignalDirection,
+  type SignalDriver,
+} from "./signals";
+import {
+  buildScoreboard,
+  percentChange,
+  resolveOutcome,
+  type PredictionDirection,
+  type PredictionSource,
+  type Scoreboard,
+} from "./scoreboard";
 
 // Notowania dzienne zmieniają się raz na sesję, więc częstsze odpytywanie
 // darmowych API nic nie wnosi poza zużyciem limitu. Krypto chodzi 24/7,
@@ -482,6 +497,362 @@ export const getMarketNews = createServerFn({ method: "GET" })
       refreshedAt: new Date().toISOString(),
     };
   });
+
+// ------------------------------------------------- typer (etap 3) ----
+
+/** Ile dni do przodu dotyczy prognoza. Krótki horyzont da się rozliczyć. */
+const HORIZON_DAYS = 7;
+
+export type OutlookRow = {
+  symbol: string;
+  label: string;
+  assetClass: MarketAsset["assetClass"];
+  currency: string;
+  colorToken: string;
+  lastPrice: number;
+  /** Wypadkowa techniki i newsów, -100..100. */
+  score: number;
+  direction: SignalDirection;
+  confidence: number;
+  technicalScore: number;
+  sentimentScore: number | null;
+  sentimentItems: number;
+  drivers: SignalDriver[];
+  /** Werdykt modelu — null, gdy nie ma klucza albo model zawiódł. */
+  ai: { direction: SignalDirection; confidence: number; rationalePl: string | null } | null;
+};
+
+export type MarketOutlook = {
+  rows: OutlookRow[];
+  horizonDays: number;
+  /** Model, który wydał werdykty; null = same sygnały. */
+  model: string | null;
+  generatedAt: string;
+};
+
+const OutlookInput = z.object({ force: z.boolean().optional().default(false) }).optional();
+
+// Typer kosztuje wywołanie modelu, więc nie liczymy go przy każdym wejściu
+// na stronę. Raz na godzinę wystarcza dla horyzontu tygodniowego.
+const MIN_OUTLOOK_REFRESH_MS = 60 * 60_000;
+let lastOutlookAt = 0;
+let outlookCache: MarketOutlook | null = null;
+
+export const getMarketOutlook = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => OutlookInput.parse(input))
+  .handler(async ({ data, context }): Promise<MarketOutlook> => {
+    const { supabase, userId } = context;
+    const force = data?.force ?? false;
+
+    if (!force && outlookCache && Date.now() - lastOutlookAt < MIN_OUTLOOK_REFRESH_MS) {
+      return outlookCache;
+    }
+
+    const symbols = await loadWatchlist(supabase, userId);
+    const assets = symbols.map(assetBySymbol).filter((a): a is MarketAsset => Boolean(a));
+
+    // Notowania bierzemy z cache'u — typer nie odświeża danych sam, żeby
+    // jedno kliknięcie nie odpalało dwudziestu żądań do darmowych API.
+    // Świeżość zapewnia getMarketGrid, które i tak biegnie na tej stronie.
+    const since = new Date(Date.now() - 200 * 86_400_000).toISOString().slice(0, 10);
+    const { data: quoteRows, error: quoteErr } = await supabase
+      .from("market_quotes")
+      .select("symbol, quote_date, close")
+      .in("symbol", symbols)
+      .gte("quote_date", since)
+      .order("quote_date", { ascending: true });
+    if (quoteErr) throw new Error(quoteErr.message);
+
+    const pointsBySymbol = new Map<string, PricePoint[]>();
+    for (const row of quoteRows ?? []) {
+      const bucket = pointsBySymbol.get(row.symbol) ?? [];
+      bucket.push({ date: row.quote_date, close: Number(row.close) });
+      pointsBySymbol.set(row.symbol, bucket);
+    }
+
+    // Wydźwięk i nagłówki z tego samego cache'u newsów, co panel etapu 2.
+    const { data: newsRows } = await supabase
+      .from("market_news_items")
+      .select(
+        "guid, title, link, source, published_at, feed_tag, symbols, impact, impact_score, summary_pl, classified_by",
+      )
+      .order("published_at", { ascending: false, nullsFirst: false })
+      .limit(150);
+
+    const news: MarketNewsItem[] = (newsRows ?? []).map((r) => ({
+      guid: r.guid,
+      title: r.title,
+      link: r.link,
+      source: r.source,
+      publishedAt: r.published_at,
+      feedTag: r.feed_tag ?? "",
+      symbols: r.symbols ?? [],
+      impact: (r.impact as MarketImpact | null) ?? "neutral",
+      impactScore: r.impact_score ?? 0,
+      summaryPl: r.summary_pl,
+      classifiedBy: r.classified_by === "ai" ? "ai" : "heuristic",
+    }));
+    const sentimentBySymbol = new Map(aggregateSentiment(news).map((r) => [r.symbol, r]));
+
+    // Import dynamiczny, jak przy quotes.server/news.server: trzyma klucze
+    // i wywołania modelu poza bundlem klienta.
+    const { forecastWithModel } = await import("./forecast.server");
+
+    const prepared = assets.flatMap((asset) => {
+      const points = normalizeSeries(pointsBySymbol.get(asset.symbol) ?? []);
+      if (points.length < 2) return [];
+      const technical = scoreSignals(computeSignals(points));
+      const sentiment = sentimentBySymbol.get(asset.symbol) ?? null;
+      const headlines = news
+        .filter((n) => n.symbols.includes(asset.symbol))
+        .sort((a, b) => b.impactScore - a.impactScore)
+        .slice(0, 4)
+        .map((n) => n.title);
+      return [
+        {
+          asset,
+          technical,
+          sentimentScore: sentiment?.score ?? null,
+          sentimentItems: sentiment?.items ?? 0,
+          headlines,
+          lastPrice: points[points.length - 1].close,
+        },
+      ];
+    });
+
+    const { data: secret } = await supabase
+      .from("user_secrets")
+      .select("gemini_api_key, anthropic_api_key")
+      .eq("owner_id", userId)
+      .maybeSingle();
+
+    const forecast = await forecastWithModel(prepared, {
+      anthropicApiKey: secret?.anthropic_api_key?.trim() || null,
+      geminiApiKey: secret?.gemini_api_key?.trim() || null,
+    });
+
+    const rows: OutlookRow[] = prepared.map((input, idx) => {
+      const combined = combineOutlook(input.technical, input.sentimentScore, input.sentimentItems);
+      const verdict = forecast.verdicts[idx];
+      return {
+        symbol: input.asset.symbol,
+        label: input.asset.label,
+        assetClass: input.asset.assetClass,
+        currency: input.asset.currency,
+        colorToken: input.asset.colorToken,
+        lastPrice: input.lastPrice,
+        score: combined.score,
+        direction: combined.direction,
+        confidence: combined.confidence,
+        technicalScore: input.technical.score,
+        sentimentScore: input.sentimentScore,
+        sentimentItems: input.sentimentItems,
+        drivers: input.technical.drivers,
+        // Werdykt „ai" istnieje tylko wtedy, gdy model faktycznie
+        // odpowiedział — inaczej podpisalibyśmy arytmetykę nazwą modelu.
+        ai: forecast.model
+          ? {
+              direction: verdict.direction,
+              confidence: verdict.confidence,
+              rationalePl: verdict.rationalePl,
+            }
+          : null,
+      };
+    });
+
+    await recordPredictions(supabase, userId, rows, forecast.model);
+
+    const result: MarketOutlook = {
+      // Najmocniejsze sygnały na górze, niezależnie od kierunku.
+      rows: rows.sort((a, b) => Math.abs(b.score) - Math.abs(a.score)),
+      horizonDays: HORIZON_DAYS,
+      model: forecast.model,
+      generatedAt: new Date().toISOString(),
+    };
+    outlookCache = result;
+    lastOutlookAt = Date.now();
+    return result;
+  });
+
+/**
+ * Zapisuje prognozy razem z ceną z momentu ich postawienia.
+ *
+ * Bez tej ceny rozliczenie byłoby zgadywaniem, od czego liczyć zmianę, a
+ * trafności nie da się odtworzyć wstecz — albo zapisujemy ją od pierwszego
+ * dnia, albo nie dowiemy się nigdy, czy moduł działa.
+ *
+ * Ograniczenie UNIQUE w migracji dopuszcza jedną prognozę dziennie na
+ * instrument i źródło, więc `ignoreDuplicates` sprawia, że kolejne
+ * odświeżenia tego samego dnia nie rozcieńczają statystyki.
+ */
+async function recordPredictions(
+  supabase: Db,
+  userId: string,
+  rows: OutlookRow[],
+  model: string | null,
+): Promise<void> {
+  if (rows.length === 0) return;
+  const dueAt = new Date(Date.now() + HORIZON_DAYS * 86_400_000).toISOString();
+
+  const base = rows.map((row) => ({
+    owner_id: userId,
+    symbol: row.symbol,
+    horizon_days: HORIZON_DAYS,
+    due_at: dueAt,
+    price_at_prediction: row.lastPrice,
+    technical_score: row.technicalScore,
+    sentiment_score: row.sentimentScore,
+  }));
+
+  const signalRows = base.map((b, i) => ({
+    ...b,
+    direction: rows[i].direction,
+    confidence: rows[i].confidence,
+    rationale_pl: rows[i].drivers[0]?.note ?? null,
+    source: "signals" as const,
+    model: null,
+  }));
+
+  // Prognoza modelu zapisywana OSOBNO, żeby panel skuteczności mógł
+  // odpowiedzieć, czy model bije prostą arytmetykę.
+  const aiRows = model
+    ? base.flatMap((b, i) => {
+        const ai = rows[i].ai;
+        if (!ai) return [];
+        return [
+          {
+            ...b,
+            direction: ai.direction,
+            confidence: ai.confidence,
+            rationale_pl: ai.rationalePl,
+            source: "ai" as const,
+            model,
+          },
+        ];
+      })
+    : [];
+
+  const { error } = await supabase.from("market_predictions").upsert([...signalRows, ...aiRows], {
+    onConflict: "owner_id,symbol,source,horizon_days,made_on",
+    ignoreDuplicates: true,
+  });
+  if (error) {
+    await logEvent(supabase, userId, "warn", `Zapis prognoz: ${error.message}`, {} as Json);
+  }
+}
+
+// --------------------------------------------- skuteczność (backtest) ----
+
+export type PredictionScoreboard = Scoreboard & {
+  /** Ile prognoz rozliczono podczas tego wywołania. */
+  justResolved: number;
+  recent: Array<{
+    symbol: string;
+    madeAt: string;
+    direction: PredictionDirection;
+    source: PredictionSource;
+    confidence: number;
+    actualChangePct: number | null;
+    outcome: "hit" | "miss" | null;
+    rationalePl: string | null;
+  }>;
+};
+
+export const getPredictionScoreboard = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<PredictionScoreboard> => {
+    const { supabase, userId } = context;
+
+    const justResolved = await resolveDuePredictions(supabase, userId);
+
+    const { data: rows, error } = await supabase
+      .from("market_predictions")
+      .select(
+        "symbol, made_at, direction, source, confidence, actual_change_pct, outcome, rationale_pl",
+      )
+      .eq("owner_id", userId)
+      .order("made_at", { ascending: false })
+      .limit(500);
+    if (error) throw new Error(error.message);
+
+    const scored = (rows ?? []).map((r) => ({
+      source: (r.source === "ai" ? "ai" : "signals") as PredictionSource,
+      direction: r.direction as PredictionDirection,
+      symbol: r.symbol,
+      outcome: (r.outcome as "hit" | "miss" | null) ?? null,
+      actualChangePct: r.actual_change_pct === null ? null : Number(r.actual_change_pct),
+    }));
+
+    return {
+      ...buildScoreboard(scored),
+      justResolved,
+      recent: (rows ?? []).slice(0, 25).map((r) => ({
+        symbol: r.symbol,
+        madeAt: r.made_at,
+        direction: r.direction as PredictionDirection,
+        source: (r.source === "ai" ? "ai" : "signals") as PredictionSource,
+        confidence: r.confidence,
+        actualChangePct: r.actual_change_pct === null ? null : Number(r.actual_change_pct),
+        outcome: (r.outcome as "hit" | "miss" | null) ?? null,
+        rationalePl: r.rationale_pl,
+      })),
+    };
+  });
+
+/**
+ * Rozlicza prognozy, którym minął termin.
+ *
+ * Cena rozliczeniowa to pierwsze notowanie NIE WCZEŚNIEJSZE niż termin —
+ * a nie po prostu „ostatnie, jakie mamy". Ta różnica jest istotna: gdyby
+ * brać ostatnie notowanie, prognoza sprzed dwóch miesięcy rozliczyłaby się
+ * wobec dzisiejszej ceny, czyli na zupełnie innym horyzoncie niż ten, który
+ * zadeklarowała.
+ */
+async function resolveDuePredictions(supabase: Db, userId: string): Promise<number> {
+  const nowIso = new Date().toISOString();
+  const { data: due, error } = await supabase
+    .from("market_predictions")
+    .select("id, symbol, direction, due_at, price_at_prediction")
+    .eq("owner_id", userId)
+    .is("outcome", null)
+    .lte("due_at", nowIso)
+    .limit(200);
+  if (error || !due || due.length === 0) return 0;
+
+  let resolved = 0;
+  for (const prediction of due) {
+    const dueDate = prediction.due_at.slice(0, 10);
+    const { data: quote } = await supabase
+      .from("market_quotes")
+      .select("close, quote_date")
+      .eq("symbol", prediction.symbol)
+      .gte("quote_date", dueDate)
+      .order("quote_date", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    // Brak notowania z terminu albo po nim znaczy, że jeszcze nie ma czym
+    // rozliczyć (weekend, święto, luka w danych) — zostawiamy na później.
+    if (!quote) continue;
+
+    const change = percentChange(Number(prediction.price_at_prediction), Number(quote.close));
+    if (change === null) continue;
+
+    const { error: updErr } = await supabase
+      .from("market_predictions")
+      .update({
+        resolved_at: new Date().toISOString(),
+        price_at_resolution: Number(quote.close),
+        actual_change_pct: change,
+        outcome: resolveOutcome(prediction.direction as PredictionDirection, change),
+      })
+      .eq("id", prediction.id)
+      .eq("owner_id", userId);
+    if (!updErr) resolved += 1;
+  }
+  return resolved;
+}
 
 /** Katalog instrumentów dla wyszukiwarki w UI — bez odpytywania sieci. */
 export const getAssetCatalog = createServerFn({ method: "GET" })

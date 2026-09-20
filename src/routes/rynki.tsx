@@ -1,9 +1,12 @@
 // MARKET GRID — monitoring cen akcji, krypto, surowców, indeksów i walut.
 //
-// Etap 1: dane, cache, wykresy i watchlista. Etap 2: newsy z oceną wpływu i
-// wypadkowy wydźwięk per instrument. Sygnały predykcyjne („co urośnie")
-// świadomie NIE są jeszcze częścią modułu — wydźwięk newsów jest
-// podsumowaniem tego, co napisano, nie prognozą ceny.
+// Etap 1: dane, cache, wykresy i watchlista. Etap 2: newsy z oceną wpływu.
+// Etap 3: sygnały techniczne, ranking „co może rosnąć / spadać" i pomiar
+// własnej trafności.
+//
+// Typer ma własne zapytanie i własny, rzadki interwał: przeliczenie kosztuje
+// wywołanie modelu, a horyzont prognozy to tydzień — odświeżanie go co
+// minutę nic nie wnosi poza rachunkiem.
 //
 // Strona odpytuje jedną server function z interwałem 5 minut. Serwer i tak
 // nie wypuści żądania do zewnętrznych API częściej niż pozwala próg
@@ -22,12 +25,16 @@ import { MarketChart, type ChartMode } from "@/components/jarvis/markets/MarketC
 import { MarketWatchRail } from "@/components/jarvis/markets/MarketWatchRail";
 import { MarketNewsPanel } from "@/components/jarvis/markets/MarketNewsPanel";
 import { SentimentPanel } from "@/components/jarvis/markets/SentimentPanel";
+import { OutlookPanel } from "@/components/jarvis/markets/OutlookPanel";
+import { AccuracyPanel } from "@/components/jarvis/markets/AccuracyPanel";
 import { AssetPicker } from "@/components/jarvis/markets/AssetPicker";
 import { formatPercent, formatPrice } from "@/lib/markets/series";
 import {
   addToWatchlist,
   getMarketGrid,
   getMarketNews,
+  getMarketOutlook,
+  getPredictionScoreboard,
   removeFromWatchlist,
   type MarketSeries,
 } from "@/lib/markets/markets.functions";
@@ -92,6 +99,25 @@ function MarketsPage() {
     queryFn: () => fetchNews({ data: newsSymbol ? { symbol: newsSymbol } : {} }),
     refetchInterval: 10 * 60_000,
     staleTime: 2 * 60_000,
+  });
+
+  const fetchOutlook = useServerFn(getMarketOutlook);
+  const outlook = useQuery({
+    queryKey: ["market-outlook"],
+    queryFn: () => fetchOutlook({ data: {} }),
+    refetchInterval: 60 * 60_000,
+    staleTime: 30 * 60_000,
+  });
+
+  // Rozliczanie prognoz dzieje się przy okazji odczytu tablicy wyników —
+  // nie ma tu nocnego joba, a prognoza sprzed tygodnia ma się rozliczyć
+  // sama, gdy ktokolwiek wejdzie na stronę.
+  const fetchScoreboard = useServerFn(getPredictionScoreboard);
+  const scoreboard = useQuery({
+    queryKey: ["market-scoreboard"],
+    queryFn: () => fetchScoreboard(),
+    refetchInterval: 30 * 60_000,
+    staleTime: 10 * 60_000,
   });
 
   const series = useMemo<MarketSeries[]>(() => grid.data?.series ?? [], [grid.data]);
@@ -273,6 +299,30 @@ function MarketsPage() {
           </PanelHint>
         </HudPanel>
       )}
+
+      <div className="grid gap-6 @[900px]:grid-cols-[1fr_360px]">
+        <HudPanel index={3} title="MARKET GRID // TYPER" tone="elevated" className="min-w-0 p-5">
+          {outlook.isLoading ? (
+            <EmptyState>Liczenie sygnałów…</EmptyState>
+          ) : (
+            <OutlookPanel
+              rows={outlook.data?.rows ?? []}
+              horizonDays={outlook.data?.horizonDays ?? 7}
+              model={outlook.data?.model ?? null}
+            />
+          )}
+        </HudPanel>
+
+        <HudPanel index={3} title="MARKET GRID // SKUTECZNOŚĆ" tone="quiet" className="min-w-0 p-5">
+          {scoreboard.isLoading ? (
+            <EmptyState>Rozliczanie prognoz…</EmptyState>
+          ) : scoreboard.data ? (
+            <AccuracyPanel board={scoreboard.data} />
+          ) : (
+            <EmptyState>Brak danych o skuteczności</EmptyState>
+          )}
+        </HudPanel>
+      </div>
 
       <div className="grid gap-6 @[900px]:grid-cols-[1fr_360px]">
         <HudPanel index={3} title="MARKET GRID // NEWSY" className="min-w-0 p-5">
