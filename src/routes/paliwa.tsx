@@ -133,6 +133,9 @@ function FuelPage() {
   // `?? []` tworzyłoby nową tablicę przy każdym renderze, więc pochodne
   // useMemo przeliczałyby się bez powodu — stąd własne memo na samą serię.
   const series = useMemo(() => gridQuery.data?.series ?? [], [gridQuery.data]);
+  // Dopóki pierwsze zapytanie nie wróci, zakładamy zapisywalność — inaczej
+  // baner „tylko do odczytu" mrugałby przy każdym wejściu na stronę.
+  const writable = gridQuery.data?.writable ?? true;
   const selected = useMemo(
     () => series.find((s) => s.productId === selectedId),
     [series, selectedId],
@@ -294,8 +297,13 @@ function FuelPage() {
           <button
             type="button"
             onClick={() => backfillMutation.mutate()}
-            disabled={backfillMutation.isPending}
-            className="font-display inline-flex items-center gap-2 rounded border border-primary/40 px-3 py-1.5 text-[9px] uppercase tracking-[0.2em] text-primary transition hover:bg-primary/10 disabled:opacity-40"
+            disabled={backfillMutation.isPending || !writable}
+            title={
+              writable
+                ? undefined
+                : "Aplikacja nie ma klucza service_role — użyj workflow „Orlen Fuel Grid”"
+            }
+            className="font-display inline-flex items-center gap-2 rounded border border-primary/40 px-3 py-1.5 text-[9px] uppercase tracking-[0.2em] text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <DatabaseBackup className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             {backfillMutation.isPending ? "archiwizuję…" : "pełna archiwizacja od 2004"}
@@ -306,6 +314,27 @@ function FuelPage() {
             archiwizacja pobiera ~26 tys. wierszy i trwa kilkanaście sekund.
           </p>
         </div>
+
+        {/*
+          Tryb tylko do odczytu to normalny stan tej instalacji, nie awaria:
+          zapisuje nocny job, który ma własny klucz w sekretach repozytorium.
+          Komunikat ma tłumaczyć, a nie straszyć — stąd --warning, nie
+          --destructive.
+        */}
+        {gridQuery.isSuccess && !writable && (
+          <p
+            className="mt-3 min-w-0 break-words rounded border px-3 py-2 font-mono text-[10px] leading-relaxed"
+            style={{
+              borderColor: "color-mix(in oklab, var(--warning) 40%, transparent)",
+              color: "var(--warning)",
+            }}
+          >
+            Tryb tylko do odczytu — aplikacja nie ma klucza service_role, więc dane odświeża
+            wyłącznie workflow „Orlen Fuel Grid” w GitHub Actions (dwa razy dziennie w dni robocze).
+            Wykresy i alerty działają normalnie; zmiany cennika z ostatnich godzin pojawią się po
+            najbliższym przebiegu.
+          </p>
+        )}
       </HudPanel>
     </div>
   );
