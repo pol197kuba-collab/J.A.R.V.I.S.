@@ -21,6 +21,9 @@ import {
   type PricePoint,
 } from "./analytics";
 import type { Impact } from "./news";
+// Tylko typ — import jest wymazywany, więc ten plik nie wciąga
+// ingest.server.ts do bundla klienta.
+import type { Db } from "./ingest.server";
 
 // ------------------------------------------------------------- typy ----
 
@@ -40,6 +43,11 @@ export type FuelGrid = {
   refreshedAt: string;
   /** true, gdy to wywołanie faktycznie odpytało Orlen (a nie tylko cache). */
   didFetch: boolean;
+  /**
+   * false, gdy aplikacja nie ma klucza service_role — moduł działa wtedy
+   * w trybie tylko do odczytu, a dane odświeża wyłącznie nocny job.
+   */
+  writable: boolean;
 };
 
 export type MarketOverlay = {
@@ -106,18 +114,50 @@ type LogContext = { supabase: SupabaseClient<Database>; userId: string };
  * dalej. Ale musi zostawić ślad w system_events, inaczej „dane sprzed
  * dwóch dni" wyglądają identycznie jak „dane aktualne".
  */
-async function logFailure(context: LogContext, message: string, meta: Json): Promise<void> {
+async function logEvent(
+  context: LogContext,
+  level: "error" | "warn",
+  message: string,
+  meta: Json,
+): Promise<void> {
   try {
     await context.supabase.from("system_events").insert({
       owner_id: context.userId,
-      level: "error",
+      level,
       source: "orlen-fuel",
       message,
       meta,
     });
   } catch {
-    // Logowanie błędu nie ma prawa wysypać żądania.
+    // Logowanie nie ma prawa wysypać żądania.
   }
+}
+
+const logFailure = (context: LogContext, message: string, meta: Json) =>
+  logEvent(context, "error", message, meta);
+
+// -------------------------------------------- opcjonalny klucz zapisu ----
+
+/** Klient service_role albo `null` — patrz writeAccess.server.ts. */
+async function loadAdmin(): Promise<Db | null> {
+  const { resolveWriteClient } = await import("./writeAccess.server");
+  return (await resolveWriteClient()) as Db | null;
+}
+
+// Ostrzeżenie o braku klucza ma sens raz na proces — inaczej zalałoby
+// System Logs przy każdym odświeżeniu co pięć minut.
+let readOnlyWarned = false;
+
+async function warnReadOnly(context: LogContext): Promise<void> {
+  if (readOnlyWarned) return;
+  readOnlyWarned = true;
+  await logEvent(
+    context,
+    "warn",
+    "Brak SUPABASE_SERVICE_ROLE_KEY w środowisku aplikacji — moduł paliwowy czyta cache, " +
+      "a dane odświeża wyłącznie workflow „Orlen Fuel Grid”.",
+    {} as Json,
+  );
 }
 
 // ------------------------------------------------------ ceny + wykres ----
@@ -135,11 +175,13 @@ export const getFuelGrid = createServerFn({ method: "GET" })
     const days = data?.days ?? 365;
     const { supabase, userId } = context;
 
+    const admin = await loadAdmin();
+    if (!admin) await warnReadOnly({ supabase, userId });
+
     let didFetch = false;
-    if (Date.now() - lastPriceIngest > MIN_PRICE_REFRESH_MS) {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    if (admin && Date.now() - lastPriceIngest > MIN_PRICE_REFRESH_MS) {
       const { ingestPrices } = await import("./ingest.server");
-      priceInFlight ??= ingestPrices(supabaseAdmin).finally(() => {
+      priceInFlight ??= ingestPrices(admin).finally(() => {
         priceInFlight = null;
         lastPriceIngest = Date.now();
       });
@@ -202,7 +244,13 @@ export const getFuelGrid = createServerFn({ method: "GET" })
       }
     }
 
-    return { series, lastPublished, refreshedAt: new Date().toISOString(), didFetch };
+    return {
+      series,
+      lastPublished,
+      refreshedAt: new Date().toISOString(),
+      didFetch,
+      writable: admin !== null,
+    };
   });
 
 /**
@@ -213,10 +261,18 @@ export const getFuelGrid = createServerFn({ method: "GET" })
 export const backfillFuelHistory = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<{ written: number; errors: string[] }> => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = await loadAdmin();
+    if (!admin) {
+      // Bez klucza nie ma czego udawać — ale komunikat ma powiedzieć, gdzie
+      // ta sama operacja jest dostępna, zamiast zostawiać surowy błąd env.
+      throw new Error(
+        "Pełna archiwizacja wymaga klucza service_role w środowisku aplikacji. " +
+          "Uruchom zamiast tego workflow „Orlen Fuel Grid” w GitHub Actions z opcją backfill.",
+      );
+    }
     const { ingestPrices } = await import("./ingest.server");
 
-    const summaries = await ingestPrices(supabaseAdmin, { full: true });
+    const summaries = await ingestPrices(admin, { full: true });
     lastPriceIngest = Date.now();
 
     const errors = summaries.filter((s) => s.error).map((s) => `${s.product}: ${s.error}`);
@@ -245,10 +301,10 @@ export const getMarketOverlay = createServerFn({ method: "GET" })
     const productId = data?.productId ?? DEFAULT_PRODUCT_ID;
     const { supabase, userId } = context;
 
-    if (Date.now() - lastMarketIngest > MIN_MARKET_REFRESH_MS) {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = await loadAdmin();
+    if (admin && Date.now() - lastMarketIngest > MIN_MARKET_REFRESH_MS) {
       const { ingestMarket } = await import("./ingest.server");
-      marketInFlight ??= ingestMarket(supabaseAdmin, { days }).finally(() => {
+      marketInFlight ??= ingestMarket(admin, { days }).finally(() => {
         marketInFlight = null;
         lastMarketIngest = Date.now();
       });
@@ -365,7 +421,8 @@ export const getFuelNews = createServerFn({ method: "GET" })
     const limit = data?.limit ?? 40;
     const { supabase, userId } = context;
 
-    if (Date.now() - lastNewsIngest > MIN_NEWS_REFRESH_MS) {
+    const admin = await loadAdmin();
+    if (admin && Date.now() - lastNewsIngest > MIN_NEWS_REFRESH_MS) {
       // Klucz Gemini jest BYOK (user_secrets) — bez niego newsy dalej
       // działają, tylko z oceną heurystyczną zamiast streszczeń po polsku.
       const { data: secret } = await supabase
@@ -374,14 +431,11 @@ export const getFuelNews = createServerFn({ method: "GET" })
         .eq("owner_id", userId)
         .maybeSingle();
 
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       const { ingestNews } = await import("./ingest.server");
-      newsInFlight ??= ingestNews(supabaseAdmin, secret?.gemini_api_key?.trim() || null).finally(
-        () => {
-          newsInFlight = null;
-          lastNewsIngest = Date.now();
-        },
-      );
+      newsInFlight ??= ingestNews(admin, secret?.gemini_api_key?.trim() || null).finally(() => {
+        newsInFlight = null;
+        lastNewsIngest = Date.now();
+      });
       const summary = (await newsInFlight) as { error?: string };
       if (summary.error) {
         await logFailure({ supabase, userId }, `News ingest failed: ${summary.error}`, {} as Json);
