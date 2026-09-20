@@ -57,4 +57,9 @@ jobs:
           # streszczeń po polsku, a job i tak kończy się sukcesem.
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ORLEN_BACKFILL: ${{ inputs.backfill }}
-        run: npx tsx scripts/orlen-daily.ts
+        # tsx CELOWO nie jest zależnością projektu, tylko wersją przypiętą
+        # tutaj: służy wyłącznie temu jobowi, a dopisanie go do package.json
+        # podbijało esbuild w całym drzewie (tsx wymaga ~0.27, aplikacja
+        # stała na 0.25) i rozjeżdżało bun.lock z package-lock.json —
+        # a bunem buduje Lovable, więc publish przestawał przechodzić.
+        run: npx --yes tsx@4.21.0 scripts/orlen-daily.ts
