@@ -161,58 +161,68 @@ export function MobileBottomNav() {
       className="relative z-20 shrink-0 border-t border-primary/20 bg-gradient-to-t from-black/85 to-black/50 backdrop-blur-xl shadow-[0_-8px_28px_-18px_color-mix(in_oklab,var(--primary)_70%,transparent)]"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      {/* Przycisk komendy głosowej POZA kontenerem przewijania: `bottom-full`
-          kotwiczy go do górnej krawędzi paska, więc nie ma tu żadnej
-          zgadywanej wysokości, a lista modułów zachowuje pełną szerokość
-          wraz z przeciąganiem i bezwładnością. */}
-      <div className="absolute right-3 bottom-full z-30 mb-3">
-        <GlobalVoiceCommand />
-      </div>
+      {/* Rząd paska: przewijalna lista modułów + stała komórka mikrofonu.
+          Mikrofon NALEŻY do paska (nie unosi się nad nim), więc nie ma
+          prawa zasłonić niczego w treści strony — wcześniej, zakotwiczony
+          przez `bottom-full`, lądował dokładnie na polu wysyłki czatu w
+          module J.A.R.V.I.S.
 
-      <div
-        ref={scrollerRef}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        className="no-scrollbar flex touch-pan-x items-stretch gap-1 overflow-x-auto px-2 py-1.5 [scrollbar-width:none] select-none"
-        style={{ overscrollBehaviorX: "contain" }}
-      >
-        {items.map((item) => {
-          const active = pathname === item.url;
-          return (
-            <button
-              key={item.url}
-              ref={active ? activeRef : undefined}
-              type="button"
-              disabled={isTransitioning || isDiagnosticRunning || isShowcaseRunning}
-              aria-current={active ? "page" : undefined}
-              onClick={() => {
-                if (drag.current.moved) return;
-                audio.playClick();
-                if (item.url === "/situation-room") speak("Uruchamiam telemetrię satelitarną.");
-                go(item.url);
-              }}
-              className={cn(
-                "group relative flex w-[19vw] min-w-[68px] shrink-0 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-1.5 transition-all duration-200 disabled:opacity-50",
-                active
-                  ? "bg-gradient-to-b from-primary/20 to-primary/5 text-primary shadow-[inset_0_1px_0_color-mix(in_oklab,var(--primary)_30%,transparent),0_0_18px_-8px_var(--primary)]"
-                  : "text-muted-foreground",
-              )}
-            >
-              <item.icon
-                className={cn("h-[18px] w-[18px]", active && "icon-neon")}
-                strokeWidth={1.5}
-              />
-              <span className="font-display max-w-full truncate text-[8px] uppercase tracking-[0.18em]">
-                {item.title}
-              </span>
-              {active && (
-                <span className="absolute -top-[7px] h-1 w-1 rounded-full bg-primary shadow-[0_0_8px_var(--primary)]" />
-              )}
-            </button>
-          );
-        })}
+          Jest rodzeństwem przewijarki, a nie jej elementem, więc zostaje w
+          miejscu przy przewijaniu ikon, a samo przewijanie (przeciąganie i
+          bezwładność) działa dokładnie jak dotąd — gesty łapie wyłącznie
+          przewijarka. `min-w-0` na niej jest konieczne: bez tego element
+          flex nie zejdzie poniżej swojej zawartości i wypchnąłby mikrofon
+          poza ekran. */}
+      <div className="flex items-stretch">
+        <div
+          ref={scrollerRef}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          className="no-scrollbar flex min-w-0 flex-1 touch-pan-x items-stretch gap-1 overflow-x-auto px-2 py-1.5 [scrollbar-width:none] select-none"
+          style={{ overscrollBehaviorX: "contain" }}
+        >
+          {items.map((item) => {
+            const active = pathname === item.url;
+            return (
+              <button
+                key={item.url}
+                ref={active ? activeRef : undefined}
+                type="button"
+                disabled={isTransitioning || isDiagnosticRunning || isShowcaseRunning}
+                aria-current={active ? "page" : undefined}
+                onClick={() => {
+                  if (drag.current.moved) return;
+                  audio.playClick();
+                  if (item.url === "/situation-room") speak("Uruchamiam telemetrię satelitarną.");
+                  go(item.url);
+                }}
+                className={cn(
+                  "group relative flex w-[19vw] min-w-[68px] shrink-0 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-1.5 transition-all duration-200 disabled:opacity-50",
+                  active
+                    ? "bg-gradient-to-b from-primary/20 to-primary/5 text-primary shadow-[inset_0_1px_0_color-mix(in_oklab,var(--primary)_30%,transparent),0_0_18px_-8px_var(--primary)]"
+                    : "text-muted-foreground",
+                )}
+              >
+                <item.icon
+                  className={cn("h-[18px] w-[18px]", active && "icon-neon")}
+                  strokeWidth={1.5}
+                />
+                <span className="font-display max-w-full truncate text-[8px] uppercase tracking-[0.18em]">
+                  {item.title}
+                </span>
+                {active && (
+                  <span className="absolute -top-[7px] h-1 w-1 rounded-full bg-primary shadow-[0_0_8px_var(--primary)]" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex shrink-0 items-center border-l border-primary/20 px-3 py-1.5">
+          <GlobalVoiceCommand />
+        </div>
       </div>
     </nav>
   );
