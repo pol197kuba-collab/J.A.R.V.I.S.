@@ -21,6 +21,7 @@ import {
 } from "recharts";
 import { EmptyState } from "@/components/jarvis/fuel/chrome";
 import { rebaseToHundred, type PricePoint } from "@/lib/markets/series";
+import type { ForecastPoint } from "@/lib/markets/projection";
 import type { MarketSeries } from "@/lib/markets/markets.functions";
 
 export type ChartMode = "price" | "index";
@@ -32,6 +33,9 @@ const shortLabel = (iso: string): string =>
 
 /** Klucz serii w wierszu wykresu — symbole zawierają kropki, recharts nie lubi ich w dataKey. */
 const keyFor = (symbol: string): string => `s_${symbol.replace(/[^A-Za-z0-9]/g, "_")}`;
+/** Środek prognozy i pasmo niepewności — osobne klucze tej samej serii. */
+const fcKeyFor = (symbol: string): string => `${keyFor(symbol)}__fc`;
+const bandKeyFor = (symbol: string): string => `${keyFor(symbol)}__band`;
 
 function MarketTooltip({
   active,
@@ -84,10 +88,14 @@ export function MarketChart({
   series,
   visibleSymbols,
   mode,
+  forecasts,
 }: {
   series: MarketSeries[];
   visibleSymbols: string[];
   mode: ChartMode;
+  /** Ścieżki prognozy per symbol. Brak wpisu = typer nie ma zdania i wykres
+   *  kończy się na dzisiaj, tak jak dotąd. */
+  forecasts?: Record<string, ForecastPoint[]>;
 }) {
   const visible = useMemo(
     () => series.filter((s) => visibleSymbols.includes(s.symbol)),
@@ -111,13 +119,42 @@ export function MarketChart({
         (row as Record<string, number | string | null>)[key] = point.value;
         byDate.set(point.date, row);
       }
+
+      const forecast = forecasts?.[s.symbol];
+      if (!forecast || forecast.length === 0 || values.length === 0) continue;
+
+      // Tryb „Indeks 100" przeskalowuje historię do wspólnego startu, więc
+      // prognoza musi przejść DOKŁADNIE to samo przeskalowanie. Inaczej
+      // kreska prognozy wystrzeliłaby w zupełnie innej skali niż linia, z
+      // której wyrasta.
+      const scale = mode === "index" ? values[0].value / s.points[0].close : 1;
+
+      // Prognoza zaczyna się od ostatniego znanego punktu, nie obok niego —
+      // bez tego kreska wisiałaby w powietrzu oderwana od historii.
+      const lastActual = values[values.length - 1];
+      const anchor = byDate.get(lastActual.date);
+      if (anchor) {
+        (anchor as Record<string, number | string | null>)[fcKeyFor(s.symbol)] = lastActual.value;
+        (anchor as Record<string, number | string | null>)[bandKeyFor(s.symbol)] = [
+          lastActual.value,
+          lastActual.value,
+        ] as unknown as number;
+      }
+
+      for (const point of forecast) {
+        const row = byDate.get(point.date) ?? { label: shortLabel(point.date), date: point.date };
+        const r = row as Record<string, number | string | null>;
+        r[fcKeyFor(s.symbol)] = point.mid * scale;
+        r[bandKeyFor(s.symbol)] = [point.low * scale, point.high * scale] as unknown as number;
+        byDate.set(point.date, row);
+      }
     }
 
     return {
       rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
       currencyByKey: currencies,
     };
-  }, [visible, mode]);
+  }, [visible, mode, forecasts]);
 
   if (visible.length === 0 || rows.length === 0) {
     return <EmptyState>Wybierz instrument z listy obserwowanych</EmptyState>;
@@ -207,6 +244,45 @@ export function MarketChart({
                 animationDuration={450}
               />
             ))}
+          {/* PROGNOZA. Ten sam kolor co historia instrumentu — kolor niesie
+              tożsamość instrumentu, nie rodzaj danych. Od faktów odróżnia ją
+              kreskowanie i pasmo niepewności, a nie osobny odcień, bo przy
+              kilku instrumentach nowe odcienie skończyłyby się tęczą.
+              Pasmo rysowane PRZED linią, żeby linia została na wierzchu. */}
+          {visible.map((s) =>
+            forecasts?.[s.symbol]?.length ? (
+              <Area
+                key={`${s.symbol}-band`}
+                type="monotone"
+                dataKey={bandKeyFor(s.symbol)}
+                name={`${s.label} — zakres prognozy`}
+                stroke="none"
+                fill={s.colorToken}
+                fillOpacity={0.12}
+                dot={false}
+                activeDot={false}
+                legendType="none"
+                isAnimationActive={false}
+              />
+            ) : null,
+          )}
+          {visible.map((s) =>
+            forecasts?.[s.symbol]?.length ? (
+              <Line
+                key={`${s.symbol}-fc`}
+                type="monotone"
+                dataKey={fcKeyFor(s.symbol)}
+                name={`${s.label} — prognoza`}
+                stroke={s.colorToken}
+                strokeWidth={2}
+                strokeDasharray="5 4"
+                dot={false}
+                activeDot={{ r: 4, strokeWidth: 0 }}
+                connectNulls
+                isAnimationActive={false}
+              />
+            ) : null,
+          )}
         </ComposedChart>
       </ResponsiveContainer>
     </div>

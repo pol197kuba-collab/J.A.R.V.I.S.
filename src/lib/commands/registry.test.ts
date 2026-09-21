@@ -23,6 +23,24 @@ describe("COMMAND_REGISTRY", () => {
     }
   });
 
+  describe("moduł rynkowy", () => {
+    it("otwiera rynki na frazach o notowaniach i giełdzie", () => {
+      expect(firstMatch("jarvis otwórz rynki")).toBe("open_markets");
+      expect(firstMatch("jarvis pokaż notowania")).toBe("open_markets");
+      expect(firstMatch("show markets")).toBe("open_markets");
+      expect(firstMatch("jarvis co na giełdzie")).toBe("open_markets");
+    });
+
+    it("nie porywa fraz, w których rynek nie znaczy giełdy", () => {
+      // Gołe `rynek` łapałoby „rynek pracy" i „rynek nieruchomości", czyli
+      // pytania, na które moduł nie odpowiada. Nawigacja ma być pewna, a nie
+      // gorliwa: lepiej nie otworzyć niczego niż wyrzucić użytkownika z
+      // rozmowy do przypadkowego modułu.
+      expect(firstMatch("jak wygląda rynek pracy w polsce")).not.toBe("open_markets");
+      expect(firstMatch("ceny na rynku nieruchomości")).not.toBe("open_markets");
+    });
+  });
+
   describe("rozdział komend paliwowych", () => {
     it("frazy o cenach prowadzą do modułu cennika", () => {
       expect(firstMatch("jarvis ceny paliw")).toBe("open_fuel_prices");

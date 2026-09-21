@@ -71,6 +71,34 @@ export const COMMAND_REGISTRY = [
     phrases: ["Open JARVIS panel", "Jarvis, otwórz panel JARVIS", "Jarvis, pokaż JARVISA"],
     description: "Opens the dedicated J.A.R.V.I.S. core panel.",
   },
+  {
+    id: "open_markets",
+    category: "Navigation",
+    kind: { type: "route", path: "/rynki" },
+    pattern:
+      // Bez gołego `rynek`: „rynek pracy", „rynek nieruchomości" i „co na
+      // rynku" trafiałyby tu bez związku z modułem. Wymagamy formy mnogiej
+      // albo słowa jednoznacznie giełdowego.
+      //
+      // `gie[łl]d\w*` zamiast listy końcówek — „giełda", „giełdy",
+      // „giełdzie", „giełdę" to cztery różne formy tego samego pytania, a
+      // wyliczanie ich z palca zawsze kończy się tą jedną, o której nikt nie
+      // pomyślał. Wariant `giel` bo dyktowanie gubi ogonki.
+      //
+      // `markets?` łapie angielską liczbę pojedynczą i mnogą, ale NIE
+      // „marketing": po „market" musi wypaść granica słowa.
+      /\b(rynki|rynk(?:ów|ach)|markets?|notowania|gie[łl]d\w*|typer|kursy\s+akcji)\b/i,
+    confirmation: "Otwieram moduł rynkowy, Panie Sławiński.",
+    label: "Open Markets",
+    phrases: [
+      "Jarvis, otwórz rynki",
+      "Jarvis, pokaż notowania",
+      "Show markets",
+      "Jarvis, co na giełdzie",
+    ],
+    description:
+      "Opens the Market Grid: quotes for stocks, crypto, commodities and FX, news scored per instrument, a technical outlook with its own accuracy scoreboard, and forecasts drawn past today on the chart.",
+  },
   // MUSI stać przed `open_fuel`: VoiceCommandContext bierze PIERWSZE
   // dopasowanie z tablicy, a "open fuel prices" pasuje też do tamtego
   // wzorca (`open\s+fuel`). Kolejność rozstrzyga to na korzyść cennika —
