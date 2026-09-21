@@ -29,6 +29,7 @@ import { OutlookPanel } from "@/components/jarvis/markets/OutlookPanel";
 import { AccuracyPanel } from "@/components/jarvis/markets/AccuracyPanel";
 import { AssetPicker } from "@/components/jarvis/markets/AssetPicker";
 import { formatPercent, formatPrice } from "@/lib/markets/series";
+import { projectForecast, type ForecastPoint } from "@/lib/markets/projection";
 import {
   addToWatchlist,
   getMarketGrid,
@@ -182,6 +183,28 @@ function MarketsPage() {
     return { top: ranked[0] ?? null, bottom: ranked[ranked.length - 1] ?? null };
   }, [series]);
 
+  // Prognozy dorysowywane na wykresie: bierzemy werdykt typera dla każdego
+  // instrumentu i przedłużamy jego notowania o horyzont prognozy. Liczone tu,
+  // a nie na serwerze, bo obie składowe — notowania i werdykty — i tak są już
+  // w pamięci przeglądarki, a rachunek jest trywialny.
+  const forecasts = useMemo<Record<string, ForecastPoint[]>>(() => {
+    const rows = outlook.data?.rows ?? [];
+    const horizon = outlook.data?.horizonDays ?? 7;
+    const out: Record<string, ForecastPoint[]> = {};
+    for (const s of series) {
+      const row = rows.find((r) => r.symbol === s.symbol);
+      if (!row) continue;
+      // Werdykt modelu ma pierwszeństwo przed samą techniką, dokładnie tak
+      // jak w panelu typera — na wykresie ma się pojawić TA SAMA prognoza,
+      // którą użytkownik czyta obok, a nie jej druga wersja.
+      const direction = row.ai?.direction ?? row.direction;
+      const confidence = row.ai?.confidence ?? row.confidence;
+      const path = projectForecast(s.points, { score: row.score, direction, confidence }, horizon);
+      if (path.length > 0) out[s.symbol] = path;
+    }
+    return out;
+  }, [series, outlook.data]);
+
   const watched = series.map((s) => s.symbol);
   const primary = series.find((s) => s.symbol === visibleSymbols[0]) ?? null;
   const missing = grid.data?.missing ?? [];
@@ -253,7 +276,23 @@ function MarketsPage() {
         {grid.isLoading ? (
           <EmptyState>Ładowanie notowań…</EmptyState>
         ) : (
-          <MarketChart series={series} visibleSymbols={visibleSymbols} mode={mode} />
+          <>
+            <MarketChart
+              series={series}
+              visibleSymbols={visibleSymbols}
+              mode={mode}
+              forecasts={forecasts}
+            />
+            {/* Kreskowanie i pasmo trzeba nazwać. Przy jednym instrumencie nie
+                ma legendy, a nawet przy kilku legenda mówi, CZYJA to linia,
+                nie co znaczy jej przerywanie. */}
+            {Object.keys(forecasts).some((sym) => visibleSymbols.includes(sym)) && (
+              <p className="mt-2 font-mono text-[10px] text-muted-foreground">
+                Linia przerywana — prognoza na {outlook.data?.horizonDays ?? 7} dni. Pasmo — zakres
+                niepewności; im szersze, tym mniejsza pewność typera.
+              </p>
+            )}
+          </>
         )}
 
         <PanelHint>
