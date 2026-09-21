@@ -108,7 +108,7 @@ export function MarketChart({
 
       for (const point of values) {
         const row = byDate.get(point.date) ?? { label: shortLabel(point.date), date: point.date };
-        row[key] = point.value;
+        (row as Record<string, number | string | null>)[key] = point.value;
         byDate.set(point.date, row);
       }
     }
