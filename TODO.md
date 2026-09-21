@@ -23,6 +23,33 @@
 > unchanged (already referenced in pushed commit messages) — only the
 > build order is reprioritized here, not the file's physical layout.
 
+## 0. Otwarte PO STRONIE WŁAŚCICIELA (nie do zrobienia z repo) — stan 2026-09-21
+
+Rzeczy, których żaden commit nie załatwi, bo wymagają dostępu do kont i
+paneli zewnętrznych. Trzymane tutaj, żeby nie zginęły między sesjami.
+
+- [ ] **`GEMINI_API_KEY` jako sekret w GitHubie** (Settings → Secrets and
+      variables → Actions). Bez niego nocne joby działają, ale newsy
+      dostają ocenę słownikową zamiast modelu, a typer zapisuje wyłącznie
+      prognozę sygnałową. Widać to w logu przebiegu jako
+      `0 ocenionych przez model` i `interpretacja: same sygnały`.
+      Cztery pozostałe sekrety (`SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`,
+      `JARVIS_EMAIL`, `JARVIS_PASSWORD`) są już ustawione i zweryfikowane
+      udanym przebiegiem 2026-09-21 05:47 UTC.
+
+- [ ] **Doładowanie konta Anthropic.** Klucz jest zapisany i w aplikacji, i
+      w sekretach, ale konto nie ma środków — płatność odrzucana przez
+      operatora (Google Pay). Anthropic zwykle odrzuca portfele oraz karty
+      prepaid i wirtualne; skuteczna bywa zwykła karta kredytowa dodana
+      wprost w Billing. Nic nie jest tym zablokowane: runtime schodzi na
+      Gemini, a Claude włączy się sam, gdy kredyty się pojawią — bez
+      żadnej zmiany konfiguracji.
+
+- [ ] **Opcjonalnie: ETF WIG20TR zamiast WIG20 na watchliście.** Yahoo
+      serwuje dla samego indeksu tylko ostatnie notowanie, a Stooq jest
+      blokowany z IP hostingu, więc wykres WIG20 zostaje jednym punktem.
+      ETF ma pełną historię w obu źródłach (szczegóły w `assets.ts`).
+
 ## 1. [UI] Dashboard redesign — holo-panels with depth — **shipped 2026-07-16, confirmed working**
 
 Root cause (confirmed against the screenshot + `src/routes/index.tsx:25`,
@@ -1824,6 +1851,36 @@ and produce one prediction per instrument per day instead of a clump of
 whichever days someone happened to look. Watchlist and predictions are
 per-user, so the job's account (or `JARVIS_OWNER_ID`) decides whose
 instruments are fetched and whose forecasts are settled.
+
+## 18. [UI] Globalna komenda głosowa z dowolnej strony — **shipped 2026-09-21**
+
+Mikrofon istniał tylko w konsoli czatu w module `/jarvis`, więc każda
+komenda zaczynała się od nawigacji do tego modułu. Teraz pływający
+przycisk siedzi w prawym dolnym rogu na każdej stronie i robi DOKŁADNIE
+to samo, co tamten mikrofon: jedno przechwycenie i pełny agent ze
+wszystkimi narzędziami (`useAgentChatChannel.send`), a nie lżejsza
+ścieżka `routeText` bez narzędzi.
+
+Dwie decyzje warte zapamiętania:
+
+- **Hook czatu montowany leniwie.** `useAgentChatChannel` odpytuje listę
+  agentów co 15 sekund. Przycisk wisi wszędzie, więc trzymanie hooka na
+  stałe dołożyłoby ten polling na każdej stronie — także komuś, kto przez
+  godzinę ogląda wykresy i nie tknie mikrofonu. Hook żyje więc w osobnym
+  `VoiceSendRunner`, montowanym dopiero gdy jest co wysłać. Odpowiedź
+  łapiemy z magistrali `onChat`, nie ze stanu hooka, więc runner może
+  zniknąć, a karta i tak pokaże wynik; odmontowanie nie przerywa żądania.
+- **Na mobile przycisk mieszka W pasku dolnym, zakotwiczony `bottom-full`
+  do jego górnej krawędzi**, ale POZA kontenerem przewijania. Dzięki temu
+  lista modułów zachowuje pełną szerokość wraz z przeciąganiem i
+  bezwładnością, a wysokość paska nie jest nigdzie powtórzona jako stała.
+  Wariant „wypukły przycisk na środku paska" został odrzucony świadomie:
+  dzielił scroller na dwie połówki i psuł bezwładność przez środek.
+
+Odpowiedź jest czytana na głos (to `send()` robił już wcześniej) ORAZ
+pokazywana na znikającej karcie z transkrypcją tego, co usłyszał
+mikrofon — bez niej przy błędnym rozpoznaniu nie wiadomo, co poszło nie
+tak, a długiej odpowiedzi nie da się przyswoić ze słuchu.
 
 ## Long-shot / not scheduled
 

@@ -19,6 +19,7 @@ import { ShowcaseProvider } from "@/components/jarvis/ShowcaseContext";
 import { ShowcaseOverlay } from "@/components/jarvis/ShowcaseOverlay";
 import { ShowcaseButton } from "@/components/jarvis/ShowcaseButton";
 import { MobileBottomNav } from "@/components/jarvis/MobileBottomNav";
+import { GlobalVoiceCommand } from "@/components/jarvis/GlobalVoiceCommand";
 import { isFullscreen, onFullscreenChange, toggleAppFullscreen } from "@/lib/fullscreen";
 import type { AppPhase } from "@/components/jarvis/PhaseContext";
 
@@ -120,7 +121,15 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
           <Outlet />
           <HudRouteTransition />
         </main>
-        {isMobile && <MobileBottomNav />}
+        {isMobile ? (
+          // Na mobile przycisk mieszka w pasku (zakotwiczony nad nim), żeby
+          // nie trzeba było nigdzie powtarzać jego wysokości.
+          <MobileBottomNav />
+        ) : (
+          <div className="absolute right-6 bottom-6 z-40">
+            <GlobalVoiceCommand />
+          </div>
+        )}
         <ArkRebootOverlay />
         <ShowcaseOverlay />
         <Toaster theme="dark" position="top-right" richColors />
