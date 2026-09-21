@@ -3,13 +3,15 @@
 // 1. normalizeDocSpec: model-produced args are untrusted — malformed input
 //    must come back as a typed error, never throw or produce a broken spec.
 // 2. buildDocument: each format must produce real bytes with the right
-//    container signature (pptx/docx are ZIPs → "PK", pdf → "%PDF").
-// 3. Polish diacritics in PDF: the entire reason producerFonts.server.ts
-//    exists — pdf-lib's StandardFonts throw on the first "ł". If someone
-//    "simplifies" the embedded font away, this is the test that catches it.
+//    container signature (pptx and docx are both ZIPs → "PK").
+// 3. Rozdzielenie opisu: prezentacja niesie `slides`, dokument `sections`.
+//    Model widzi w obu przypadkach to samo pole „sections" — to jest jego
+//    interfejs, nie nasz kształt wewnętrzny — więc normalizacja musi
+//    przełożyć jedno na drugie i nie wolno jej tego pomylić.
 
 import { describe, expect, it } from "vitest";
 import {
+  blocksOf,
   buildDocument,
   generateDocImages,
   normalizeDocSpec,
@@ -17,6 +19,7 @@ import {
   slugifyFilename,
   specHasImagePrompts,
   type DocImages,
+  type DeckSpec,
   type DocSpec,
 } from "./producer.server";
 import { vi, afterEach } from "vitest";
@@ -38,18 +41,32 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const POLISH_SPEC: Omit<DocSpec, "format"> = {
+const POLISH_BLOCKS = [
+  {
+    heading: "Wnioski końcowe",
+    content: "Świeża treść z polskimi znakami: łódź, źdźbło, żółw.\n\nDrugi akapit.",
+    bullets: ["Pierwszy wniosek — ważny", "Drugi wniosek (ok. 50%)"],
+  },
+  { heading: "Źródła", bullets: ["https://example.com/artykuł"] },
+];
+
+const POLISH_COMMON = {
   title: "Zażółć gęślą jaźń — raport",
   subtitle: "Pełny polski zestaw znaków: ąćęłńóśźż ĄĆĘŁŃÓŚŹŻ",
-  filename: "raport.pdf",
-  sections: [
-    {
-      heading: "Wnioski końcowe",
-      content: "Świeża treść z polskimi znakami: łódź, źdźbło, żółw.\n\nDrugi akapit.",
-      bullets: ["Pierwszy wniosek — ważny", "Drugi wniosek (ok. 50%)"],
-    },
-    { heading: "Źródła", bullets: ["https://example.com/artykuł"] },
-  ],
+};
+
+const POLISH_DECK: DeckSpec = {
+  ...POLISH_COMMON,
+  format: "pptx",
+  filename: "raport.pptx",
+  slides: POLISH_BLOCKS,
+};
+
+const POLISH_DOC: DocSpec = {
+  ...POLISH_COMMON,
+  format: "docx",
+  filename: "raport.docx",
+  sections: POLISH_BLOCKS,
 };
 
 describe("normalizeDocSpec", () => {
@@ -62,7 +79,31 @@ describe("normalizeDocSpec", () => {
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.spec.filename).toBe("plan-kwartalny-q3.pptx");
-    expect(res.spec.sections).toHaveLength(1);
+    // Wejściowe „sections" modelu ląduje dla pptx w `slides` — to jest cały
+    // sens rozdzielenia opisu i regresja, która najłatwiej przeszłaby cicho.
+    expect(res.spec.format === "pptx" && res.spec.slides).toHaveLength(1);
+    expect(blocksOf(res.spec)).toHaveLength(1);
+  });
+
+  it("routes identical input to slides for a deck and sections for a document", () => {
+    // Sedno rozdzielenia opisu: model podaje jedno pole „sections" dla obu
+    // formatów, a wewnątrz rozchodzi się to na dwa różne kształty. Gdyby
+    // kiedyś zrosło się z powrotem w jeden, prezentacje znów mogłyby zawierać
+    // wyłącznie to, co wyraża Word — i to jest ta regresja, którą chcemy tu
+    // złapać, a nie literówkę w nazwie pola.
+    const args = { title: "t", sections: [{ heading: "h", content: "c" }] };
+
+    const deck = normalizeDocSpec({ ...args, format: "pptx" });
+    const doc = normalizeDocSpec({ ...args, format: "docx" });
+    expect(deck.ok && doc.ok).toBe(true);
+    if (!deck.ok || !doc.ok) return;
+
+    expect(deck.spec).toHaveProperty("slides");
+    expect(deck.spec).not.toHaveProperty("sections");
+    expect(doc.spec).toHaveProperty("sections");
+    expect(doc.spec).not.toHaveProperty("slides");
+    // …a kod, który po prostu przechodzi po treści, nie musi o tym wiedzieć.
+    expect(blocksOf(deck.spec)).toEqual(blocksOf(doc.spec));
   });
 
   it("rejects unknown formats", () => {
@@ -71,11 +112,11 @@ describe("normalizeDocSpec", () => {
   });
 
   it("rejects an empty title and content-free sections", () => {
-    expect(normalizeDocSpec({ format: "pdf", title: "  ", sections: [{ heading: "h" }] }).ok).toBe(
+    expect(normalizeDocSpec({ format: "docx", title: "  ", sections: [{ heading: "h" }] }).ok).toBe(
       false,
     );
     expect(
-      normalizeDocSpec({ format: "pdf", title: "t", sections: [{}, { bullets: [] }] }).ok,
+      normalizeDocSpec({ format: "docx", title: "t", sections: [{}, { bullets: [] }] }).ok,
     ).toBe(false);
   });
 
@@ -87,20 +128,24 @@ describe("normalizeDocSpec", () => {
     });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect(res.spec.sections).toHaveLength(1);
-    expect(res.spec.sections[0].bullets).toEqual(["real"]);
+    expect(blocksOf(res.spec)).toHaveLength(1);
+    expect(blocksOf(res.spec)[0].bullets).toEqual(["real"]);
   });
 
-  it("normalizes a user-supplied filename and strips a duplicate extension", () => {
+  it("normalizes a user-supplied filename and forces the real extension", () => {
+    // Rozszerzenie z nazwy podanej przez model jest odrzucane, nie doklejane.
+    // „.pdf" zostaje na liście zdejmowanych końcówek celowo, mimo że tego
+    // formatu już nie produkujemy: model nadal potrafi taką nazwę napisać,
+    // a „moj-raport.pdf.docx" byłoby gorsze niż jakikolwiek brak walidacji.
     const res = normalizeDocSpec({
-      format: "pdf",
+      format: "docx",
       title: "t",
       filename: "mój raport.pdf",
       sections: [{ heading: "h", content: "c" }],
     });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect(res.spec.filename).toBe("moj-raport.pdf");
+    expect(res.spec.filename).toBe("moj-raport.docx");
   });
 });
 
@@ -128,7 +173,7 @@ describe("image prompts", () => {
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.spec.heroImagePrompt).toBe("sleek phone on dark glass");
-    expect(res.spec.sections[0].imagePrompt).toBe("macro camera lens");
+    expect(blocksOf(res.spec)[0].imagePrompt).toBe("macro camera lens");
   });
 
   it("generateDocImages parses inlineData and caps the number of calls at 1+4", async () => {
@@ -154,12 +199,12 @@ describe("image prompts", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const spec: DocSpec = {
+    const spec: DeckSpec = {
       format: "pptx",
       title: "t",
       filename: "t.pptx",
       heroImagePrompt: "hero",
-      sections: Array.from({ length: 8 }, (_, i) => ({
+      slides: Array.from({ length: 8 }, (_, i) => ({
         heading: `s${i}`,
         content: "c",
         imagePrompt: `img${i}`,
@@ -200,7 +245,7 @@ describe("image prompts", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const images = await generateDocImages(
-      { format: "pdf", title: "t", filename: "t.pdf", heroImagePrompt: "hero", sections: [] },
+      { format: "pptx", title: "t", filename: "t.pptx", heroImagePrompt: "hero", slides: [] },
       "test-key",
     );
     // 503 then 200 — the hero image survives instead of degrading to text-only.
@@ -210,18 +255,16 @@ describe("image prompts", () => {
 
   it("specHasImagePrompts drives async enrichment (AI prompts OR web-photo queries)", () => {
     const base = { format: "pptx" as const, title: "t", filename: "t.pptx" };
-    expect(specHasImagePrompts({ ...base, sections: [{ heading: "h", content: "c" }] })).toBe(
-      false,
+    expect(specHasImagePrompts({ ...base, slides: [{ heading: "h", content: "c" }] })).toBe(false);
+    expect(specHasImagePrompts({ ...base, heroImagePrompt: "hero", slides: [] })).toBe(true);
+    expect(specHasImagePrompts({ ...base, heroImageQuery: "samsung phone", slides: [] })).toBe(
+      true,
     );
-    expect(specHasImagePrompts({ ...base, heroImagePrompt: "hero", sections: [] })).toBe(true);
-    expect(specHasImagePrompts({ ...base, heroImageQuery: "samsung phone", sections: [] })).toBe(
+    expect(specHasImagePrompts({ ...base, slides: [{ heading: "h", imagePrompt: "phone" }] })).toBe(
       true,
     );
     expect(
-      specHasImagePrompts({ ...base, sections: [{ heading: "h", imagePrompt: "phone" }] }),
-    ).toBe(true);
-    expect(
-      specHasImagePrompts({ ...base, sections: [{ heading: "h", imageQuery: "real photo" }] }),
+      specHasImagePrompts({ ...base, slides: [{ heading: "h", imageQuery: "real photo" }] }),
     ).toBe(true);
   });
 
@@ -235,14 +278,19 @@ describe("image prompts", () => {
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.spec.heroImageQuery).toBe("Samsung Galaxy S26 Ultra");
-    expect(res.spec.sections[0].imageQuery).toBe("camera module");
+    expect(blocksOf(res.spec)[0].imageQuery).toBe("camera module");
   });
 
   it("generateDocImages is a no-op without prompts (no network)", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const images = await generateDocImages(
-      { format: "pdf", title: "t", filename: "t.pdf", sections: [{ heading: "h", content: "c" }] },
+      {
+        format: "docx",
+        title: "t",
+        filename: "t.docx",
+        sections: [{ heading: "h", content: "c" }],
+      },
       "test-key",
     );
     expect(fetchMock).not.toHaveBeenCalled();
@@ -253,42 +301,38 @@ describe("image prompts", () => {
 
 describe("buildDocument", () => {
   it("builds a pptx (ZIP container)", async () => {
-    const bytes = await buildDocument({ ...POLISH_SPEC, format: "pptx" });
+    const bytes = await buildDocument(POLISH_DECK);
     expect(bytes.byteLength).toBeGreaterThan(1000);
     expect(String.fromCharCode(bytes[0], bytes[1])).toBe("PK");
   });
 
   it("builds a docx (ZIP container)", async () => {
-    const bytes = await buildDocument({ ...POLISH_SPEC, format: "docx" });
+    const bytes = await buildDocument(POLISH_DOC);
     expect(bytes.byteLength).toBeGreaterThan(1000);
     expect(String.fromCharCode(bytes[0], bytes[1])).toBe("PK");
   });
 
-  it("builds a pdf with Polish diacritics without throwing", async () => {
-    const bytes = await buildDocument({ ...POLISH_SPEC, format: "pdf" });
-    expect(bytes.byteLength).toBeGreaterThan(1000);
-    expect(String.fromCharCode(...bytes.slice(0, 5))).toBe("%PDF-");
-  });
-
-  it("embeds images in all three formats without throwing", async () => {
-    for (const format of ["pptx", "docx", "pdf"] as const) {
-      const bytes = await buildDocument({ ...POLISH_SPEC, format }, TINY_IMAGES);
+  it("embeds images in both formats without throwing", async () => {
+    for (const spec of [POLISH_DECK, POLISH_DOC]) {
+      const bytes = await buildDocument(spec, TINY_IMAGES);
       expect(bytes.byteLength).toBeGreaterThan(1000);
     }
   });
 
-  it("paginates long content instead of overflowing one PDF page", async () => {
+  it("builds a long document without throwing", async () => {
+    // Dawniej pilnowało to łamania stron w PDF-ie, który sam liczył linie.
+    // Word łamie strony sam, więc zostaje to, co nadal może się wywrócić:
+    // dużo sekcji z długą treścią i polskimi znakami.
     const bytes = await buildDocument({
-      format: "pdf",
+      format: "docx",
       title: "Długi dokument",
-      filename: "dlugi.pdf",
+      filename: "dlugi.docx",
       sections: Array.from({ length: 12 }, (_, i) => ({
         heading: `Sekcja ${i + 1}`,
         content: "Zdanie testowe z polskimi znakami: żółć. ".repeat(40),
       })),
     });
-    const { PDFDocument } = await import("pdf-lib");
-    const doc = await PDFDocument.load(bytes);
-    expect(doc.getPageCount()).toBeGreaterThan(1);
+    expect(bytes.byteLength).toBeGreaterThan(1000);
+    expect(String.fromCharCode(bytes[0], bytes[1])).toBe("PK");
   });
 });

@@ -1,28 +1,31 @@
-// In-app preview for F.O.R.G.E.-generated files — no download required.
+// Podgląd plików F.O.R.G.E. w aplikacji — bez pobierania.
 //
-//  - pdf : the signed URL straight into an <iframe> (browsers render PDF).
-//  - pptx: no in-browser renderer exists, so we preview the PDF rendering
-//          F.O.R.G.E. stored alongside it (kind: "preview"); if that's
-//          missing (older file / failed render) we fall back to download.
-//  - docx: fetched as bytes and rendered to HTML client-side via
-//          docx-preview — the file never leaves the user's browser.
+//  - pptx: slajdy rysowane w Reakcie z zapisanej specyfikacji (DeckPreview).
+//          Żaden plik nie jest w tym celu pobierany ani renderowany drugi raz.
+//  - docx: bajty pobrane i wyrenderowane do HTML po stronie przeglądarki
+//          przez docx-preview — plik nie opuszcza urządzenia.
 //
-// The signed URL is minted on open and again for the download button, so a
-// stale/expired URL is never an issue.
+// Do prezentacji nie mintujemy już URL-a przy otwarciu: podgląd nie potrzebuje
+// samego pliku. Przycisk pobierania mintuje własny, świeży URL, więc wygasły
+// link nigdy nie jest problemem.
 
 import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Download, X } from "lucide-react";
 import {
   getGeneratedFileUrlFn,
+  getGeneratedSpecFn,
   type GeneratedFileSummary,
 } from "@/lib/documents/generated.functions";
+import { DeckPreview } from "./DeckPreview";
+import type { DeckSpec } from "@/lib/agents/docSpec";
 
 type Props = { file: GeneratedFileSummary; onClose: () => void };
 
 export function GeneratedFilePreview({ file, onClose }: Props) {
   const getUrl = useServerFn(getGeneratedFileUrlFn);
-  const [iframeUrl, setIframeUrl] = useState<string | null>(null);
+  const getSpec = useServerFn(getGeneratedSpecFn);
+  const [deck, setDeck] = useState<DeckSpec | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [message, setMessage] = useState<string>("");
   const docxRef = useRef<HTMLDivElement>(null);
@@ -37,43 +40,54 @@ export function GeneratedFilePreview({ file, onClose }: Props) {
   useEffect(() => {
     let cancelled = false;
     setStatus("loading");
-    setIframeUrl(null);
+    setDeck(null);
 
     (async () => {
       try {
-        // "preview" serves inline (and swaps in the pptx→pdf rendering when
-        // one exists); pdf/docx have no separate preview object so they get
-        // their own bytes served inline.
+        if (file.format === "pptx") {
+          // Prezentacja: bierzemy sam opis, nie plik. Starsze pliki sprzed
+          // rozdzielenia specyfikacji trzymają „sections" zamiast „slides" —
+          // mapujemy je, zamiast pokazywać użytkownikowi błąd za decyzję
+          // architektoniczną, której nie podejmował.
+          const res = await getSpec({ data: { fileId: file.id } });
+          if (cancelled) return;
+          if (!res.ok) {
+            setStatus("error");
+            setMessage("Podgląd tej prezentacji jest niedostępny — pobierz plik, aby go otworzyć.");
+            return;
+          }
+          const raw = res.spec as Partial<DeckSpec> & { sections?: DeckSpec["slides"] };
+          const slides = raw.slides ?? raw.sections ?? [];
+          if (slides.length === 0) {
+            setStatus("error");
+            setMessage("Ta prezentacja nie ma zapisanej treści — pobierz plik, aby ją otworzyć.");
+            return;
+          }
+          setDeck({ ...(raw as DeckSpec), format: "pptx", slides });
+          setStatus("ready");
+          return;
+        }
+
         const res = await getUrl({ data: { fileId: file.id, kind: "preview" } });
         if (cancelled) return;
         if (!res.ok) {
           setStatus("error");
-          setMessage(
-            file.format === "pptx"
-              ? "Podgląd tej prezentacji jest niedostępny — pobierz plik, aby go otworzyć."
-              : `Nie udało się wczytać podglądu: ${res.reason}`,
-          );
+          setMessage(`Nie udało się wczytać podglądu: ${res.reason}`);
           return;
         }
 
-        if (file.format === "docx") {
-          const resp = await fetch(res.url);
-          const blob = await resp.blob();
-          if (cancelled) return;
-          const { renderAsync } = await import("docx-preview");
-          if (docxRef.current) {
-            docxRef.current.innerHTML = "";
-            await renderAsync(blob, docxRef.current, undefined, {
-              className: "docx-preview",
-              inWrapper: true,
-            });
-          }
-          if (!cancelled) setStatus("ready");
-        } else {
-          // pdf + pptx(→pdf) both render in an iframe.
-          setIframeUrl(res.url);
-          setStatus("ready");
+        const resp = await fetch(res.url);
+        const blob = await resp.blob();
+        if (cancelled) return;
+        const { renderAsync } = await import("docx-preview");
+        if (docxRef.current) {
+          docxRef.current.innerHTML = "";
+          await renderAsync(blob, docxRef.current, undefined, {
+            className: "docx-preview",
+            inWrapper: true,
+          });
         }
+        if (!cancelled) setStatus("ready");
       } catch (err) {
         if (!cancelled) {
           setStatus("error");
@@ -156,9 +170,7 @@ export function GeneratedFilePreview({ file, onClose }: Props) {
               </button>
             </div>
           )}
-          {iframeUrl && (
-            <iframe title={`Podgląd: ${file.filename}`} src={iframeUrl} className="h-full w-full" />
-          )}
+          {deck && <DeckPreview spec={deck} />}
           {file.format === "docx" && (
             <div ref={docxRef} className="min-h-full bg-neutral-100 p-4 text-black" />
           )}
