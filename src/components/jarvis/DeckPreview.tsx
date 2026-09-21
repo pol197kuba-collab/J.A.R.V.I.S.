@@ -114,65 +114,100 @@ function TitleSlide({ spec }: { spec: DeckSpec }) {
   );
 }
 
-function ContentSlide({
-  slide,
+/** Etykieta w prawym górnym rogu — tytuł prezentacji i numer slajdu. */
+const Chrome = ({
+  deckTitle,
   index,
   total,
-  deckTitle,
 }: {
-  slide: DeckSlide;
+  deckTitle: string;
   index: number;
   total: number;
-  deckTitle: string;
-}) {
+}) => (
+  <div
+    className="absolute top-[3%] right-[4%] text-[clamp(6px,0.9cqw,10px)] tracking-widest"
+    style={{ color: cssColor(DOC_COLORS.muted) }}
+  >
+    {deckTitle.toUpperCase()} · {String(index + 2).padStart(2, "0")}/
+    {String(total).padStart(2, "0")}
+  </div>
+);
+
+const Spine = () => (
+  <div
+    className="absolute inset-y-0 left-0 w-[1.3%]"
+    style={{ background: cssColor(DOC_COLORS.accent) }}
+  />
+);
+
+const AccentRule = ({ className = "" }: { className?: string }) => (
+  <div
+    className={`h-[3px] w-[9%] ${className}`}
+    style={{ background: cssColor(DOC_COLORS.accent) }}
+  />
+);
+
+const Heading = ({ children, light }: { children: React.ReactNode; light?: boolean }) => (
+  <h3
+    className="min-w-0 break-words text-[clamp(11px,2.1cqw,24px)] leading-tight font-semibold"
+    style={{ color: cssColor(light ? DOC_COLORS.paper : DOC_COLORS.dark) }}
+  >
+    {children}
+  </h3>
+);
+
+const Body = ({ children }: { children: React.ReactNode }) => (
+  <p
+    className="min-w-0 break-words text-[clamp(8px,1.2cqw,13px)] leading-relaxed"
+    style={{ color: cssColor(DOC_COLORS.body) }}
+  >
+    {children}
+  </p>
+);
+
+const Bullets = ({
+  items,
+  size = "clamp(8px,1.2cqw,13px)",
+}: {
+  items: string[];
+  size?: string;
+}) => (
+  <ul className="min-w-0 space-y-[1%]">
+    {items.map((b, i) => (
+      <li
+        key={i}
+        className="flex min-w-0 gap-2 leading-snug"
+        style={{ color: cssColor(DOC_COLORS.body), fontSize: size }}
+      >
+        <span style={{ color: cssColor(DOC_COLORS.accent) }}>•</span>
+        <span className="min-w-0 break-words">{b}</span>
+      </li>
+    ))}
+  </ul>
+);
+
+type SlideProps = { slide: DeckSlide; index: number; total: number; deckTitle: string };
+
+function BulletsSlide({ slide, index, total, deckTitle }: SlideProps) {
   const subject = slide.imageQuery;
   const url = slide.imageUrl;
   const hasImage = !!(subject || url);
-  // Zdjęcie raz z lewej, raz z prawej — dokładnie tak, jak robi to renderer
-  // pptx. Slajdy z obrazem zawsze w tym samym miejscu czytają się jak
-  // odbitka z szablonu (czym, strukturalnie, są).
-  const imageOnLeft = hasImage ? index % 2 === 1 : false;
+  // Przemienność stron dokładnie jak w rendererze pptx.
+  const imageOnLeft = hasImage && index % 2 === 1;
   const text = (
     <div className="flex min-w-0 flex-1 flex-col justify-center gap-[2%]">
-      <h3
-        className="min-w-0 break-words text-[clamp(11px,2.1cqw,24px)] leading-tight font-semibold"
-        style={{ color: cssColor(DOC_COLORS.dark) }}
-      >
-        {slide.heading}
-      </h3>
-      {slide.content && (
-        <p
-          className="min-w-0 break-words text-[clamp(8px,1.2cqw,13px)] leading-relaxed"
-          style={{ color: cssColor(DOC_COLORS.body) }}
-        >
-          {slide.content}
-        </p>
-      )}
-      {slide.bullets && slide.bullets.length > 0 && (
-        <ul className="min-w-0 space-y-[1%]">
-          {slide.bullets.map((b, i) => (
-            <li
-              key={i}
-              className="flex min-w-0 gap-2 text-[clamp(8px,1.2cqw,13px)] leading-snug"
-              style={{ color: cssColor(DOC_COLORS.body) }}
-            >
-              <span style={{ color: cssColor(DOC_COLORS.accent) }}>•</span>
-              <span className="min-w-0 break-words">{b}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <AccentRule className="mb-[1%]" />
+      <Heading>{slide.heading}</Heading>
+      {slide.content && <Body>{slide.content}</Body>}
+      {slide.bullets && slide.bullets.length > 0 && <Bullets items={slide.bullets} />}
     </div>
   );
-
   return (
     <Slide>
-      <div
-        className="absolute inset-y-0 left-0 w-[1.3%]"
-        style={{ background: cssColor(DOC_COLORS.accent) }}
-      />
-      <div className="flex h-full items-stretch gap-[3%] pt-[6%] pr-[4%] pb-[4%] pl-[6%]">
-        {imageOnLeft && hasImage && (
+      <Spine />
+      <Chrome deckTitle={deckTitle} index={index} total={total} />
+      <div className="flex h-full items-stretch gap-[3%] pt-[9%] pr-[4%] pb-[5%] pl-[6%]">
+        {imageOnLeft && (
           <div className="w-[33%] shrink-0">
             <ImageSlot url={url} subject={subject} />
           </div>
@@ -184,21 +219,187 @@ function ContentSlide({
           </div>
         )}
       </div>
-      <div
-        className="absolute top-[3%] right-[4%] text-[clamp(6px,0.9cqw,10px)] tracking-widest"
-        style={{ color: cssColor(DOC_COLORS.muted) }}
-      >
-        {deckTitle.toUpperCase()} · {String(index + 2).padStart(2, "0")}/
-        {String(total).padStart(2, "0")}
-      </div>
-      <div
-        className="absolute top-[4%] left-[4%] flex h-[7%] w-[3.5%] items-center justify-center text-[clamp(6px,0.9cqw,10px)] font-semibold"
-        style={{ background: cssColor(DOC_COLORS.accent), color: cssColor(DOC_COLORS.paper) }}
-      >
-        {index + 1}
+    </Slide>
+  );
+}
+
+function SectionBreakSlide({ slide, index }: SlideProps) {
+  return (
+    <Slide dark>
+      <Spine />
+      <div className="flex h-full flex-col justify-center px-[6%]">
+        <span
+          className="text-[clamp(28px,7cqw,76px)] leading-none font-bold"
+          style={{ color: cssColor(DOC_COLORS.accent) }}
+        >
+          {String(index + 1).padStart(2, "0")}
+        </span>
+        <AccentRule className="mt-[3%] mb-[2%] w-[12%]" />
+        <Heading light>{slide.heading}</Heading>
+        {slide.content && (
+          <p
+            className="mt-[2%] min-w-0 break-words text-[clamp(8px,1.2cqw,13px)]"
+            style={{ color: cssColor(DOC_COLORS.muted) }}
+          >
+            {slide.content}
+          </p>
+        )}
       </div>
     </Slide>
   );
+}
+
+function StatementSlide({ slide, index, total, deckTitle }: SlideProps) {
+  const text = slide.content || (slide.bullets ?? []).join("  ·  ");
+  return (
+    <Slide>
+      <Spine />
+      <Chrome deckTitle={deckTitle} index={index} total={total} />
+      <div className="flex h-full flex-col justify-center px-[6%]">
+        <span
+          className="text-[clamp(6px,0.9cqw,10px)] tracking-[0.2em] uppercase"
+          style={{ color: cssColor(DOC_COLORS.muted) }}
+        >
+          {slide.heading}
+        </span>
+        <AccentRule className="mt-[2%] mb-[3%] w-[12%]" />
+        <p
+          className="min-w-0 break-words text-[clamp(13px,2.6cqw,30px)] leading-snug font-semibold"
+          style={{ color: cssColor(DOC_COLORS.dark) }}
+        >
+          {text}
+        </p>
+      </div>
+    </Slide>
+  );
+}
+
+function MetricsSlide({ slide, index, total, deckTitle }: SlideProps) {
+  const metrics = slide.metrics ?? [];
+  return (
+    <Slide>
+      <Spine />
+      <Chrome deckTitle={deckTitle} index={index} total={total} />
+      <div className="flex h-full flex-col justify-center gap-[4%] px-[6%] pt-[8%]">
+        <div>
+          <AccentRule className="mb-[2%]" />
+          <Heading>{slide.heading}</Heading>
+        </div>
+        <div className="flex min-w-0 items-start gap-[3%]">
+          {metrics.map((m, i) => (
+            <div key={i} className="min-w-0 flex-1">
+              <div
+                className="mb-[8%] h-[3px] w-full"
+                style={{ background: cssColor(DOC_COLORS.accent) }}
+              />
+              <div
+                className="min-w-0 break-words leading-none font-bold"
+                style={{
+                  color: cssColor(DOC_COLORS.accent),
+                  fontSize:
+                    metrics.length >= 4 ? "clamp(16px,3.4cqw,40px)" : "clamp(20px,5cqw,58px)",
+                }}
+              >
+                {m.value}
+              </div>
+              {m.label && (
+                <div
+                  className="mt-[6%] min-w-0 break-words text-[clamp(7px,1.1cqw,12px)] leading-snug"
+                  style={{ color: cssColor(DOC_COLORS.body) }}
+                >
+                  {m.label}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        {slide.content && (
+          <p
+            className="min-w-0 break-words text-[clamp(7px,1cqw,11px)]"
+            style={{ color: cssColor(DOC_COLORS.muted) }}
+          >
+            {slide.content}
+          </p>
+        )}
+      </div>
+    </Slide>
+  );
+}
+
+function CompareSlide({ slide, index, total, deckTitle }: SlideProps) {
+  const columns = slide.columns ?? [];
+  return (
+    <Slide>
+      <Spine />
+      <Chrome deckTitle={deckTitle} index={index} total={total} />
+      <div className="flex h-full flex-col gap-[3%] px-[6%] pt-[9%] pb-[5%]">
+        <div>
+          <AccentRule className="mb-[2%]" />
+          <Heading>{slide.heading}</Heading>
+        </div>
+        <div className="flex min-w-0 flex-1 gap-[4%]">
+          {columns.map((c, i) => (
+            <div key={i} className="flex min-w-0 flex-1 flex-col gap-[4%]">
+              <div
+                className="flex min-w-0 items-center gap-2 px-[4%] py-[3%]"
+                style={{ background: cssColor(DOC_COLORS.surface) }}
+              >
+                <div
+                  className="h-[1.1em] w-[3px] shrink-0"
+                  style={{ background: cssColor(DOC_COLORS.accent) }}
+                />
+                <span
+                  className="min-w-0 break-words text-[clamp(8px,1.3cqw,15px)] font-semibold"
+                  style={{ color: cssColor(DOC_COLORS.dark) }}
+                >
+                  {c.heading}
+                </span>
+              </div>
+              <Bullets items={c.bullets} size="clamp(7px,1.1cqw,12px)" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </Slide>
+  );
+}
+
+function PhotoSlide({ slide }: SlideProps) {
+  return (
+    <Slide dark>
+      <div className="absolute inset-0">
+        <ImageSlot url={slide.imageUrl} subject={slide.imageQuery} />
+      </div>
+      <div
+        className="absolute inset-x-0 bottom-0 h-[35%]"
+        style={{
+          background: `linear-gradient(to top, ${cssColor(DOC_COLORS.dark)}, transparent)`,
+        }}
+      />
+      <div className="absolute inset-x-0 bottom-0 px-[6%] pb-[6%]">
+        <AccentRule className="mb-[2%] w-[12%]" />
+        <Heading light>{slide.heading}</Heading>
+      </div>
+    </Slide>
+  );
+}
+
+/** Dyspozytor — lustrzane odbicie tego w rendererze pptx. */
+function ContentSlide(props: SlideProps) {
+  switch (props.slide.layout) {
+    case "section":
+      return <SectionBreakSlide {...props} />;
+    case "statement":
+      return <StatementSlide {...props} />;
+    case "metrics":
+      return <MetricsSlide {...props} />;
+    case "compare":
+      return <CompareSlide {...props} />;
+    case "photo":
+      return <PhotoSlide {...props} />;
+    default:
+      return <BulletsSlide {...props} />;
+  }
 }
 
 export function DeckPreview({ spec }: { spec: DeckSpec }) {

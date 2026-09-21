@@ -61,7 +61,7 @@ const POLISH_DECK: DeckSpec = {
   ...POLISH_COMMON,
   format: "pptx",
   filename: "raport.pptx",
-  slides: POLISH_BLOCKS,
+  slides: POLISH_BLOCKS.map((b) => ({ ...b, layout: "bullets" as const })),
 };
 
 const POLISH_DOC: DocSpec = {
@@ -104,8 +104,14 @@ describe("normalizeDocSpec", () => {
     expect(deck.spec).not.toHaveProperty("sections");
     expect(doc.spec).toHaveProperty("sections");
     expect(doc.spec).not.toHaveProperty("slides");
-    // …a kod, który po prostu przechodzi po treści, nie musi o tym wiedzieć.
-    expect(blocksOf(deck.spec)).toEqual(blocksOf(doc.spec));
+    // …a kod, który po prostu przechodzi po treści, dostaje z obu ten sam
+    // materiał. Slajd niesie ponadto swój układ, więc porównujemy to, co
+    // faktycznie jest wspólne, zamiast udawać, że kształty są identyczne.
+    const common = (b: { heading: string; content?: string }) => ({
+      heading: b.heading,
+      content: b.content,
+    });
+    expect(blocksOf(deck.spec).map(common)).toEqual(blocksOf(doc.spec).map(common));
   });
 
   it("rejects unknown formats", () => {
@@ -164,6 +170,155 @@ describe("slugifyFilename", () => {
   });
 });
 
+describe("układy slajdów", () => {
+  const deck = (slide: Record<string, unknown>) =>
+    normalizeDocSpec({ format: "pptx", title: "t", sections: [slide] });
+
+  const layoutOf = (res: ReturnType<typeof normalizeDocSpec>) => {
+    if (!res.ok || res.spec.format !== "pptx") return null;
+    return res.spec.slides[0].layout;
+  };
+
+  it("keeps a layout whose data is actually there", () => {
+    expect(
+      layoutOf(deck({ heading: "Wyniki", layout: "metrics", metrics: [{ value: "42%" }] })),
+    ).toBe("metrics");
+    expect(
+      layoutOf(
+        deck({
+          heading: "Przed i po",
+          layout: "compare",
+          columns: [
+            { heading: "Przed", bullets: ["a"] },
+            { heading: "Po", bullets: ["b"] },
+          ],
+        }),
+      ),
+    ).toBe("compare");
+    expect(layoutOf(deck({ heading: "Teza", layout: "statement", content: "Jedno zdanie." }))).toBe(
+      "statement",
+    );
+    expect(
+      layoutOf(deck({ heading: "Część I", layout: "photo", image_query: "warsaw skyline" })),
+    ).toBe("photo");
+  });
+
+  it("degrades to bullets when the layout's own data is missing", () => {
+    // To jest gwarancja, na której stoi cały renderer: układ bez swoich
+    // danych wyrenderowałby się jako pusta ramka z nagłówkiem, czyli dziura
+    // w prezentacji zamiast treści, którą model faktycznie napisał.
+    expect(layoutOf(deck({ heading: "h", content: "c", layout: "metrics" }))).toBe("bullets");
+    expect(
+      layoutOf(
+        deck({ heading: "h", content: "c", layout: "compare", columns: [{ heading: "A" }] }),
+      ),
+    ).toBe("bullets");
+    expect(layoutOf(deck({ heading: "h", bullets: ["x"], layout: "photo" }))).toBe("bullets");
+    expect(layoutOf(deck({ heading: "h", layout: "statement", bullets: [] }))).toBe("bullets");
+  });
+
+  it("falls back to bullets for an unknown or missing layout", () => {
+    expect(layoutOf(deck({ heading: "h", content: "c", layout: "carousel" }))).toBe("bullets");
+    expect(layoutOf(deck({ heading: "h", content: "c" }))).toBe("bullets");
+  });
+
+  it("drops a metric with no value and caps the row at four", () => {
+    const res = deck({
+      heading: "h",
+      layout: "metrics",
+      metrics: [
+        { value: "1", label: "a" },
+        { label: "brak wartości" },
+        { value: "2" },
+        { value: "3" },
+        { value: "4" },
+        { value: "5" },
+      ],
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok || res.spec.format !== "pptx") return;
+    const metrics = res.spec.slides[0].metrics ?? [];
+    expect(metrics).toHaveLength(4);
+    expect(metrics.map((m) => m.value)).toEqual(["1", "2", "3", "4"]);
+  });
+
+  it("never leaks layout fields into a Word document", () => {
+    // Układy, liczby i kolumny to pojęcia slajdu. Przepuszczenie ich do
+    // docx tylko dlatego, że wspólna pętla je policzyła, odtworzyłoby
+    // sprzęgnięcie formatów, przez które prezentacje były kalekie.
+    const res = normalizeDocSpec({
+      format: "docx",
+      title: "t",
+      sections: [{ heading: "h", content: "c", layout: "metrics", metrics: [{ value: "42%" }] }],
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok || res.spec.format !== "docx") return;
+    const section = res.spec.sections[0];
+    expect(section).not.toHaveProperty("layout");
+    expect(section).not.toHaveProperty("metrics");
+    expect(section).not.toHaveProperty("columns");
+    expect(section.content).toBe("c");
+  });
+
+  it("builds a pptx with every layout without throwing", async () => {
+    const bytes = await buildDocument({
+      format: "pptx",
+      title: "Wszystkie układy",
+      filename: "uklady.pptx",
+      slides: [
+        { layout: "bullets", heading: "Punkty", content: "Treść", bullets: ["a", "b"] },
+        { layout: "section", heading: "Część II", content: "Wprowadzenie" },
+        { layout: "statement", heading: "Wniosek", content: "Jedno mocne zdanie." },
+        {
+          layout: "metrics",
+          heading: "Liczby",
+          metrics: [
+            { value: "42%", label: "udział" },
+            { value: "3.2 mln", label: "zasięg" },
+            { value: "17x", label: "wzrost" },
+            { value: "8", label: "rynki" },
+          ],
+        },
+        {
+          layout: "compare",
+          heading: "Przed i po",
+          columns: [
+            { heading: "Przed", bullets: ["wolno", "drogo"] },
+            { heading: "Po", bullets: ["szybko", "taniej"] },
+          ],
+        },
+        { layout: "photo", heading: "Otwarcie", imageQuery: "city skyline" },
+      ],
+    });
+    expect(bytes.byteLength).toBeGreaterThan(1000);
+    expect(String.fromCharCode(bytes[0], bytes[1])).toBe("PK");
+  });
+
+  it("builds every layout with images embedded too", async () => {
+    const withImages: DocImages = {
+      hero: TINY_IMAGES.hero,
+      sections: new Map([
+        [0, { bytes: TINY_PNG, mime: "image/png", sourceUrl: "https://example.com/a.png" }],
+        [1, { bytes: TINY_PNG, mime: "image/png", sourceUrl: "https://example.com/b.png" }],
+      ]),
+    };
+    const bytes = await buildDocument(
+      {
+        format: "pptx",
+        title: "Z obrazami",
+        filename: "obrazy.pptx",
+        heroImageQuery: "hero",
+        slides: [
+          { layout: "bullets", heading: "Punkty", bullets: ["a"], imageQuery: "x" },
+          { layout: "photo", heading: "Pełny kadr", imageQuery: "y" },
+        ],
+      },
+      withImages,
+    );
+    expect(bytes.byteLength).toBeGreaterThan(1000);
+  });
+});
+
 describe("zdjęcia", () => {
   it("ignores an AI image prompt instead of reviving the generated-graphics path", () => {
     // Ścieżka generowania obrazów przez model została wycięta: bywała
@@ -197,6 +352,7 @@ describe("zdjęcia", () => {
       filename: "t.pptx",
       heroImageQuery: "hero subject",
       slides: Array.from({ length: 8 }, (_, i) => ({
+        layout: "bullets" as const,
         heading: `s${i}`,
         content: "c",
         imageQuery: `subject ${i}`,
@@ -217,12 +373,17 @@ describe("zdjęcia", () => {
 
   it("specHasImagePrompts drives async enrichment from photo queries", () => {
     const base = { format: "pptx" as const, title: "t", filename: "t.pptx" };
-    expect(specHasImagePrompts({ ...base, slides: [{ heading: "h", content: "c" }] })).toBe(false);
+    expect(
+      specHasImagePrompts({ ...base, slides: [{ layout: "bullets", heading: "h", content: "c" }] }),
+    ).toBe(false);
     expect(specHasImagePrompts({ ...base, heroImageQuery: "samsung phone", slides: [] })).toBe(
       true,
     );
     expect(
-      specHasImagePrompts({ ...base, slides: [{ heading: "h", imageQuery: "real photo" }] }),
+      specHasImagePrompts({
+        ...base,
+        slides: [{ layout: "bullets", heading: "h", imageQuery: "real photo" }],
+      }),
     ).toBe(true);
   });
 

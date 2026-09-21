@@ -1991,7 +1991,7 @@ const generateDocumentTool: Tool = {
   declaration: {
     name: "generate_document",
     description:
-      "Generate a downloadable file — a presentation (pptx) or a Word document (docx) — from structured content, and return a download link. Call it ONCE with the complete, final content: a title and a list of sections, each with a heading plus paragraph text and/or bullet points. Write real content in the user's language, never placeholders. For visuals, set image_query (and hero_image_query): a short ENGLISH search phrase naming a real, concrete thing — a product, place, person, event or object, e.g. 'Samsung Galaxy S26 Ultra smartphone', 'Warsaw Old Town square'. The system finds a real photo on the web and embeds it. Be SPECIFIC: a vague phrase ('technology', 'business growth') returns generic stock filler, while a named subject returns the actual thing. Skip image_query entirely for a slide where no real photo would add anything — a slide with no image reads better than one with an unrelated picture. Photos are added in the background after the file is delivered.",
+      "Generate a downloadable file — a presentation (pptx) or a Word document (docx) — from structured content, and return a download link. Call it ONCE with the complete, final content: a title and a list of sections, each with a heading plus paragraph text and/or bullet points. Write real content in the user's language, never placeholders. For visuals, set image_query (and hero_image_query): a short ENGLISH search phrase naming a real, concrete thing — a product, place, person, event or object, e.g. 'Samsung Galaxy S26 Ultra smartphone', 'Warsaw Old Town square'. The system finds a real photo on the web and embeds it. Be SPECIFIC: a vague phrase ('technology', 'business growth') returns generic stock filler, while a named subject returns the actual thing. Skip image_query entirely for a slide where no real photo would add anything — a slide with no image reads better than one with an unrelated picture. Photos are added in the background after the file is delivered. FOR PRESENTATIONS: give every slide a `layout` chosen to fit its content — a deck where every slide is the same bullet list reads as filler. Vary them.",
     parameters: {
       type: "object",
       properties: {
@@ -2019,6 +2019,42 @@ const generateDocumentTool: Tool = {
             type: "object",
             properties: {
               heading: { type: "string", description: "Section/slide heading." },
+              layout: {
+                type: "string",
+                enum: ["bullets", "section", "statement", "metrics", "compare", "photo"],
+                description:
+                  "PRESENTATIONS ONLY (ignored for docx). Pick the layout that fits THIS slide's content: 'bullets' = heading + paragraph and/or bullet points, optionally a side photo — the workhorse; 'section' = a divider opening a new part of the deck (heading + one line of context, no bullets); 'statement' = one single claim or conclusion set large, put it in `content`, no bullets; 'metrics' = 1-4 numbers with captions, fill `metrics` — use it whenever the slide is really about figures; 'compare' = two side-by-side columns, fill `columns` with exactly two — for before/after, us/them, pros/cons; 'photo' = a full-bleed photo with the heading over it, requires image_query — good for opening a part. Defaults to 'bullets'. If the data a layout needs is missing, the slide silently falls back to 'bullets', so fill the matching field.",
+              },
+              metrics: {
+                type: "array",
+                description:
+                  "For layout 'metrics': 1-4 figures. Keep `value` SHORT — '42%', '3.2 mln', '17x' — it is set very large. `label` says what the number is.",
+                items: {
+                  type: "object",
+                  properties: {
+                    value: { type: "string", description: "The figure itself, max ~12 chars." },
+                    label: { type: "string", description: "What this number means." },
+                  },
+                  required: ["value"],
+                },
+              },
+              columns: {
+                type: "array",
+                description:
+                  "For layout 'compare': EXACTLY two columns. Fewer than two makes the slide fall back to 'bullets'.",
+                items: {
+                  type: "object",
+                  properties: {
+                    heading: { type: "string", description: "Column heading." },
+                    bullets: {
+                      type: "array",
+                      items: { type: "string" },
+                      description: "Points in this column.",
+                    },
+                  },
+                  required: ["heading"],
+                },
+              },
               content: { type: "string", description: "Paragraph text for this section." },
               bullets: {
                 type: "array",
