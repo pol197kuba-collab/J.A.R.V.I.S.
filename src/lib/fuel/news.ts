@@ -4,7 +4,7 @@
 // Samo parsowanie RSS-a mieszka w src/lib/rss/parse.ts — ten sam kod czyta
 // kanały dla modułu /rynki, więc nie ma tu jego drugiej kopii. Zostaje to,
 // co jest specyficzne dla paliw: dobór kanałów i słownik oceny wpływu.
-import { googleNewsFeed, type FeedSource, type RssItem } from "@/lib/rss/parse";
+import type { FeedSource, RssItem } from "@/lib/rss/parse";
 
 export { dedupeNews, parseRss } from "@/lib/rss/parse";
 export type { FeedSource } from "@/lib/rss/parse";
@@ -12,21 +12,37 @@ export type { FeedSource } from "@/lib/rss/parse";
 /** Pozycja newsowa modułu paliwowego — dziś dokładnie kształt z RSS-a. */
 export type NewsItem = RssItem;
 
+// ŹRÓDŁA WYDAWCÓW, NIE GOOGLE NEWS.
+//
+// Pięć z sześciu kanałów odpytywało wcześniej Google News. Na produkcji
+// wszystkie zwracały HTTP 503 przy każdym zaciągu — Google odrzuca ruch z
+// adresów IP centrów danych, a aplikacja stoi właśnie na takim. Wykryte
+// dopiero w module /rynki (te same kanały, te same 503 w System Logs), bo
+// tutaj awaria była cicha: ceny pokazywały się normalnie, a panel newsów
+// świecił pustką, którą łatwo wziąć za brak ciekawych wiadomości.
+//
+// Każdy kanał poniżej sprawdzony realnym żądaniem z serwerowni. Dobór
+// trzyma się tematyki modułu: to, co rusza HURTOWĄ ceną paliwa w Polsce —
+// ropa i OPEC, notowania surowców, krajowa energetyka i akcyza, oraz kurs
+// dolara, w którym rozliczana jest ropa.
 export const FEEDS: readonly FeedSource[] = [
-  { tag: "opec", label: "OPEC+", url: googleNewsFeed("OPEC production quota oil", "en") },
-  { tag: "brent", label: "Brent", url: googleNewsFeed("Brent crude oil price", "en") },
+  // Globalna ropa: OPEC, awarie rafinerii, sankcje, Ormuz.
+  { tag: "oil", label: "Ropa (OilPrice)", url: "https://oilprice.com/rss/main" },
   {
-    tag: "supply",
-    label: "Podaż",
-    url: googleNewsFeed("refinery outage OR pipeline disruption oil", "en"),
+    tag: "commodities",
+    label: "Surowce",
+    url: "https://www.investing.com/rss/commodities.rss",
   },
+  // Polska perspektywa — dokładnie to, czego nie opisują serwisy anglojęzyczne.
+  { tag: "ropa-pl", label: "Ropa (PL)", url: "https://biznesalert.pl/category/ropa/feed/" },
   {
-    tag: "geo",
-    label: "Geopolityka",
-    url: googleNewsFeed("Russia oil sanctions OR Strait of Hormuz", "en"),
+    tag: "energia-pl",
+    label: "Energetyka (PL)",
+    url: "https://biznesalert.pl/category/energetyka/feed/",
   },
-  { tag: "pl", label: "Polska", url: googleNewsFeed("ceny paliw hurtowe Orlen akcyza", "pl") },
-  { tag: "market", label: "Rynek", url: "https://oilprice.com/rss/main" },
+  // Kurs dolara: ropa jest w USD, więc słabszy złoty podnosi cenę w PLN
+  // niezależnie od notowań samego surowca.
+  { tag: "fx", label: "Waluty", url: "https://www.investing.com/rss/news_11.rss" },
 ] as const;
 
 export type Impact = "bullish" | "bearish" | "neutral";
@@ -62,13 +78,25 @@ const BULLISH = [
   "escalat",
   "hurricane",
   "blockade",
+  // Polskie formy zapisane RDZENIAMI, nie mianownikiem. Dopasowanie idzie
+  // przez `includes`, więc "wzrost" łapie "wzrostów", ale "spadek" NIE łapie
+  // "spadają" — a to właśnie ta asymetria przekłamywała kierunek. Realny
+  // przypadek z kanału BiznesAlert: "Ceny ropy w końcu spadają po dwóch
+  // tygodniach wzrostów" wychodziło jako wzrostowe, bo jedyne trafienie
+  // dawał rdzeń "wzrost".
   "cięcia",
   "awaria",
   "sankcje",
   "atak",
   "przerwa",
   "wzrost",
+  "wzrosł",
+  "rosną",
+  "rośnie",
   "podwyżka",
+  "podwyż",
+  "drożeje",
+  "drożeją",
   "ryzyko",
 ];
 const BEARISH = [
@@ -90,11 +118,19 @@ const BEARISH = [
   "recession",
   "demand weak",
   "spadek",
+  "spadki",
+  "spadają",
+  "spada",
+  "spadł",
   "obniżka",
+  "obniż",
   "rozejm",
   "porozumienie",
   "nadpodaż",
   "taniej",
+  "tanieje",
+  "tanieją",
+  "słabszy popyt",
 ];
 const HIGH_IMPACT = ["opec", "sanction", "embargo", "hormuz", "russia", "war", "strike", "sankcje"];
 

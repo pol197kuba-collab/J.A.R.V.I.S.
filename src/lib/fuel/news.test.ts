@@ -94,6 +94,23 @@ describe("dedupeNews", () => {
   });
 });
 
+describe("heuristicImpact — polska odmiana", () => {
+  it("nie czyta spadku ceny jako wzrostu", () => {
+    // Realny nagłówek z kanału BiznesAlert, na którym to wyszło: słownik
+    // znał rdzeń "wzrost" (trafiał w "wzrostów"), ale nie znał "spadają",
+    // więc news o TANIEJĄCEJ ropie wychodził jako wzrostowy.
+    const v = heuristicImpact("Ceny ropy w końcu spadają po dwóch tygodniach wzrostów");
+    expect(v.impact).not.toBe("bullish");
+  });
+
+  it("rozpoznaje potoczne formy w obie strony", () => {
+    expect(heuristicImpact("Paliwo tanieje na stacjach").impact).toBe("bearish");
+    expect(heuristicImpact("Ceny ropy rosną po decyzji OPEC").impact).toBe("bullish");
+    expect(heuristicImpact("Hurtowe ceny spadają trzeci dzień").impact).toBe("bearish");
+    expect(heuristicImpact("Drożeje diesel w hurcie").impact).toBe("bullish");
+  });
+});
+
 describe("heuristicImpact", () => {
   it("rozpoznaje sygnał wzrostowy", () => {
     const verdict = heuristicImpact("Refinery outage halts supply after drone attack");
