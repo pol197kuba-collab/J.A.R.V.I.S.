@@ -59,6 +59,15 @@ describe("matchSymbols", () => {
     expect(matchSymbols("Kurs dolara najwyżej od miesięcy", MARKET_ASSETS)).toContain("USDPLN");
   });
 
+  it("tags a GPW headline for the ETF that stands in for WIG20", () => {
+    // ETF na WIG20 TR jest tym, co widzi użytkownik na watchliście domyślnej
+    // (sam indeks nie oddaje historii z serwera). Gdyby łapał wyłącznie
+    // „wig20tr"/„etfbw20", jego panel newsów byłby pusty przy pełnym
+    // strumieniu o warszawskiej giełdzie — te skróty nie padają w nagłówkach.
+    expect(matchSymbols("WIG20 zamyka sesję na plusie", MARKET_ASSETS)).toContain("ETFBW20.PL");
+    expect(matchSymbols("Mocne otwarcie na GPW", MARKET_ASSETS)).toContain("ETFBW20.PL");
+  });
+
   it("only considers the assets it was handed", () => {
     const onlyGold = [assetBySymbol("XAUUSD")!];
     expect(matchSymbols("Bitcoin and gold both rally", onlyGold)).toEqual(["XAUUSD"]);
