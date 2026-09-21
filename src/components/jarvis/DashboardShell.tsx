@@ -122,8 +122,10 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
           <HudRouteTransition />
         </main>
         {isMobile ? (
-          // Na mobile przycisk mieszka w pasku (zakotwiczony nad nim), żeby
-          // nie trzeba było nigdzie powtarzać jego wysokości.
+          // Na mobile mikrofon jest częścią paska — osobną komórką obok
+          // przewijanej listy modułów, nie elementem unoszącym się nad
+          // treścią. Dzięki temu nie ma jak zasłonić niczego na stronie
+          // (a zasłaniał: pole wysyłki czatu w module J.A.R.V.I.S.).
           <MobileBottomNav />
         ) : (
           <div className="absolute right-6 bottom-6 z-40">

@@ -143,12 +143,17 @@ export function GlobalVoiceCommand() {
   const busy = phase === "listening" || phase === "thinking";
 
   return (
-    <div className="pointer-events-none relative flex flex-col items-end gap-2">
+    <div className="pointer-events-none relative flex flex-col items-end">
+      {/* Karta jest ABSOLUTNA, nie kolejnym elementem kolumny. Przycisk
+          mieszka teraz w pasku dolnym, czyli w rzędzie o ustalonej
+          wysokości — karta w normalnym przepływie rozpychałaby ten rząd
+          przy każdej odpowiedzi. `bottom-full` kotwiczy ją nad przyciskiem
+          niezależnie od tego, gdzie ten przycisk wisi. */}
       {cardVisible && (
         <div
           role="status"
           aria-live="polite"
-          className="hud-panel pointer-events-auto w-[min(340px,calc(100vw-2rem))] p-3"
+          className="hud-panel pointer-events-auto absolute right-0 bottom-full z-50 mb-2 w-[min(340px,calc(100vw-2rem))] p-3"
         >
           <div className="flex items-start justify-between gap-2">
             <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">

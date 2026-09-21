@@ -50,6 +50,19 @@ paneli zewnętrznych. Trzymane tutaj, żeby nie zginęły między sesjami.
       blokowany z IP hostingu, więc wykres WIG20 zostaje jednym punktem.
       ETF ma pełną historię w obu źródłach (szczegóły w `assets.ts`).
 
+- [ ] **Kierunek docelowy: własna, niezależna instancja Supabase.** Stan na
+      2026-09-21: buildy nie idą już przez Lovable — Lovable służy wyłącznie
+      jako edytor SQL do bazy oraz jako hosting aplikacji. Docelowo baza ma
+      przejść na własny projekt Supabase (pełny dostęp, w tym
+      `service_role`), a hosting zostaje na Lovable do czasu przejścia na
+      własną domenę. To nie jest zadanie na jedną sesję — wymaga osobnego
+      planu: odtworzenie migracji w nowym projekcie po kolei, przeniesienie
+      danych i kont użytkowników (auth), zmiana `project_id` w
+      `supabase/config.toml` (dziś `myjynbqzlovanoarppyt`), rotacja
+      `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` w sekretach GitHuba i w
+      hostingu, weryfikacja polityk RLS. Do zaplanowania, gdy będzie na to
+      okno czasowe.
+
 ## 1. [UI] Dashboard redesign — holo-panels with depth — **shipped 2026-07-16, confirmed working**
 
 Root cause (confirmed against the screenshot + `src/routes/index.tsx:25`,
