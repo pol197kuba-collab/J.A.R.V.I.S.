@@ -6,7 +6,20 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", ".output", ".vinxi"] },
+  {
+    ignores: [
+      "dist",
+      ".output",
+      ".vinxi",
+      // Generowane w całości przez Supabase/Lovable — regenerowane przy
+      // każdej edycji w edytorze, więc żadna reguła (nie tylko
+      // formatowanie) nie ma tu kogo uczyć. Trasy MCP zostają pod lintem:
+      // build zmienia w nich WYŁĄCZNIE formatowanie, a to załatwia
+      // .prettierignore, więc realne reguły dalej ich pilnują.
+      "src/integrations/supabase/types.ts",
+      "src/integrations/supabase/previewAuthStorage.ts",
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
