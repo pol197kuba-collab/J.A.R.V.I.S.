@@ -8,10 +8,12 @@
 // podglądu. Tutaj nie ma renderu: jest specyfikacja, która i tak leży w bazie,
 // i te same tokeny motywu, z których korzysta renderer pptx.
 //
-// CZEGO TU NIE MA, ŚWIADOMIE: zdjęć. Grafiki żyją zaszyte w bajtach .pptx, a
-// nie osobno w storage — podgląd pokazuje więc ramkę z opisem tematu zdjęcia
-// zamiast samego zdjęcia. To jest realny ubytek wobec starego podglądu PDF i
-// nie ma sensu go ukrywać: ramka mówi wprost, co w tym miejscu jest w pliku.
+// ZDJĘCIA SĄ. Nie dlatego, że trzymamy je drugi raz w storage — bajty siedzą
+// wyłącznie w .pptx. Odkąd wszystkie obrazy pochodzą z sieci, opis niesie ich
+// ADRESY, dopisane przez potok obrazów w chwili, gdy je znalazł. Podgląd
+// ładuje więc dokładnie to samo zdjęcie, które jest w pliku, nie kosztując ani
+// jednego dodatkowego bajtu. Ramka z tematem zostaje jako sytuacja awaryjna:
+// dla plików sprzed tej zmiany i dla adresów, które przestały odpowiadać.
 //
 // Geometria jest ŚWIADOMIE przybliżona. Dokładne współrzędne w calach zostają
 // w rendererze pptx — to on produkuje plik i on jest źródłem prawdy. Tutaj
@@ -19,6 +21,7 @@
 // prezentacja, a nie żeby udawać renderer. Próba trzymania jednych
 // współrzędnych dla obu skończyłaby się tym, czego chcieliśmy uniknąć:
 // sprzęgnięciem dwóch różnych problemów w jeden kod.
+import { useState } from "react";
 import { ImageIcon } from "lucide-react";
 
 import { cssColor, DOC_COLORS, DOC_FONTS } from "@/lib/agents/docTheme";
@@ -38,24 +41,40 @@ const Slide = ({ children, dark }: { children: React.ReactNode; dark?: boolean }
   </div>
 );
 
-/** Miejsce po zdjęciu, którego podgląd nie ma — z tematem, o który poproszono. */
-const ImageSlot = ({ subject }: { subject: string }) => (
-  <div
-    className="flex h-full w-full flex-col items-center justify-center gap-2 rounded p-3 text-center"
-    style={{ background: cssColor(DOC_COLORS.surface) }}
-  >
-    <ImageIcon className="h-6 w-6 shrink-0" style={{ color: cssColor(DOC_COLORS.muted) }} />
-    <span
-      className="min-w-0 break-words text-[10px] leading-snug"
-      style={{ color: cssColor(DOC_COLORS.muted) }}
+/** Zdjęcie ze znanego adresu, a gdy go nie ma (albo przestał odpowiadać) —
+ *  ramka z tematem, o który poproszono. */
+function ImageSlot({ url, subject }: { url?: string; subject?: string }) {
+  const [broken, setBroken] = useState(false);
+  if (url && !broken) {
+    return (
+      <img
+        src={url}
+        alt={subject ?? ""}
+        onError={() => setBroken(true)}
+        className="h-full w-full rounded object-cover"
+        style={{ background: cssColor(DOC_COLORS.surface) }}
+      />
+    );
+  }
+  return (
+    <div
+      className="flex h-full w-full flex-col items-center justify-center gap-2 rounded p-3 text-center"
+      style={{ background: cssColor(DOC_COLORS.surface) }}
     >
-      {subject}
-    </span>
-  </div>
-);
+      <ImageIcon className="h-6 w-6 shrink-0" style={{ color: cssColor(DOC_COLORS.muted) }} />
+      <span
+        className="min-w-0 break-words text-[10px] leading-snug"
+        style={{ color: cssColor(DOC_COLORS.muted) }}
+      >
+        {subject ?? "zdjęcie w pliku"}
+      </span>
+    </div>
+  );
+}
 
 function TitleSlide({ spec }: { spec: DeckSpec }) {
-  const heroSubject = spec.heroImageQuery ?? spec.heroImagePrompt;
+  const heroSubject = spec.heroImageQuery;
+  const heroUrl = spec.heroImageUrl;
   return (
     <Slide dark>
       <div className="flex h-full">
@@ -85,9 +104,9 @@ function TitleSlide({ spec }: { spec: DeckSpec }) {
             {spec.slides.length} slajdów
           </p>
         </div>
-        {heroSubject && (
+        {(heroSubject || heroUrl) && (
           <div className="w-[38%] shrink-0 p-[2%]">
-            <ImageSlot subject={heroSubject} />
+            <ImageSlot url={heroUrl} subject={heroSubject} />
           </div>
         )}
       </div>
@@ -106,11 +125,13 @@ function ContentSlide({
   total: number;
   deckTitle: string;
 }) {
-  const subject = slide.imageQuery ?? slide.imagePrompt;
+  const subject = slide.imageQuery;
+  const url = slide.imageUrl;
+  const hasImage = !!(subject || url);
   // Zdjęcie raz z lewej, raz z prawej — dokładnie tak, jak robi to renderer
   // pptx. Slajdy z obrazem zawsze w tym samym miejscu czytają się jak
   // odbitka z szablonu (czym, strukturalnie, są).
-  const imageOnLeft = subject ? index % 2 === 1 : false;
+  const imageOnLeft = hasImage ? index % 2 === 1 : false;
   const text = (
     <div className="flex min-w-0 flex-1 flex-col justify-center gap-[2%]">
       <h3
@@ -151,15 +172,15 @@ function ContentSlide({
         style={{ background: cssColor(DOC_COLORS.accent) }}
       />
       <div className="flex h-full items-stretch gap-[3%] pt-[6%] pr-[4%] pb-[4%] pl-[6%]">
-        {imageOnLeft && subject && (
+        {imageOnLeft && hasImage && (
           <div className="w-[33%] shrink-0">
-            <ImageSlot subject={subject} />
+            <ImageSlot url={url} subject={subject} />
           </div>
         )}
         {text}
-        {!imageOnLeft && subject && (
+        {!imageOnLeft && hasImage && (
           <div className="w-[33%] shrink-0">
-            <ImageSlot subject={subject} />
+            <ImageSlot url={url} subject={subject} />
           </div>
         )}
       </div>
@@ -192,7 +213,7 @@ export function DeckPreview({ spec }: { spec: DeckSpec }) {
         <ContentSlide key={i} slide={slide} index={i} total={total} deckTitle={spec.title} />
       ))}
       <p className="pb-2 text-center text-[10px] text-muted-foreground">
-        Podgląd układu i treści. Zdjęcia są w pobranym pliku — tutaj zaznaczone ramką.
+        Podgląd układu i treści. Zdjęcia ładowane ze źródeł, z których trafiły do pliku.
       </p>
     </div>
   );

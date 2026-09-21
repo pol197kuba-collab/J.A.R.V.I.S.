@@ -1991,7 +1991,7 @@ const generateDocumentTool: Tool = {
   declaration: {
     name: "generate_document",
     description:
-      "Generate a downloadable file — a presentation (pptx) or a Word document (docx) — from structured content, and return a download link. Call it ONCE with the complete, final content: a title and a list of sections, each with a heading plus paragraph text and/or bullet points. Write real content in the user's language, never placeholders. For visuals, prefer REAL PHOTOS: pass image_query (and hero_image_query) — short English search phrases for a real thing (product, place, person, concept), e.g. 'Samsung Galaxy S26 Ultra smartphone'. The system finds a real Creative-Commons photo and embeds it. IMPORTANT — Creative-Commons photos frequently do NOT exist for specific branded products, newly-released items, or anything under copyright (e.g. a just-announced car model, a named consumer gadget): whenever you set image_query or hero_image_query for this kind of concrete, brand-specific subject, ALSO set the matching image_prompt / hero_image_prompt as a genuine fallback describing the same subject in general visual terms (no exact brand names/logos, since it's AI-generated) — otherwise that slide silently ends up with no image at all if no real photo is found. Only skip the *_prompt fallback when the subject is generic/decorative enough that a missing photo is fine. Graphics are added in the background after the file is delivered.",
+      "Generate a downloadable file — a presentation (pptx) or a Word document (docx) — from structured content, and return a download link. Call it ONCE with the complete, final content: a title and a list of sections, each with a heading plus paragraph text and/or bullet points. Write real content in the user's language, never placeholders. For visuals, set image_query (and hero_image_query): a short ENGLISH search phrase naming a real, concrete thing — a product, place, person, event or object, e.g. 'Samsung Galaxy S26 Ultra smartphone', 'Warsaw Old Town square'. The system finds a real photo on the web and embeds it. Be SPECIFIC: a vague phrase ('technology', 'business growth') returns generic stock filler, while a named subject returns the actual thing. Skip image_query entirely for a slide where no real photo would add anything — a slide with no image reads better than one with an unrelated picture. Photos are added in the background after the file is delivered.",
     parameters: {
       type: "object",
       properties: {
@@ -2009,12 +2009,7 @@ const generateDocumentTool: Tool = {
         hero_image_query: {
           type: "string",
           description:
-            "Preferred. English search phrase for a REAL title-slide photo (a real product/place/person/thing), e.g. 'Samsung Galaxy S26 Ultra smartphone'.",
-        },
-        hero_image_prompt: {
-          type: "string",
-          description:
-            "Fallback for hero_image_query. ENGLISH prompt for an AI-generated hero graphic, used only if no real photo is found. Set this alongside hero_image_query whenever the subject is a specific branded/copyrighted product or place — Creative-Commons photos of those often don't exist. Describe the subject visually without exact brand names/logos. Concrete scene, no text in the image.",
+            "English search phrase for a REAL title-slide photo (a concrete product/place/person/thing), e.g. 'Samsung Galaxy S26 Ultra smartphone'.",
         },
         sections: {
           type: "array",
@@ -2033,12 +2028,7 @@ const generateDocumentTool: Tool = {
               image_query: {
                 type: "string",
                 description:
-                  "Preferred. English search phrase for a REAL photo for this slide (max 4 sections get an image — pick the most important). e.g. 'smartphone camera module close-up'.",
-              },
-              image_prompt: {
-                type: "string",
-                description:
-                  "Fallback for image_query. ENGLISH prompt for an AI-generated illustration, used only if no real photo is found. Set this alongside image_query whenever the subject is a specific branded/copyrighted product — Creative-Commons photos of those often don't exist. Describe the subject visually without exact brand names/logos. Concrete scene, no text in the image.",
+                  "English search phrase for a REAL photo for this slide — name a concrete subject, not an abstraction (max 4 sections get an image, so pick the most important). e.g. 'smartphone camera module close-up'. Omit it when no real photo would add anything.",
               },
             },
             required: ["heading"],

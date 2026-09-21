@@ -35,18 +35,24 @@ const MAX_TEXT_CHARS = 4000;
 const MAX_BULLET_CHARS = 400;
 const MAX_IMAGE_PROMPT_CHARS = 600;
 
-/** Twardy limit obrazów na plik: 1 hero + do 4 na sekcje. Każdy to płatne
- *  żądanie na kluczu użytkownika — rozbiegany model nie zamówi dwudziestu. */
+/** Twardy limit zdjęć na plik: 1 tytułowe + do 4 na bloki. Każde to kilka
+ *  żądań sieciowych w łańcuchu źródeł, a całość mieści się w budżecie jednego
+ *  wywołania w tle — rozbiegany model nie zamówi dwudziestu. */
 export const MAX_SECTION_IMAGES = 4;
 
-/** Skąd wziąć grafikę dla tego bloku. Wspólne dla slajdu i sekcji dokumentu,
- *  bo potok obrazów jest jeden i nie interesuje go format wyjściowy. */
+/** Skąd wziąć zdjęcie dla tego bloku. Wspólne dla slajdu i sekcji dokumentu,
+ *  bo potok obrazów jest jeden i nie interesuje go format wyjściowy.
+ *
+ *  Wyłącznie prawdziwe zdjęcia z sieci — pola na prompt do modelu graficznego
+ *  już nie ma. Obraz generowany bywał rozjeżdżoną atrapą tematu, kosztował
+ *  płatne żądanie i wracał jako 503 częściej niż jako obraz. */
 type ImageRefs = {
-  /** Angielski prompt dla grafiki generowanej przez model. */
-  imagePrompt?: string;
-  /** Fraza do wyszukania PRAWDZIWEGO zdjęcia. Ma pierwszeństwo przed
-   *  promptem — realne zdjęcie nie zależy od kapryśnego modelu graficznego. */
+  /** Fraza po angielsku do wyszukania zdjęcia. */
   imageQuery?: string;
+  /** Adres znalezionego zdjęcia, dopisywany PO fakcie — kiedy potok obrazów
+   *  już je znalazł i wbudował w plik. Dzięki temu podgląd pokazuje dokładnie
+   *  to zdjęcie, które siedzi w pliku, nie trzymając go drugi raz w storage. */
+  imageUrl?: string;
 };
 
 /** Jeden slajd prezentacji. */
@@ -63,25 +69,16 @@ export type DocSection = ImageRefs & {
   bullets?: string[];
 };
 
-export type DeckSpec = {
-  format: "pptx";
+type SpecCommon = {
   title: string;
   subtitle?: string;
   filename: string;
-  slides: DeckSlide[];
-  heroImagePrompt?: string;
   heroImageQuery?: string;
+  heroImageUrl?: string;
 };
 
-export type DocSpec = {
-  format: "docx";
-  title: string;
-  subtitle?: string;
-  filename: string;
-  sections: DocSection[];
-  heroImagePrompt?: string;
-  heroImageQuery?: string;
-};
+export type DeckSpec = SpecCommon & { format: "pptx"; slides: DeckSlide[] };
+export type DocSpec = SpecCommon & { format: "docx"; sections: DocSection[] };
 
 /** Cokolwiek Forge potrafi zbudować. */
 export type ProducerSpec = DeckSpec | DocSpec;
@@ -153,13 +150,11 @@ export function normalizeDocSpec(args: Record<string, unknown>): NormalizeResult
       .filter(Boolean)
       .slice(0, MAX_BULLETS_PER_SECTION);
     if (!heading && !content && bullets.length === 0) continue;
-    const imagePrompt = clip(s.image_prompt ?? s.imagePrompt, MAX_IMAGE_PROMPT_CHARS);
     const imageQuery = clip(s.image_query ?? s.imageQuery, MAX_IMAGE_PROMPT_CHARS);
     blocks.push({
       heading: heading || "—",
       content: content || undefined,
       bullets,
-      imagePrompt: imagePrompt || undefined,
       imageQuery: imageQuery || undefined,
     });
   }
@@ -171,14 +166,12 @@ export function normalizeDocSpec(args: Record<string, unknown>): NormalizeResult
   const base = slugifyFilename((requestedName || title).replace(/\.(pptx|docx|pdf)$/i, ""));
   const subtitle = clip(args.subtitle, MAX_TITLE_CHARS);
   const a = args as Record<string, unknown>;
-  const heroImagePrompt = clip(a.hero_image_prompt ?? a.heroImagePrompt, MAX_IMAGE_PROMPT_CHARS);
   const heroImageQuery = clip(a.hero_image_query ?? a.heroImageQuery, MAX_IMAGE_PROMPT_CHARS);
 
   const common = {
     title,
     subtitle: subtitle || undefined,
     filename: `${base}.${format}`,
-    heroImagePrompt: heroImagePrompt || undefined,
     heroImageQuery: heroImageQuery || undefined,
   };
 
@@ -191,12 +184,8 @@ export function normalizeDocSpec(args: Record<string, unknown>): NormalizeResult
   };
 }
 
-/** Czy ten opis w ogóle prosi o jakąkolwiek grafikę? Steruje asynchronicznym
+/** Czy ten opis w ogóle prosi o jakiekolwiek zdjęcie? Steruje asynchronicznym
  *  dociąganiem obrazów po oddaniu pliku. */
 export function specHasImagePrompts(spec: ProducerSpec): boolean {
-  return (
-    !!spec.heroImagePrompt ||
-    !!spec.heroImageQuery ||
-    blocksOf(spec).some((b) => !!b.imagePrompt || !!b.imageQuery)
-  );
+  return !!spec.heroImageQuery || blocksOf(spec).some((b) => !!b.imageQuery);
 }

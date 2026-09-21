@@ -33,8 +33,10 @@ const TINY_PNG = Uint8Array.from(
   (c) => c.charCodeAt(0),
 );
 const TINY_IMAGES: DocImages = {
-  hero: { bytes: TINY_PNG, mime: "image/png" },
-  sections: new Map([[0, { bytes: TINY_PNG, mime: "image/png" }]]),
+  hero: { bytes: TINY_PNG, mime: "image/png", sourceUrl: "https://example.com/hero.png" },
+  sections: new Map([
+    [0, { bytes: TINY_PNG, mime: "image/png", sourceUrl: "https://example.com/s0.png" }],
+  ]),
 };
 
 afterEach(() => {
@@ -162,105 +164,61 @@ describe("slugifyFilename", () => {
   });
 });
 
-describe("image prompts", () => {
-  it("normalizeDocSpec picks up hero_image_prompt and per-section image_prompt", () => {
+describe("zdjęcia", () => {
+  it("ignores an AI image prompt instead of reviving the generated-graphics path", () => {
+    // Ścieżka generowania obrazów przez model została wycięta: bywała
+    // rozjeżdżoną atrapą tematu, kosztowała płatne żądanie i wracała jako 503
+    // częściej niż jako obraz. Model może jeszcze przez jakiś czas wysyłać
+    // „image_prompt" z rozpędu — ma to wpaść do kosza, nie do specyfikacji.
     const res = normalizeDocSpec({
       format: "pptx",
       title: "t",
-      hero_image_prompt: "  sleek phone on dark glass  ",
+      hero_image_prompt: "sleek phone on dark glass",
       sections: [{ heading: "h", content: "c", image_prompt: "macro camera lens" }],
     });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect(res.spec.heroImagePrompt).toBe("sleek phone on dark glass");
-    expect(blocksOf(res.spec)[0].imagePrompt).toBe("macro camera lens");
+    expect(res.spec).not.toHaveProperty("heroImagePrompt");
+    expect(blocksOf(res.spec)[0]).not.toHaveProperty("imagePrompt");
+    // Sam prompt nie jest też traktowany jak prośba o zdjęcie.
+    expect(specHasImagePrompts(res.spec)).toBe(false);
   });
 
-  it("generateDocImages parses inlineData and caps the number of calls at 1+4", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        candidates: [
-          {
-            content: {
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: "image/png",
-                    data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      }),
-      text: async () => "",
-    });
+  it("caps image lookups at 1 hero + 4 blocks", async () => {
+    // Każde źródło zawodzi, więc test nie zależy od tego, które akurat
+    // odpowiedziało — liczy WYŁĄCZNIE to, o ile różnych tematów w ogóle
+    // zapytaliśmy. To jest limit, który chroni budżet zadania w tle.
+    const fetchMock = vi.fn().mockRejectedValue(new Error("offline"));
     vi.stubGlobal("fetch", fetchMock);
 
     const spec: DeckSpec = {
       format: "pptx",
       title: "t",
       filename: "t.pptx",
-      heroImagePrompt: "hero",
+      heroImageQuery: "hero subject",
       slides: Array.from({ length: 8 }, (_, i) => ({
         heading: `s${i}`,
         content: "c",
-        imagePrompt: `img${i}`,
+        imageQuery: `subject ${i}`,
       })),
     };
     const images = await generateDocImages(spec, "test-key");
-    expect(fetchMock).toHaveBeenCalledTimes(5); // 1 hero + 4 section cap
-    expect(images.hero?.mime).toBe("image/png");
-    expect(images.sections.size).toBe(4);
-    expect(pngDims(images.hero!.bytes)).toEqual({ width: 1, height: 1 });
+
+    const asked = new Set<string>();
+    for (const [url] of fetchMock.mock.calls) {
+      const text = String(url);
+      if (text.includes("hero%20subject")) asked.add("hero");
+      for (let i = 0; i < 8; i += 1) if (text.includes(`subject%20${i}`)) asked.add(String(i));
+    }
+    expect(asked.size).toBe(5); // 1 tytułowe + 4 bloki
+    expect(images.hero).toBeUndefined();
+    expect(images.sections.size).toBe(0);
   });
 
-  it("generateDocImages retries a transient 503 and recovers the image", async () => {
-    const PNG =
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-    let call = 0;
-    const fetchMock = vi.fn().mockImplementation(async () => {
-      call += 1;
-      // First attempt: the 503 storm the image model was throwing live.
-      if (call === 1) {
-        return {
-          ok: false,
-          status: 503,
-          text: async () => '{"error":{"code":503,"status":"UNAVAILABLE"}}',
-          json: async () => ({}),
-        };
-      }
-      return {
-        ok: true,
-        json: async () => ({
-          candidates: [
-            { content: { parts: [{ inlineData: { mimeType: "image/png", data: PNG } }] } },
-          ],
-        }),
-        text: async () => "",
-      };
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    const images = await generateDocImages(
-      { format: "pptx", title: "t", filename: "t.pptx", heroImagePrompt: "hero", slides: [] },
-      "test-key",
-    );
-    // 503 then 200 — the hero image survives instead of degrading to text-only.
-    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
-    expect(images.hero?.mime).toBe("image/png");
-  });
-
-  it("specHasImagePrompts drives async enrichment (AI prompts OR web-photo queries)", () => {
+  it("specHasImagePrompts drives async enrichment from photo queries", () => {
     const base = { format: "pptx" as const, title: "t", filename: "t.pptx" };
     expect(specHasImagePrompts({ ...base, slides: [{ heading: "h", content: "c" }] })).toBe(false);
-    expect(specHasImagePrompts({ ...base, heroImagePrompt: "hero", slides: [] })).toBe(true);
     expect(specHasImagePrompts({ ...base, heroImageQuery: "samsung phone", slides: [] })).toBe(
-      true,
-    );
-    expect(specHasImagePrompts({ ...base, slides: [{ heading: "h", imagePrompt: "phone" }] })).toBe(
       true,
     );
     expect(

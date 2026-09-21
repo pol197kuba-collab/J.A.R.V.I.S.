@@ -18,7 +18,7 @@
 
 import PptxGen from "pptxgenjs";
 import { AlignmentType, Document, HeadingLevel, ImageRun, Packer, Paragraph, TextRun } from "docx";
-import { DEFAULT_GEMINI_IMAGE_MODEL, DEFAULT_GEMINI_MODEL } from "./models";
+import { DEFAULT_GEMINI_MODEL } from "./models";
 import { DOC_COLORS, DOC_FONTS, DECK_SLIDE } from "./docTheme";
 import {
   blocksOf,
@@ -37,99 +37,16 @@ export * from "./docSpec";
 // AI slide graphics — Gemini image generation on the user's own key
 // ---------------------------------------------------------------------------
 
-export type DocImage = { bytes: Uint8Array; mime: string };
+export type DocImage = {
+  bytes: Uint8Array;
+  mime: string;
+  /** Adres, spod którego zdjęcie faktycznie przyszło (po przekierowaniach).
+   *  Nie jest ozdobą: to on pozwala podglądowi pokazać TO SAMO zdjęcie, które
+   *  siedzi w pliku, nie trzymając ani jednego dodatkowego bajtu w storage.
+   *  Odkąd wszystkie obrazy pochodzą z sieci, każdy taki adres istnieje. */
+  sourceUrl: string;
+};
 export type DocImages = { hero?: DocImage; sections: Map<number, DocImage> };
-
-// One consistent visual language across every generated deck, so slides read
-// as a designed set rather than random stock art. "No text" is load-bearing:
-// image models render garbled words otherwise.
-const IMAGE_STYLE_PREFIX =
-  "Premium technology presentation illustration, dark navy and cyan color palette, " +
-  "cinematic lighting, sleek modern aesthetic, high detail. Strictly no text, no words, " +
-  "no letters, no captions, no watermarks. ";
-
-// The image model (gemini-2.5-flash-image, preview) is heavily
-// shared-capacity and returns HTTP 503 "high demand" / 500 "internal error"
-// in bursts far more often than the text model — observed live 2026-07-22:
-// five presentation runs in a row all came back with 0 images while the deck
-// itself generated fine. A single shot reliably loses that race, so retry on
-// transient statuses with short backoff. Kept separate from the orchestrator
-// retry (different endpoint, tighter per-attempt timeout) but same idea.
-const IMAGE_RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
-// 3 attempts total. Worst case 3×12s + backoff stays inside the
-// server-function budget (a producer run has been observed at ~41s), while
-// giving three shots at hitting an available window during a 503 burst —
-// each 503 fails fast (<1s), so the retries are cheap unless the model
-// actually hangs.
-const IMAGE_MAX_RETRIES = 2;
-const IMAGE_RETRY_BACKOFF_MS = 500;
-const IMAGE_ATTEMPT_TIMEOUT_MS = 12_000;
-
-async function generateOneImage(
-  prompt: string,
-  apiKey: string,
-  timeoutMs: number,
-): Promise<DocImage | null> {
-  let lastErr: Error | null = null;
-  for (let attempt = 0; attempt <= IMAGE_MAX_RETRIES; attempt++) {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-          DEFAULT_GEMINI_IMAGE_MODEL,
-        )}:generateContent?key=${encodeURIComponent(apiKey)}`,
-        {
-          method: "POST",
-          signal: ctrl.signal,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: IMAGE_STYLE_PREFIX + prompt }] }],
-            generationConfig: {
-              responseModalities: ["IMAGE"],
-              imageConfig: { aspectRatio: "16:9" },
-            },
-          }),
-        },
-      );
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        // Retry transient overload; give up immediately on anything else
-        // (bad request, auth) — retrying won't help there.
-        if (IMAGE_RETRYABLE_STATUS.has(res.status) && attempt < IMAGE_MAX_RETRIES) {
-          lastErr = new Error(`HTTP ${res.status}`);
-          await new Promise((r) => setTimeout(r, IMAGE_RETRY_BACKOFF_MS * (attempt + 1)));
-          continue;
-        }
-        throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
-      }
-      const data = (await res.json()) as {
-        candidates?: Array<{
-          content?: { parts?: Array<{ inlineData?: { mimeType?: string; data?: string } }> };
-        }>;
-      };
-      const inline = (data.candidates?.[0]?.content?.parts ?? []).find((p) =>
-        p.inlineData?.mimeType?.startsWith("image/"),
-      )?.inlineData;
-      if (!inline?.data) return null;
-      return {
-        bytes: Uint8Array.from(atob(inline.data), (c) => c.charCodeAt(0)),
-        mime: inline.mimeType ?? "image/png",
-      };
-    } catch (err) {
-      // AbortError (timeout) is worth one more try too, up to the cap.
-      lastErr = err instanceof Error ? err : new Error(String(err));
-      if (attempt < IMAGE_MAX_RETRIES) {
-        await new Promise((r) => setTimeout(r, IMAGE_RETRY_BACKOFF_MS * (attempt + 1)));
-        continue;
-      }
-      throw lastErr;
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-  throw lastErr ?? new Error("image generation failed");
-}
 
 // ---------------------------------------------------------------------------
 // Real web photos — Openverse (Creative Commons image search, no API key)
@@ -182,7 +99,7 @@ async function fetchWebImage(query: string): Promise<DocImage | null> {
         if (!mime.startsWith("image/")) continue;
         const buf = new Uint8Array(await imgRes.arrayBuffer());
         if (buf.byteLength === 0 || buf.byteLength > MAX_WEB_IMAGE_BYTES) continue;
-        return { bytes: buf, mime: mime.split(";")[0] };
+        return { bytes: buf, mime: mime.split(";")[0], sourceUrl: imgRes.url };
       } catch {
         continue; // try the next candidate
       }
@@ -254,7 +171,7 @@ async function fetchWikipediaImage(query: string): Promise<DocImage | null> {
     if (!mime.startsWith("image/")) return null;
     const buf = new Uint8Array(await imgRes.arrayBuffer());
     if (buf.byteLength === 0 || buf.byteLength > MAX_WEB_IMAGE_BYTES) return null;
-    return { bytes: buf, mime: mime.split(";")[0] };
+    return { bytes: buf, mime: mime.split(";")[0], sourceUrl: imgRes.url };
   } catch {
     return null;
   } finally {
@@ -296,7 +213,7 @@ async function fetchGoogleCseImage(query: string, creds: GoogleCseCreds): Promis
         if (!mime.startsWith("image/")) continue;
         const buf = new Uint8Array(await imgRes.arrayBuffer());
         if (buf.byteLength === 0 || buf.byteLength > MAX_WEB_IMAGE_BYTES) continue;
-        return { bytes: buf, mime: mime.split(";")[0] };
+        return { bytes: buf, mime: mime.split(";")[0], sourceUrl: imgRes.url };
       } catch {
         continue; // try the next candidate
       }
@@ -380,7 +297,7 @@ async function fetchWebSearchOgImage(
         if (!mime.startsWith("image/")) continue;
         const buf = new Uint8Array(await imgRes.arrayBuffer());
         if (buf.byteLength === 0 || buf.byteLength > MAX_WEB_IMAGE_BYTES) continue;
-        return { bytes: buf, mime: mime.split(";")[0] };
+        return { bytes: buf, mime: mime.split(";")[0], sourceUrl: imgRes.url };
       } catch {
         continue; // try the next candidate page
       }
@@ -402,11 +319,16 @@ async function hashImageBytes(bytes: Uint8Array): Promise<string> {
     .join("");
 }
 
-/** Resolve one slide image: a real photo — tried Google CSE (if configured),
- *  Wikipedia, a free whole-web og:image lookup, then Openverse CC, in that
- *  order — if imageQuery was requested, otherwise an AI-generated one
- *  (imagePrompt). Real photos are preferred and don't touch the AI image
- *  model at all.
+/** Znajduje jedno zdjęcie: Google CSE (jeśli skonfigurowane), Wikipedia,
+ *  darmowe wyszukanie og:image w całej sieci, na końcu Openverse CC — w tej
+ *  kolejności.
+ *
+ *  ŚCIEŻKI GENEROWANIA PRZEZ MODEL JUŻ NIE MA. Obraz z modelu graficznego
+ *  bywał rozjeżdżoną atrapą tematu, kosztował płatne żądanie na kluczu
+ *  użytkownika i regularnie wracał jako 503 — a przy tym nie miał adresu
+ *  źródłowego, więc był jedynym powodem, dla którego podgląd nie mógł
+ *  pokazać wszystkich obrazów. Zdjęcia z sieci rozwiązują wszystkie trzy
+ *  rzeczy naraz.
  *
  *  `usedHashes` dedupes ACROSS the whole document: querying different facets
  *  of the same broad subject (e.g. "GTA VI characters" vs "GTA VI gameplay")
@@ -417,7 +339,7 @@ async function hashImageBytes(bytes: Uint8Array): Promise<string> {
  *  it's treated as a miss and the next tier is tried instead, so a repeat
  *  never gets embedded twice. */
 async function resolveOneImage(
-  job: { imageQuery?: string; imagePrompt?: string },
+  job: { imageQuery?: string },
   apiKey: string,
   usedHashes: Set<string>,
   googleCse?: GoogleCseCreds,
@@ -430,7 +352,8 @@ async function resolveOneImage(
     return candidate;
   };
 
-  if (job.imageQuery) {
+  if (!job.imageQuery) return null;
+  {
     if (googleCse) {
       const cse = await claim(await fetchGoogleCseImage(job.imageQuery, googleCse));
       if (cse) return cse;
@@ -441,14 +364,12 @@ async function resolveOneImage(
     if (webPhoto) return webPhoto;
     const photo = await claim(await fetchWebImage(job.imageQuery));
     if (photo) return photo;
-    // Fall back to AI generation only if a prompt was also supplied.
   }
-  if (job.imagePrompt) return generateOneImage(job.imagePrompt, apiKey, IMAGE_ATTEMPT_TIMEOUT_MS);
   return null;
 }
 
-/** Resolve the hero + section images declared in the spec (web photos and/or
- *  AI graphics). Best-effort: any individual failure just means that slide
+/** Znajduje zdjęcie tytułowe i zdjęcia bloków zadeklarowane w opisie.
+ *  Best-effort: any individual failure just means that slide
  *  renders text-only — never fails the whole document. Resolved SEQUENTIALLY
  *  (not in parallel): cross-document deduplication (see resolveOneImage)
  *  needs each job to see what every earlier job already claimed, which a
@@ -461,15 +382,11 @@ export async function generateDocImages(
   onWarn?: (message: string) => Promise<void> | void,
   googleCse?: GoogleCseCreds,
 ): Promise<DocImages> {
-  type Job = { key: "hero" | number; imageQuery?: string; imagePrompt?: string };
+  type Job = { key: "hero" | number; imageQuery: string };
   const jobs: Job[] = [];
-  if (spec.heroImageQuery || spec.heroImagePrompt) {
-    jobs.push({ key: "hero", imageQuery: spec.heroImageQuery, imagePrompt: spec.heroImagePrompt });
-  }
+  if (spec.heroImageQuery) jobs.push({ key: "hero", imageQuery: spec.heroImageQuery });
   for (const [i, section] of blocksOf(spec).entries()) {
-    if (section.imageQuery || section.imagePrompt) {
-      jobs.push({ key: i, imageQuery: section.imageQuery, imagePrompt: section.imagePrompt });
-    }
+    if (section.imageQuery) jobs.push({ key: i, imageQuery: section.imageQuery });
   }
   const capped = jobs.slice(0, 1 + MAX_SECTION_IMAGES);
 

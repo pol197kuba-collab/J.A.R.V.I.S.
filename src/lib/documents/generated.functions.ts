@@ -92,7 +92,7 @@ export async function enrichGeneratedFileImages(
 ): Promise<EnrichResult> {
   const { generateDocImages, buildDocument, CONTENT_TYPES } =
     await import("@/lib/agents/producer.server");
-  type ProducerDocSpec = import("@/lib/agents/producer.server").DocSpec;
+  type ProducerDocSpec = import("@/lib/agents/producer.server").ProducerSpec;
 
   const { data: row, error } = await supabase
     .from("generated_files")
@@ -145,6 +145,17 @@ export async function enrichGeneratedFileImages(
       .update(row.storage_path, bytes, { contentType: CONTENT_TYPES[spec.format] });
     if (upErr) throw new Error(upErr.message);
 
+    // Adresy znalezionych zdjęć wracają do opisu. To jedyny moment, w którym
+    // są znane — potem bajty żyją już tylko zaszyte w pliku. Dzięki temu
+    // zapisowi podgląd pokazuje te same zdjęcia, nie trzymając ich drugi raz
+    // w storage. Kolumna jest jsonb, więc to zwykły UPDATE, bez migracji.
+    const withUrls = structuredClone(spec);
+    if (images.hero) withUrls.heroImageUrl = images.hero.sourceUrl;
+    const urlBlocks = withUrls.format === "pptx" ? withUrls.slides : withUrls.sections;
+    for (const [i, img] of images.sections) {
+      if (urlBlocks[i]) urlBlocks[i].imageUrl = img.sourceUrl;
+    }
+
     // Kiedyś w tym miejscu szedł drugi render: prezentacja do PDF-a, bo to
     // on był podglądem w aplikacji. Podgląd rysuje dziś slajdy wprost ze
     // `spec`, więc dociągnięcie obrazów nie ma już czego przebudowywać —
@@ -152,7 +163,12 @@ export async function enrichGeneratedFileImages(
 
     await supabase
       .from("generated_files")
-      .update({ image_status: "ready", image_count: imageCount, size_bytes: bytes.byteLength })
+      .update({
+        image_status: "ready",
+        image_count: imageCount,
+        size_bytes: bytes.byteLength,
+        spec: withUrls as unknown as Json,
+      })
       .eq("id", row.id);
     return { ok: true, imageCount, status: "ready" };
   } catch (err) {

@@ -338,16 +338,16 @@ function DocumentsPage() {
                     {f.image_status === "pending" && (
                       <span className="flex items-center gap-1 text-[9px] uppercase tracking-widest text-primary/70">
                         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-                        grafiki w toku
+                        szukam zdjęć
                       </span>
                     )}
                     {f.image_status === "failed" && (
                       <span
                         className="text-[9px] uppercase tracking-widest"
                         style={{ color: "var(--destructive)" }}
-                        title="Nie udało się wygenerować grafik (model przeciążony) — plik jest gotowy bez nich."
+                        title="Nie udało się znaleźć zdjęć dla tego pliku — jest gotowy bez nich."
                       >
-                        grafiki niedostępne
+                        brak zdjęć
                       </span>
                     )}
                     <span className="ml-auto flex items-center gap-1 text-[10px] uppercase tracking-widest text-muted-foreground opacity-0 transition group-hover:opacity-100">
@@ -359,7 +359,7 @@ function DocumentsPage() {
                     <span>
                       {formatBytes(f.size_bytes)}
                       {f.section_count != null ? ` · ${f.section_count} sekcji` : ""}
-                      {f.image_count ? ` · ${f.image_count} grafik` : ""}
+                      {f.image_count ? ` · ${f.image_count} zdjęć` : ""}
                     </span>
                     <span
                       role="button"
