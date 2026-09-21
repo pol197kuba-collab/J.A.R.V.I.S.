@@ -137,25 +137,35 @@ export const MARKET_ASSETS: MarketAsset[] = [
     assetClass: "index",
     currency: "PLN",
     colorToken: "var(--market-3)",
-    // Yahoo oddaje dla tego indeksu wyłącznie ostatnie notowanie (jeden punkt,
-    // sprawdzone na żywo — WIG20.WA i WIG.WA zachowują się tak samo), więc
-    // pełna historia przychodzi tylko ze Stooqa. Fallback zostaje, bo jedna
-    // aktualna cena to nadal więcej niż pusty kafel, ale gdy wykres WIG20 jest
-    // płaski, to znaczy dokładnie tyle, że Stooq nie odpowiedział.
+    // SAM INDEKS NIE MA DZIŚ ŹRÓDŁA HISTORII DOSTĘPNEGO Z SERWERA, i to jest
+    // powód, dla którego watchlista domyślna pokazuje ETF (niżej), a nie to.
+    // Zweryfikowane na żywo 2026-09-21, każde źródło osobno:
+    //   · Stooq (.com i .pl) — challenge proof-of-work zamiast CSV,
+    //   · Yahoo WIG20.WA i WIG.WA — 1 punkt, także przy jawnym period1/period2,
+    //   · Yahoo ^WIG20 — symbol nie istnieje,
+    //   · gpwbenchmark.pl — WAF odrzuca żądanie.
+    // Instrument zostaje w słowniku, bo wraca do życia sam, gdy Stooq
+    // przestanie blokować; jedna aktualna cena to nadal więcej niż pusty
+    // kafel. Ale kto go doda, ma prawo wiedzieć z góry, co dostanie — stąd
+    // ostrzeżenie wprost w `hint`.
     source: { kind: "stooq", ticker: "wig20", yahoo: "WIG20.WA" },
-    hint: "20 największych spółek GPW · historia tylko ze Stooqa",
+    hint: "20 największych spółek GPW · UWAGA: sam indeks oddaje dziś tylko ostatnią cenę, bez wykresu — wykres ma ETF WIG20 TR",
   },
   {
     symbol: "ETFBW20.PL",
-    label: "ETF WIG20TR",
+    label: "WIG20 TR (ETF)",
     assetClass: "index",
     currency: "PLN",
-    colorToken: "var(--market-6)",
-    // Nie jest to ten sam instrument co WIG20: to ETF na WIG20 Total Return
-    // (uwzględnia dywidendy), notowany na GPW. Za to ma pełną historię w obu
-    // źródłach — użyteczny zamiennik, gdy Stooq milczy.
+    colorToken: "var(--market-3)",
+    // To NIE jest ten sam instrument co WIG20 i etykieta ma o tym mówić:
+    // ETF na WIG20 Total Return (z dywidendami), notowany na GPW. Kształt
+    // krzywej idzie za indeksem, poziom nie — TR rośnie o reinwestowane
+    // dywidendy, więc nie da się tego czytać jako „punktów WIG20".
+    // Praktyczna różnica: 250 punktów historii z Yahoo (sprawdzone
+    // 2026-09-21) wobec jednego dla samego indeksu. Dlatego to on siedzi na
+    // watchliście domyślnej i przejmuje kolor indeksu WIG20.
     source: { kind: "stooq", ticker: "etfbw20tr.pl", yahoo: "ETFBW20TR.WA" },
-    hint: "ETF na WIG20 z dywidendami — pełna historia także z Yahoo",
+    hint: "ETF na WIG20 z dywidendami — zamiennik indeksu, bo ma pełną historię",
   },
   {
     symbol: "SPX",
@@ -231,7 +241,9 @@ export const MARKET_ASSETS: MarketAsset[] = [
 export const DEFAULT_WATCHLIST: readonly string[] = [
   "BTC",
   "ETH",
-  "WIG20",
+  // ETF zamiast samego indeksu WIG20: ten drugi oddaje z serwera jeden punkt,
+  // więc na watchliście startowej byłby kafelkiem z kropką zamiast wykresu.
+  "ETFBW20.PL",
   "CDR.PL",
   "NVDA.US",
   "XAUUSD",

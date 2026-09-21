@@ -93,7 +93,11 @@ const KEYWORDS: Readonly<Record<string, readonly string[]>> = {
   "NVDA.US": ["nvidia"],
   "MSFT.US": ["microsoft"],
   WIG20: ["wig20", "wig 20", "gpw", "warsaw stock exchange"],
-  "ETFBW20.PL": ["wig20tr", "etfbw20"],
+  // ETF dostaje te same hasła co indeks, bo od kiedy to ON siedzi na
+  // watchliście domyślnej, newsy „o WIG20" dotyczą właśnie tego kafelka.
+  // Same „wig20tr"/„etfbw20" nie padają w nagłówkach praktycznie nigdy —
+  // panel newsów zostałby pusty przy pełnym strumieniu o GPW.
+  "ETFBW20.PL": ["wig20tr", "etfbw20", "wig20", "wig 20", "gpw", "warsaw stock exchange"],
   SPX: ["s&p 500", "s&p500", "sp500"],
   NDX: ["nasdaq"],
   XAUUSD: ["gold", "złot*", "zlot*", "bullion"],
