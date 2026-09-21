@@ -25,6 +25,7 @@ import { useArkReboot } from "./ArkRebootContext";
 import { useShowcase } from "./ShowcaseContext";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
+import { GlobalVoiceCommand } from "./GlobalVoiceCommand";
 
 const items = [
   { title: "JARVIS", url: "/jarvis", icon: Hexagon },
@@ -160,6 +161,14 @@ export function MobileBottomNav() {
       className="relative z-20 shrink-0 border-t border-primary/20 bg-gradient-to-t from-black/85 to-black/50 backdrop-blur-xl shadow-[0_-8px_28px_-18px_color-mix(in_oklab,var(--primary)_70%,transparent)]"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
+      {/* Przycisk komendy głosowej POZA kontenerem przewijania: `bottom-full`
+          kotwiczy go do górnej krawędzi paska, więc nie ma tu żadnej
+          zgadywanej wysokości, a lista modułów zachowuje pełną szerokość
+          wraz z przeciąganiem i bezwładnością. */}
+      <div className="absolute right-3 bottom-full z-30 mb-3">
+        <GlobalVoiceCommand />
+      </div>
+
       <div
         ref={scrollerRef}
         onPointerDown={onPointerDown}
