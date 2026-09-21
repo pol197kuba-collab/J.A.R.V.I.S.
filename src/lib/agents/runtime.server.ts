@@ -1386,6 +1386,33 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       }
     }
 
+    // PRZEBIEG ZAKOŃCZONY BEZ ANI JEDNEGO ZNAKU ODPOWIEDZI.
+    //
+    // Czat renderował to jako „⚠ Agent error: unknown": status był „done",
+    // więc żaden komunikat błędu nie powstał, a pusty tekst wpadał w gałąź
+    // błędu po stronie UI. Użytkownik dostawał słowo „unknown", z którego nie
+    // da się wywnioskować niczego — a przyczyna bywa bardzo konkretna: model
+    // wywołał narzędzie, dostał wynik i nie napisał po nim nic.
+    //
+    // Zaobserwowane na żywo po dołożeniu narzędzia market_outlook. Zamiast
+    // zostawiać puste miejsce, mówimy użytkownikowi prawdę i zapisujemy w
+    // logu to, co rozstrzyga diagnozę: ile tur, jakie narzędzia.
+    if (!finalText.trim()) {
+      await logEvent(
+        "warn",
+        agent.slug,
+        `przebieg zakończony bez treści odpowiedzi po ${toolCallLog.length} wywołaniach narzędzi`,
+        {
+          run_id: runId,
+          tools: toolCallLog.map((c) => (c as { name?: string }).name ?? "?"),
+        } as Json,
+      );
+      finalText =
+        toolCallLog.length > 0
+          ? "Pobrałem dane, ale nie udało mi się złożyć z nich odpowiedzi. Spróbuj zapytać jeszcze raz — jeśli powtórzy się, zajrzyj do logów systemowych."
+          : "Nie udało mi się sformułować odpowiedzi. Spróbuj przeformułować pytanie.";
+    }
+
     const latencyMs = Date.now() - startedAt;
 
     await supabase

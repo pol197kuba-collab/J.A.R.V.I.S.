@@ -382,8 +382,6 @@ export async function buildOutlook(
 
   await recordPredictions(supabase, userId, rows, forecast.model);
 
-  await recordPredictions(supabase, userId, rows, forecast.model);
-
   // Pusty typer wygląda w UI tak samo, niezależnie od przyczyny: braku
   // notowań w cache'u, zbyt krótkich serii czy pustej watchlisty. Bez tego
   // wpisu diagnoza sprowadzała się do zgadywania — stąd liczby, które
