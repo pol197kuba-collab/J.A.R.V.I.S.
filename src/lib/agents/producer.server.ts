@@ -23,6 +23,7 @@ import { DOC_COLORS, DOC_FONTS, DECK_SLIDE } from "./docTheme";
 import {
   blocksOf,
   MAX_SECTION_IMAGES,
+  type DeckSlide,
   type DeckSpec,
   type DocSpec,
   type ProducerSpec,
@@ -435,7 +436,8 @@ export function pngDims(bytes: Uint8Array): { width: number; height: number } | 
 // i podgląd slajdów w przeglądarce. Tutaj zostają wyłącznie aliasy, żeby
 // współrzędne poniżej dało się czytać bez rozpraszania.
 const { accent: ACCENT_HEX, dark: DARK_HEX, body: BODY_HEX } = DOC_COLORS;
-const { surface: SURFACE_HEX, muted: MUTED_HEX } = DOC_COLORS;
+const { surface: SURFACE_HEX, muted: MUTED_HEX, paper: PAPER_HEX } = DOC_COLORS;
+const SURFACE_LIGHT = DOC_COLORS.paper;
 
 async function buildPptx(spec: DeckSpec, images: DocImages): Promise<Uint8Array> {
   const pres = new PptxGen();
@@ -505,121 +507,36 @@ async function buildPptx(spec: DeckSpec, images: DocImages): Promise<Uint8Array>
   });
 
   const totalSlides = spec.slides.length + 1; // +1 na sam slajd tytułowy
-  for (const [i, section] of spec.slides.entries()) {
-    const slide = pres.addSlide();
-    slide.background = { color: "FFFFFF" };
-    slide.addShape("rect", { x: 0, y: 0, w: 0.18, h: 7.5, fill: { color: ACCENT_HEX } });
-
-    const sectionImage = images.sections.get(i);
-    // Alternate which side the photo sits on, slide to slide — a deck where
-    // every single image lands in the identical spot reads as a template
-    // stamped out by code (which, structurally, it is); alternating is the
-    // cheapest way to break that pattern without inventing new layouts.
-    const imageOnLeft = sectionImage ? i % 2 === 1 : false;
-    const imageX = imageOnLeft ? 0.75 : 8.15;
-    const textX = imageOnLeft ? 5.9 : 0.8;
-    // Badge sits at 5.9 in the imageOnLeft case (see badgeX below) — offset
-    // the heading past it by the same 0.85" gap the imageOnLeft=false case
-    // uses (badgeX 0.75 → headingX 1.6), instead of the two colliding.
-    const headingX = imageOnLeft ? 6.75 : 1.6;
-
-    // Header chrome: deck title (kicker) + running page count, tucked into
-    // whichever top corner sits ABOVE the photo — the one guaranteed-empty
-    // strip regardless of layout. With no image the heading runs nearly
-    // full-width, so there's no safe corner left for chrome — skip it there
-    // rather than risk it colliding with the heading text.
-    if (sectionImage) {
-      const chromeX = imageOnLeft ? imageX : 8.5;
-      const chromeAlign: "left" | "right" = imageOnLeft ? "left" : "right";
-      slide.addText(spec.title.toUpperCase(), {
-        x: chromeX,
-        y: 0.35,
-        w: 4.05,
-        h: 0.3,
-        fontSize: 9,
-        color: MUTED_HEX,
-        align: chromeAlign,
-        charSpacing: 1,
-      });
-      slide.addText(`${String(i + 2).padStart(2, "0")} / ${String(totalSlides).padStart(2, "0")}`, {
-        x: chromeX,
-        y: 0.65,
-        w: 4.05,
-        h: 0.3,
-        fontSize: 9,
-        color: MUTED_HEX,
-        align: chromeAlign,
-      });
-    }
-
-    // Number badge — filled accent square with the slide number, anchoring
-    // the heading instead of a lone footer digit.
-    const badgeX = imageOnLeft ? 5.9 : 0.75;
-    slide.addShape("rect", { x: badgeX, y: 0.55, w: 0.62, h: 0.62, fill: { color: ACCENT_HEX } });
-    slide.addText(String(i + 1).padStart(2, "0"), {
-      x: badgeX,
-      y: 0.55,
-      w: 0.62,
-      h: 0.62,
-      fontSize: 16,
-      bold: true,
-      color: "FFFFFF",
-      align: "center",
-      valign: "middle",
-    });
-    slide.addText(section.heading, {
-      x: headingX,
-      y: 0.45,
-      w: sectionImage ? 6.4 : 11.0,
-      h: 0.9,
-      fontSize: 28,
-      bold: true,
-      color: DARK_HEX,
-      valign: "middle",
-    });
-
-    if (sectionImage) {
-      // Matted panel: a soft light-grey field slightly larger than the
-      // photo itself (like a print mat around a framed picture), plus thin
-      // accent keylines top and bottom — reads as a deliberately framed
-      // photo rather than an image slapped onto bare white.
-      slide.addShape("rect", {
-        x: imageX - 0.2,
-        y: 1.35,
-        w: 4.83,
-        h: 5.4,
-        fill: { color: SURFACE_HEX },
-      });
-      slide.addImage({
-        data: toDataUri(sectionImage),
-        x: imageX,
-        y: 1.55,
-        w: 4.43,
-        h: 5.0,
-        sizing: { type: "cover", w: 4.43, h: 5.0 },
-      });
-      slide.addShape("rect", { x: imageX, y: 1.49, w: 4.43, h: 0.06, fill: { color: ACCENT_HEX } });
-      slide.addShape("rect", { x: imageX, y: 6.62, w: 4.43, h: 0.06, fill: { color: ACCENT_HEX } });
-    }
-
-    const bodyWidth = sectionImage ? 6.9 : 11.7;
-    const body: PptxGen.TextProps[] = [];
-    if (section.content) {
-      body.push({ text: section.content, options: { fontSize: 16, color: BODY_HEX } });
-    }
-    for (const bullet of section.bullets ?? []) {
-      body.push({
-        text: bullet,
-        options: {
-          fontSize: 16,
-          color: BODY_HEX,
-          bullet: { code: "2022", indent: 14 },
-          paraSpaceBefore: 6,
-        },
-      });
-    }
-    if (body.length > 0) {
-      slide.addText(body, { x: textX, y: 1.55, w: bodyWidth, h: 5.4, valign: "top" });
+  for (const [i, slideSpec] of spec.slides.entries()) {
+    const ctx: SlideCtx = {
+      slide: pres.addSlide(),
+      spec: slideSpec,
+      image: images.sections.get(i),
+      index: i,
+      total: totalSlides,
+      deckTitle: spec.title,
+    };
+    // Dyspozytor układów. Normalizacja gwarantuje, że dane wymagane przez
+    // dany układ są na miejscu (patrz resolveLayout w docSpec.ts), więc
+    // żaden renderer poniżej nie sprawdza tego drugi raz.
+    switch (slideSpec.layout) {
+      case "section":
+        renderSectionBreak(ctx);
+        break;
+      case "statement":
+        renderStatement(ctx);
+        break;
+      case "metrics":
+        renderMetrics(ctx);
+        break;
+      case "compare":
+        renderCompare(ctx);
+        break;
+      case "photo":
+        renderPhoto(ctx);
+        break;
+      default:
+        renderBullets(ctx);
     }
   }
 
@@ -649,6 +566,329 @@ async function buildPptx(spec: DeckSpec, images: DocImages): Promise<Uint8Array>
 
   const out = (await pres.write({ outputType: "arraybuffer" })) as ArrayBuffer;
   return new Uint8Array(out);
+}
+
+// ---------------------------------------------------------------------------
+// Biblioteka układów slajdów
+// ---------------------------------------------------------------------------
+//
+// Jeden układ = jedna funkcja, jeden komplet współrzędnych, zero wspólnego
+// kodu pozycjonowania między nimi. To jest celowe: układy nie dziedziczą po
+// sobie, bo „prawie taki sam jak tamten, tylko…" jest dokładnie tym, z czego
+// bierze się kod, którego nikt później nie rusza ze strachu.
+//
+// Wszystkie liczby są w calach na płótnie 13.33 × 7.5 (16:9). Margines
+// roboczy to 0.85 z lewej i 12.45 z prawej — trzymanie go daje prezentacji
+// wspólny rytm bez żadnego mechanizmu, który by go pilnował.
+
+type SlideCtx = {
+  slide: PptxGen.Slide;
+  spec: DeckSlide;
+  image?: DocImage;
+  index: number;
+  total: number;
+  deckTitle: string;
+};
+
+const MARGIN_X = 0.85;
+const CONTENT_W = 11.6;
+
+/** Tytuł prezentacji + numer slajdu w prawym górnym rogu. Na ciemnych
+ *  układach pomijany — tam chrom konkuruje z treścią zamiast jej służyć. */
+function addChrome(ctx: SlideCtx): void {
+  ctx.slide.addText(
+    `${ctx.deckTitle.toUpperCase()}  ·  ${String(ctx.index + 2).padStart(2, "0")}/${String(
+      ctx.total,
+    ).padStart(2, "0")}`,
+    {
+      x: 6.45,
+      y: 0.35,
+      w: 6,
+      h: 0.3,
+      fontSize: 9,
+      color: MUTED_HEX,
+      align: "right",
+      charSpacing: 1,
+    },
+  );
+}
+
+/** Lewy pasek akcentu — wspólna sygnatura jasnych slajdów. */
+function addSpine(ctx: SlideCtx): void {
+  ctx.slide.addShape("rect", { x: 0, y: 0, w: 0.18, h: 7.5, fill: { color: ACCENT_HEX } });
+}
+
+function addHeading(ctx: SlideCtx, y: number, w = CONTENT_W): void {
+  ctx.slide.addText(ctx.spec.heading, {
+    x: MARGIN_X,
+    y,
+    w,
+    h: 0.9,
+    fontSize: 26,
+    bold: true,
+    color: DARK_HEX,
+    valign: "bottom",
+  });
+}
+
+/** Punkty i akapit — koń roboczy, jedyny układ ze zdjęciem z boku. */
+function renderBullets(ctx: SlideCtx): void {
+  const { slide, spec, image, index } = ctx;
+  slide.background = { color: SURFACE_LIGHT };
+  addSpine(ctx);
+  addChrome(ctx);
+
+  // Zdjęcie raz z lewej, raz z prawej. Prezentacja, w której każdy obraz
+  // ląduje w tym samym miejscu, czyta się jak odbitka z szablonu — a
+  // przemienność nie kosztuje ani jednego dodatkowego układu.
+  const imageOnLeft = !!image && index % 2 === 1;
+  const imageX = imageOnLeft ? 0.75 : 8.15;
+  const textX = imageOnLeft ? 5.9 : MARGIN_X;
+  const bodyWidth = image ? 6.5 : CONTENT_W;
+
+  slide.addShape("rect", { x: textX, y: 0.62, w: 1.1, h: 0.07, fill: { color: ACCENT_HEX } });
+  slide.addText(spec.heading, {
+    x: textX,
+    y: 0.85,
+    w: bodyWidth,
+    h: 1.1,
+    fontSize: 26,
+    bold: true,
+    color: DARK_HEX,
+    valign: "bottom",
+  });
+
+  if (image) {
+    slide.addShape("rect", { x: imageX, y: 1.45, w: 4.43, h: 4.9, fill: { color: SURFACE_HEX } });
+    slide.addImage({
+      data: toDataUri(image),
+      x: imageX,
+      y: 1.45,
+      w: 4.43,
+      h: 4.9,
+      sizing: { type: "cover", w: 4.43, h: 4.9 },
+    });
+    slide.addShape("rect", { x: imageX, y: 6.38, w: 4.43, h: 0.06, fill: { color: ACCENT_HEX } });
+  }
+
+  const body: PptxGen.TextProps[] = [];
+  if (spec.content) body.push({ text: spec.content, options: { fontSize: 15, color: BODY_HEX } });
+  for (const bullet of spec.bullets ?? []) {
+    body.push({
+      text: bullet,
+      options: {
+        fontSize: 15,
+        color: BODY_HEX,
+        bullet: { code: "2022", indent: 14 },
+        paraSpaceBefore: 6,
+      },
+    });
+  }
+  if (body.length > 0) {
+    slide.addText(body, { x: textX, y: 2.15, w: bodyWidth, h: 4.6, valign: "top" });
+  }
+}
+
+/** Przekładka: wielki numer i tytuł części na ciemnym tle. */
+function renderSectionBreak(ctx: SlideCtx): void {
+  const { slide, spec, index } = ctx;
+  slide.background = { color: DARK_HEX };
+  slide.addShape("rect", { x: 0, y: 0, w: 0.18, h: 7.5, fill: { color: ACCENT_HEX } });
+  slide.addText(String(index + 1).padStart(2, "0"), {
+    x: MARGIN_X,
+    y: 1.7,
+    w: 3,
+    h: 2,
+    fontSize: 96,
+    bold: true,
+    color: ACCENT_HEX,
+    valign: "bottom",
+  });
+  slide.addShape("rect", { x: MARGIN_X, y: 3.95, w: 1.6, h: 0.07, fill: { color: ACCENT_HEX } });
+  slide.addText(spec.heading, {
+    x: MARGIN_X,
+    y: 4.2,
+    w: CONTENT_W,
+    h: 1.2,
+    fontSize: 36,
+    bold: true,
+    color: PAPER_HEX,
+    valign: "top",
+  });
+  if (spec.content) {
+    slide.addText(spec.content, {
+      x: MARGIN_X,
+      y: 5.45,
+      w: 9,
+      h: 1.2,
+      fontSize: 15,
+      color: MUTED_HEX,
+      valign: "top",
+    });
+  }
+}
+
+/** Jedna teza dużym krojem. Nagłówek schodzi do roli etykiety nad nią. */
+function renderStatement(ctx: SlideCtx): void {
+  const { slide, spec } = ctx;
+  slide.background = { color: SURFACE_LIGHT };
+  addSpine(ctx);
+  addChrome(ctx);
+
+  const text = spec.content || (spec.bullets ?? []).join("  ·  ");
+  slide.addText(spec.heading.toUpperCase(), {
+    x: MARGIN_X,
+    y: 1.9,
+    w: CONTENT_W,
+    h: 0.4,
+    fontSize: 11,
+    color: MUTED_HEX,
+    charSpacing: 2,
+  });
+  slide.addShape("rect", { x: MARGIN_X, y: 2.45, w: 1.6, h: 0.07, fill: { color: ACCENT_HEX } });
+  slide.addText(text, {
+    x: MARGIN_X,
+    y: 2.8,
+    w: CONTENT_W,
+    h: 2.6,
+    fontSize: 30,
+    bold: true,
+    color: DARK_HEX,
+    valign: "top",
+  });
+}
+
+/** Od jednej do czterech liczb w rzędzie, każda z podpisem. */
+function renderMetrics(ctx: SlideCtx): void {
+  const { slide, spec } = ctx;
+  const metrics = spec.metrics ?? [];
+  slide.background = { color: SURFACE_LIGHT };
+  addSpine(ctx);
+  addChrome(ctx);
+  slide.addShape("rect", { x: MARGIN_X, y: 0.62, w: 1.1, h: 0.07, fill: { color: ACCENT_HEX } });
+  addHeading(ctx, 0.85);
+
+  const gap = 0.3;
+  const cellW = (CONTENT_W - gap * (metrics.length - 1)) / metrics.length;
+  // Liczba zwęża się wraz z liczbą kafli — cztery wartości po 66pt zlałyby
+  // się w jeden pas. Skok jest w krokach, nie proporcjonalny, bo cyfry i tak
+  // nie skalują się liniowo do czytelności.
+  const valueSize = metrics.length >= 4 ? 44 : metrics.length === 3 ? 54 : 66;
+  for (const [i, metric] of metrics.entries()) {
+    const x = MARGIN_X + i * (cellW + gap);
+    slide.addShape("rect", { x, y: 2.5, w: cellW, h: 0.07, fill: { color: ACCENT_HEX } });
+    slide.addText(metric.value, {
+      x,
+      y: 2.75,
+      w: cellW,
+      h: 1.5,
+      fontSize: valueSize,
+      bold: true,
+      color: ACCENT_HEX,
+      valign: "top",
+    });
+    if (metric.label) {
+      slide.addText(metric.label, {
+        x,
+        y: 4.4,
+        w: cellW,
+        h: 1.4,
+        fontSize: 13,
+        color: BODY_HEX,
+        valign: "top",
+      });
+    }
+  }
+
+  if (spec.content) {
+    slide.addText(spec.content, {
+      x: MARGIN_X,
+      y: 6.1,
+      w: CONTENT_W,
+      h: 0.9,
+      fontSize: 13,
+      color: MUTED_HEX,
+      valign: "top",
+    });
+  }
+}
+
+/** Dwie kolumny obok siebie — zestawienie. */
+function renderCompare(ctx: SlideCtx): void {
+  const { slide, spec } = ctx;
+  const columns = spec.columns ?? [];
+  slide.background = { color: SURFACE_LIGHT };
+  addSpine(ctx);
+  addChrome(ctx);
+  slide.addShape("rect", { x: MARGIN_X, y: 0.62, w: 1.1, h: 0.07, fill: { color: ACCENT_HEX } });
+  addHeading(ctx, 0.85);
+
+  const colW = 5.5;
+  for (const [i, column] of columns.entries()) {
+    const x = MARGIN_X + i * (colW + 0.6);
+    slide.addShape("rect", { x, y: 2.25, w: colW, h: 0.62, fill: { color: SURFACE_HEX } });
+    slide.addShape("rect", { x, y: 2.25, w: 0.08, h: 0.62, fill: { color: ACCENT_HEX } });
+    slide.addText(column.heading, {
+      x: x + 0.25,
+      y: 2.25,
+      w: colW - 0.4,
+      h: 0.62,
+      fontSize: 15,
+      bold: true,
+      color: DARK_HEX,
+      valign: "middle",
+    });
+    if (column.bullets.length > 0) {
+      slide.addText(
+        column.bullets.map((b) => ({
+          text: b,
+          options: {
+            fontSize: 13,
+            color: BODY_HEX,
+            bullet: { code: "2022", indent: 14 },
+            paraSpaceBefore: 6,
+          },
+        })),
+        { x, y: 3.1, w: colW, h: 3.7, valign: "top" },
+      );
+    }
+  }
+}
+
+/** Zdjęcie na pełnym slajdzie, tytuł na przyciemnieniu u dołu. */
+function renderPhoto(ctx: SlideCtx): void {
+  const { slide, spec, image } = ctx;
+  slide.background = { color: DARK_HEX };
+  if (image) {
+    slide.addImage({
+      data: toDataUri(image),
+      x: 0,
+      y: 0,
+      w: 13.33,
+      h: 7.5,
+      sizing: { type: "cover", w: 13.33, h: 7.5 },
+    });
+  }
+  // Przyciemnienie tylko pod tekstem, nie na całym kadrze: zdjęcie ma
+  // zostać zdjęciem, a nie tłem przykrytym szarą płachtą.
+  slide.addShape("rect", {
+    x: 0,
+    y: 4.9,
+    w: 13.33,
+    h: 2.6,
+    fill: { color: DARK_HEX, transparency: 20 },
+  });
+  slide.addShape("rect", { x: MARGIN_X, y: 5.35, w: 1.6, h: 0.07, fill: { color: ACCENT_HEX } });
+  slide.addText(spec.heading, {
+    x: MARGIN_X,
+    y: 5.6,
+    w: CONTENT_W,
+    h: 1.1,
+    fontSize: 30,
+    bold: true,
+    color: PAPER_HEX,
+    valign: "top",
+  });
 }
 
 // ---------------------------------------------------------------------------

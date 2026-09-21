@@ -40,6 +40,11 @@ const MAX_IMAGE_PROMPT_CHARS = 600;
  *  wywołania w tle — rozbiegany model nie zamówi dwudziestu. */
 export const MAX_SECTION_IMAGES = 4;
 
+/** Powyżej czterech liczb na slajdzie nikt już nie czyta — czyta tabelę. */
+export const MAX_METRICS = 4;
+const MAX_METRIC_VALUE_CHARS = 12;
+const MAX_METRIC_LABEL_CHARS = 60;
+
 /** Skąd wziąć zdjęcie dla tego bloku. Wspólne dla slajdu i sekcji dokumentu,
  *  bo potok obrazów jest jeden i nie interesuje go format wyjściowy.
  *
@@ -55,11 +60,52 @@ type ImageRefs = {
   imageUrl?: string;
 };
 
+/**
+ * UKŁADY SLAJDÓW — to jest ta rzecz, której wspólny opis z Wordem nie mógł
+ * unieść, i powód, dla którego każda prezentacja wyglądała jak odbitka z
+ * jednego szablonu.
+ *
+ * Model wybiera układ pasujący do treści, a nie współrzędne. Świadoma
+ * granica: gdyby podawał `x/y/w/h`, dostałby pełną swobodę i regularnie
+ * produkował slajdy z nachodzącym tekstem, bo NIGDY NIE WIDZI swojego
+ * wyniku. Skończona lista układów daje mu wybór, a nam gwarancję, że każdy
+ * wariant został sprawdzony raz i nie da się go rozsypać.
+ *
+ * Kolejność ma znaczenie tylko dla czytelności — pierwszy jest domyślny.
+ */
+export const SLIDE_LAYOUTS = [
+  /** Nagłówek + akapit i/lub punkty, opcjonalnie zdjęcie z boku. Koń roboczy. */
+  "bullets",
+  /** Przekładka: ciemny slajd z numerem i tytułem części. Oddziela rozdziały. */
+  "section",
+  /** Jedna teza dużym krojem. Bez punktów — slajd ma wybrzmieć, nie streszczać. */
+  "statement",
+  /** Od jednej do czterech liczb z podpisami. Do wyników, udziałów, skali. */
+  "metrics",
+  /** Dwie kolumny obok siebie. Do zestawień „przed/po", „my/oni", „za/przeciw". */
+  "compare",
+  /** Zdjęcie na pełnej szerokości, tytuł na przyciemnieniu. Do otwarć części. */
+  "photo",
+] as const;
+export type SlideLayout = (typeof SLIDE_LAYOUTS)[number];
+export const DEFAULT_LAYOUT: SlideLayout = "bullets";
+
+/** Jedna liczba z podpisem — układ „metrics". */
+export type SlideMetric = { value: string; label?: string };
+
+/** Jedna kolumna zestawienia — układ „compare". */
+export type SlideColumn = { heading: string; bullets: string[] };
+
 /** Jeden slajd prezentacji. */
 export type DeckSlide = ImageRefs & {
+  layout: SlideLayout;
   heading: string;
   content?: string;
   bullets?: string[];
+  /** Tylko „metrics". */
+  metrics?: SlideMetric[];
+  /** Tylko „compare" — zawsze dokładnie dwie. */
+  columns?: [SlideColumn, SlideColumn];
 };
 
 /** Jedna sekcja dokumentu. */
@@ -122,6 +168,77 @@ export function slugifyFilename(name: string): string {
   return slug || "dokument";
 }
 
+function readMetrics(raw: unknown): SlideMetric[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: SlideMetric[] = [];
+  // Limit liczony po WALIDACJI, nie przed nią. Obcięcie surowej tablicy z
+  // góry sprawiłoby, że jeden pusty wpis od modelu zjada miejsce poprawnej
+  // liczbie — slajd „4 wskaźniki" pokazywałby wtedy trzy. Skan i tak jest
+  // ograniczony, żeby ogromna tablica nie kosztowała przebiegu.
+  for (const item of raw.slice(0, MAX_METRICS * 4)) {
+    if (out.length >= MAX_METRICS) break;
+    if (typeof item !== "object" || item === null) continue;
+    const m = item as Record<string, unknown>;
+    const value = clip(m.value, MAX_METRIC_VALUE_CHARS);
+    if (!value) continue; // liczba bez wartości nie jest liczbą
+    out.push({ value, label: clip(m.label, MAX_METRIC_LABEL_CHARS) || undefined });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+function readColumns(raw: unknown): [SlideColumn, SlideColumn] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: SlideColumn[] = [];
+  for (const item of raw.slice(0, 2)) {
+    if (typeof item !== "object" || item === null) continue;
+    const c = item as Record<string, unknown>;
+    const heading = clip(c.heading, MAX_TITLE_CHARS);
+    const bullets = (Array.isArray(c.bullets) ? c.bullets : [])
+      .map((b) => clip(b, MAX_BULLET_CHARS))
+      .filter(Boolean)
+      .slice(0, MAX_BULLETS_PER_SECTION);
+    if (!heading && bullets.length === 0) continue;
+    out.push({ heading: heading || "—", bullets });
+  }
+  // Zestawienie z jedną kolumną nie jest zestawieniem — niech spadnie na punkty.
+  return out.length === 2 ? [out[0], out[1]] : undefined;
+}
+
+/**
+ * Wybiera układ i — to jest tu najważniejsze — DEGRADUJE go, gdy brakuje
+ * danych, których ten układ wymaga.
+ *
+ * Model prosi o „metrics", ale nie przysyła ani jednej liczby? Dostaje
+ * punkty. Prosi o „compare" z jedną kolumną? Punkty. Bez tego slajd
+ * wyrenderowałby się jako pusta ramka z samym nagłówkiem, a użytkownik
+ * zobaczyłby dziurę w prezentacji zamiast treści, którą model faktycznie
+ * napisał. Renderer może więc zakładać, że dane układu ZAWSZE są na miejscu
+ * — nie musi ich sprawdzać drugi raz.
+ */
+function resolveLayout(
+  raw: unknown,
+  data: {
+    bullets: string[];
+    content: string;
+    metrics?: SlideMetric[];
+    columns?: [SlideColumn, SlideColumn];
+    imageQuery: string;
+  },
+): SlideLayout {
+  const asked = String(raw ?? "")
+    .trim()
+    .toLowerCase() as SlideLayout;
+  const layout = SLIDE_LAYOUTS.includes(asked) ? asked : DEFAULT_LAYOUT;
+
+  if (layout === "metrics" && !data.metrics) return DEFAULT_LAYOUT;
+  if (layout === "compare" && !data.columns) return DEFAULT_LAYOUT;
+  // „photo" bez zdjęcia to czarny prostokąt z tytułem; „statement" bez tekstu
+  // to pusty slajd. Oba mają czym oddychać albo schodzą na punkty.
+  if (layout === "photo" && !data.imageQuery) return DEFAULT_LAYOUT;
+  if (layout === "statement" && !data.content && data.bullets.length === 0) return DEFAULT_LAYOUT;
+  return layout;
+}
+
 export type NormalizeResult = { ok: true; spec: ProducerSpec } | { ok: false; error: string };
 
 /** Waliduje i sprowadza do postaci kanonicznej surowe argumenty narzędzia.
@@ -149,12 +266,17 @@ export function normalizeDocSpec(args: Record<string, unknown>): NormalizeResult
       .map((b) => clip(b, MAX_BULLET_CHARS))
       .filter(Boolean)
       .slice(0, MAX_BULLETS_PER_SECTION);
-    if (!heading && !content && bullets.length === 0) continue;
+    const metrics = readMetrics(s.metrics);
+    const columns = readColumns(s.columns);
+    if (!heading && !content && bullets.length === 0 && !metrics && !columns) continue;
     const imageQuery = clip(s.image_query ?? s.imageQuery, MAX_IMAGE_PROMPT_CHARS);
     blocks.push({
+      layout: resolveLayout(s.layout, { bullets, content, metrics, columns, imageQuery }),
       heading: heading || "—",
       content: content || undefined,
       bullets,
+      metrics,
+      columns,
       imageQuery: imageQuery || undefined,
     });
   }
@@ -175,13 +297,19 @@ export function normalizeDocSpec(args: Record<string, unknown>): NormalizeResult
     heroImageQuery: heroImageQuery || undefined,
   };
 
-  return {
-    ok: true,
-    spec:
-      format === "pptx"
-        ? { format: "pptx", ...common, slides: blocks }
-        : { format: "docx", ...common, sections: blocks },
-  };
+  if (format === "pptx") return { ok: true, spec: { format: "pptx", ...common, slides: blocks } };
+
+  // Dokument dostaje WYŁĄCZNIE to, co dokument wyraża. Układ, liczby i
+  // kolumny to pojęcia slajdu — przepuszczenie ich tutaj tylko dlatego, że
+  // wspólna pętla je policzyła, odtworzyłoby dokładnie to sprzęgnięcie
+  // formatów, przez które prezentacje były wcześniej kaleke.
+  const sections: DocSection[] = blocks.map((b) => ({
+    heading: b.heading,
+    content: b.content,
+    bullets: b.bullets,
+    imageQuery: b.imageQuery,
+  }));
+  return { ok: true, spec: { format: "docx", ...common, sections } };
 }
 
 /** Czy ten opis w ogóle prosi o jakiekolwiek zdjęcie? Steruje asynchronicznym
