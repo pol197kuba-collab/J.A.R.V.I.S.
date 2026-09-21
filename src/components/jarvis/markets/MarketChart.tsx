@@ -25,7 +25,7 @@ import type { MarketSeries } from "@/lib/markets/markets.functions";
 
 export type ChartMode = "price" | "index";
 
-type Row = { label: string; date: string } & Record<string, number | string | null>;
+type Row = Record<string, number | string | null>;
 
 const shortLabel = (iso: string): string =>
   new Date(`${iso}T00:00:00`).toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit" });
