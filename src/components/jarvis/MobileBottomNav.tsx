@@ -52,7 +52,7 @@ const items = [
  * are a swipe away. Uses the exact same HUD transition navigation as the
  * desktop sidebar, so behaviour is identical across form factors.
  */
-export function MobileBottomNav() {
+export function MobileBottomNav({ showVoice = true }: { showVoice?: boolean }) {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const { go, isTransitioning } = useHudNavigate();
   const { isDiagnosticRunning } = useArkReboot();
@@ -220,9 +220,11 @@ export function MobileBottomNav() {
           })}
         </div>
 
-        <div className="flex shrink-0 items-center border-l border-primary/20 px-3 py-1.5">
-          <GlobalVoiceCommand />
-        </div>
+        {showVoice && (
+          <div className="flex shrink-0 items-center border-l border-primary/20 px-3 py-1.5">
+            <GlobalVoiceCommand />
+          </div>
+        )}
       </div>
     </nav>
   );

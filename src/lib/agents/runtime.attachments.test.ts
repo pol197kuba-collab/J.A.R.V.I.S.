@@ -16,7 +16,7 @@ import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 type CannedResponse = { data: unknown; error: { message: string } | null };
 
 const SIGNED_URL =
-  "https://example.supabase.co/storage/v1/object/sign/generated/u/f/raport.pdf?token=SIGNED_TOKEN_THE_MODEL_MUST_NOT_RETYPE";
+  "https://example.supabase.co/storage/v1/object/sign/generated/u/f/raport.docx?token=SIGNED_TOKEN_THE_MODEL_MUST_NOT_RETYPE";
 
 function makeSupabaseStub(responses: Record<string, CannedResponse[]>) {
   const counts: Record<string, number> = {};
@@ -67,7 +67,7 @@ function makeGeminiFetchMock() {
                         functionCall: {
                           name: "generate_document",
                           args: {
-                            format: "pdf",
+                            format: "docx",
                             title: "Raport",
                             sections: [{ heading: "Sekcja", content: "Treść." }],
                           },
@@ -132,7 +132,7 @@ describe("runOrchestrator — generate_document link delivery", () => {
     // The model's own prose survives, with the verbatim URL appended below it.
     expect(result.output).toContain(MODEL_REPLY);
     expect(result.output).toContain(`⬇ ${SIGNED_URL}`);
-    expect(result.attachments).toEqual([{ filename: "raport.pdf", url: SIGNED_URL }]);
+    expect(result.attachments).toEqual([{ filename: "raport.docx", url: SIGNED_URL }]);
 
     // Producer's FIRST turn must force the generate_document call (mode ANY),
     // so it can't end its run in prose with 0 tool calls (the live failure).

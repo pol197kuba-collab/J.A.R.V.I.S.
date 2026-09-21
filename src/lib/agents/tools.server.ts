@@ -1820,7 +1820,7 @@ const listGeneratedFilesTool: Tool = {
   declaration: {
     name: "list_generated_files",
     description:
-      "List presentations/documents F.O.R.G.E. has generated for the user (pptx/docx/pdf), with title, format and section count. Use to check what's available before read_generated_file, or to answer 'what files/decks have I generated'. Separate from list_documents, which is for files the user uploaded, not ones F.O.R.G.E. built.",
+      "List presentations/documents F.O.R.G.E. has generated for the user (pptx/docx), with title, format and section count. Use to check what's available before read_generated_file, or to answer 'what files/decks have I generated'. Separate from list_documents, which is for files the user uploaded, not ones F.O.R.G.E. built.",
     parameters: {
       type: "object",
       properties: {
@@ -1910,16 +1910,16 @@ const readGeneratedFileTool: Tool = {
 };
 
 // ---------------------------------------------------------------------------
-// F.O.R.G.E. tool — generate a downloadable document (pptx/docx/pdf)
+// F.O.R.G.E. tool — generate a downloadable document (pptx/docx)
 // ---------------------------------------------------------------------------
 
 // First tool in this app that produces a FILE instead of returning
 // text/data through the JSON tool-call channel: bytes go to the private
 // 'generated' Storage bucket (owner-scoped paths, same idiom as
 // 'documents') and the model gets back a signed download URL to hand to
-// the user in chat. The heavy build libraries (pptxgenjs/docx/pdf-lib +
-// the embedded PDF font) are dynamically imported so they only load when
-// a document is actually being generated, not on every runtime start.
+// the user in chat. The heavy build libraries (pptxgenjs/docx) are
+// dynamically imported so they only load when a document is actually being
+// generated, not on every runtime start.
 
 const SIGNED_URL_TTL_SECONDS = 7 * 24 * 3600; // 7 days
 
@@ -1991,13 +1991,13 @@ const generateDocumentTool: Tool = {
   declaration: {
     name: "generate_document",
     description:
-      "Generate a downloadable file — a presentation (pptx), a Word document (docx), or a PDF — from structured content, and return a download link. Call it ONCE with the complete, final content: a title and a list of sections, each with a heading plus paragraph text and/or bullet points. Write real content in the user's language, never placeholders. For visuals, prefer REAL PHOTOS: pass image_query (and hero_image_query) — short English search phrases for a real thing (product, place, person, concept), e.g. 'Samsung Galaxy S26 Ultra smartphone'. The system finds a real Creative-Commons photo and embeds it. IMPORTANT — Creative-Commons photos frequently do NOT exist for specific branded products, newly-released items, or anything under copyright (e.g. a just-announced car model, a named consumer gadget): whenever you set image_query or hero_image_query for this kind of concrete, brand-specific subject, ALSO set the matching image_prompt / hero_image_prompt as a genuine fallback describing the same subject in general visual terms (no exact brand names/logos, since it's AI-generated) — otherwise that slide silently ends up with no image at all if no real photo is found. Only skip the *_prompt fallback when the subject is generic/decorative enough that a missing photo is fine. Graphics are added in the background after the file is delivered.",
+      "Generate a downloadable file — a presentation (pptx) or a Word document (docx) — from structured content, and return a download link. Call it ONCE with the complete, final content: a title and a list of sections, each with a heading plus paragraph text and/or bullet points. Write real content in the user's language, never placeholders. For visuals, set image_query (and hero_image_query): a short ENGLISH search phrase naming a real, concrete thing — a product, place, person, event or object, e.g. 'Samsung Galaxy S26 Ultra smartphone', 'Warsaw Old Town square'. The system finds a real photo on the web and embeds it. Be SPECIFIC: a vague phrase ('technology', 'business growth') returns generic stock filler, while a named subject returns the actual thing. Skip image_query entirely for a slide where no real photo would add anything — a slide with no image reads better than one with an unrelated picture. Photos are added in the background after the file is delivered.",
     parameters: {
       type: "object",
       properties: {
         format: {
           type: "string",
-          enum: ["pptx", "docx", "pdf"],
+          enum: ["pptx", "docx"],
           description: "Output file format.",
         },
         title: { type: "string", description: "Document/presentation title." },
@@ -2009,17 +2009,12 @@ const generateDocumentTool: Tool = {
         hero_image_query: {
           type: "string",
           description:
-            "Preferred. English search phrase for a REAL title-slide photo (a real product/place/person/thing), e.g. 'Samsung Galaxy S26 Ultra smartphone'.",
-        },
-        hero_image_prompt: {
-          type: "string",
-          description:
-            "Fallback for hero_image_query. ENGLISH prompt for an AI-generated hero graphic, used only if no real photo is found. Set this alongside hero_image_query whenever the subject is a specific branded/copyrighted product or place — Creative-Commons photos of those often don't exist. Describe the subject visually without exact brand names/logos. Concrete scene, no text in the image.",
+            "English search phrase for a REAL title-slide photo (a concrete product/place/person/thing), e.g. 'Samsung Galaxy S26 Ultra smartphone'.",
         },
         sections: {
           type: "array",
           description:
-            "Ordered sections (slides for pptx, headed sections for docx/pdf). Each needs a heading and real content: paragraph text, bullet points, or both.",
+            "Ordered sections (slides for pptx, headed sections for docx). Each needs a heading and real content: paragraph text, bullet points, or both.",
           items: {
             type: "object",
             properties: {
@@ -2033,12 +2028,7 @@ const generateDocumentTool: Tool = {
               image_query: {
                 type: "string",
                 description:
-                  "Preferred. English search phrase for a REAL photo for this slide (max 4 sections get an image — pick the most important). e.g. 'smartphone camera module close-up'.",
-              },
-              image_prompt: {
-                type: "string",
-                description:
-                  "Fallback for image_query. ENGLISH prompt for an AI-generated illustration, used only if no real photo is found. Set this alongside image_query whenever the subject is a specific branded/copyrighted product — Creative-Commons photos of those often don't exist. Describe the subject visually without exact brand names/logos. Concrete scene, no text in the image.",
+                  "English search phrase for a REAL photo for this slide — name a concrete subject, not an abstraction (max 4 sections get an image, so pick the most important). e.g. 'smartphone camera module close-up'. Omit it when no real photo would add anything.",
               },
             },
             required: ["heading"],
@@ -2049,7 +2039,7 @@ const generateDocumentTool: Tool = {
     },
   },
   async execute(args, ctx) {
-    const { normalizeDocSpec, buildDocument, CONTENT_TYPES, specHasImagePrompts } =
+    const { normalizeDocSpec, buildDocument, CONTENT_TYPES, specHasImagePrompts, blocksOf } =
       await import("./producer.server");
     const normalized = normalizeDocSpec(args);
     if (!normalized.ok) {
@@ -2105,27 +2095,13 @@ const generateDocumentTool: Tool = {
       return { error: `signed_url_failed: ${signErr?.message ?? "unknown"}` };
     }
 
-    // pptx has no in-browser renderer, so also store a text-only PDF rendering
-    // as the in-app preview (enrichment rebuilds it with images later).
-    let previewPath: string | null = null;
-    if (spec.format === "pptx") {
-      try {
-        const previewBytes = await buildDocument({ ...spec, format: "pdf" });
-        const pp = `${ctx.userId}/${crypto.randomUUID()}/preview.pdf`;
-        const { error: pErr } = await ctx.supabase.storage
-          .from("generated")
-          .upload(pp, previewBytes, { contentType: CONTENT_TYPES.pdf });
-        if (pErr) throw new Error(pErr.message);
-        previewPath = pp;
-      } catch (err) {
-        await ctx.logEvent(
-          "warn",
-          "tool.generate_document",
-          `pptx preview render failed: ${err instanceof Error ? err.message : String(err)}`,
-          { run_id: ctx.runId } as Json,
-        );
-      }
-    }
+    // Podgląd prezentacji NIE jest już osobnym plikiem. Wcześniej renderowało
+    // się ją do PDF-a i to jego pokazywał <iframe>, bo przeglądarka nie umie
+    // .pptx. Kosztowało to drugi pełny render przy każdym pliku, trzymanie
+    // dwóch obiektów w storage i utrzymywanie renderera PDF wyłącznie po to.
+    // Teraz podgląd rysuje slajdy w Reakcie wprost z `spec` (zapisywanego
+    // niżej i tak), tym samym motywem co plik — więc jest szybszy, zawsze
+    // aktualny i pokazuje dokładnie to, co poszło do pliku.
 
     // Does the spec ask for any graphics? If so, mark it 'pending' so
     // enrichment can rebuild the exact same document with images. The spec
@@ -2139,10 +2115,9 @@ const generateDocumentTool: Tool = {
       filename: spec.filename,
       format: spec.format,
       storage_path: path,
-      preview_path: previewPath,
       size_bytes: bytes.byteLength,
       title: spec.title,
-      section_count: spec.sections.length,
+      section_count: blocksOf(spec).length,
       image_count: 0,
       image_status: wantsImages ? "pending" : "none",
       spec: spec as unknown as Json,
@@ -2162,14 +2137,14 @@ const generateDocumentTool: Tool = {
     await ctx.logEvent(
       "info",
       "tool.generate_document",
-      `${spec.format} generated: ${spec.filename} (${bytes.byteLength} bytes, ${spec.sections.length} sections, images ${wantsImages ? "pending" : "none"})`,
+      `${spec.format} generated: ${spec.filename} (${bytes.byteLength} bytes, ${blocksOf(spec).length} sections, images ${wantsImages ? "pending" : "none"})`,
       { run_id: ctx.runId, path, size_bytes: bytes.byteLength } as Json,
     );
     return {
       ok: true,
       format: spec.format,
       filename: spec.filename,
-      sections: spec.sections.length,
+      sections: blocksOf(spec).length,
       size_bytes: bytes.byteLength,
       download_url: signed.signedUrl,
       link_valid_days: 7,

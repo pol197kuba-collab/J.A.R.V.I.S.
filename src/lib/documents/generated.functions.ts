@@ -28,6 +28,8 @@ export type GeneratedFileSummary = {
   image_count: number | null;
   /** 'none' | 'pending' | 'ready' | 'failed' — background graphics status. */
   image_status: string;
+  /** Tylko dla plików sprzed przejścia na podgląd rysowany z opisu — nowe
+   *  prezentacje nie mają już osobnego obiektu podglądu i go nie potrzebują. */
   has_preview: boolean;
   created_at: string;
 };
@@ -90,7 +92,7 @@ export async function enrichGeneratedFileImages(
 ): Promise<EnrichResult> {
   const { generateDocImages, buildDocument, CONTENT_TYPES } =
     await import("@/lib/agents/producer.server");
-  type ProducerDocSpec = import("@/lib/agents/producer.server").DocSpec;
+  type ProducerDocSpec = import("@/lib/agents/producer.server").ProducerSpec;
 
   const { data: row, error } = await supabase
     .from("generated_files")
@@ -143,17 +145,30 @@ export async function enrichGeneratedFileImages(
       .update(row.storage_path, bytes, { contentType: CONTENT_TYPES[spec.format] });
     if (upErr) throw new Error(upErr.message);
 
-    // pptx: rebuild the PDF preview with images too.
-    if (spec.format === "pptx" && row.preview_path) {
-      const previewBytes = await buildDocument({ ...spec, format: "pdf" }, images);
-      await supabase.storage
-        .from("generated")
-        .update(row.preview_path, previewBytes, { contentType: CONTENT_TYPES.pdf });
+    // Adresy znalezionych zdjęć wracają do opisu. To jedyny moment, w którym
+    // są znane — potem bajty żyją już tylko zaszyte w pliku. Dzięki temu
+    // zapisowi podgląd pokazuje te same zdjęcia, nie trzymając ich drugi raz
+    // w storage. Kolumna jest jsonb, więc to zwykły UPDATE, bez migracji.
+    const withUrls = structuredClone(spec);
+    if (images.hero) withUrls.heroImageUrl = images.hero.sourceUrl;
+    const urlBlocks = withUrls.format === "pptx" ? withUrls.slides : withUrls.sections;
+    for (const [i, img] of images.sections) {
+      if (urlBlocks[i]) urlBlocks[i].imageUrl = img.sourceUrl;
     }
+
+    // Kiedyś w tym miejscu szedł drugi render: prezentacja do PDF-a, bo to
+    // on był podglądem w aplikacji. Podgląd rysuje dziś slajdy wprost ze
+    // `spec`, więc dociągnięcie obrazów nie ma już czego przebudowywać —
+    // jeden render zamiast dwóch.
 
     await supabase
       .from("generated_files")
-      .update({ image_status: "ready", image_count: imageCount, size_bytes: bytes.byteLength })
+      .update({
+        image_status: "ready",
+        image_count: imageCount,
+        size_bytes: bytes.byteLength,
+        spec: withUrls as unknown as Json,
+      })
       .eq("id", row.id);
     return { ok: true, imageCount, status: "ready" };
   } catch (err) {
@@ -169,6 +184,31 @@ export const enrichDocumentImagesFn = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<EnrichResult> => {
     const { supabase, userId } = context;
     return enrichGeneratedFileImages(supabase, userId, data.fileId);
+  });
+
+/** Opis pliku dla podglądu w przeglądarce.
+ *
+ *  Podgląd prezentacji rysuje slajdy z TEJ SAMEJ specyfikacji, z której
+ *  zbudowano .pptx — nie z osobnego renderu. Kolumna `spec` i tak była
+ *  zapisywana (M.E.T.R.I.C. czyta z niej treść), więc podgląd nie kosztuje
+ *  ani jednego dodatkowego bajtu w storage. Celowo osobna funkcja, a nie
+ *  pole w liście plików: spec bywa spory, a lista pokazuje tylko metadane. */
+export type GeneratedSpecResult = { ok: true; spec: Json } | { ok: false; reason: string };
+
+export const getGeneratedSpecFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ fileId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }): Promise<GeneratedSpecResult> => {
+    const { supabase, userId } = context;
+    const { data: row, error } = await supabase
+      .from("generated_files")
+      .select("spec")
+      .eq("id", data.fileId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) return { ok: false, reason: error.message };
+    if (!row?.spec) return { ok: false, reason: "no_spec" };
+    return { ok: true, spec: row.spec };
   });
 
 const UrlInput = z.object({

@@ -19,6 +19,8 @@ import { ShowcaseProvider } from "@/components/jarvis/ShowcaseContext";
 import { ShowcaseOverlay } from "@/components/jarvis/ShowcaseOverlay";
 import { ShowcaseButton } from "@/components/jarvis/ShowcaseButton";
 import { MobileBottomNav } from "@/components/jarvis/MobileBottomNav";
+import { useRouterState } from "@tanstack/react-router";
+
 import { GlobalVoiceCommand } from "@/components/jarvis/GlobalVoiceCommand";
 import { isFullscreen, onFullscreenChange, toggleAppFullscreen } from "@/lib/fullscreen";
 import type { AppPhase } from "@/components/jarvis/PhaseContext";
@@ -41,6 +43,12 @@ export function DashboardShell({ phase, onShutdown }: { phase: AppPhase; onShutd
 function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdown: () => void }) {
   const { transition } = useRouteTransition();
   const { setOpen, setOpenMobile, isMobile } = useSidebar();
+  // Moduł /jarvis ma własny mikrofon w konsoli czatu, tuż obok przycisku
+  // wysyłki. Globalny przycisk jest tam nie tylko zbędny — w wersji
+  // desktopowej siada dokładnie na „SEND", bo oba kotwiczą się w prawym
+  // dolnym rogu. Ukrywamy go w tym jednym module zamiast przesuwać: mikrofon
+  // obok pola tekstowego jest bliżej ręki niż pływający w rogu.
+  const onJarvisModule = useRouterState({ select: (r) => r.location.pathname === "/jarvis" });
   const { isDiagnosticRunning } = useArkReboot();
 
   // Bridge for voice commands ("open menu" / "close menu") dispatched via
@@ -124,13 +132,16 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
         {isMobile ? (
           // Na mobile mikrofon jest częścią paska — osobną komórką obok
           // przewijanej listy modułów, nie elementem unoszącym się nad
-          // treścią. Dzięki temu nie ma jak zasłonić niczego na stronie
-          // (a zasłaniał: pole wysyłki czatu w module J.A.R.V.I.S.).
-          <MobileBottomNav />
+          // treścią. Dzięki temu nie ma jak zasłonić niczego na stronie.
+          // Sam pasek zostaje ZAWSZE: to jedyna nawigacja na telefonie,
+          // znika wyłącznie komórka mikrofonu.
+          <MobileBottomNav showVoice={!onJarvisModule} />
         ) : (
-          <div className="absolute right-6 bottom-6 z-40">
-            <GlobalVoiceCommand />
-          </div>
+          !onJarvisModule && (
+            <div className="absolute right-6 bottom-6 z-40">
+              <GlobalVoiceCommand />
+            </div>
+          )
         )}
         <ArkRebootOverlay />
         <ShowcaseOverlay />

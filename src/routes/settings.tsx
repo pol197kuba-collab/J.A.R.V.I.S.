@@ -778,10 +778,10 @@ function Settings() {
           )}
           <p className="font-mono text-[10px] text-muted-foreground/70">
             ℹ Bez tego F.O.R.G.E. i tak szuka prawdziwych zdjęć za darmo (Wikipedia, wyszukiwanie po
-            całym internecie, Openverse) zanim spadnie na grafikę AI — to pole tylko poprawia
-            trafność. Załóż darmowy klucz na console.cloud.google.com (Custom Search JSON API, 100
-            zapytań/dzień gratis) i własną wyszukiwarkę na programmablesearchengine.google.com, żeby
-            dostać jej "cx" ID. Puste oba pola + zapis = usunięcie danych.
+            całym internecie, Openverse) — to pole tylko poprawia trafność. Załóż darmowy klucz na
+            console.cloud.google.com (Custom Search JSON API, 100 zapytań/dzień gratis) i własną
+            wyszukiwarkę na programmablesearchengine.google.com, żeby dostać jej "cx" ID. Puste oba
+            pola + zapis = usunięcie danych.
           </p>
         </div>
       </HudPanel>

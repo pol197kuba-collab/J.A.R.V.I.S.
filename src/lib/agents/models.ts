@@ -119,11 +119,6 @@ export const ALL_MODELS: ModelOption[] = [...GEMINI_MODELS, ...ANTHROPIC_MODELS]
 
 export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 
-// Image generation (F.O.R.G.E. slide graphics). Not in GEMINI_MODELS on
-// purpose — it's not a conversational model and shouldn't appear in the
-// Settings/Console dropdowns.
-export const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image";
-
 export const isKnownGeminiModel = (id: string): boolean => GEMINI_MODELS.some((m) => m.id === id);
 
 export const isKnownModel = (id: string): boolean => ALL_MODELS.some((m) => m.id === id);

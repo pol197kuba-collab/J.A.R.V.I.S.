@@ -1,270 +1,52 @@
-// F.O.R.G.E. agent — document builders (pptx / docx / pdf).
+// F.O.R.G.E. — renderery plików (pptx / docx).
 //
-// Pure functions from a normalized DocSpec to file bytes, kept separate from
-// the tool wiring in tools.server.ts so they're unit-testable without a
-// Supabase context. All three formats are pure-JS (pptxgenjs, docx, pdf-lib)
-// per the repo's TypeScript-first rule — no native dependencies, runnable in
-// the existing server-function runtime.
+// Czyste funkcje z opisu na bajty, trzymane osobno od okablowania narzędzia w
+// tools.server.ts, żeby dało się je testować bez kontekstu Supabase. Oba
+// formaty są czysto javascriptowe (pptxgenjs, docx) zgodnie z zasadą repo
+// „TypeScript first" — zero zależności natywnych, działa w istniejącym
+// runtime funkcji serwerowych.
 //
-// PDF is the only format that needs an embedded font: pdf-lib's built-in
-// StandardFonts are WinAnsi-encoded and throw on the first Polish diacritic,
-// so a subsetted Unicode TTF (producerFonts.server.ts) is embedded via
-// fontkit instead. pptx/docx only reference font names — the viewer supplies
-// the actual glyphs, so they need none of this.
+// Dwa formaty, dwa renderery, zero wspólnego kodu układu — bo prezentacja to
+// płótno ze współrzędnymi, a dokument to płyn, w którym tekst łamie się sam.
+// Wspólne są tylko: opis (./docSpec) i motyw (./docTheme).
+//
+// Oba formaty jedynie REFERENCUJĄ kroje pisma — glify dokłada program, który
+// otwiera plik — więc żaden nie potrzebuje osadzania fontów. Nieistniejąca
+// już ścieżka PDF potrzebowała: wbudowane kroje pdf-liba są w WinAnsi i
+// wywracały się na pierwszym polskim ogonku, więc trzeba było wozić ze sobą
+// podzbiór TTF-a i fontkit. Zniknęła razem z formatem.
 
 import PptxGen from "pptxgenjs";
 import { AlignmentType, Document, HeadingLevel, ImageRun, Packer, Paragraph, TextRun } from "docx";
-// Deliberately the fully-bundled dist, NOT the bare "pdf-lib" entry. The
-// default multi-file es/ build imports bare `tslib` (v1 — no `exports` map,
-// UMD with dynamically-generated exports the SSR bundler's CJS interop can't
-// statically analyze), which crashed in the deployed bundle with "Cannot
-// destructure property '__extends' of '__toESM(...).default'" on every
-// generate_document call — while working fine in local node/vitest. The
-// dist bundle has tslib (and all other deps) inlined, so there's nothing
-// left for any bundler's interop to mangle. Types come from the shim in
-// pdf-lib-esm.d.ts.
-import { PDFDocument, PDFFont, PDFPage, rgb } from "pdf-lib/dist/pdf-lib.esm.js";
-import fontkit from "@pdf-lib/fontkit";
-import { DOC_SANS_BOLD_B64, DOC_SANS_REGULAR_B64 } from "./producerFonts.server";
-import { DEFAULT_GEMINI_IMAGE_MODEL, DEFAULT_GEMINI_MODEL } from "./models";
+import { DEFAULT_GEMINI_MODEL } from "./models";
+import { DOC_COLORS, DOC_FONTS, DECK_SLIDE } from "./docTheme";
+import {
+  blocksOf,
+  MAX_SECTION_IMAGES,
+  type DeckSpec,
+  type DocSpec,
+  type ProducerSpec,
+} from "./docSpec";
 
-export const DOC_FORMATS = ["pptx", "docx", "pdf"] as const;
-export type DocFormat = (typeof DOC_FORMATS)[number];
-
-export type DocSection = {
-  heading: string;
-  content?: string;
-  bullets?: string[];
-  /** Optional English prompt for an AI-generated illustration on this slide/section. */
-  imagePrompt?: string;
-  /** Optional search phrase for a REAL web photo (Openverse) on this section.
-   *  Preferred over imagePrompt when set — real photos don't depend on the
-   *  flaky image model. */
-  imageQuery?: string;
-};
-
-export type DocSpec = {
-  format: DocFormat;
-  title: string;
-  subtitle?: string;
-  filename: string;
-  sections: DocSection[];
-  /** Optional English prompt for the title-slide hero graphic (AI-generated). */
-  heroImagePrompt?: string;
-  /** Optional search phrase for a REAL web photo on the title slide. */
-  heroImageQuery?: string;
-};
-
-export const CONTENT_TYPES: Record<DocFormat, string> = {
-  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  pdf: "application/pdf",
-};
-
-// Caps chosen the same way as the documents pipeline's MAX_CHUNKS cap:
-// generous for any realistic agent-produced document, tight enough that a
-// runaway model can't make the server build a 300-page file inside a
-// server-function execution budget.
-export const MAX_SECTIONS = 24;
-export const MAX_BULLETS_PER_SECTION = 16;
-const MAX_TITLE_CHARS = 200;
-const MAX_TEXT_CHARS = 4000;
-const MAX_BULLET_CHARS = 400;
-
-const clip = (v: unknown, max: number): string =>
-  typeof v === "string" ? v.trim().slice(0, max) : "";
-
-const MAX_IMAGE_PROMPT_CHARS = 600;
-/** Hard cap on generated images per document: 1 hero + up to 4 section shots.
- *  Generation runs in parallel, so the wall-clock cost is one image call,
- *  but each is a paid request on the user's key — don't let a runaway model
- *  order two dozen. */
-export const MAX_SECTION_IMAGES = 4;
-
-// Filename slug: the old path ran the title straight through
-// sanitizeFilename, which turned every Polish diacritic into "_" —
-// live feedback: "Przyszłość" became "Przysz_o__" in the chat link label.
-// Transliterate first (NFD strips combining accents; ł/Ł don't decompose so
-// they're mapped by hand), then slug to lowercase-hyphens.
-export function slugifyFilename(name: string): string {
-  const slug = name
-    .replace(/[łŁ]/g, (c) => (c === "ł" ? "l" : "L"))
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80)
-    .replace(/-+$/g, "");
-  return slug || "dokument";
-}
-
-export type NormalizeResult = { ok: true; spec: DocSpec } | { ok: false; error: string };
-
-/** Validate + coerce raw tool args (model-produced, so trust nothing). */
-export function normalizeDocSpec(args: Record<string, unknown>): NormalizeResult {
-  const format = String(args.format ?? "").toLowerCase() as DocFormat;
-  if (!DOC_FORMATS.includes(format)) {
-    return { ok: false, error: `invalid_format: expected one of ${DOC_FORMATS.join("/")}` };
-  }
-
-  const title = clip(args.title, MAX_TITLE_CHARS);
-  if (!title) return { ok: false, error: "empty_title" };
-
-  const rawSections = Array.isArray(args.sections) ? args.sections : [];
-  const sections: DocSection[] = [];
-  for (const raw of rawSections.slice(0, MAX_SECTIONS)) {
-    if (typeof raw !== "object" || raw === null) continue;
-    const s = raw as Record<string, unknown>;
-    const heading = clip(s.heading, MAX_TITLE_CHARS);
-    const content = clip(s.content, MAX_TEXT_CHARS);
-    const bullets = (Array.isArray(s.bullets) ? s.bullets : [])
-      .map((b) => clip(b, MAX_BULLET_CHARS))
-      .filter(Boolean)
-      .slice(0, MAX_BULLETS_PER_SECTION);
-    if (!heading && !content && bullets.length === 0) continue;
-    const imagePrompt = clip(s.image_prompt ?? s.imagePrompt, MAX_IMAGE_PROMPT_CHARS);
-    const imageQuery = clip(s.image_query ?? s.imageQuery, MAX_IMAGE_PROMPT_CHARS);
-    sections.push({
-      heading: heading || "—",
-      content: content || undefined,
-      bullets,
-      imagePrompt: imagePrompt || undefined,
-      imageQuery: imageQuery || undefined,
-    });
-  }
-  if (sections.length === 0) {
-    return { ok: false, error: "empty_sections: provide at least one section with real content" };
-  }
-
-  const requestedName = clip(args.filename, 120);
-  const base = slugifyFilename((requestedName || title).replace(/\.(pptx|docx|pdf)$/i, ""));
-  const subtitle = clip(args.subtitle, MAX_TITLE_CHARS);
-  const a = args as Record<string, unknown>;
-  const heroImagePrompt = clip(a.hero_image_prompt ?? a.heroImagePrompt, MAX_IMAGE_PROMPT_CHARS);
-  const heroImageQuery = clip(a.hero_image_query ?? a.heroImageQuery, MAX_IMAGE_PROMPT_CHARS);
-
-  return {
-    ok: true,
-    spec: {
-      format,
-      title,
-      subtitle: subtitle || undefined,
-      filename: `${base}.${format}`,
-      sections,
-      heroImagePrompt: heroImagePrompt || undefined,
-      heroImageQuery: heroImageQuery || undefined,
-    },
-  };
-}
-
-/** Does this spec ask for any graphics (AI prompt OR web-photo query)?
- *  Drives the async enrichment flow. */
-export function specHasImagePrompts(spec: DocSpec): boolean {
-  return (
-    !!spec.heroImagePrompt ||
-    !!spec.heroImageQuery ||
-    spec.sections.some((s) => !!s.imagePrompt || !!s.imageQuery)
-  );
-}
+// Typy i walidacja opisu mieszkają w ./docSpec (plik czysty, bez zależności
+// serwerowych — czyta go też podgląd w przeglądarce). Re-eksport zostaje,
+// żeby konsumenci tego modułu nie musieli wiedzieć, że coś się przeprowadziło.
+export * from "./docSpec";
 
 // ---------------------------------------------------------------------------
 // AI slide graphics — Gemini image generation on the user's own key
 // ---------------------------------------------------------------------------
 
-export type DocImage = { bytes: Uint8Array; mime: string };
+export type DocImage = {
+  bytes: Uint8Array;
+  mime: string;
+  /** Adres, spod którego zdjęcie faktycznie przyszło (po przekierowaniach).
+   *  Nie jest ozdobą: to on pozwala podglądowi pokazać TO SAMO zdjęcie, które
+   *  siedzi w pliku, nie trzymając ani jednego dodatkowego bajtu w storage.
+   *  Odkąd wszystkie obrazy pochodzą z sieci, każdy taki adres istnieje. */
+  sourceUrl: string;
+};
 export type DocImages = { hero?: DocImage; sections: Map<number, DocImage> };
-
-// One consistent visual language across every generated deck, so slides read
-// as a designed set rather than random stock art. "No text" is load-bearing:
-// image models render garbled words otherwise.
-const IMAGE_STYLE_PREFIX =
-  "Premium technology presentation illustration, dark navy and cyan color palette, " +
-  "cinematic lighting, sleek modern aesthetic, high detail. Strictly no text, no words, " +
-  "no letters, no captions, no watermarks. ";
-
-// The image model (gemini-2.5-flash-image, preview) is heavily
-// shared-capacity and returns HTTP 503 "high demand" / 500 "internal error"
-// in bursts far more often than the text model — observed live 2026-07-22:
-// five presentation runs in a row all came back with 0 images while the deck
-// itself generated fine. A single shot reliably loses that race, so retry on
-// transient statuses with short backoff. Kept separate from the orchestrator
-// retry (different endpoint, tighter per-attempt timeout) but same idea.
-const IMAGE_RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
-// 3 attempts total. Worst case 3×12s + backoff stays inside the
-// server-function budget (a producer run has been observed at ~41s), while
-// giving three shots at hitting an available window during a 503 burst —
-// each 503 fails fast (<1s), so the retries are cheap unless the model
-// actually hangs.
-const IMAGE_MAX_RETRIES = 2;
-const IMAGE_RETRY_BACKOFF_MS = 500;
-const IMAGE_ATTEMPT_TIMEOUT_MS = 12_000;
-
-async function generateOneImage(
-  prompt: string,
-  apiKey: string,
-  timeoutMs: number,
-): Promise<DocImage | null> {
-  let lastErr: Error | null = null;
-  for (let attempt = 0; attempt <= IMAGE_MAX_RETRIES; attempt++) {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-          DEFAULT_GEMINI_IMAGE_MODEL,
-        )}:generateContent?key=${encodeURIComponent(apiKey)}`,
-        {
-          method: "POST",
-          signal: ctrl.signal,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: IMAGE_STYLE_PREFIX + prompt }] }],
-            generationConfig: {
-              responseModalities: ["IMAGE"],
-              imageConfig: { aspectRatio: "16:9" },
-            },
-          }),
-        },
-      );
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        // Retry transient overload; give up immediately on anything else
-        // (bad request, auth) — retrying won't help there.
-        if (IMAGE_RETRYABLE_STATUS.has(res.status) && attempt < IMAGE_MAX_RETRIES) {
-          lastErr = new Error(`HTTP ${res.status}`);
-          await new Promise((r) => setTimeout(r, IMAGE_RETRY_BACKOFF_MS * (attempt + 1)));
-          continue;
-        }
-        throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
-      }
-      const data = (await res.json()) as {
-        candidates?: Array<{
-          content?: { parts?: Array<{ inlineData?: { mimeType?: string; data?: string } }> };
-        }>;
-      };
-      const inline = (data.candidates?.[0]?.content?.parts ?? []).find((p) =>
-        p.inlineData?.mimeType?.startsWith("image/"),
-      )?.inlineData;
-      if (!inline?.data) return null;
-      return {
-        bytes: Uint8Array.from(atob(inline.data), (c) => c.charCodeAt(0)),
-        mime: inline.mimeType ?? "image/png",
-      };
-    } catch (err) {
-      // AbortError (timeout) is worth one more try too, up to the cap.
-      lastErr = err instanceof Error ? err : new Error(String(err));
-      if (attempt < IMAGE_MAX_RETRIES) {
-        await new Promise((r) => setTimeout(r, IMAGE_RETRY_BACKOFF_MS * (attempt + 1)));
-        continue;
-      }
-      throw lastErr;
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-  throw lastErr ?? new Error("image generation failed");
-}
 
 // ---------------------------------------------------------------------------
 // Real web photos — Openverse (Creative Commons image search, no API key)
@@ -317,7 +99,7 @@ async function fetchWebImage(query: string): Promise<DocImage | null> {
         if (!mime.startsWith("image/")) continue;
         const buf = new Uint8Array(await imgRes.arrayBuffer());
         if (buf.byteLength === 0 || buf.byteLength > MAX_WEB_IMAGE_BYTES) continue;
-        return { bytes: buf, mime: mime.split(";")[0] };
+        return { bytes: buf, mime: mime.split(";")[0], sourceUrl: imgRes.url };
       } catch {
         continue; // try the next candidate
       }
@@ -389,7 +171,7 @@ async function fetchWikipediaImage(query: string): Promise<DocImage | null> {
     if (!mime.startsWith("image/")) return null;
     const buf = new Uint8Array(await imgRes.arrayBuffer());
     if (buf.byteLength === 0 || buf.byteLength > MAX_WEB_IMAGE_BYTES) return null;
-    return { bytes: buf, mime: mime.split(";")[0] };
+    return { bytes: buf, mime: mime.split(";")[0], sourceUrl: imgRes.url };
   } catch {
     return null;
   } finally {
@@ -431,7 +213,7 @@ async function fetchGoogleCseImage(query: string, creds: GoogleCseCreds): Promis
         if (!mime.startsWith("image/")) continue;
         const buf = new Uint8Array(await imgRes.arrayBuffer());
         if (buf.byteLength === 0 || buf.byteLength > MAX_WEB_IMAGE_BYTES) continue;
-        return { bytes: buf, mime: mime.split(";")[0] };
+        return { bytes: buf, mime: mime.split(";")[0], sourceUrl: imgRes.url };
       } catch {
         continue; // try the next candidate
       }
@@ -515,7 +297,7 @@ async function fetchWebSearchOgImage(
         if (!mime.startsWith("image/")) continue;
         const buf = new Uint8Array(await imgRes.arrayBuffer());
         if (buf.byteLength === 0 || buf.byteLength > MAX_WEB_IMAGE_BYTES) continue;
-        return { bytes: buf, mime: mime.split(";")[0] };
+        return { bytes: buf, mime: mime.split(";")[0], sourceUrl: imgRes.url };
       } catch {
         continue; // try the next candidate page
       }
@@ -537,11 +319,16 @@ async function hashImageBytes(bytes: Uint8Array): Promise<string> {
     .join("");
 }
 
-/** Resolve one slide image: a real photo — tried Google CSE (if configured),
- *  Wikipedia, a free whole-web og:image lookup, then Openverse CC, in that
- *  order — if imageQuery was requested, otherwise an AI-generated one
- *  (imagePrompt). Real photos are preferred and don't touch the AI image
- *  model at all.
+/** Znajduje jedno zdjęcie: Google CSE (jeśli skonfigurowane), Wikipedia,
+ *  darmowe wyszukanie og:image w całej sieci, na końcu Openverse CC — w tej
+ *  kolejności.
+ *
+ *  ŚCIEŻKI GENEROWANIA PRZEZ MODEL JUŻ NIE MA. Obraz z modelu graficznego
+ *  bywał rozjeżdżoną atrapą tematu, kosztował płatne żądanie na kluczu
+ *  użytkownika i regularnie wracał jako 503 — a przy tym nie miał adresu
+ *  źródłowego, więc był jedynym powodem, dla którego podgląd nie mógł
+ *  pokazać wszystkich obrazów. Zdjęcia z sieci rozwiązują wszystkie trzy
+ *  rzeczy naraz.
  *
  *  `usedHashes` dedupes ACROSS the whole document: querying different facets
  *  of the same broad subject (e.g. "GTA VI characters" vs "GTA VI gameplay")
@@ -552,7 +339,7 @@ async function hashImageBytes(bytes: Uint8Array): Promise<string> {
  *  it's treated as a miss and the next tier is tried instead, so a repeat
  *  never gets embedded twice. */
 async function resolveOneImage(
-  job: { imageQuery?: string; imagePrompt?: string },
+  job: { imageQuery?: string },
   apiKey: string,
   usedHashes: Set<string>,
   googleCse?: GoogleCseCreds,
@@ -565,7 +352,8 @@ async function resolveOneImage(
     return candidate;
   };
 
-  if (job.imageQuery) {
+  if (!job.imageQuery) return null;
+  {
     if (googleCse) {
       const cse = await claim(await fetchGoogleCseImage(job.imageQuery, googleCse));
       if (cse) return cse;
@@ -576,14 +364,12 @@ async function resolveOneImage(
     if (webPhoto) return webPhoto;
     const photo = await claim(await fetchWebImage(job.imageQuery));
     if (photo) return photo;
-    // Fall back to AI generation only if a prompt was also supplied.
   }
-  if (job.imagePrompt) return generateOneImage(job.imagePrompt, apiKey, IMAGE_ATTEMPT_TIMEOUT_MS);
   return null;
 }
 
-/** Resolve the hero + section images declared in the spec (web photos and/or
- *  AI graphics). Best-effort: any individual failure just means that slide
+/** Znajduje zdjęcie tytułowe i zdjęcia bloków zadeklarowane w opisie.
+ *  Best-effort: any individual failure just means that slide
  *  renders text-only — never fails the whole document. Resolved SEQUENTIALLY
  *  (not in parallel): cross-document deduplication (see resolveOneImage)
  *  needs each job to see what every earlier job already claimed, which a
@@ -591,20 +377,16 @@ async function resolveOneImage(
  *  correctness (no repeated image) matters more than shaving a few seconds
  *  off a background job. */
 export async function generateDocImages(
-  spec: DocSpec,
+  spec: ProducerSpec,
   apiKey: string,
   onWarn?: (message: string) => Promise<void> | void,
   googleCse?: GoogleCseCreds,
 ): Promise<DocImages> {
-  type Job = { key: "hero" | number; imageQuery?: string; imagePrompt?: string };
+  type Job = { key: "hero" | number; imageQuery: string };
   const jobs: Job[] = [];
-  if (spec.heroImageQuery || spec.heroImagePrompt) {
-    jobs.push({ key: "hero", imageQuery: spec.heroImageQuery, imagePrompt: spec.heroImagePrompt });
-  }
-  for (const [i, section] of spec.sections.entries()) {
-    if (section.imageQuery || section.imagePrompt) {
-      jobs.push({ key: i, imageQuery: section.imageQuery, imagePrompt: section.imagePrompt });
-    }
+  if (spec.heroImageQuery) jobs.push({ key: "hero", imageQuery: spec.heroImageQuery });
+  for (const [i, section] of blocksOf(spec).entries()) {
+    if (section.imageQuery) jobs.push({ key: i, imageQuery: section.imageQuery });
   }
   const capped = jobs.slice(0, 1 + MAX_SECTION_IMAGES);
 
@@ -649,17 +431,19 @@ export function pngDims(bytes: Uint8Array): { width: number; height: number } | 
 // pptx — pptxgenjs
 // ---------------------------------------------------------------------------
 
-// Single accent used across all three formats — close to the HUD primary so
-// generated files feel like they came from the same system.
-const ACCENT_HEX = "0891B2"; // cyan-600
-const DARK_HEX = "0F172A"; // slate-900
-const BODY_HEX = "334155"; // slate-700
-const SURFACE_HEX = "F1F5F9"; // slate-100 — matting behind photos, header/footer chrome
-const MUTED_HEX = "94A3B8"; // slate-400 — kicker labels, page numbers
+// Kolory czytane z motywu — ten sam zestaw, z którego korzysta renderer docx
+// i podgląd slajdów w przeglądarce. Tutaj zostają wyłącznie aliasy, żeby
+// współrzędne poniżej dało się czytać bez rozpraszania.
+const { accent: ACCENT_HEX, dark: DARK_HEX, body: BODY_HEX } = DOC_COLORS;
+const { surface: SURFACE_HEX, muted: MUTED_HEX } = DOC_COLORS;
 
-async function buildPptx(spec: DocSpec, images: DocImages): Promise<Uint8Array> {
+async function buildPptx(spec: DeckSpec, images: DocImages): Promise<Uint8Array> {
   const pres = new PptxGen();
-  pres.defineLayout({ name: "WIDE", width: 13.33, height: 7.5 });
+  pres.defineLayout({ name: "WIDE", ...DECK_SLIDE });
+  // Kroje ustawiane raz, na poziomie prezentacji — zamiast powtarzać
+  // `fontFace` przy każdym polu tekstowym i prędzej czy później gdzieś go
+  // zapomnieć.
+  pres.theme = { headFontFace: DOC_FONTS.heading, bodyFontFace: DOC_FONTS.body };
   pres.layout = "WIDE";
 
   // Title slide — dark; with a hero image the right half becomes a
@@ -710,7 +494,7 @@ async function buildPptx(spec: DocSpec, images: DocImages): Promise<Uint8Array> 
   }
   // Cover metadata line (section count) — the kind of small, quiet detail
   // that makes a report cover read as designed rather than a bare title.
-  title.addText(`${spec.sections.length} SEKCJI`, {
+  title.addText(`${spec.slides.length} SLAJDÓW`, {
     x: 0.85,
     y: 6.85,
     w: 4,
@@ -720,8 +504,8 @@ async function buildPptx(spec: DocSpec, images: DocImages): Promise<Uint8Array> 
     charSpacing: 2,
   });
 
-  const totalSlides = spec.sections.length + 1; // +1 for the title slide itself
-  for (const [i, section] of spec.sections.entries()) {
+  const totalSlides = spec.slides.length + 1; // +1 na sam slajd tytułowy
+  for (const [i, section] of spec.slides.entries()) {
     const slide = pres.addSlide();
     slide.background = { color: "FFFFFF" };
     slide.addShape("rect", { x: 0, y: 0, w: 0.18, h: 7.5, fill: { color: ACCENT_HEX } });
@@ -940,6 +724,17 @@ async function buildDocx(spec: DocSpec, images: DocImages): Promise<Uint8Array> 
   const doc = new Document({
     creator: "J.A.R.V.I.S. F.O.R.G.E.",
     title: spec.title,
+    // Kroje z motywu, ustawione na stylu domyślnym — dokument ma czytać się
+    // jak plik z tego samego systemu co prezentacja, a nie jak Calibri
+    // z pustego szablonu Worda.
+    styles: {
+      default: {
+        document: { run: { font: DOC_FONTS.body, color: DOC_COLORS.body } },
+        title: { run: { font: DOC_FONTS.heading, color: DOC_COLORS.dark } },
+        heading1: { run: { font: DOC_FONTS.heading, color: DOC_COLORS.dark } },
+        heading2: { run: { font: DOC_FONTS.heading, color: DOC_COLORS.dark } },
+      },
+    },
     sections: [{ children }],
   });
   // toArrayBuffer, not toBuffer — the deployed server runtime is not
@@ -949,133 +744,9 @@ async function buildDocx(spec: DocSpec, images: DocImages): Promise<Uint8Array> 
   return new Uint8Array(buffer);
 }
 
-// ---------------------------------------------------------------------------
-// pdf — pdf-lib + embedded Unicode font
-// ---------------------------------------------------------------------------
-
-/** Word-wrap `text` to `maxWidth` points at `size`. Exported for tests. */
-export function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
-  const lines: string[] = [];
-  for (const rawLine of text.split("\n")) {
-    const words = rawLine.split(/\s+/).filter(Boolean);
-    if (words.length === 0) {
-      lines.push("");
-      continue;
-    }
-    let line = "";
-    for (const word of words) {
-      const candidate = line ? `${line} ${word}` : word;
-      if (line && font.widthOfTextAtSize(candidate, size) > maxWidth) {
-        lines.push(line);
-        line = word;
-      } else {
-        line = candidate;
-      }
-    }
-    if (line) lines.push(line);
-  }
-  return lines;
-}
-
-const A4: [number, number] = [595.28, 841.89];
-const PDF_MARGIN = 56;
-
-async function buildPdf(spec: DocSpec, images: DocImages): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-  doc.registerFontkit(fontkit);
-  doc.setTitle(spec.title);
-  doc.setProducer("J.A.R.V.I.S. F.O.R.G.E.");
-  const regular = await doc.embedFont(
-    Uint8Array.from(atob(DOC_SANS_REGULAR_B64), (c) => c.charCodeAt(0)),
-    { subset: true },
-  );
-  const bold = await doc.embedFont(
-    Uint8Array.from(atob(DOC_SANS_BOLD_B64), (c) => c.charCodeAt(0)),
-    { subset: true },
-  );
-
-  const accent = rgb(0x08 / 255, 0x91 / 255, 0xb2 / 255);
-  const dark = rgb(0x0f / 255, 0x17 / 255, 0x2a / 255);
-  const body = rgb(0x33 / 255, 0x41 / 255, 0x55 / 255);
-  const maxWidth = A4[0] - 2 * PDF_MARGIN;
-
-  let page: PDFPage = doc.addPage(A4);
-  let y = A4[1] - PDF_MARGIN;
-
-  const ensureRoom = (needed: number) => {
-    if (y - needed < PDF_MARGIN) {
-      page = doc.addPage(A4);
-      y = A4[1] - PDF_MARGIN;
-    }
-  };
-
-  const drawWrapped = (
-    text: string,
-    font: PDFFont,
-    size: number,
-    color: ReturnType<typeof rgb>,
-    indent = 0,
-    gapAfter = 6,
-  ) => {
-    const lineHeight = size * 1.35;
-    for (const line of wrapText(text, font, size, maxWidth - indent)) {
-      ensureRoom(lineHeight);
-      page.drawText(line, { x: PDF_MARGIN + indent, y: y - size, size, font, color });
-      y -= lineHeight;
-    }
-    y -= gapAfter;
-  };
-
-  // Title block with accent rule.
-  drawWrapped(spec.title, bold, 26, dark, 0, 4);
-  if (spec.subtitle) drawWrapped(spec.subtitle, regular, 13, body, 0, 4);
-  ensureRoom(14);
-  page.drawRectangle({ x: PDF_MARGIN, y: y - 3, width: 64, height: 3, color: accent });
-  y -= 24;
-
-  if (images.hero) {
-    // Full-width hero banner under the title rule; pdf-lib reports real
-    // image dimensions, so the aspect ratio is always preserved.
-    try {
-      const img =
-        images.hero.mime === "image/jpeg"
-          ? await doc.embedJpg(images.hero.bytes)
-          : await doc.embedPng(images.hero.bytes);
-      const height = Math.min((maxWidth * img.height) / img.width, 300);
-      const width = (height * img.width) / img.height;
-      ensureRoom(height + 12);
-      page.drawImage(img, { x: PDF_MARGIN, y: y - height, width, height });
-      y -= height + 18;
-    } catch {
-      // Unsupported/corrupt image — the document is still worth producing.
-    }
-  }
-
-  for (const section of spec.sections) {
-    ensureRoom(60); // keep a heading from landing alone at the page bottom
-    drawWrapped(section.heading, bold, 16, dark, 0, 4);
-    if (section.content) drawWrapped(section.content, regular, 11.5, body, 0, 6);
-    for (const bullet of section.bullets ?? []) {
-      drawWrapped(`•  ${bullet}`, regular, 11.5, body, 10, 2);
-    }
-    y -= 10;
-  }
-
-  return doc.save();
-}
-
-// ---------------------------------------------------------------------------
-
 export async function buildDocument(
-  spec: DocSpec,
+  spec: ProducerSpec,
   images: DocImages = NO_IMAGES,
 ): Promise<Uint8Array> {
-  switch (spec.format) {
-    case "pptx":
-      return buildPptx(spec, images);
-    case "docx":
-      return buildDocx(spec, images);
-    case "pdf":
-      return buildPdf(spec, images);
-  }
+  return spec.format === "pptx" ? buildPptx(spec, images) : buildDocx(spec, images);
 }
