@@ -2346,6 +2346,12 @@ const openDocumentTool: Tool = {
 // szukał w sieci, mając obok gotowy typer liczony na notowaniach użytkownika.
 // To nie było ograniczenie rozpoznawania mowy, tylko brak narzędzia.
 
+/** Ile instrumentów najwyżej wraca do modelu i ile przesłanek przy każdym.
+ *  Limity są po to, żeby odpowiedź narzędzia dało się przeczytać i streścić,
+ *  a nie żeby oszczędzać bajty. */
+const MAX_INSTRUMENTS_IN_REPLY = 6;
+const MAX_DRIVERS_IN_REPLY = 3;
+
 const marketOutlookTool: Tool = {
   declaration: {
     name: "market_outlook",
@@ -2389,7 +2395,13 @@ const marketOutlookTool: Tool = {
         )
       : rows;
 
-    const picked = matched.length > 0 ? matched : rows;
+    // ROZMIAR WYNIKU MA ZNACZENIE. Pierwsza wersja oddawała całą watchlistę
+    // z pełnym kompletem przesłanek — dla ośmiu instrumentów to ściana JSON-a,
+    // po której model potrafił nie napisać już nic (zaobserwowane na żywo:
+    // przebieg kończył się bez ani jednego znaku odpowiedzi). Pytanie brzmi
+    // „czy Bitcoin urośnie", a nie „opowiedz o wszystkim" — więc gdy pada
+    // konkretny instrument, oddajemy JEGO, a nie dwadzieścia innych.
+    const picked = (matched.length > 0 ? matched : rows).slice(0, MAX_INSTRUMENTS_IN_REPLY);
     return {
       horizon_days: HORIZON_DAYS,
       matched_query: wanted || null,
@@ -2408,7 +2420,9 @@ const marketOutlookTool: Tool = {
         technical_score: r.technicalScore,
         sentiment_score: r.sentimentScore,
         news_items: r.sentimentItems,
-        drivers: r.drivers.map((d) => d.note),
+        // Trzy najmocniejsze przesłanki wystarczą do uzasadnienia werdyktu;
+        // pełna lista to głównie powtórzenia tej samej myśli innymi słowami.
+        drivers: r.drivers.slice(0, MAX_DRIVERS_IN_REPLY).map((d) => d.note),
       })),
     };
   },
