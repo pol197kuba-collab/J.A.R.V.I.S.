@@ -7,3 +7,22 @@ package-lock.json
 bun.lock
 routeTree.gen.ts
 src/lib/agents/producerFonts.server.ts
+
+# Pliki PRZEPISYWANE PRZEZ NARZĘDZIA, nie pisane ręcznie.
+#
+# Powód jest konkretny i sprawdzony: `vite build` (plugin Lovable) zwija
+# pliki tras MCP przy KAŻDYM przebiegu, a edycje w Lovable regenerują
+# types.ts i previewAuthStorage.ts we własnym formatowaniu. Efekt — każdy
+# build i każda edycja w edytorze zostawiały repo w stanie, który lint
+# odrzucał: jeden commit z Lovable dał 1327 błędów formatowania i wywrócił
+# CI na main (2026-09-21).
+#
+# Formatowanie pliku, którego nikt nie pisze ręcznie, niczego nie chroni —
+# a bramka, która pada od cudzego narzędzia, przestaje cokolwiek znaczyć.
+# Ta sama zasada, co dla routeTree.gen.ts wyżej.
+src/integrations/supabase/types.ts
+src/integrations/supabase/previewAuthStorage.ts
+src/routes/mcp.ts
+src/routes/**/list-tools.ts
+src/routes/**/invoke-tool/*.ts
+src/routes/**/oauth-protected-resource.ts
