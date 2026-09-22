@@ -28,6 +28,7 @@ import { onChat } from "@/lib/ai/chatBus";
 import { useAgentChatChannel } from "@/lib/ai/useAgentChatChannel";
 import { useSingleVoiceCommand } from "./useSingleVoiceCommand";
 import { useVoiceCommands } from "./VoiceCommandContext";
+import { useIsScrolling } from "./useIsScrolling";
 
 type Phase = "idle" | "listening" | "thinking" | "reply" | "nothing-heard";
 
@@ -142,6 +143,17 @@ export function GlobalVoiceCommand() {
   const cardVisible = phase !== "idle";
   const busy = phase === "listening" || phase === "thinking";
 
+  // While the page is being scrolled the button tucks toward its corner so
+  // it stops covering whatever is underneath, then comes back once
+  // scrolling settles — it is never hidden, only smaller and dimmer.
+  //
+  // Only in "idle" though: receding mid-capture would shrink the control
+  // the user is talking to, and while a card is up the user is most likely
+  // scrolling in order to read around it, which is exactly when the anchor
+  // needs to stay put.
+  const scrolling = useIsScrolling();
+  const recede = scrolling && phase === "idle";
+
   return (
     <div className="pointer-events-none relative flex flex-col items-end">
       {/* Karta jest ABSOLUTNA, nie kolejnym elementem kolumny. Przycisk
@@ -231,10 +243,17 @@ export function GlobalVoiceCommand() {
               : "Powiedz komendę"
         }
         className={cn(
-          "pointer-events-auto relative flex h-14 w-14 items-center justify-center rounded-full border-2 transition-all",
+          "pointer-events-auto relative flex h-14 w-14 items-center justify-center rounded-full border-2",
+          "transition-all duration-300 ease-out",
           "border-primary/60 bg-card/90 text-primary shadow-[var(--glow-primary)] backdrop-blur",
-          "hover:scale-105 hover:bg-primary/10 active:scale-95",
+          // Shrink toward the corner it lives in, so it tucks away rather
+          // than drifting. Hover is generated after this in Tailwind's
+          // cascade, so pointing at a receded button restores it.
+          "origin-bottom-right",
+          "hover:scale-105 hover:opacity-100 hover:bg-primary/10 active:scale-95",
           "disabled:opacity-60 disabled:hover:scale-100",
+          // Reduced-motion users get the dimming but not the resize.
+          recede && "scale-[0.62] opacity-45 motion-reduce:scale-100 motion-reduce:opacity-70",
           phase === "listening" && "border-primary bg-primary/20",
         )}
       >
