@@ -25,11 +25,11 @@ import { MarketOverlayPanel } from "@/components/jarvis/fuel/MarketOverlayPanel"
 import { ForecastPanel } from "@/components/jarvis/fuel/ForecastPanel";
 import { ChangeHeatmap } from "@/components/jarvis/fuel/ChangeHeatmap";
 import { FuelNewsPanel } from "@/components/jarvis/fuel/FuelNewsPanel";
-import { FuelAlertsPanel } from "@/components/jarvis/fuel/FuelAlertsPanel";
-import { DEFAULT_PRODUCT_ID } from "@/lib/fuel/orlen";
+import { StandingOrdersPanel } from "@/components/jarvis/orders/StandingOrdersPanel";
+import { DEFAULT_PRODUCT_ID, productById } from "@/lib/fuel/orlen";
+import { listStandingOrders } from "@/lib/orders/orders.functions";
 import {
   backfillFuelHistory,
-  getFuelAlerts,
   getFuelForecast,
   getFuelGrid,
   getFuelNews,
@@ -58,6 +58,9 @@ const RANGES = [
   { value: 8000, label: "MAX" },
 ] as const;
 
+/** Wspólny klucz: panel unieważnia dokładnie to zapytanie po każdej zmianie. */
+const ORDERS_QUERY_KEY = ["orders", "fuel"] as const;
+
 const MODES: ReadonlyArray<{ value: ChartMode; label: string }> = [
   { value: "pln", label: "PLN/m³" },
   { value: "index", label: "Indeks 100" },
@@ -69,7 +72,7 @@ function FuelPage() {
   const fetchOverlay = useServerFn(getMarketOverlay);
   const fetchForecast = useServerFn(getFuelForecast);
   const fetchNews = useServerFn(getFuelNews);
-  const fetchAlerts = useServerFn(getFuelAlerts);
+  const fetchOrders = useServerFn(listStandingOrders);
   const runBackfill = useServerFn(backfillFuelHistory);
   const qc = useQueryClient();
 
@@ -107,9 +110,9 @@ function FuelPage() {
     refetchInterval: 10 * 60_000,
   });
 
-  const alertsQuery = useQuery({
-    queryKey: ["fuel", "alerts"],
-    queryFn: () => fetchAlerts({}),
+  const ordersQuery = useQuery({
+    queryKey: ORDERS_QUERY_KEY,
+    queryFn: () => fetchOrders({ data: { subjectKind: "fuel" } }),
     refetchInterval: 5 * 60_000,
   });
 
@@ -134,6 +137,21 @@ function FuelPage() {
   // useMemo przeliczałyby się bez powodu — stąd własne memo na samą serię.
   const series = useMemo(() => gridQuery.data?.series ?? [], [gridQuery.data]);
   const writeMode = gridQuery.data?.writeMode ?? null;
+
+  // Serie w kształcie, którego oczekuje ewaluator rozkazów — po kodzie
+  // produktu, bo tak rozkaz nazywa swój przedmiot. Dni uzupełnione
+  // odpadają: doklejona cena nie jest notowaniem i „zmiana dzienna"
+  // policzona z niej albo wynosi zero, albo dubluje piątkowy ruch.
+  const orderSeries = useMemo(
+    () =>
+      Object.fromEntries(
+        series.map((s) => [
+          s.code,
+          s.points.filter((p) => !p.isGapFill).map((p) => ({ date: p.date, value: p.price })),
+        ]),
+      ),
+    [series],
+  );
   const selected = useMemo(
     () => series.find((s) => s.productId === selectedId),
     [series, selectedId],
@@ -276,11 +294,13 @@ function FuelPage() {
           <FuelNewsPanel items={newsQuery.data ?? []} />
         </HudPanel>
 
-        <HudPanel index={7} title="ALERTY // PROGI" tone="quiet">
-          <FuelAlertsPanel
-            alerts={alertsQuery.data ?? []}
-            series={series}
-            defaultProductId={selectedId}
+        <HudPanel index={7} title="ROZKAZY // PROGI" tone="quiet">
+          <StandingOrdersPanel
+            subjectKind="fuel"
+            orders={ordersQuery.data ?? []}
+            seriesBySubject={orderSeries}
+            defaultSubject={productById(selectedId)?.code}
+            queryKey={ORDERS_QUERY_KEY}
           />
         </HudPanel>
       </div>

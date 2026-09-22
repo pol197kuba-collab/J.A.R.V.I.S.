@@ -23,6 +23,7 @@ import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { DEFAULT_GEMINI_MODEL } from "@/lib/agents/models";
 import { enrichGeneratedFileImages } from "@/lib/documents/generated.functions";
 import { logServerError, logServerWarn } from "@/lib/system/logServerError";
+import { notifyOwner } from "@/lib/notifications/notify.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import type { AgentRunResult } from "./runtime.functions";
@@ -77,12 +78,12 @@ async function failJob(
       finished_at: new Date().toISOString(),
     })
     .eq("id", jobId);
-  await supabase.from("notifications").insert({
-    owner_id: userId,
+  await notifyOwner(supabase, userId, {
     kind: "document_failed",
     title: `Nie udało się: ${title}`,
     body: reason.slice(0, 500),
     payload: { job_id: jobId } as Json,
+    url: "/documents",
   });
 }
 
@@ -350,8 +351,7 @@ export const runDocumentJobFn = createServerFn({ method: "POST" })
         .eq("id", job.id);
 
       const hasWarnings = warnings.length > 0;
-      await supabase.from("notifications").insert({
-        owner_id: userId,
+      await notifyOwner(supabase, userId, {
         kind: hasWarnings ? "document_ready_with_warnings" : "document_ready",
         title: hasWarnings ? `Gotowe (ze zastrzeżeniami): ${job.title}` : job.title,
         body: hasWarnings
@@ -363,6 +363,7 @@ export const runDocumentJobFn = createServerFn({ method: "POST" })
           download_url: attachment.url,
           warnings,
         } as Json,
+        url: "/documents",
       });
 
       return { ok: true };

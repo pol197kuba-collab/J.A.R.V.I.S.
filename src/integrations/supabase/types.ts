@@ -1114,6 +1114,45 @@ export type Database = {
         };
         Relationships: [];
       };
+      push_subscriptions: {
+        Row: {
+          auth: string;
+          created_at: string;
+          endpoint: string;
+          failure_count: number;
+          id: string;
+          last_success_at: string | null;
+          owner_id: string;
+          p256dh: string;
+          updated_at: string;
+          user_agent: string | null;
+        };
+        Insert: {
+          auth: string;
+          created_at?: string;
+          endpoint: string;
+          failure_count?: number;
+          id?: string;
+          last_success_at?: string | null;
+          owner_id: string;
+          p256dh: string;
+          updated_at?: string;
+          user_agent?: string | null;
+        };
+        Update: {
+          auth?: string;
+          created_at?: string;
+          endpoint?: string;
+          failure_count?: number;
+          id?: string;
+          last_success_at?: string | null;
+          owner_id?: string;
+          p256dh?: string;
+          updated_at?: string;
+          user_agent?: string | null;
+        };
+        Relationships: [];
+      };
       profiles: {
         Row: {
           avatar_url: string | null;
@@ -1174,6 +1213,60 @@ export type Database = {
           repo_owner?: string | null;
           status?: string;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      standing_orders: {
+        Row: {
+          condition: string;
+          cooldown_hours: number;
+          created_at: string;
+          expires_at: string | null;
+          id: string;
+          is_enabled: boolean;
+          last_triggered_at: string | null;
+          owner_id: string;
+          phrase: string | null;
+          subject: string;
+          subject_kind: string;
+          threshold: number;
+          trigger_count: number;
+          updated_at: string;
+          window_days: number;
+        };
+        Insert: {
+          condition: string;
+          cooldown_hours?: number;
+          created_at?: string;
+          expires_at?: string | null;
+          id?: string;
+          is_enabled?: boolean;
+          last_triggered_at?: string | null;
+          owner_id: string;
+          phrase?: string | null;
+          subject: string;
+          subject_kind: string;
+          threshold: number;
+          trigger_count?: number;
+          updated_at?: string;
+          window_days?: number;
+        };
+        Update: {
+          condition?: string;
+          cooldown_hours?: number;
+          created_at?: string;
+          expires_at?: string | null;
+          id?: string;
+          is_enabled?: boolean;
+          last_triggered_at?: string | null;
+          owner_id?: string;
+          phrase?: string | null;
+          subject?: string;
+          subject_kind?: string;
+          threshold?: number;
+          trigger_count?: number;
+          updated_at?: string;
+          window_days?: number;
         };
         Relationships: [];
       };
@@ -1344,6 +1437,9 @@ export type Database = {
           groq_api_key: string | null;
           owner_id: string;
           updated_at: string;
+          vapid_private_key: string | null;
+          vapid_public_key: string | null;
+          vapid_subject: string | null;
         };
         Insert: {
           anthropic_api_key?: string | null;
@@ -1355,6 +1451,9 @@ export type Database = {
           groq_api_key?: string | null;
           owner_id: string;
           updated_at?: string;
+          vapid_private_key?: string | null;
+          vapid_public_key?: string | null;
+          vapid_subject?: string | null;
         };
         Update: {
           anthropic_api_key?: string | null;
@@ -1366,6 +1465,9 @@ export type Database = {
           groq_api_key?: string | null;
           owner_id?: string;
           updated_at?: string;
+          vapid_private_key?: string | null;
+          vapid_public_key?: string | null;
+          vapid_subject?: string | null;
         };
         Relationships: [];
       };

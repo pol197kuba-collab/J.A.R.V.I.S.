@@ -50,6 +50,23 @@ paneli zewnętrznych. Trzymane tutaj, żeby nie zginęły między sesjami.
       blokowany z IP hostingu, więc wykres WIG20 zostaje jednym punktem.
       ETF ma pełną historię w obu źródłach (szczegóły w `assets.ts`).
 
+- [ ] **Wgrać trzy migracje stałych rozkazów w edytorze SQL Lovable**
+      (kolejno: `20260922100000_standing_orders.sql`,
+      `20260922110000_standing_order_agent_tools.sql`,
+      `20260922120000_push_subscriptions.sql`). Bez pierwszej panel
+      „ROZKAZY // PROGI" w /rynki i /paliwa nie ma gdzie zapisywać, bez
+      drugiej J.A.R.V.I.S. nie zobaczy narzędzi (runtime pyta bazę, nie
+      kod), bez trzeciej nie ma gdzie trzymać subskrypcji urządzeń.
+      Pierwsza przenosi przy okazji istniejące progi paliwowe — stara
+      tabela `fuel_price_alerts` zostaje nietknięta.
+
+- [ ] **Włączyć powiadomienia na telefonie** (Ustawienia → POWIADOMIENIA //
+      URZĄDZENIA, przycisk „włącz na tym urządzeniu"). Zgoda jest wydawana
+      osobno w każdej przeglądarce, więc laptop i telefon trzeba włączyć
+      oddzielnie. Na iPhonie Web Push działa WYŁĄCZNIE po dodaniu
+      aplikacji do ekranu początkowego — samo Safari nie wystarczy.
+      Klucze VAPID generują się same przy pierwszym włączeniu.
+
 - [ ] **Kierunek docelowy: własna, niezależna instancja Supabase.** Stan na
       2026-09-21: buildy nie idą już przez Lovable — Lovable służy wyłącznie
       jako edytor SQL do bazy oraz jako hosting aplikacji. Docelowo baza ma

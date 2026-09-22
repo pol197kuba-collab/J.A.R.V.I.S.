@@ -79,15 +79,6 @@ export type FuelNewsItem = {
   classifiedBy: string | null;
 };
 
-export type FuelAlert = {
-  id: string;
-  productId: number;
-  kind: "daily_change_abs" | "level_above" | "level_below";
-  threshold: number;
-  isEnabled: boolean;
-  lastTriggeredAt: string | null;
-};
-
 // -------------------------------------------------- strażnik świeżości ----
 
 // Orlen publikuje cennik raz dziennie, więc odpytywanie go częściej niż co
@@ -493,73 +484,4 @@ export const getFuelNews = createServerFn({ method: "GET" })
       summaryPl: r.summary_pl,
       classifiedBy: r.classified_by,
     }));
-  });
-
-// ------------------------------------------------------------ alerty ----
-
-export const getFuelAlerts = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }): Promise<FuelAlert[]> => {
-    const { data } = await context.supabase
-      .from("fuel_price_alerts")
-      .select("id, product_id, kind, threshold, is_enabled, last_triggered_at")
-      .eq("owner_id", context.userId)
-      .order("product_id", { ascending: true });
-
-    return (data ?? []).map((r) => ({
-      id: r.id,
-      productId: r.product_id,
-      kind: r.kind as FuelAlert["kind"],
-      threshold: Number(r.threshold),
-      isEnabled: r.is_enabled,
-      lastTriggeredAt: r.last_triggered_at,
-    }));
-  });
-
-const SaveAlertInput = z.object({
-  productId: z
-    .number()
-    .int()
-    .refine((id) => productById(id) !== undefined, "unknown product"),
-  kind: z.enum(["daily_change_abs", "level_above", "level_below"]),
-  threshold: z.number().positive().max(99_999),
-  isEnabled: z.boolean().optional().default(true),
-});
-
-export const saveFuelAlert = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => SaveAlertInput.parse(input))
-  .handler(async ({ data, context }): Promise<{ id: string }> => {
-    const { data: row, error } = await context.supabase
-      .from("fuel_price_alerts")
-      .upsert(
-        {
-          owner_id: context.userId,
-          product_id: data.productId,
-          kind: data.kind,
-          threshold: data.threshold,
-          is_enabled: data.isEnabled,
-        },
-        { onConflict: "owner_id,product_id,kind" },
-      )
-      .select("id")
-      .single();
-
-    if (error) throw new Error(error.message);
-    return { id: row.id };
-  });
-
-const DeleteAlertInput = z.object({ id: z.string().uuid() });
-
-export const deleteFuelAlert = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => DeleteAlertInput.parse(input))
-  .handler(async ({ data, context }): Promise<{ ok: true }> => {
-    const { error } = await context.supabase
-      .from("fuel_price_alerts")
-      .delete()
-      .eq("id", data.id)
-      .eq("owner_id", context.userId);
-    if (error) throw new Error(error.message);
-    return { ok: true };
   });

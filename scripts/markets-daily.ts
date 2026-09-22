@@ -32,6 +32,7 @@ import {
   resolveDuePredictions,
   type Db,
 } from "../src/lib/markets/ingest.server";
+import { evaluateStandingOrders } from "../src/lib/orders/evaluate.server";
 
 const args = new Set(process.argv.slice(2));
 const DRY_RUN = args.has("--dry-run");
@@ -217,6 +218,21 @@ async function main(): Promise<void> {
     notice(`rozliczenie: ${resolved} prognoz zamkniętych`);
   } catch (err) {
     await report("rozliczenie", err instanceof Error ? err.message : String(err));
+  }
+
+  // ---------- 5. Stałe rozkazy ----------
+  // Na samym końcu, bo rozkaz ma być oceniany przeciwko notowaniom
+  // zaciągniętym przed chwilą, a nie przeciwko wczorajszemu stanowi bazy.
+  // Ten sam ewaluator obsługuje progi paliwowe w scripts/orlen-daily.ts.
+  try {
+    const orders = await evaluateStandingOrders(db, "market");
+    for (const message of orders.errors) await report("rozkazy", message);
+    notice(
+      `rozkazy: ${orders.triggered} z ${orders.checked} wyzwolonych` +
+        (orders.skipped > 0 ? `, ${orders.skipped} bez notowań` : ""),
+    );
+  } catch (err) {
+    await report("rozkazy", err instanceof Error ? err.message : String(err));
   }
 
   if (failures.length > 0) {
