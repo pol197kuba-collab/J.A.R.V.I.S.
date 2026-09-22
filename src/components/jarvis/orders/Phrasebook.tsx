@@ -85,6 +85,20 @@ const GROUPS: Group[] = [
     ],
   },
   {
+    title: "Briefing",
+    intro:
+      "Poranna rubryka składa się sama o 7:45 z tego, co zapisały nocne joby. Tu się ją przywołuje.",
+    phrases: [
+      { text: "Streść mi dzień" },
+      { text: "Co nowego?" },
+      { text: "Przeczytaj briefing" },
+      {
+        text: "Co się wczoraj popsuło?",
+        note: "Awarie z ostatniej doby są osobną sekcją rubryki.",
+      },
+    ],
+  },
+  {
     title: "Prognozy",
     intro:
       "Odpowiedź z własnego typera, policzonego na Twoich notowaniach — nie z ogólnej wiedzy modelu.",

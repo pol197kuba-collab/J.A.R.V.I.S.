@@ -67,6 +67,11 @@ paneli zewnętrznych. Trzymane tutaj, żeby nie zginęły między sesjami.
       aplikacji do ekranu początkowego — samo Safari nie wystarczy.
       Klucze VAPID generują się same przy pierwszym włączeniu.
 
+- [ ] **Wgrać dwie migracje porannego briefingu** (`20260923090000_daily_briefs.sql`,
+      `20260923100000_daily_brief_agent_tool.sql`). Bez pierwszej nocny job
+      nie ma gdzie zapisać rubryki, bez drugiej J.A.R.V.I.S. nie odczyta jej
+      na pytanie „streść mi dzień" — runtime pyta bazę, nie kod.
+
 - [ ] **Kierunek docelowy: własna, niezależna instancja Supabase.** Stan na
       2026-09-21: buildy nie idą już przez Lovable — Lovable służy wyłącznie
       jako edytor SQL do bazy oraz jako hosting aplikacji. Docelowo baza ma

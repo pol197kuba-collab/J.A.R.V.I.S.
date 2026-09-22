@@ -221,6 +221,45 @@ export type Database = {
           },
         ];
       };
+      daily_briefs: {
+        Row: {
+          brief_date: string;
+          created_at: string;
+          facts: Json;
+          generated_by: string;
+          greeting: string;
+          id: string;
+          owner_id: string;
+          sections: Json;
+          spoken: string;
+          updated_at: string;
+        };
+        Insert: {
+          brief_date: string;
+          created_at?: string;
+          facts?: Json;
+          generated_by?: string;
+          greeting: string;
+          id?: string;
+          owner_id: string;
+          sections?: Json;
+          spoken: string;
+          updated_at?: string;
+        };
+        Update: {
+          brief_date?: string;
+          created_at?: string;
+          facts?: Json;
+          generated_by?: string;
+          greeting?: string;
+          id?: string;
+          owner_id?: string;
+          sections?: Json;
+          spoken?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       dev_sessions: {
         Row: {
           created_at: string;
