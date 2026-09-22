@@ -108,7 +108,17 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
           <MobileBottomNav showVoice={!onJarvisModule} />
         ) : (
           !onJarvisModule && (
-            <div className="absolute right-6 bottom-6 z-40">
+            // `fixed`, not `absolute`. The offset parent here is the shell
+            // column, whose `min-h-screen` is a MINIMUM, not a definite
+            // height — so <main>'s `flex-1 min-h-0` has nothing to resolve
+            // against, <main> grows to its content and the column grows with
+            // it. `bottom-6` then meant "6 below the bottom of the module",
+            // which on a long route put the mic hundreds of pixels under the
+            // fold, reachable only by scrolling to the very end of the page.
+            // Pinning to the viewport also covers both scroll models: the
+            // document scrolls on desktop, <main> scrolls where the root has
+            // a definite height (portrait / short / landscape:max-md).
+            <div className="fixed right-6 bottom-6 z-40">
               <GlobalVoiceCommand />
             </div>
           )
