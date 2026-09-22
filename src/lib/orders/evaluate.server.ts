@@ -153,6 +153,12 @@ export async function evaluateStandingOrders(
       kind: "standing_order",
       title,
       body,
+      // Kliknięcie w powiadomienie na telefonie ma otworzyć moduł, którego
+      // rozkaz dotyczy, a nie stronę główną.
+      url: order.subjectKind === "market" ? "/rynki" : "/paliwa",
+      // Znacznik per rozkaz: drugi meldunek z tego samego rozkazu zastępuje
+      // poprzedni na ekranie, zamiast budować stos identycznych wpisów.
+      tag: `order-${order.id}`,
       payload: {
         order_id: order.id,
         subject_kind: order.subjectKind,

@@ -1114,6 +1114,45 @@ export type Database = {
         };
         Relationships: [];
       };
+      push_subscriptions: {
+        Row: {
+          auth: string;
+          created_at: string;
+          endpoint: string;
+          failure_count: number;
+          id: string;
+          last_success_at: string | null;
+          owner_id: string;
+          p256dh: string;
+          updated_at: string;
+          user_agent: string | null;
+        };
+        Insert: {
+          auth: string;
+          created_at?: string;
+          endpoint: string;
+          failure_count?: number;
+          id?: string;
+          last_success_at?: string | null;
+          owner_id: string;
+          p256dh: string;
+          updated_at?: string;
+          user_agent?: string | null;
+        };
+        Update: {
+          auth?: string;
+          created_at?: string;
+          endpoint?: string;
+          failure_count?: number;
+          id?: string;
+          last_success_at?: string | null;
+          owner_id?: string;
+          p256dh?: string;
+          updated_at?: string;
+          user_agent?: string | null;
+        };
+        Relationships: [];
+      };
       profiles: {
         Row: {
           avatar_url: string | null;
@@ -1398,6 +1437,9 @@ export type Database = {
           groq_api_key: string | null;
           owner_id: string;
           updated_at: string;
+          vapid_private_key: string | null;
+          vapid_public_key: string | null;
+          vapid_subject: string | null;
         };
         Insert: {
           anthropic_api_key?: string | null;
@@ -1409,6 +1451,9 @@ export type Database = {
           groq_api_key?: string | null;
           owner_id: string;
           updated_at?: string;
+          vapid_private_key?: string | null;
+          vapid_public_key?: string | null;
+          vapid_subject?: string | null;
         };
         Update: {
           anthropic_api_key?: string | null;
@@ -1420,6 +1465,9 @@ export type Database = {
           groq_api_key?: string | null;
           owner_id?: string;
           updated_at?: string;
+          vapid_private_key?: string | null;
+          vapid_public_key?: string | null;
+          vapid_subject?: string | null;
         };
         Relationships: [];
       };

@@ -9,6 +9,7 @@
 // tak samo. Stąd ta funkcja: wołający mówi CO zameldować, a nie JAK.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
+import { sendPushToOwner, type PushResult } from "./push.server";
 
 type Db = SupabaseClient<Database>;
 
@@ -18,12 +19,18 @@ export type NotifyInput = {
   title: string;
   body?: string | null;
   payload?: Json;
+  /** Dokąd zabrać użytkownika po kliknięciu w powiadomienie na telefonie. */
+  url?: string;
+  /** Znacznik zastępowania na ekranie urządzenia; domyślnie rodzaj meldunku. */
+  tag?: string;
 };
 
 export type NotifyResult = {
   /** Identyfikator zapisanego wiersza; null, gdy zapis się nie powiódł. */
   id: string | null;
   error: string | null;
+  /** Co się stało z powiadomieniem na urządzenia; null, gdy nie próbowano. */
+  push?: PushResult | null;
 };
 
 /**
@@ -51,5 +58,24 @@ export async function notifyOwner(
     .single();
 
   if (error) return { id: null, error: error.message };
-  return { id: data.id, error: null };
+
+  // Push jest DRUGĄ drogą tego samego meldunku, nie warunkiem jego istnienia.
+  // Wiersz wyżej jest zapisem kanonicznym — dzwonek w aplikacji zapali się i
+  // wtedy, gdy urządzenie nie odbierze powiadomienia albo gdy użytkownik nie
+  // włączył ich wcale. Dlatego nieudane pukanie nie zmienia wyniku.
+  let push: PushResult | null = null;
+  try {
+    push = await sendPushToOwner(db, ownerId, {
+      title: input.title,
+      body: input.body ?? "",
+      url: input.url,
+      // Meldunki tego samego rodzaju zastępują się na ekranie urządzenia,
+      // zamiast budować stos powiadomień mówiących to samo.
+      tag: input.tag ?? input.kind,
+    });
+  } catch {
+    // Celowo bez żadnej reakcji: patrz akapit wyżej.
+  }
+
+  return { id: data.id, error: null, push };
 }

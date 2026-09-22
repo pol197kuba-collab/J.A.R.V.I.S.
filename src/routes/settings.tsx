@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
+import { PushToggle } from "@/components/jarvis/orders/PushToggle";
 import { useAudioSettings } from "@/lib/audio/useAudioSettings";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
@@ -1044,6 +1045,19 @@ function Settings() {
           </button>
         </div>
       </HudPanel>
+      <HudPanel index={3} title="POWIADOMIENIA // URZĄDZENIA" className="p-5">
+        <p className="mt-2 min-w-0 break-words font-mono text-[11px] leading-relaxed text-muted-foreground">
+          Meldunki ze stałych rozkazów i z zakończonych zadań trafiają na dzwonek w aplikacji
+          zawsze. Włączone tutaj powiadomienia docierają też wtedy, gdy aplikacja jest zamknięta — a
+          stały rozkaz z definicji wyzwala się w nocy, kiedy nikt nie patrzy. Zgoda jest wydawana
+          osobno w każdej przeglądarce; na iPhonie działa dopiero po dodaniu aplikacji do ekranu
+          początkowego.
+        </p>
+        <div className="mt-4">
+          <PushToggle />
+        </div>
+      </HudPanel>
+
       <HudPanel index={3} title="AUDIO // SUBSYSTEM" className="p-5">
         <div className="mt-4 space-y-4">
           <div>
