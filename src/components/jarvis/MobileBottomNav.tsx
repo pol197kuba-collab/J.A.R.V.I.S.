@@ -1,23 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useRouterState } from "@tanstack/react-router";
-import {
-  LayoutDashboard,
-  Hexagon,
-  Bot,
-  Terminal,
-  Settings as SettingsIcon,
-  Boxes,
-  Radar,
-  Eye,
-  ListChecks,
-  Database,
-  FileText,
-  Command,
-  StickyNote,
-  Rss,
-  CandlestickChart,
-  Fuel,
-} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useHudNavigate } from "./TransitionContext";
@@ -26,25 +8,7 @@ import { useShowcase } from "./ShowcaseContext";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 import { GlobalVoiceCommand } from "./GlobalVoiceCommand";
-
-const items = [
-  { title: "JARVIS", url: "/jarvis", icon: Hexagon },
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Feed", url: "/feed", icon: Rss },
-  { title: "Paliwa", url: "/paliwa", icon: Fuel },
-  { title: "Rynki", url: "/rynki", icon: CandlestickChart },
-  { title: "Agents", url: "/agent-hub", icon: Bot },
-  { title: "Tasks", url: "/tasks", icon: ListChecks },
-  { title: "Notes", url: "/notes", icon: StickyNote },
-  { title: "Systems", url: "/sub-systems", icon: Boxes },
-  { title: "Situation", url: "/situation-room", icon: Radar },
-  { title: "Vision", url: "/vision", icon: Eye },
-  { title: "Logs", url: "/system-logs", icon: Terminal },
-  { title: "Schema", url: "/schema", icon: Database },
-  { title: "Docs", url: "/documents", icon: FileText },
-  { title: "Commands", url: "/commands", icon: Command },
-  { title: "Settings", url: "/settings", icon: SettingsIcon },
-] as const;
+import { MODULE_ITEMS } from "./modules";
 
 /**
  * Mobile-only navigation rail pinned to the bottom of the viewport.
@@ -158,7 +122,7 @@ export function MobileBottomNav({ showVoice = true }: { showVoice?: boolean }) {
   return (
     <nav
       aria-label="Modules"
-      className="relative z-20 shrink-0 border-t border-primary/20 bg-gradient-to-t from-black/85 to-black/50 backdrop-blur-xl shadow-[0_-8px_28px_-18px_color-mix(in_oklab,var(--primary)_70%,transparent)]"
+      className="hud-chrome relative z-20 shrink-0 border-t border-primary/20 shadow-[0_-8px_28px_-18px_color-mix(in_oklab,var(--primary)_70%,transparent)]"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       {/* Rząd paska: przewijalna lista modułów + stała komórka mikrofonu.
@@ -180,10 +144,10 @@ export function MobileBottomNav({ showVoice = true }: { showVoice?: boolean }) {
           onPointerMove={onPointerMove}
           onPointerUp={endDrag}
           onPointerCancel={endDrag}
-          className="no-scrollbar flex min-w-0 flex-1 touch-pan-x items-stretch gap-1 overflow-x-auto px-2 py-1.5 [scrollbar-width:none] select-none"
+          className="no-scrollbar fade-scroll-x flex min-w-0 flex-1 touch-pan-x items-stretch gap-1 overflow-x-auto px-2 py-1.5 select-none [scrollbar-width:none]"
           style={{ overscrollBehaviorX: "contain" }}
         >
-          {items.map((item) => {
+          {MODULE_ITEMS.map((item) => {
             const active = pathname === item.url;
             return (
               <button
@@ -210,7 +174,7 @@ export function MobileBottomNav({ showVoice = true }: { showVoice?: boolean }) {
                   strokeWidth={1.5}
                 />
                 <span className="font-display max-w-full truncate text-[8px] uppercase tracking-[0.18em]">
-                  {item.title}
+                  {item.shortTitle}
                 </span>
                 {active && (
                   <span className="absolute -top-[7px] h-1 w-1 rounded-full bg-primary shadow-[0_0_8px_var(--primary)]" />

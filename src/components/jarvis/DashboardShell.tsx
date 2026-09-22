@@ -1,6 +1,6 @@
 import { Outlet } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Menu, Maximize2, Minimize2 } from "lucide-react";
+import { Menu, Maximize2, Minimize2, SlidersHorizontal } from "lucide-react";
 
 import { AppSidebar } from "@/components/jarvis/AppSidebar";
 import { DeactivateButton } from "@/components/jarvis/DeactivateButton";
@@ -20,6 +20,11 @@ import { ShowcaseOverlay } from "@/components/jarvis/ShowcaseOverlay";
 import { ShowcaseButton } from "@/components/jarvis/ShowcaseButton";
 import { MobileBottomNav } from "@/components/jarvis/MobileBottomNav";
 import { useRouterState } from "@tanstack/react-router";
+import { CommandPalette } from "@/components/jarvis/CommandPalette";
+import { moduleTitleFor } from "@/components/jarvis/modules";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useHeaderDensity } from "@/components/jarvis/useHeaderDensity";
 
 import { GlobalVoiceCommand } from "@/components/jarvis/GlobalVoiceCommand";
 import { isFullscreen, onFullscreenChange, toggleAppFullscreen } from "@/lib/fullscreen";
@@ -73,42 +78,7 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
         </div>
       )}
       <div className="relative z-10 flex min-h-screen min-w-0 flex-1 flex-col portrait:min-h-0 landscape:max-md:min-h-0 short:min-h-0">
-        <header className="sticky top-0 z-10 flex h-12 min-w-0 items-center gap-2 overflow-hidden border-b border-primary/20 bg-gradient-to-b from-black/80 to-black/50 px-4 backdrop-blur-xl shadow-[0_8px_24px_-16px_color-mix(in_oklab,var(--primary)_60%,transparent)] portrait:h-10 landscape:max-md:h-8 landscape:max-md:gap-1.5 landscape:max-md:px-2 short:h-8 short:gap-1.5 short:px-2">
-          {!isMobile && (
-            <>
-              <HudMenuTrigger />
-              <div className="h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent" />
-            </>
-          )}
-          <MiniArcReactor size={20} />
-          <span className="font-display text-[10px] uppercase tracking-[0.3em] text-primary/80 portrait:hidden landscape:max-md:text-[8px] landscape:max-md:tracking-[0.2em] short:hidden">
-            J.A.R.V.I.S. // STARK SECURE TERMINAL
-          </span>
-          <div className="ml-auto flex min-w-0 items-center gap-2 overflow-hidden font-display text-[10px] uppercase tracking-widest portrait:gap-1.5 landscape:max-md:text-[8px] landscape:max-md:gap-1.5 short:text-[8px] short:gap-1.5">
-            <span
-              className="h-1.5 w-1.5 animate-blink rounded-full"
-              style={{ backgroundColor: "var(--success)" }}
-            />
-            <span
-              className="portrait:hidden landscape:max-md:hidden short:hidden"
-              style={{ color: "var(--success)" }}
-            >
-              All Systems Nominal
-            </span>
-            <div className="ml-3 h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent portrait:ml-1" />
-            <HeaderVoiceToggle />
-            <div className="h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent" />
-            <NotificationBell />
-            <div className="h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent" />
-            <ShowcaseButton />
-            <div className="h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent" />
-            <RebootButton />
-            <div className="h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent portrait:hidden short:hidden" />
-            <FullscreenToggle />
-            <div className="h-4 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent" />
-            <DeactivateButton onClick={onShutdown} />
-          </div>
-        </header>
+        <HudHeader onShutdown={onShutdown} />
         <main
           className={
             // @container: the page-level container context — route content
@@ -143,6 +113,7 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
             </div>
           )
         )}
+        <CommandPalette />
         <ArkRebootOverlay />
         <ShowcaseOverlay />
         <Toaster theme="dark" position="top-right" richColors />
@@ -157,6 +128,142 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
   );
 }
 
+/**
+ * Top bar.
+ *
+ * Two clusters instead of the old chain of seven `w-px` dividers: a passive
+ * STATUS readout and an ACTIONS group. The dividers were pure noise on
+ * desktop and, on a phone, ate the width that forced the labels down to 8px.
+ * Background is .hud-chrome — the same glass as the rail and the panels,
+ * replacing the literal black/80 gradient that made the chrome read as a
+ * different application.
+ */
+function HudHeader({ onShutdown }: { onShutdown: () => void }) {
+  const isMobile = useIsMobile();
+  const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const moduleTitle = moduleTitleFor(pathname);
+  const { ref, density } = useHeaderDensity<HTMLElement>();
+
+  // On a phone the bar is always compact; on desktop the measured width
+  // decides, so collapsing the rail gives the labels back.
+  const compact = isMobile || density === "compact";
+
+  return (
+    <header
+      ref={ref}
+      className="hud-chrome sticky top-0 z-20 flex h-12 min-w-0 items-center gap-3 px-4 shadow-[0_8px_24px_-16px_color-mix(in_oklab,var(--primary)_60%,transparent)] portrait:h-11 portrait:gap-2 portrait:px-2.5 landscape:max-md:h-9 landscape:max-md:gap-2 landscape:max-md:px-2 short:h-9 short:gap-2 short:px-2"
+    >
+      <span className="hud-chrome-rule" aria-hidden />
+
+      {!isMobile && <HudMenuTrigger />}
+
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <MiniArcReactor size={20} />
+        {/* Was a static "STARK SECURE TERMINAL". Showing the active module
+            instead turns decoration into orientation — which matters most on
+            a phone, where the rail isn't visible at all. */}
+        <span className="font-display min-w-0 truncate whitespace-nowrap text-[10px] uppercase tracking-[0.3em] text-primary/80 landscape:max-md:text-[8px] landscape:max-md:tracking-[0.2em] short:text-[8px] short:tracking-[0.2em]">
+          {density === "full" && !isMobile && <span>J.A.R.V.I.S.</span>}
+          {moduleTitle && (
+            <>
+              {density === "full" && !isMobile && (
+                <span className="px-1.5 text-primary/40">//</span>
+              )}
+              <span className="text-foreground/90">{moduleTitle}</span>
+            </>
+          )}
+        </span>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-2 portrait:gap-1.5">
+        {/* STATUS — passive telemetry. Below "full" the label drops and the
+            dot carries the state on its own, which is what buys the action
+            cluster the room it needs before anything has to move. */}
+        <span className="font-display flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-primary/12 bg-primary/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-widest portrait:border-0 portrait:bg-transparent portrait:px-0 landscape:max-md:px-1.5 landscape:max-md:py-0.5 landscape:max-md:text-[8px] short:px-1.5 short:py-0.5 short:text-[8px]">
+          <span
+            className="h-1.5 w-1.5 shrink-0 animate-blink rounded-full"
+            style={{ backgroundColor: "var(--success)" }}
+          />
+          {density === "full" && !isMobile && (
+            <span
+              className="landscape:max-md:hidden short:hidden"
+              style={{ color: "var(--success)" }}
+            >
+              All Systems Nominal
+            </span>
+          )}
+        </span>
+
+        {compact ? (
+          // Six labelled controls never fit a narrow bar — they used to
+          // wrap onto a second line. Only the two that must stay one tap
+          // away (voice, notifications) keep their spot; the rest move
+          // behind SYS, where they are still one tap deep.
+          <>
+            <HeaderVoiceToggle />
+            <NotificationBell />
+            <SysMenu onShutdown={onShutdown} showFullscreen={!isMobile} />
+          </>
+        ) : (
+          <>
+            <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-primary/12 bg-primary/[0.04] px-1.5 py-1 landscape:max-md:gap-1 landscape:max-md:px-1 landscape:max-md:py-0.5 short:gap-1 short:px-1 short:py-0.5">
+              <HeaderVoiceToggle />
+              <NotificationBell />
+              <ShowcaseButton />
+              <RebootButton />
+              <FullscreenToggle />
+            </span>
+            {/* Deactivate sits outside the cluster: it is the only
+                destructive control up here, and grouping it with the rest
+                would make it look like one more toggle. */}
+            <DeactivateButton onClick={onShutdown} />
+          </>
+        )}
+      </div>
+    </header>
+  );
+}
+
+/** Phone-only overflow for the header actions that don't fit the bar. */
+function SysMenu({
+  onShutdown,
+  showFullscreen = false,
+}: {
+  onShutdown: () => void;
+  showFullscreen?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onClick={() => audio.playClick()}
+          aria-label="Akcje systemowe"
+          className="font-display flex items-center gap-1 rounded-md border border-primary/40 bg-primary/[0.06] px-2 py-1 text-[9px] uppercase tracking-[0.25em] text-primary transition-colors hover:border-primary/70 hover:bg-primary/15 hover:text-foreground"
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={1.5} />
+          SYS
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        className="hud-chrome w-auto border-primary/25 p-2"
+        onClick={() => setOpen(false)}
+      >
+        <div className="flex items-center gap-2">
+          <ShowcaseButton />
+          <RebootButton />
+          {showFullscreen && <FullscreenToggle />}
+          <DeactivateButton onClick={onShutdown} />
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function HudMenuTrigger() {
   const { isMobile, setOpenMobile, toggleSidebar } = useSidebar();
   return (
@@ -168,7 +275,7 @@ function HudMenuTrigger() {
         else toggleSidebar();
       }}
       aria-label="Open menu"
-      className="font-display group relative flex items-center gap-1.5 rounded-md border border-primary/40 bg-gradient-to-b from-primary/10 to-primary/[0.02] px-2.5 py-1 text-[10px] uppercase tracking-[0.28em] text-primary shadow-[inset_0_1px_0_color-mix(in_oklab,var(--primary)_20%,transparent),0_0_12px_-4px_color-mix(in_oklab,var(--primary)_60%,transparent)] transition-all duration-200 hover:border-primary/70 hover:bg-primary/15 hover:text-foreground hover:shadow-[inset_0_1px_0_color-mix(in_oklab,var(--primary)_30%,transparent),0_0_18px_-4px_var(--primary)] landscape:max-md:px-1.5 landscape:max-md:py-0.5 landscape:max-md:text-[8px] landscape:max-md:tracking-[0.2em]"
+      className="font-display group relative flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-primary/40 bg-gradient-to-b from-primary/10 to-primary/[0.02] px-2.5 py-1 text-[10px] uppercase tracking-[0.28em] text-primary shadow-[inset_0_1px_0_color-mix(in_oklab,var(--primary)_20%,transparent),0_0_12px_-4px_color-mix(in_oklab,var(--primary)_60%,transparent)] transition-all duration-200 hover:border-primary/70 hover:bg-primary/15 hover:text-foreground hover:shadow-[inset_0_1px_0_color-mix(in_oklab,var(--primary)_30%,transparent),0_0_18px_-4px_var(--primary)] landscape:max-md:px-1.5 landscape:max-md:py-0.5 landscape:max-md:text-[8px] landscape:max-md:tracking-[0.2em]"
     >
       <Menu className="h-3.5 w-3.5 landscape:max-md:h-3 landscape:max-md:w-3" strokeWidth={1.5} />
       <span className="portrait:hidden">MENU // SYS</span>
@@ -228,7 +335,7 @@ function FullscreenToggle() {
         void toggleAppFullscreen();
       }}
       aria-label={active ? "Exit fullscreen" : "Enter fullscreen"}
-      className="flex items-center justify-center rounded-md border border-primary/40 bg-primary/[0.06] p-1.5 text-primary shadow-[inset_0_1px_0_color-mix(in_oklab,var(--primary)_18%,transparent)] transition-all duration-200 hover:border-primary/70 hover:bg-primary/15 hover:text-foreground hover:shadow-[0_0_12px_-4px_var(--primary)] portrait:hidden"
+      className="flex items-center justify-center rounded-md border border-primary/40 bg-primary/[0.06] p-1.5 text-primary shadow-[inset_0_1px_0_color-mix(in_oklab,var(--primary)_18%,transparent)] transition-all duration-200 hover:border-primary/70 hover:bg-primary/15 hover:text-foreground hover:shadow-[0_0_12px_-4px_var(--primary)]"
     >
       <Icon className="h-3 w-3" strokeWidth={1.75} />
     </button>

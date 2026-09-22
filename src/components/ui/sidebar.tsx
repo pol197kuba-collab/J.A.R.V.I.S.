@@ -192,14 +192,8 @@ const Sidebar = React.forwardRef<
           <SheetContent
             data-sidebar="sidebar"
             data-mobile="true"
-            className="w-(--sidebar-width) border-r-2 border-primary/60 p-0 text-sidebar-foreground shadow-[0_0_40px_rgba(56,189,248,0.35)] backdrop-blur-xl [&>button]:hidden"
-            style={
-              {
-                "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
-                background:
-                  "radial-gradient(ellipse at 50% -10%, oklch(0.55 0.18 200 / 0.18), transparent 55%), radial-gradient(ellipse at 20% 100%, oklch(0.5 0.18 200 / 0.12), transparent 60%), linear-gradient(180deg, oklch(0.06 0.03 230 / 0.92), oklch(0.02 0.02 230 / 0.95))",
-              } as React.CSSProperties
-            }
+            className="hud-chrome w-(--sidebar-width) border-r border-sidebar-border p-0 text-sidebar-foreground shadow-[8px_0_40px_-12px_color-mix(in_oklab,var(--primary)_45%,transparent)] [&>button]:hidden"
+            style={{ "--sidebar-width": SIDEBAR_WIDTH_MOBILE } as React.CSSProperties}
             side={side}
           >
             <SheetHeader className="sr-only">
@@ -210,7 +204,7 @@ const Sidebar = React.forwardRef<
               type="button"
               onClick={() => setOpenMobile(false)}
               aria-label="Close menu"
-              className="font-display absolute right-2 top-2 z-20 flex items-center gap-1 border border-primary/60 bg-black/60 px-2 py-1 text-[10px] uppercase tracking-[0.3em] text-primary shadow-[0_0_12px_rgba(56,189,248,0.45)] transition hover:bg-primary/15 hover:text-foreground"
+              className="font-display absolute right-2 top-2 z-20 flex items-center gap-1 rounded-md border border-primary/40 bg-primary/[0.06] px-2 py-1 text-[10px] uppercase tracking-[0.3em] text-primary shadow-[inset_0_1px_0_color-mix(in_oklab,var(--primary)_20%,transparent)] transition hover:border-primary/70 hover:bg-primary/15 hover:text-foreground"
             >
               [ X ] CLOSE
             </button>
@@ -256,7 +250,7 @@ const Sidebar = React.forwardRef<
         >
           <div
             data-sidebar="sidebar"
-            className="flex h-full w-full flex-col bg-background group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-border group-data-[variant=floating]:shadow"
+            className="hud-chrome relative flex h-full w-full flex-col text-sidebar-foreground group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-border group-data-[variant=floating]:shadow"
           >
             {children}
           </div>
@@ -406,7 +400,7 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.ComponentProps<"di
         ref={ref}
         data-sidebar="content"
         className={cn(
-          "flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
+          "no-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden group-data-[collapsible=icon]:overflow-hidden",
           className,
         )}
         {...props}
