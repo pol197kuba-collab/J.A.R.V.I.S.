@@ -28,6 +28,8 @@ import { SentimentPanel } from "@/components/jarvis/markets/SentimentPanel";
 import { OutlookPanel } from "@/components/jarvis/markets/OutlookPanel";
 import { AccuracyPanel } from "@/components/jarvis/markets/AccuracyPanel";
 import { AssetPicker } from "@/components/jarvis/markets/AssetPicker";
+import { StandingOrdersPanel } from "@/components/jarvis/orders/StandingOrdersPanel";
+import { listStandingOrders } from "@/lib/orders/orders.functions";
 import { formatPercent, formatPrice } from "@/lib/markets/series";
 import { projectForecast, type ForecastPoint } from "@/lib/markets/projection";
 import {
@@ -73,6 +75,9 @@ const changeColor = (value: number | null | undefined): string => {
   return value > 0 ? "var(--success)" : value < 0 ? "var(--destructive)" : "var(--foreground)";
 };
 
+/** Wspólny klucz: panel rozkazów unieważnia dokładnie to zapytanie. */
+const ORDERS_QUERY_KEY = ["orders", "market"] as const;
+
 function MarketsPage() {
   const fetchGrid = useServerFn(getMarketGrid);
   const addSymbol = useServerFn(addToWatchlist);
@@ -83,6 +88,13 @@ function MarketsPage() {
   const [mode, setMode] = useState<ChartMode>("price");
   const [visibleSymbols, setVisibleSymbols] = useState<string[]>([]);
   const [newsSymbol, setNewsSymbol] = useState<string | null>(null);
+
+  const fetchOrders = useServerFn(listStandingOrders);
+  const orders = useQuery({
+    queryKey: ORDERS_QUERY_KEY,
+    queryFn: () => fetchOrders({ data: { subjectKind: "market" } }),
+    refetchInterval: 5 * 60_000,
+  });
 
   const grid = useQuery({
     queryKey: ["market-grid", range],
@@ -122,6 +134,16 @@ function MarketsPage() {
   });
 
   const series = useMemo<MarketSeries[]>(() => grid.data?.series ?? [], [grid.data]);
+
+  // Notowania w kształcie ewaluatora rozkazów — ten sam kod, którym ocenia
+  // je nocny job, zaznacza tutaj rozkazy spełnione w tej chwili.
+  const orderSeries = useMemo(
+    () =>
+      Object.fromEntries(
+        series.map((s) => [s.symbol, s.points.map((p) => ({ date: p.date, value: p.close }))]),
+      ),
+    [series],
+  );
 
   // Pierwszy instrument z watchlisty wchodzi na wykres sam, żeby strona nie
   // otwierała się pustym panelem. Kolejne odświeżenia nie ruszają wyboru
@@ -390,7 +412,17 @@ function MarketsPage() {
         </HudPanel>
       </div>
 
-      <HudPanel index={4} title="MARKET GRID // DODAJ INSTRUMENT" tone="quiet" className="p-5">
+      <HudPanel index={4} title="MARKET GRID // ROZKAZY" tone="quiet">
+        <StandingOrdersPanel
+          subjectKind="market"
+          orders={orders.data ?? []}
+          seriesBySubject={orderSeries}
+          defaultSubject={visibleSymbols[0]}
+          queryKey={ORDERS_QUERY_KEY}
+        />
+      </HudPanel>
+
+      <HudPanel index={5} title="MARKET GRID // DODAJ INSTRUMENT" tone="quiet" className="p-5">
         <AssetPicker
           watched={watched}
           onAdd={(symbol) => addMutation.mutate(symbol)}

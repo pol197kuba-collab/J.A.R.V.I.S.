@@ -1177,6 +1177,60 @@ export type Database = {
         };
         Relationships: [];
       };
+      standing_orders: {
+        Row: {
+          condition: string;
+          cooldown_hours: number;
+          created_at: string;
+          expires_at: string | null;
+          id: string;
+          is_enabled: boolean;
+          last_triggered_at: string | null;
+          owner_id: string;
+          phrase: string | null;
+          subject: string;
+          subject_kind: string;
+          threshold: number;
+          trigger_count: number;
+          updated_at: string;
+          window_days: number;
+        };
+        Insert: {
+          condition: string;
+          cooldown_hours?: number;
+          created_at?: string;
+          expires_at?: string | null;
+          id?: string;
+          is_enabled?: boolean;
+          last_triggered_at?: string | null;
+          owner_id: string;
+          phrase?: string | null;
+          subject: string;
+          subject_kind: string;
+          threshold: number;
+          trigger_count?: number;
+          updated_at?: string;
+          window_days?: number;
+        };
+        Update: {
+          condition?: string;
+          cooldown_hours?: number;
+          created_at?: string;
+          expires_at?: string | null;
+          id?: string;
+          is_enabled?: boolean;
+          last_triggered_at?: string | null;
+          owner_id?: string;
+          phrase?: string | null;
+          subject?: string;
+          subject_kind?: string;
+          threshold?: number;
+          trigger_count?: number;
+          updated_at?: string;
+          window_days?: number;
+        };
+        Relationships: [];
+      };
       system_events: {
         Row: {
           created_at: string;

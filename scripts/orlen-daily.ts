@@ -14,14 +14,9 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import type { Database, Json } from "../src/integrations/supabase/types";
-import { ORLEN_PRODUCTS, productById } from "../src/lib/fuel/orlen";
-import {
-  evaluateAlerts,
-  ingestMarket,
-  ingestNews,
-  ingestPrices,
-  type Db,
-} from "../src/lib/fuel/ingest.server";
+import { ORLEN_PRODUCTS } from "../src/lib/fuel/orlen";
+import { ingestMarket, ingestNews, ingestPrices, type Db } from "../src/lib/fuel/ingest.server";
+import { evaluateStandingOrders } from "../src/lib/orders/evaluate.server";
 
 const args = new Set(process.argv.slice(2));
 const DRY_RUN = args.has("--dry-run");
@@ -177,45 +172,21 @@ async function main(): Promise<void> {
     await report("newsy", err instanceof Error ? err.message : String(err));
   }
 
-  // ---------- 4. Alerty ----------
+  // ---------- 4. Stałe rozkazy ----------
+  // Progi paliwowe nie są już liczone tutaj: od migracji 20260922100000
+  // mieszkają w `standing_orders` razem z rozkazami rynkowymi i ocenia je
+  // jeden wspólny ewaluator. Dzięki temu „powiadom mnie, gdy ON spadnie
+  // poniżej 5200" i „powiadom mnie, gdy Bitcoin tąpnie o 5%" to ten sam
+  // mechanizm, a nie dwa podobne.
   try {
-    const hits = await evaluateAlerts(db);
-    for (const hit of hits) {
-      const product = productById(hit.productId);
-      const name = product?.label ?? `produkt ${hit.productId}`;
-      const body =
-        hit.kind === "daily_change_abs"
-          ? `Zmiana dobowa ${hit.change > 0 ? "+" : ""}${hit.change} PLN/m³ przy progu ${hit.threshold}.`
-          : `Cena ${hit.price} PLN/m³ przekroczyła próg ${hit.threshold}.`;
-
-      const { error } = await db.from("notifications").insert({
-        owner_id: hit.ownerId,
-        kind: "fuel_alert",
-        title: `${name}: próg cenowy`,
-        body,
-        payload: {
-          product_id: hit.productId,
-          price: hit.price,
-          change: hit.change,
-          threshold: hit.threshold,
-          alert_kind: hit.kind,
-        } as unknown as Json,
-      });
-      if (error) {
-        await report("alerty", `zapis powiadomienia: ${error.message}`);
-        continue;
-      }
-
-      // Znacznik ustawiany dopiero PO udanym zapisie — inaczej nieudane
-      // powiadomienie wyciszyłoby alert na całą dobę.
-      await db
-        .from("fuel_price_alerts")
-        .update({ last_triggered_at: new Date().toISOString() })
-        .eq("id", hit.alertId);
-    }
-    notice(`alerty: ${hits.length} przekroczonych progów`);
+    const orders = await evaluateStandingOrders(db, "fuel");
+    for (const message of orders.errors) await report("rozkazy", message);
+    notice(
+      `rozkazy: ${orders.triggered} z ${orders.checked} wyzwolonych` +
+        (orders.skipped > 0 ? `, ${orders.skipped} bez danych` : ""),
+    );
   } catch (err) {
-    await report("alerty", err instanceof Error ? err.message : String(err));
+    await report("rozkazy", err instanceof Error ? err.message : String(err));
   }
 
   if (failures.length > 0) {
