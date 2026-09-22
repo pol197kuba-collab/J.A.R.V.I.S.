@@ -140,13 +140,13 @@
   --market-6: oklch(0.7 0.17 300); /* fiolet */
   --market-7: oklch(0.82 0.13 175); /* turkus */
   --market-8: oklch(0.75 0.17 35); /* pomarańcz */
-  --sidebar: oklch(0.16 0.028 250);
+  --sidebar: var(--surface-chrome);
   --sidebar-foreground: oklch(0.95 0.03 210);
   --sidebar-primary: oklch(0.84 0.15 205);
   --sidebar-primary-foreground: oklch(0.05 0.02 230);
   --sidebar-accent: oklch(0.2 0.03 250);
   --sidebar-accent-foreground: oklch(0.96 0.02 210);
-  --sidebar-border: oklch(0.84 0.15 205 / 18%);
+  --sidebar-border: var(--chrome-border);
   --sidebar-ring: oklch(0.84 0.15 205);
   --glow-primary: 0 0 12px oklch(0.84 0.15 205 / 0.8), 0 0 36px oklch(0.84 0.15 205 / 0.35);
   --gradient-core: radial-gradient(
@@ -163,6 +163,20 @@
   --surface-2: color-mix(in oklab, oklch(0.84 0.15 205) 9%, oklch(0.2 0.03 250) 91%);
   --surface-3: color-mix(in oklab, oklch(0.84 0.15 205) 14%, oklch(0.23 0.032 250) 86%);
   --holo-edge: color-mix(in oklab, oklch(0.84 0.15 205) 35%, transparent);
+  /*
+   * Chrome (sidebar + topbar) — deliberately the SAME cyan-tinted glass
+   * family as --surface-*, one step darker than a quiet panel.
+   *
+   * Before this, the sidebar rendered on flat --background and the header
+   * on literal black/80, so the app showed three different darks at once
+   * and the chrome read as a separate, colder application hosting the HUD.
+   * Anything that frames the dashboard uses these, never a raw black.
+   */
+  --surface-chrome: color-mix(in oklab, oklch(0.84 0.15 205) 6%, oklch(0.125 0.026 250) 94%);
+  --gradient-chrome:
+    radial-gradient(ellipse at 0% 0%, oklch(0.84 0.15 205 / 0.09), transparent 58%),
+    radial-gradient(ellipse at 100% 100%, oklch(0.78 0.13 250 / 0.07), transparent 62%);
+  --chrome-border: color-mix(in oklab, var(--primary) 16%, transparent);
   --gradient-panel:
     radial-gradient(ellipse at 20% 0%, oklch(0.84 0.15 205 / 0.1), transparent 55%),
     radial-gradient(ellipse at 100% 100%, oklch(0.78 0.13 250 / 0.08), transparent 60%);
@@ -961,6 +975,137 @@
   box-shadow:
     0 0 0 1px color-mix(in oklab, var(--primary) 10%, transparent) inset,
     0 14px 34px -24px oklch(0 0 0 / 0.9);
+}
+
+/* ---------------------------------------------------------------------------
+   Chrome — the sidebar rail and the top bar.
+
+   Same glass family as .hud-panel so the frame and the content read as one
+   HUD surface. Kept as CSS rather than a Tailwind class soup because both
+   the desktop rail and the mobile sheet need the identical stack, and they
+   are rendered by two different components (ui/sidebar.tsx's Sheet vs. the
+   fixed rail).
+   --------------------------------------------------------------------------- */
+.hud-chrome {
+  background:
+    var(--gradient-chrome),
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--surface-1) 55%, transparent),
+      color-mix(in oklab, var(--surface-chrome) 80%, transparent)
+    );
+  backdrop-filter: blur(16px) saturate(125%);
+}
+
+/* Hairline edge with a vertical falloff — bright where the rail meets the
+   header, fading toward the floor. A flat 1px border made the rail look
+   like a pane stuck onto the page; the falloff gives it depth and ties its
+   top corner to the header's own edge. `side` picks which edge it draws. */
+.hud-chrome-edge {
+  position: absolute;
+  inset-block: 0;
+  width: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--primary) 55%, transparent) 0%,
+    color-mix(in oklab, var(--primary) 22%, transparent) 30%,
+    color-mix(in oklab, var(--primary) 8%, transparent) 70%,
+    transparent 100%
+  );
+}
+.hud-chrome-edge.right {
+  right: 0;
+}
+
+/* Horizontal twin of .hud-chrome-edge, for the header's bottom rule. Peaks
+   at the left so it continues the rail's bright top corner across. */
+.hud-chrome-rule {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--primary) 45%, transparent) 0%,
+    color-mix(in oklab, var(--primary) 18%, transparent) 45%,
+    color-mix(in oklab, var(--primary) 8%, transparent) 100%
+  );
+}
+
+/* Soft top/bottom cut for a scroll area whose bar is hidden. Without it a
+   hidden scrollbar just slices content mid-glyph and reads as a rendering
+   bug; with it the overflow looks like instrumentation running past the
+   frame. `mask` only — no layout or paint cost on the children. */
+@utility fade-scroll-y {
+  mask-image: linear-gradient(
+    180deg,
+    transparent 0,
+    #000 14px,
+    #000 calc(100% - 18px),
+    transparent 100%
+  );
+}
+
+/* Horizontal twin, for the mobile module rail. */
+@utility fade-scroll-x {
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 16px,
+    #000 calc(100% - 16px),
+    transparent 100%
+  );
+}
+
+/* A nav entry in the rail. Reads as a slot on an instrument panel: a tick
+   on the left rather than a filled pill, so the active item is the only
+   thing in the rail carrying a glow and never outshines the panels it is
+   navigating to. */
+.hud-slot {
+  position: relative;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+.hud-slot::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 0;
+  width: 2px;
+  translate: 0 -50%;
+  border-radius: 0 2px 2px 0;
+  background: var(--primary);
+  transition:
+    height 0.22s ease,
+    box-shadow 0.22s ease;
+}
+.hud-slot:hover {
+  background: color-mix(in oklab, var(--primary) 6%, transparent);
+  border-color: color-mix(in oklab, var(--primary) 14%, transparent);
+}
+.hud-slot:hover::before {
+  height: 12px;
+}
+.hud-slot[data-active="true"] {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--primary) 16%, transparent),
+    color-mix(in oklab, var(--primary) 5%, transparent) 55%,
+    transparent
+  );
+  border-color: color-mix(in oklab, var(--primary) 28%, transparent);
+  color: var(--primary);
+}
+.hud-slot[data-active="true"]::before {
+  height: 60%;
+  box-shadow: 0 0 8px var(--primary);
 }
 
 /* Four corner brackets — elevated panels only. Sit just outside the
