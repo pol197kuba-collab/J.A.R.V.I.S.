@@ -36,21 +36,72 @@ const FETCH_TIMEOUT_MS = 30_000;
 const UPSERT_CHUNK = 1000;
 const USER_AGENT = "JARVIS-FuelGrid/1.0";
 
+/**
+ * PONAWIANIE PRÓBY PRZY BŁĘDZIE PRZEJŚCIOWYM.
+ *
+ * Nocny job padał praktycznie co noc, choć nic nie było zepsute: z pięciu
+ * paliw trzy zaciągały się poprawnie, a jedno–dwa wracały z „fetch failed" —
+ * generycznym błędem sieciowym Node'a, nie odpowiedzią Orlenu. Za każdym
+ * razem inne paliwo. Cały przebieg kończył się kodem 1, mimo że rynek, newsy
+ * i alerty przechodziły. Jedno mrugnięcie sieci kosztowało całą noc danych.
+ *
+ * Ponawiamy WYŁĄCZNIE to, co ma szansę zadziałać za chwilę: błędy sieci,
+ * przekroczony czas i odpowiedzi 5xx/429. Kod 4xx to odpowiedź serwera
+ * mówiąca „tego zasobu nie ma" albo „nie wolno ci" — ponawianie jej niczego
+ * nie zmieni, a tylko opóźni moment, w którym zobaczymy prawdziwy problem.
+ */
+const FETCH_ATTEMPTS = 3;
+const RETRY_BACKOFF_MS = 400;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Czy ten błąd ma sens ponawiać? */
+export function isRetriableFetchError(err: unknown): boolean {
+  if (err instanceof HttpStatusError) return err.status >= 500 || err.status === 429;
+  // Wszystko, co nie jest odpowiedzią HTTP, jest awarią transportu: zerwane
+  // połączenie, DNS, timeout. To właśnie te przypadki wywracały job.
+  return true;
+}
+
+/** Błąd niosący kod odpowiedzi — żeby dało się odróżnić 503 od 404. */
+class HttpStatusError extends Error {
+  constructor(
+    readonly status: number,
+    url: string,
+  ) {
+    super(`${url} → HTTP ${status}`);
+    this.name = "HttpStatusError";
+  }
+}
+
+async function fetchWithRetry(url: string, accept: string): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= FETCH_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        headers: { Accept: accept, "User-Agent": USER_AGENT },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      if (!response.ok) throw new HttpStatusError(response.status, url);
+      return response;
+    } catch (err) {
+      lastError = err;
+      if (attempt === FETCH_ATTEMPTS || !isRetriableFetchError(err)) break;
+      // Narastająco: 400 ms, potem 800 ms. Przy błędzie sieciowym kolejna
+      // próba od razu trafiłaby najczęściej w ten sam stan.
+      await sleep(RETRY_BACKOFF_MS * attempt);
+    }
+  }
+  throw lastError;
+}
+
 async function fetchJson(url: string): Promise<unknown> {
-  const response = await fetch(url, {
-    headers: { Accept: "application/json", "User-Agent": USER_AGENT },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
-  if (!response.ok) throw new Error(`${url} → HTTP ${response.status}`);
+  const response = await fetchWithRetry(url, "application/json");
   return response.json();
 }
 
 async function fetchText(url: string): Promise<string> {
-  const response = await fetch(url, {
-    headers: { Accept: "application/rss+xml, application/xml, text/xml", "User-Agent": USER_AGENT },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
-  if (!response.ok) throw new Error(`${url} → HTTP ${response.status}`);
+  const response = await fetchWithRetry(url, "application/rss+xml, application/xml, text/xml");
   return response.text();
 }
 
