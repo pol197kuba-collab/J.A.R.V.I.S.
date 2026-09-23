@@ -17,7 +17,7 @@ import type { Database, Json } from "@/integrations/supabase/types";
 import { callAnthropic } from "@/lib/agents/providers/anthropic";
 import type { GeminiContent } from "@/lib/agents/providers/types";
 import { notifyOwner } from "@/lib/notifications/notify.server";
-import { composeBrief } from "./compose";
+import { composeBrief, sectionsToSpoken } from "./compose";
 import { gatherFacts } from "./facts.server";
 import type { BriefSection, ComposedBrief, DailyBrief } from "./types";
 
@@ -33,22 +33,62 @@ const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/m
 /** Ile znaków wolno mieć wersji mówionej. Powyżej tego to już nie briefing. */
 const MAX_SPOKEN_CHARS = 900;
 
+/** Powitanie dłuższe niż to nie jest powitaniem, tylko drugim briefingiem. */
+const MAX_GREETING_CHARS = 320;
+
+/**
+ * Znaczniki, którymi model oddaje dwa kawałki w jednej odpowiedzi.
+ *
+ * DLACZEGO JEDNO WYWOŁANIE, A NIE DWA. Powitanie i treść mają różne reguły
+ * (jedno wolno napisać swobodnie, drugiego nie wolno skrócić), więc muszą
+ * wrócić rozdzielone. Dwa osobne wywołania dałyby to samo za dwa razy
+ * większy rachunek i dwa razy większą szansę, że rano akurat jedno nie
+ * odpowie. Znacznik, którego model nie odda, sam się wykrywa — i wtedy
+ * wracamy do wersji z liczb.
+ */
+const MARK_GREETING = "POWITANIE:";
+const MARK_BODY = "BRIEFING:";
+
 const SYSTEM_PROMPT = [
   "Jesteś J.A.R.V.I.S.-em i czytasz właścicielowi poranny briefing.",
-  "Dostajesz gotowy, PRAWDZIWY tekst złożony z danych. Twoim zadaniem jest",
-  "przepisać go na płynny akapit po polsku — nic więcej.",
+  "Dostajesz dwa gotowe, PRAWDZIWE kawałki tekstu, każdy pod swoim znacznikiem.",
+  "Przepisz oba i oddaj W TYM SAMYM UKŁADZIE, z tymi samymi znacznikami:",
+  `${MARK_GREETING} <powitanie>`,
+  `${MARK_BODY} <briefing>`,
+  "",
+  "TON. Ciepło i swobodnie, jak zaufany domownik przy porannej kawie —",
+  "pełnymi zdaniami, z naturalnym „warto to wykorzystać” czy „spokojny",
+  "poranek”. Bez entuzjazmu na siłę, bez poufałości: nadal per „Panie",
+  "Sławiński”. Powitanie może brzmieć gawędziarsko, treść ma zostać rzeczowa.",
   "",
   "ZASADY, OD KTÓRYCH NIE MA ODSTĘPSTW:",
-  "1. Nie dodawaj ŻADNEJ liczby, nazwy ani faktu, którego nie ma w wejściu.",
+  "1. Nie dodawaj ŻADNEJ liczby, nazwy, wydarzenia ani faktu, którego nie ma",
+  "   w wejściu. Nie wiesz, co właściciel robił wczoraj, kogo dziś spotka ani",
+  "   jak się czuje — nie zgaduj tego i nie udawaj, że pamiętasz.",
   "2. Nie zmieniaj żadnej liczby ani kierunku zmiany.",
-  "3. Nie wyciągaj wniosków, nie doradzaj, nie prognozuj niczego od siebie.",
-  "4. Nie pomijaj żadnej informacji z wejścia.",
-  "5. Odpowiedz samym akapitem: bez list, bez nagłówków, bez markdownu.",
-  "6. Zwracaj się per „Panie Sławiński”, spokojnie i rzeczowo.",
-  "Maksymalnie 120 słów.",
+  "3. Nie doradzaj i nie prognozuj niczego ponad to, co stoi w wejściu.",
+  `4. Nie pomijaj żadnej informacji spod znacznika ${MARK_BODY}.`,
+  "5. Bez list, nagłówków i markdownu — pod każdym znacznikiem jeden akapit.",
+  "Powitanie do 45 słów, briefing do 140 słów.",
 ].join("\n");
 
-/** Czy przepisany tekst nadaje się do użycia zamiast wersji z liczb. */
+type Parts = { greeting: string; body: string };
+
+/** Wyłuskuje oba kawałki z odpowiedzi modelu; null, gdy układ się nie zgadza. */
+export function parseParts(text: string | null): Parts | null {
+  if (!text) return null;
+  const gAt = text.indexOf(MARK_GREETING);
+  const bAt = text.indexOf(MARK_BODY);
+  if (gAt === -1 || bAt === -1 || bAt < gAt) return null;
+  const greeting = text.slice(gAt + MARK_GREETING.length, bAt).trim();
+  const body = text.slice(bAt + MARK_BODY.length).trim();
+  if (!greeting || !body) return null;
+  return { greeting, body };
+}
+
+const looksLikeMarkdown = (text: string): boolean => /^[-*#]|\n[-*#]/.test(text);
+
+/** Czy przepisana treść nadaje się do użycia zamiast wersji z liczb. */
 function isUsable(rewritten: string | null, original: string): boolean {
   if (!rewritten) return false;
   const text = rewritten.trim();
@@ -56,11 +96,25 @@ function isUsable(rewritten: string | null, original: string): boolean {
   if (text.length > MAX_SPOKEN_CHARS) return false;
   // Model, który zamiast przepisać zaczął odpowiadać markdownem albo listą,
   // nie wykonał zadania — a wersja z liczb jest w najgorszym razie sucha.
-  if (/^[-*#]|\n[-*#]/.test(text)) return false;
+  if (looksLikeMarkdown(text)) return false;
   // Krótsza niż połowa oryginału znaczy, że coś wypadło. Wolimy sucho i
   // w komplecie niż ładnie i bez połowy.
   if (text.length < original.length * 0.5) return false;
   return true;
+}
+
+/**
+ * Czy przepisane powitanie nadaje się do pokazania.
+ *
+ * Nie porównujemy go z długością oryginału — inaczej niż treść, powitanie
+ * WOLNO skrócić: „Witam, Panie Sławiński. Piękny dzień, warto wyjść."
+ * jest lepsze niż wierne przepisanie trzech zdań. Pilnujemy tylko, żeby
+ * nie urosło w drugi briefing i nie wróciło listą.
+ */
+export function isUsableGreeting(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length < 10 || trimmed.length > MAX_GREETING_CHARS) return false;
+  return !looksLikeMarkdown(trimmed);
 }
 
 async function rewriteWithGemini(apiKey: string, input: string): Promise<string | null> {
@@ -98,19 +152,32 @@ async function rewriteWithGemini(apiKey: string, input: string): Promise<string 
 }
 
 /**
- * Przepisuje wersję mówioną na płynniejszą. Zwraca też nazwę modelu, żeby
+ * Przepisuje powitanie i treść na płynniejsze. Zwraca też nazwę modelu, żeby
  * dało się później sprawdzić, który wariant briefingu użytkownik widział.
  */
 async function polish(
-  spoken: string,
+  parts: Parts,
   keys: BriefKeys,
-): Promise<{ spoken: string; generatedBy: string }> {
-  const plain = { spoken, generatedBy: "facts" };
+): Promise<{ greeting: string; body: string; generatedBy: string }> {
+  const plain = { ...parts, generatedBy: "facts" };
   if (!keys.anthropicApiKey && !keys.geminiApiKey) return plain;
+
+  const input = `${MARK_GREETING} ${parts.greeting}\n${MARK_BODY} ${parts.body}`;
+
+  // Przyjmujemy przepisanie TYLKO wtedy, gdy oba kawałki przeszły kontrolę.
+  // Mieszanie ciepłego powitania od modelu z suchą treścią z liczb dałoby
+  // rubrykę, która w połowie zdania zmienia głos.
+  const accept = (raw: string | null, label: string) => {
+    const got = parseParts(raw);
+    if (!got) return null;
+    if (!isUsableGreeting(got.greeting)) return null;
+    if (!isUsable(got.body, parts.body)) return null;
+    return { greeting: got.greeting.trim(), body: got.body.trim(), generatedBy: `model:${label}` };
+  };
 
   if (keys.anthropicApiKey) {
     try {
-      const contents: GeminiContent[] = [{ role: "user", parts: [{ text: spoken }] }];
+      const contents: GeminiContent[] = [{ role: "user", parts: [{ text: input }] }];
       const result = await callAnthropic({
         apiKey: keys.anthropicApiKey,
         model: ANTHROPIC_BRIEF_MODEL,
@@ -119,19 +186,16 @@ async function polish(
         maxOutputTokens: 1024,
         timeoutMs: MODEL_TIMEOUT_MS,
       });
-      if (isUsable(result.text, spoken)) {
-        return { spoken: result.text.trim(), generatedBy: `model:${ANTHROPIC_BRIEF_MODEL}` };
-      }
+      const ok = accept(result.text, ANTHROPIC_BRIEF_MODEL);
+      if (ok) return ok;
     } catch {
       // Przechodzimy na zapasowego dostawcę — nie jest to awaria briefingu.
     }
   }
 
   if (keys.geminiApiKey) {
-    const text = await rewriteWithGemini(keys.geminiApiKey, spoken);
-    if (isUsable(text, spoken)) {
-      return { spoken: text!.trim(), generatedBy: `model:${GEMINI_MODEL}` };
-    }
+    const ok = accept(await rewriteWithGemini(keys.geminiApiKey, input), GEMINI_MODEL);
+    if (ok) return ok;
   }
 
   return plain;
@@ -163,12 +227,16 @@ export async function buildDailyBrief(
 ): Promise<BuildBriefResult> {
   const facts = await gatherFacts(db, ownerId);
   const composed: ComposedBrief = composeBrief(facts);
-  const { spoken, generatedBy } = await polish(composed.spoken, keys);
+  const { greeting, body, generatedBy } = await polish(
+    { greeting: composed.greeting, body: sectionsToSpoken(composed.sections) },
+    keys,
+  );
+  const spoken = `${greeting} ${body}`;
 
   const row = {
     owner_id: ownerId,
     brief_date: facts.date,
-    greeting: composed.greeting,
+    greeting,
     sections: composed.sections as unknown as Json,
     spoken,
     facts: facts as unknown as Json,
@@ -183,7 +251,7 @@ export async function buildDailyBrief(
 
   const brief: DailyBrief = {
     date: facts.date,
-    greeting: composed.greeting,
+    greeting,
     sections: composed.sections,
     spoken,
     generatedBy,

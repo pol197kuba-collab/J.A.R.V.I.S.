@@ -14,10 +14,11 @@
 // czytania — a wtedy nie zauważy się tego jednego dnia, w którym coś się
 // wydarzyło. Lepiej, żeby spokojny dzień miał dwie linijki.
 import { money, signedPct } from "@/lib/format/number";
+import { dayAdvice, weatherSentence } from "@/lib/weather/day";
 import type { BriefFacts, BriefSection, ComposedBrief } from "./types";
 
-/** Zwrot grzecznościowy — ten sam, którego używa reszta aplikacji. */
-const GREETING = "Dzień dobry, Panie Sławiński.";
+/** Zwrot grzecznościowy, gdy nie ma czym go rozwinąć. */
+const PLAIN_GREETING = "Dzień dobry, Panie Sławiński.";
 
 /** Ruch mniejszy niż to jest szumem sesji, nie wiadomością. */
 const MOVER_FLOOR_PCT = 1.5;
@@ -150,27 +151,62 @@ function budgetSection(facts: BriefFacts): BriefSection | null {
 }
 
 /**
- * Wersja mówiona: jeden ciąg zdań, bez list i bez znaków, których synteza
- * mowy nie przeczyta sensownie.
+ * POWITANIE — jedyne miejsce w briefingu, które mówi o czymś innym niż liczby.
  *
- * Powstaje z TYCH SAMYCH sekcji, nie z faktów na nowo — inaczej tekst na
- * ekranie i tekst w głośniku mogłyby z czasem powiedzieć co innego.
+ * Nie jest ozdobą. Rubryka otwierana o siódmej rano zaczynała się dotąd od
+ * „Dzień dobry, Panie Sławiński." i od razu przechodziła do awarii — czyli
+ * brzmiała jak konsola, która akurat umie się przywitać. Zdanie o dniu, który
+ * właśnie się zaczyna, jest pierwszą rzeczą, jaką powiedziałby człowiek, i
+ * jedyną, której nie da się wyczytać z żadnego panelu obok.
+ *
+ * GRANICA JEST TWARDA: wolno tu tylko to, co wynika z PROGNOZY. Żadnego
+ * „mam nadzieję, że wczorajsze spotkanie poszło dobrze" — system nie wie,
+ * czy było jakieś spotkanie, a powitanie, które raz coś zmyśli, odbiera
+ * wiarygodność całej reszcie rubryki.
  */
-function toSpoken(greeting: string, sections: BriefSection[]): string {
-  if (sections.length === 0) {
-    return `${greeting} Nic nie wymaga dziś uwagi.`;
-  }
-  const body = sections
-    .map((section) => `${section.heading}. ${section.lines.join(" ")}`)
-    .join(" ");
+function greetingFor(facts: BriefFacts): string {
+  if (!facts.weather) return PLAIN_GREETING;
+  const advice = dayAdvice(facts.weather);
+  return [
+    "Witam, Panie Sławiński.",
+    weatherSentence(facts.weather),
+    ...(advice ? [advice] : []),
+  ].join(" ");
+}
+
+/** Czyści tekst ze znaków, których synteza mowy nie przeczyta sensownie. */
+function speakable(text: string): string {
   return (
-    `${greeting} ${body}`
+    text
       // Procent i myślnik czyta się źle; nawiasy gubią intonację.
       .replace(/%/g, " procent")
       .replace(/\u00a0/g, " ")
       .replace(/ — /g, ", ")
       .replace(/[()]/g, "")
   );
+}
+
+/**
+ * Sama TREŚĆ briefingu do odczytania, bez powitania.
+ *
+ * Osobno od powitania, bo model przepisuje jedno i drugie niezależnie:
+ * powitanie ma zabrzmieć swobodnie, treść ma zostać kompletna. Zlepione w
+ * jeden ciąg nie dałoby się rozróżnić, który kawałek wolno skracać.
+ */
+export function sectionsToSpoken(sections: BriefSection[]): string {
+  if (sections.length === 0) return "Nic nie wymaga dziś uwagi.";
+  return speakable(sections.map((s) => `${s.heading}. ${s.lines.join(" ")}`).join(" "));
+}
+
+/**
+ * Wersja mówiona: jeden ciąg zdań, bez list i bez znaków, których synteza
+ * mowy nie przeczyta sensownie.
+ *
+ * Powstaje z TYCH SAMYCH sekcji, nie z faktów na nowo — inaczej tekst na
+ * ekranie i tekst w głośniku mogłyby z czasem powiedzieć co innego.
+ */
+export function toSpoken(greeting: string, sections: BriefSection[]): string {
+  return `${speakable(greeting)} ${sectionsToSpoken(sections)}`;
 }
 
 /** Składa briefing z faktów. Sekcje w kolejności ważności, nie alfabetycznie. */
@@ -187,5 +223,6 @@ export function composeBrief(facts: BriefFacts): ComposedBrief {
     fuelSection(facts),
   ].filter((s): s is BriefSection => s !== null);
 
-  return { greeting: GREETING, sections, spoken: toSpoken(GREETING, sections) };
+  const greeting = greetingFor(facts);
+  return { greeting, sections, spoken: toSpoken(greeting, sections) };
 }

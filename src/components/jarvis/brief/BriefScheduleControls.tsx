@@ -13,7 +13,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { BellOff, BellRing } from "lucide-react";
+import { BellOff, BellRing, MapPin } from "lucide-react";
 import { getUserSettings, updateUserSettings } from "@/lib/agents/runtime.functions";
 import { PanelHint } from "@/components/jarvis/fuel/chrome";
 import { cn } from "@/lib/utils";
@@ -43,8 +43,13 @@ export function BriefScheduleControls() {
   }, [settings.data, hour]);
 
   const mutate = useMutation({
-    mutationFn: (patch: { briefHour?: number; briefPush?: boolean; monthlyBudgetUsd?: number }) =>
-      save({ data: patch }),
+    mutationFn: (patch: {
+      briefHour?: number;
+      briefPush?: boolean;
+      monthlyBudgetUsd?: number;
+      homeLat?: number;
+      homeLon?: number;
+    }) => save({ data: patch }),
     onSuccess: (fresh) => {
       qc.setQueryData(SETTINGS_QUERY_KEY, fresh);
       setHour(fresh.briefHour);
@@ -56,6 +61,31 @@ export function BriefScheduleControls() {
       }),
   });
 
+  // Pytanie o lokalizację zadajemy RAZ, na wyraźne kliknięcie — nie przy
+  // wejściu na Ustawienia. Zapisany punkt służy nocnemu jobowi, który
+  // przeglądarki nie ma; wyskakujące okienko bez powodu nauczyłoby tylko
+  // odruchowo je odklikiwać.
+  const [locating, setLocating] = useState(false);
+  const askForLocation = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      toast("Przeglądarka nie udostępnia lokalizacji");
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocating(false);
+        mutate.mutate({ homeLat: pos.coords.latitude, homeLon: pos.coords.longitude });
+      },
+      (err) => {
+        setLocating(false);
+        toast("Nie udało się ustalić lokalizacji", { description: err.message });
+      },
+      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60 * 60_000 },
+    );
+  };
+
+  const hasLocation = settings.data?.homeLat != null && settings.data?.homeLon != null;
   const push = settings.data?.briefPush ?? true;
   const budget = settings.data?.monthlyBudgetUsd ?? 5;
   const busy = settings.isLoading || mutate.isPending;
@@ -122,6 +152,30 @@ export function BriefScheduleControls() {
           ))}
         </select>
       </label>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          disabled={busy || locating}
+          onClick={askForLocation}
+          className="font-display flex shrink-0 items-center gap-2 rounded border border-primary/40 px-3 py-1.5 text-[9px] uppercase tracking-[0.2em] text-primary transition hover:bg-primary/10 disabled:opacity-40"
+        >
+          <MapPin className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+          {locating ? "ustalam…" : hasLocation ? "odśwież lokalizację" : "użyj mojej lokalizacji"}
+        </button>
+        <span className="min-w-0 break-words font-mono text-[11px] text-muted-foreground">
+          {hasLocation
+            ? `pogoda dla ${settings.data!.homeLat!.toFixed(2)}, ${settings.data!.homeLon!.toFixed(2)}`
+            : "bez lokalizacji briefing nie mówi o pogodzie"}
+        </span>
+      </div>
+
+      <PanelHint>
+        Briefing zaczyna się od zdania o dniu — ile stopni, czy pada, czy warto wziąć parasol.
+        Składa się w nocy, na serwerze, więc nie ma kogo zapytać o lokalizację; dlatego punkt
+        zapisuje się raz, tym przyciskiem. Zapisujemy go z dokładnością do dwóch miejsc po
+        przecinku, czyli około kilometra — prognoza dobowa i tak się na tym dystansie nie różni.
+      </PanelHint>
 
       <PanelHint>
         Po przekroczeniu limitu agenci schodzą o stopień na tańszy model (Opus → Sonnet → Haiku →

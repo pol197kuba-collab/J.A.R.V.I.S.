@@ -15,6 +15,7 @@ import { labelsFor } from "@/lib/orders/subjects";
 import { describeOrder, type StandingOrder } from "@/lib/orders/rules";
 import { warsawDate } from "@/lib/format/warsaw";
 import { currentBudget } from "@/lib/agents/budget.server";
+import { fetchDayWeather } from "@/lib/weather/openMeteo.server";
 import { budgetMessage } from "@/lib/agents/budget";
 import type { BriefFacts } from "./types";
 
@@ -226,6 +227,28 @@ async function loadBudget(db: Db, ownerId: string): Promise<BriefFacts["budget"]
   return { spentUsd: status.spentUsd, limitUsd: status.limitUsd, message };
 }
 
+/**
+ * Pogoda na dziś — tylko wtedy, gdy jest dla KTÓREGO miejsca.
+ *
+ * Nocny job nie ma przeglądarki, więc nie ma kogo zapytać o lokalizację.
+ * Brak zapisanego punktu nie jest awarią: rubryka po prostu nie zaczyna się
+ * od pogody. Zgadywanie miasta na sztywno byłoby gorsze niż milczenie —
+ * „dziś słonecznie" o mieście, w którym akurat nie ma użytkownika, uczy nie
+ * ufać całej reszcie briefingu.
+ */
+async function loadWeather(db: Db, ownerId: string): Promise<BriefFacts["weather"]> {
+  const { data } = await db
+    .from("user_settings")
+    .select("home_lat, home_lon")
+    .eq("owner_id", ownerId)
+    .maybeSingle();
+
+  const lat = data?.home_lat;
+  const lon = data?.home_lon;
+  if (lat === null || lat === undefined || lon === null || lon === undefined) return null;
+  return fetchDayWeather(Number(lat), Number(lon));
+}
+
 async function loadFailures(db: Db, ownerId: string): Promise<BriefFacts["failures"]> {
   const since = new Date(Date.now() - DAY_MS).toISOString();
   const { data } = await db
@@ -247,7 +270,7 @@ async function loadFailures(db: Db, ownerId: string): Promise<BriefFacts["failur
 /**
  * Zbiera komplet faktów na dziś.
  *
- * Zapytania idą RÓWNOLEGLE — jest ich siedem, a job i tak czeka na
+ * Zapytania idą RÓWNOLEGLE — jest ich dziewięć, a job i tak czeka na
  * najwolniejsze. Awaria jednego źródła nie może wywrócić briefingu:
  * lepiej rubryka bez sekcji paliwowej niż brak rubryki.
  */
@@ -260,16 +283,18 @@ export async function gatherFacts(db: Db, ownerId: string): Promise<BriefFacts> 
     }
   };
 
-  const [movers, calls, accuracy, fuel, firedOrders, tasks, failures, budget] = await Promise.all([
-    safe(() => loadMovers(db, ownerId), []),
-    safe(() => loadCalls(db, ownerId), []),
-    safe(() => loadAccuracy(db, ownerId), { settled: 0, hitRatePct: null }),
-    safe(() => loadFuel(db), null),
-    safe(() => loadFiredOrders(db, ownerId), []),
-    safe(() => loadTasks(db, ownerId), { overdue: [], today: [] }),
-    safe(() => loadFailures(db, ownerId), { count: 0, sample: null }),
-    safe(() => loadBudget(db, ownerId), null),
-  ]);
+  const [movers, calls, accuracy, fuel, firedOrders, tasks, failures, budget, weather] =
+    await Promise.all([
+      safe(() => loadMovers(db, ownerId), []),
+      safe(() => loadCalls(db, ownerId), []),
+      safe(() => loadAccuracy(db, ownerId), { settled: 0, hitRatePct: null }),
+      safe(() => loadFuel(db), null),
+      safe(() => loadFiredOrders(db, ownerId), []),
+      safe(() => loadTasks(db, ownerId), { overdue: [], today: [] }),
+      safe(() => loadFailures(db, ownerId), { count: 0, sample: null }),
+      safe(() => loadBudget(db, ownerId), null),
+      safe(() => loadWeather(db, ownerId), null),
+    ]);
 
   return {
     // Data WARSZAWSKA, nie UTC. O 00:30 czasu lokalnego w UTC trwa jeszcze
@@ -285,5 +310,6 @@ export async function gatherFacts(db: Db, ownerId: string): Promise<BriefFacts> 
     tasks,
     failures,
     budget,
+    weather,
   };
 }

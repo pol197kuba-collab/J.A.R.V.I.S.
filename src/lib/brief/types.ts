@@ -2,6 +2,8 @@
 // interfejsu. Osobny plik, bo czyta je i kod serwera, i komponent React, a
 // ani jeden nie ma powodu ciągnąć za sobą zależności drugiego.
 
+import type { DayWeather } from "@/lib/weather/day";
+
 /** Co system wie o świecie użytkownika na rano. Same liczby, zero prozy. */
 export type BriefFacts = {
   /** Dzień, którego dotyczy briefing (ISO, YYYY-MM-DD). */
@@ -48,6 +50,14 @@ export type BriefFacts = {
 
   /** Stan miesięcznego budżetu na modele; null, gdy limit wyłączony. */
   budget: { spentUsd: number; limitUsd: number; message: string } | null;
+
+  /**
+   * Prognoza na dziś dla zapisanego punktu domowego; null, gdy użytkownik
+   * nie podał współrzędnych albo dostawca nie odpowiedział. Nie trafia do
+   * żadnej sekcji — wchodzi do POWITANIA, bo tam jest po coś: rubryka ma
+   * zaczynać się od zdania o dniu, a nie od kursu bitcoina.
+   */
+  weather: DayWeather | null;
 };
 
 export type BriefSectionKind =

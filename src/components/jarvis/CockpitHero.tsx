@@ -68,11 +68,11 @@ export function CockpitHero() {
         <p className="font-display text-[10px] uppercase tracking-[0.4em] text-primary/70">
           ▸ Stark Industries · Operating System
         </p>
+        {/* Bez powitania: wita briefing nad tym panelem, i to on ma do tego
+            czym — zna pogodę i wie, co się zmieniło. Dwa powitania jedno pod
+            drugim brzmiały jak system, który zapomniał, że już się przywitał. */}
         <h1 className="font-display text-3xl font-bold leading-tight tracking-[0.14em] text-foreground">
           CO CZEKA NA CIEBIE
-          <span className="mt-1 block text-xl tracking-[0.2em] text-primary/90">
-            WITAJ, PANIE SŁAWIŃSKI
-          </span>
         </h1>
       </div>
 
