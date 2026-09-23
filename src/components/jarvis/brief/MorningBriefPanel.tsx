@@ -141,8 +141,11 @@ export function MorningBriefPanel({ index = 0 }: { index?: number }) {
           </>
         ) : (
           <>
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <p className="min-w-0 break-words font-mono text-[13px] text-foreground @max-[380px]:text-[12px]">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+              {/* Powitanie jest teraz pierwszym zdaniem całego pulpitu i bywa
+                  kilkuzdaniowe (pogoda, rada na dziś) — stąd interlinia i
+                  pełna szerokość wiersza, zamiast jednej linijki obok daty. */}
+              <p className="min-w-0 flex-1 basis-full break-words font-mono text-[14px] leading-relaxed text-foreground @max-[380px]:text-[12px]">
                 {data.greeting}
               </p>
               <span

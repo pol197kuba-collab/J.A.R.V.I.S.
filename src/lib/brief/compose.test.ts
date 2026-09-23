@@ -13,6 +13,7 @@ const quiet: BriefFacts = {
   tasks: { overdue: [], today: [] },
   failures: { count: 0, sample: null },
   budget: null,
+  weather: null,
 };
 
 const facts = (patch: Partial<BriefFacts>): BriefFacts => ({ ...quiet, ...patch });
@@ -158,5 +159,52 @@ describe("composeBrief — wersja mówiona", () => {
     );
     expect(brief.spoken).not.toMatch(/[%()\u00a0]/);
     expect(brief.spoken).toContain("procent");
+  });
+});
+
+describe("composeBrief — powitanie", () => {
+  it("wita sucho, gdy nie ma współrzędnych", () => {
+    // Brak lokalizacji to stan normalny, nie awaria — rubryka po prostu nie
+    // zaczyna się od pogody.
+    expect(composeBrief(quiet).greeting).toBe("Dzień dobry, Panie Sławiński.");
+  });
+
+  it("zaczyna dzień od pogody i rady, gdy jest o czym mówić", () => {
+    const sunny = composeBrief(
+      facts({
+        weather: {
+          tempMax: 24,
+          tempMin: 16,
+          precipChancePct: 0,
+          windMaxKph: 9,
+          code: 0,
+        },
+      }),
+    );
+    expect(sunny.greeting).toContain("24 stopnie");
+    expect(sunny.greeting).toContain("Warto to wykorzystać.");
+    // Powitanie idzie też do wersji mówionej — inaczej głośnik i ekran
+    // mówiłyby co innego.
+    expect(sunny.spoken).toContain("24 stopnie");
+  });
+
+  it("nie dopisuje do powitania niczego spoza prognozy", () => {
+    // Cała wartość tej rubryki stoi na tym, że nie zmyśla. Powitanie jest
+    // jedynym miejscem, w którym kusiłoby to najbardziej.
+    const rainy = composeBrief(
+      facts({
+        weather: {
+          tempMax: 11,
+          tempMin: 7,
+          precipChancePct: 90,
+          windMaxKph: 30,
+          code: 63,
+        },
+      }),
+    );
+    expect(rainy.greeting).toBe(
+      "Witam, Panie Sławiński. Zapowiada się deszczowy dzień — 11 stopni, deszcz. " +
+        "Parasol się dziś przyda.",
+    );
   });
 });

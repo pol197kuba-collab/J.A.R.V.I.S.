@@ -31,8 +31,14 @@ function Index() {
 
   return (
     <div className="relative space-y-6 p-6 @max-[420px]:space-y-4 @max-[420px]:p-4">
+      {/* BRIEFING NA SAMEJ GÓRZE — to jedyny panel, który mówi, co zmieniło
+          się OD WCZORAJ, i jedyny, który wita. Reszta pulpitu pokazuje stan
+          bieżący i jest tu zawsze; rubryka jest tym, po co w ogóle otwiera
+          się stronę główną rano. */}
+      <MorningBriefPanel index={0} />
+
       <HudPanel
-        index={0}
+        index={1}
         title="COMMAND // OVERVIEW"
         className="relative overflow-hidden p-8 @max-[420px]:p-4"
       >
@@ -62,11 +68,6 @@ function Index() {
           </div>
         </div>
       </HudPanel>
-
-      {/* Briefing zaraz pod nagłówkiem: to jedyny panel, który mówi, co się
-          zmieniło OD WCZORAJ. Reszta pulpitu pokazuje stan bieżący, więc
-          niżej jest na miejscu. */}
-      <MorningBriefPanel index={1} />
 
       <BudgetPanel index={2} />
 

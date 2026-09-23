@@ -1534,6 +1534,8 @@ export type Database = {
           monthly_budget_usd: number;
           created_at: string;
           default_model: string;
+          home_lat: number | null;
+          home_lon: number | null;
           owner_id: string;
           updated_at: string;
           voice_language: string;
@@ -1547,6 +1549,8 @@ export type Database = {
           monthly_budget_usd?: number;
           created_at?: string;
           default_model?: string;
+          home_lat?: number | null;
+          home_lon?: number | null;
           owner_id: string;
           updated_at?: string;
           voice_language?: string;
@@ -1560,6 +1564,8 @@ export type Database = {
           monthly_budget_usd?: number;
           created_at?: string;
           default_model?: string;
+          home_lat?: number | null;
+          home_lon?: number | null;
           owner_id?: string;
           updated_at?: string;
           voice_language?: string;
