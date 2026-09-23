@@ -2,11 +2,15 @@
  * Poranny briefing — uruchamiany przez .github/workflows/morning-brief.yml
  * (i ręcznie: `npx tsx scripts/morning-brief.ts --dry-run`).
  *
- * KIEDY BIEGNIE I DLACZEGO AKURAT WTEDY. Po porannym zaciągu cen paliw
- * (7:30 CEST), żeby cennik na dziś był już w bazie, i przed godziną, o
- * której ktokolwiek zagląda na pulpit. Notowania są z wieczornego przebiegu
- * poprzedniego dnia — i tak mają być: rano giełdy jeszcze nie otworzyły, a
- * briefing ma opisywać zamkniętą sesję, nie połowę następnej.
+ * KIEDY BIEGNIE. Co godzinę — ale rubrykę składa dopiero przy pierwszym
+ * przebiegu po godzinie WYBRANEJ PRZEZ UŻYTKOWNIKA (user_settings.brief_hour,
+ * czas lokalny). Harmonogram GitHub Actions jest jeden dla wszystkich i nie
+ * da się go ustawić per konto, więc wybór godziny musi być decyzją w kodzie,
+ * a nie w cronie.
+ *
+ * Notowania w rubryce są z wieczornego przebiegu poprzedniego dnia — i tak
+ * mają być: rano giełdy jeszcze nie otworzyły, a briefing ma opisywać
+ * zamkniętą sesję, nie połowę następnej.
  *
  * Skrypt jest CIENKI: cała logika siedzi w src/lib/brief/*, pokryta testami
  * i używana też przez server function „złóż briefing teraz". Tutaj są
@@ -17,6 +21,8 @@ import type { Database, Json } from "../src/integrations/supabase/types";
 import { buildDailyBrief } from "../src/lib/brief/build.server";
 import { gatherFacts } from "../src/lib/brief/facts.server";
 import { composeBrief } from "../src/lib/brief/compose";
+import { decideBriefRun, DEFAULT_BRIEF_HOUR } from "../src/lib/brief/schedule";
+import { warsawDate, warsawHour } from "../src/lib/format/warsaw";
 
 const args = new Set(process.argv.slice(2));
 const DRY_RUN = args.has("--dry-run");
@@ -108,8 +114,45 @@ async function main(): Promise<void> {
     return;
   }
 
+  // ---------- Czy to już ta godzina ----------
+  // Job biegnie CO GODZINĘ, bo harmonogram GitHuba jest jeden dla wszystkich,
+  // a godzina briefingu należy do użytkownika. Ta decyzja jest czysta i
+  // przetestowana (src/lib/brief/schedule.ts) — tutaj tylko odczyt ustawień.
+  const { data: settings } = await db
+    .from("user_settings")
+    .select("brief_hour, brief_push")
+    .eq("owner_id", ownerId)
+    .maybeSingle();
+
+  const schedule = {
+    hour: settings?.brief_hour ?? DEFAULT_BRIEF_HOUR,
+    push: settings?.brief_push ?? true,
+  };
+
+  const { data: lastBrief } = await db
+    .from("daily_briefs")
+    .select("brief_date")
+    .eq("owner_id", ownerId)
+    .order("brief_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const now = new Date();
+  const decision = decideBriefRun(schedule, now, lastBrief?.brief_date ?? null);
+  if (!decision.run) {
+    notice(
+      decision.reason === "already_built"
+        ? `Rubryka na ${warsawDate(now)} już istnieje — pomijam.`
+        : `Jest ${warsawHour(now)}:00 czasu lokalnego, briefing zamówiony na ${schedule.hour}:00 — za wcześnie.`,
+    );
+    return;
+  }
+
   try {
-    const { brief, notified, error } = await buildDailyBrief(db, ownerId, keys, { notify: true });
+    const { brief, notified, error } = await buildDailyBrief(db, ownerId, keys, {
+      notify: true,
+      push: schedule.push,
+    });
 
     if (error) {
       fail(`Zapis briefingu: ${error}`);
@@ -130,11 +173,12 @@ async function main(): Promise<void> {
     notice(
       `briefing ${brief.date}: ${brief.sections.length} sekcji, ` +
         `tekst: ${brief.generatedBy}` +
-        (notified ? ", powiadomienie wysłane" : ", BEZ powiadomienia"),
+        (notified ? ", meldunek zapisany" : ", BEZ meldunku") +
+        (schedule.push ? "" : " (tryb cichy — bez powiadomienia na urządzenia)"),
     );
     // Brak powiadomienia przy udanym zapisie znaczy, że briefing jest, ale
     // nikt się o nim nie dowie — warto, żeby było to widać w przebiegu.
-    if (!notified) warn("Briefing zapisany, ale powiadomienie się nie zapisało.");
+    if (!notified) warn("Briefing zapisany, ale meldunek się nie zapisał.");
   } catch (err) {
     fail(err instanceof Error ? (err.stack ?? err.message) : String(err));
     process.exit(1);

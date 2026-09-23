@@ -1513,6 +1513,8 @@ export type Database = {
       user_settings: {
         Row: {
           active_agent_slug: string;
+          brief_hour: number;
+          brief_push: boolean;
           chat_routing: string;
           created_at: string;
           default_model: string;
@@ -1523,6 +1525,8 @@ export type Database = {
         };
         Insert: {
           active_agent_slug?: string;
+          brief_hour?: number;
+          brief_push?: boolean;
           chat_routing?: string;
           created_at?: string;
           default_model?: string;
@@ -1533,6 +1537,8 @@ export type Database = {
         };
         Update: {
           active_agent_slug?: string;
+          brief_hour?: number;
+          brief_push?: boolean;
           chat_routing?: string;
           created_at?: string;
           default_model?: string;

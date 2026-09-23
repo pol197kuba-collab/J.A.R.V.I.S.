@@ -151,12 +151,15 @@ export type BuildBriefResult = {
  * wtedy użytkownik ma go już przed oczami i osobny sygnał byłby hałasem.
  * Nocny job woła z `notify: true`, bo to właśnie powiadomienie jest jedyną
  * rzeczą, która o briefingu w ogóle mówi.
+ *
+ * `push: false` to tryb cichy wybrany przez użytkownika: meldunek ląduje w
+ * dzwonku, ale nie budzi urządzeń.
  */
 export async function buildDailyBrief(
   db: Db,
   ownerId: string,
   keys: BriefKeys,
-  options: { notify?: boolean } = {},
+  options: { notify?: boolean; push?: boolean } = {},
 ): Promise<BuildBriefResult> {
   const facts = await gatherFacts(db, ownerId);
   const composed: ComposedBrief = composeBrief(facts);
@@ -206,6 +209,8 @@ export async function buildDailyBrief(
       // Jeden briefing dziennie, więc jeden znacznik — wczorajszy meldunek
       // znika z ekranu urządzenia, zamiast zostawać obok dzisiejszego.
       tag: "daily-brief",
+      // Cichy briefing: rubryka i dzwonek jak zwykle, telefon nietknięty.
+      silent: options.push === false,
     });
     notified = result.id !== null;
   }

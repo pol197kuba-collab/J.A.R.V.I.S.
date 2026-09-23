@@ -4,15 +4,20 @@ name: Morning Brief
 # które stałe rozkazy się wyzwoliły, co jest po terminie i co się wysypało.
 #
 # Briefing nie zaciąga żadnych danych z zewnątrz — czyta to, co zapisały
-# pozostałe joby. Stąd godzina: PO porannym przebiegu cen paliw (7:30 CEST),
-# żeby cennik na dziś był już w bazie. Notowania są z wieczornego przebiegu
-# poprzedniego dnia i tak ma być — rano giełdy jeszcze nie otworzyły, a
-# rubryka ma opisywać zamkniętą sesję, nie połowę następnej.
+# pozostałe joby. Notowania są z wieczornego przebiegu poprzedniego dnia i
+# tak ma być: rano giełdy jeszcze nie otworzyły, a rubryka ma opisywać
+# zamkniętą sesję, nie połowę następnej.
 on:
   schedule:
+    # CO GODZINĘ, ale rubryka powstaje tylko raz — przy pierwszym przebiegu
+    # po godzinie wybranej przez użytkownika (user_settings.brief_hour, czas
+    # warszawski). Crona nie da się ustawić per konto, więc wybór godziny
+    # jest decyzją w kodzie; przebiegi poza tą godziną kończą się w kilka
+    # sekund na jednym zapytaniu do bazy.
+    #
     # Codziennie, także w weekend: zadania po terminie i awarie nie robią
     # sobie wolnego, a krypto chodzi 24/7.
-    - cron: "45 5 * * *" # 07:45 CEST
+    - cron: "20 * * * *"
   workflow_dispatch:
 
 # Dwa przebiegi na raz napisałyby ten sam wiersz (UNIQUE po dniu przeżyje to
@@ -23,7 +28,7 @@ concurrency:
 
 jobs:
   brief:
-    name: złożenie porannego briefingu
+    name: briefing (składa się o godzinie wybranej przez użytkownika)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

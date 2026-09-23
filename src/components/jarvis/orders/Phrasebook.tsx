@@ -87,7 +87,7 @@ const GROUPS: Group[] = [
   {
     title: "Briefing",
     intro:
-      "Poranna rubryka składa się sama o 7:45 z tego, co zapisały nocne joby. Tu się ją przywołuje.",
+      "Poranna rubryka składa się sama o wybranej godzinie z tego, co zapisały nocne joby. Tu się ją przywołuje.",
     phrases: [
       { text: "Streść mi dzień" },
       { text: "Co nowego?" },

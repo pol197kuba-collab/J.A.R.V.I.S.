@@ -13,6 +13,7 @@ import { assetBySymbol } from "@/lib/markets/assets";
 import { productById, DEFAULT_PRODUCT_ID } from "@/lib/fuel/orlen";
 import { labelsFor } from "@/lib/orders/subjects";
 import { describeOrder, type StandingOrder } from "@/lib/orders/rules";
+import { warsawDate } from "@/lib/format/warsaw";
 import type { BriefFacts } from "./types";
 
 type Db = SupabaseClient<Database>;
@@ -258,7 +259,11 @@ export async function gatherFacts(db: Db, ownerId: string): Promise<BriefFacts> 
   ]);
 
   return {
-    date: isoDate(new Date()),
+    // Data WARSZAWSKA, nie UTC. O 00:30 czasu lokalnego w UTC trwa jeszcze
+    // poprzedni dzień — rubryka wylądowałaby wtedy pod wczorajszą datą, a
+    // harmonogram (który liczy dobę lokalnie) uznałby, że dzisiejszej nadal
+    // nie ma i złożyłby drugą.
+    date: warsawDate(new Date()),
     movers,
     calls,
     accuracy,

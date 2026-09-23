@@ -109,7 +109,8 @@ export function MorningBriefPanel({ index = 0 }: { index?: number }) {
         ) : !data ? (
           <>
             <p className="min-w-0 break-words font-mono text-[11px] leading-relaxed text-foreground/80">
-              Briefingu jeszcze nie ma. Pierwszy powstanie o 7:45 — albo teraz, przyciskiem obok.
+              Briefingu jeszcze nie ma. Pierwszy powstanie o godzinie ustawionej w Ustawieniach —
+              albo teraz, przyciskiem obok.
             </p>
             <PanelHint>
               Rubryka składa się z tego, co zapisały nocne joby: notowań, cen paliw, wyzwolonych

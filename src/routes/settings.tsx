@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { PushToggle } from "@/components/jarvis/orders/PushToggle";
+import { BriefScheduleControls } from "@/components/jarvis/brief/BriefScheduleControls";
 import { useAudioSettings } from "@/lib/audio/useAudioSettings";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
@@ -1055,6 +1056,15 @@ function Settings() {
         </p>
         <div className="mt-4">
           <PushToggle />
+        </div>
+
+        <div className="mt-6 border-t border-primary/15 pt-5">
+          <h3 className="font-display text-[9px] uppercase tracking-[0.25em] text-primary">
+            poranny briefing
+          </h3>
+          <div className="mt-3">
+            <BriefScheduleControls />
+          </div>
         </div>
       </HudPanel>
 
