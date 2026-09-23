@@ -8,7 +8,7 @@
 // trafności liczyłaby się z czegoś, czego typer nigdy nie powiedział.
 // Briefing czyta to, co już postanowiono, i tyle.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/integrations/supabase/types";
+import type { Database, Json } from "@/integrations/supabase/types";
 import { assetBySymbol } from "@/lib/markets/assets";
 import { productById, DEFAULT_PRODUCT_ID } from "@/lib/fuel/orlen";
 import { labelsFor } from "@/lib/orders/subjects";
@@ -16,6 +16,7 @@ import { describeOrder, type StandingOrder } from "@/lib/orders/rules";
 import { warsawDate } from "@/lib/format/warsaw";
 import { currentBudget } from "@/lib/agents/budget.server";
 import { fetchDayWeather } from "@/lib/weather/openMeteo.server";
+import { logServerError } from "@/lib/system/logServerError";
 import { budgetMessage } from "@/lib/agents/budget";
 import type { BriefFacts } from "./types";
 
@@ -235,18 +236,40 @@ async function loadBudget(db: Db, ownerId: string): Promise<BriefFacts["budget"]
  * od pogody. Zgadywanie miasta na sztywno byłoby gorsze niż milczenie —
  * „dziś słonecznie" o mieście, w którym akurat nie ma użytkownika, uczy nie
  * ufać całej reszcie briefingu.
+ *
+ * ALE BRAK PUNKTU I ZEPSUTE POBRANIE TO DWIE RÓŻNE RZECZY. Pierwsze jest
+ * wyborem użytkownika i ma prawo być ciche. Drugie jest awarią i musi
+ * zostawić ślad — inaczej rubryka bez pogody nie mówi NIC o tym, czego jej
+ * brakuje, i jedynym sposobem sprawdzenia zostaje zgadywanie. Ślad idzie do
+ * `system_events`, czyli tam, skąd następny briefing czyta sekcję „Usterki".
  */
 async function loadWeather(db: Db, ownerId: string): Promise<BriefFacts["weather"]> {
-  const { data } = await db
+  const { data, error } = await db
     .from("user_settings")
     .select("home_lat, home_lon")
     .eq("owner_id", ownerId)
     .maybeSingle();
 
+  if (error) {
+    await logServerError(db, ownerId, "brief.weather", error);
+    return null;
+  }
+
   const lat = data?.home_lat;
   const lon = data?.home_lon;
   if (lat === null || lat === undefined || lon === null || lon === undefined) return null;
-  return fetchDayWeather(Number(lat), Number(lon));
+
+  try {
+    return await fetchDayWeather(Number(lat), Number(lon));
+  } catch (err) {
+    // Współrzędne w meta, bo połowa możliwych przyczyn to właśnie one:
+    // zamienione miejscami, ucięte do zera, zapisane jako tekst.
+    await logServerError(db, ownerId, "brief.weather", err, {
+      lat: Number(lat),
+      lon: Number(lon),
+    } as Json);
+    return null;
+  }
 }
 
 async function loadFailures(db: Db, ownerId: string): Promise<BriefFacts["failures"]> {
