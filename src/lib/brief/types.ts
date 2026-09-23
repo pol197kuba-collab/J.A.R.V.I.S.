@@ -45,9 +45,19 @@ export type BriefFacts = {
 
   /** Awarie zapisane w system_events przez ostatnią dobę. */
   failures: { count: number; sample: string | null };
+
+  /** Stan miesięcznego budżetu na modele; null, gdy limit wyłączony. */
+  budget: { spentUsd: number; limitUsd: number; message: string } | null;
 };
 
-export type BriefSectionKind = "markets" | "outlook" | "fuel" | "orders" | "tasks" | "failures";
+export type BriefSectionKind =
+  | "markets"
+  | "outlook"
+  | "fuel"
+  | "orders"
+  | "tasks"
+  | "failures"
+  | "budget";
 
 export type BriefSection = {
   kind: BriefSectionKind;

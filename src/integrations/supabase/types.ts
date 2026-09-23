@@ -10,6 +10,9 @@ export type Database = {
     Tables: {
       agent_runs: {
         Row: {
+          cache_read_tokens: number | null;
+          cache_write_tokens: number | null;
+          cost_usd: number | null;
           agent_id: string;
           conversation_id: string | null;
           created_at: string;
@@ -18,6 +21,7 @@ export type Database = {
           id: string;
           input: Json;
           latency_ms: number | null;
+          model: string | null;
           output: Json | null;
           parent_run_id: string | null;
           started_at: string | null;
@@ -27,6 +31,9 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          cache_read_tokens?: number | null;
+          cache_write_tokens?: number | null;
+          cost_usd?: number | null;
           agent_id: string;
           conversation_id?: string | null;
           created_at?: string;
@@ -35,6 +42,7 @@ export type Database = {
           id?: string;
           input?: Json;
           latency_ms?: number | null;
+          model?: string | null;
           output?: Json | null;
           parent_run_id?: string | null;
           started_at?: string | null;
@@ -44,6 +52,9 @@ export type Database = {
           user_id: string;
         };
         Update: {
+          cache_read_tokens?: number | null;
+          cache_write_tokens?: number | null;
+          cost_usd?: number | null;
           agent_id?: string;
           conversation_id?: string | null;
           created_at?: string;
@@ -52,6 +63,7 @@ export type Database = {
           id?: string;
           input?: Json;
           latency_ms?: number | null;
+          model?: string | null;
           output?: Json | null;
           parent_run_id?: string | null;
           started_at?: string | null;
@@ -1519,6 +1531,7 @@ export type Database = {
           brief_hour: number;
           brief_push: boolean;
           chat_routing: string;
+          monthly_budget_usd: number;
           created_at: string;
           default_model: string;
           owner_id: string;
@@ -1531,6 +1544,7 @@ export type Database = {
           brief_hour?: number;
           brief_push?: boolean;
           chat_routing?: string;
+          monthly_budget_usd?: number;
           created_at?: string;
           default_model?: string;
           owner_id: string;
@@ -1543,6 +1557,7 @@ export type Database = {
           brief_hour?: number;
           brief_push?: boolean;
           chat_routing?: string;
+          monthly_budget_usd?: number;
           created_at?: string;
           default_model?: string;
           owner_id?: string;

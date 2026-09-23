@@ -14,6 +14,8 @@ import { productById, DEFAULT_PRODUCT_ID } from "@/lib/fuel/orlen";
 import { labelsFor } from "@/lib/orders/subjects";
 import { describeOrder, type StandingOrder } from "@/lib/orders/rules";
 import { warsawDate } from "@/lib/format/warsaw";
+import { currentBudget } from "@/lib/agents/budget.server";
+import { budgetMessage } from "@/lib/agents/budget";
 import type { BriefFacts } from "./types";
 
 type Db = SupabaseClient<Database>;
@@ -214,6 +216,16 @@ async function loadTasks(db: Db, ownerId: string): Promise<BriefFacts["tasks"]> 
   return { overdue, today };
 }
 
+/** Stan budżetu — tylko wtedy, gdy jest o czym mówić. */
+async function loadBudget(db: Db, ownerId: string): Promise<BriefFacts["budget"]> {
+  const status = await currentBudget(db, ownerId);
+  const message = budgetMessage(status);
+  // Budżet w normie nie jest wiadomością. Codzienne „zużyto 12% limitu"
+  // nauczyłoby przewijać całą rubrykę.
+  if (!message) return null;
+  return { spentUsd: status.spentUsd, limitUsd: status.limitUsd, message };
+}
+
 async function loadFailures(db: Db, ownerId: string): Promise<BriefFacts["failures"]> {
   const since = new Date(Date.now() - DAY_MS).toISOString();
   const { data } = await db
@@ -248,7 +260,7 @@ export async function gatherFacts(db: Db, ownerId: string): Promise<BriefFacts> 
     }
   };
 
-  const [movers, calls, accuracy, fuel, firedOrders, tasks, failures] = await Promise.all([
+  const [movers, calls, accuracy, fuel, firedOrders, tasks, failures, budget] = await Promise.all([
     safe(() => loadMovers(db, ownerId), []),
     safe(() => loadCalls(db, ownerId), []),
     safe(() => loadAccuracy(db, ownerId), { settled: 0, hitRatePct: null }),
@@ -256,6 +268,7 @@ export async function gatherFacts(db: Db, ownerId: string): Promise<BriefFacts> 
     safe(() => loadFiredOrders(db, ownerId), []),
     safe(() => loadTasks(db, ownerId), { overdue: [], today: [] }),
     safe(() => loadFailures(db, ownerId), { count: 0, sample: null }),
+    safe(() => loadBudget(db, ownerId), null),
   ]);
 
   return {
@@ -271,5 +284,6 @@ export async function gatherFacts(db: Db, ownerId: string): Promise<BriefFacts> 
     firedOrders,
     tasks,
     failures,
+    budget,
   };
 }

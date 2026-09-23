@@ -509,6 +509,8 @@ export type UserSettings = {
   briefHour: number;
   /** Czy o gotowym briefingu powiadomić urządzenia (false = tryb cichy). */
   briefPush: boolean;
+  /** Miesięczny limit wydatków na modele, USD. 0 = nie pilnuj. */
+  monthlyBudgetUsd: number;
 };
 
 const DEFAULT_SETTINGS: UserSettings = {
@@ -518,6 +520,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   wakeWordEnabled: true,
   briefHour: 7,
   briefPush: true,
+  monthlyBudgetUsd: 5,
 };
 
 export const getUserSettings = createServerFn({ method: "GET" })
@@ -527,7 +530,7 @@ export const getUserSettings = createServerFn({ method: "GET" })
     const { data, error } = await supabase
       .from("user_settings")
       .select(
-        "chat_routing, default_model, voice_language, wake_word_enabled, brief_hour, brief_push",
+        "chat_routing, default_model, voice_language, wake_word_enabled, brief_hour, brief_push, monthly_budget_usd",
       )
       .eq("owner_id", userId)
       .maybeSingle();
@@ -540,6 +543,7 @@ export const getUserSettings = createServerFn({ method: "GET" })
       wakeWordEnabled: data.wake_word_enabled,
       briefHour: data.brief_hour ?? DEFAULT_SETTINGS.briefHour,
       briefPush: data.brief_push ?? DEFAULT_SETTINGS.briefPush,
+      monthlyBudgetUsd: Number(data.monthly_budget_usd ?? DEFAULT_SETTINGS.monthlyBudgetUsd),
     };
   });
 
@@ -551,6 +555,7 @@ const UpdateSettingsInput = z
     wakeWordEnabled: z.boolean().optional(),
     briefHour: z.number().int().min(0).max(23).optional(),
     briefPush: z.boolean().optional(),
+    monthlyBudgetUsd: z.number().min(0).max(10_000).optional(),
   })
   .refine((v) => Object.keys(v).length > 0, "at least one field required");
 
@@ -567,6 +572,7 @@ export const updateUserSettings = createServerFn({ method: "POST" })
       wake_word_enabled?: boolean;
       brief_hour?: number;
       brief_push?: boolean;
+      monthly_budget_usd?: number;
     } = { owner_id: userId };
     if (data.chatRouting !== undefined) patch.chat_routing = data.chatRouting;
     if (data.defaultModel !== undefined) patch.default_model = data.defaultModel;
@@ -574,11 +580,12 @@ export const updateUserSettings = createServerFn({ method: "POST" })
     if (data.wakeWordEnabled !== undefined) patch.wake_word_enabled = data.wakeWordEnabled;
     if (data.briefHour !== undefined) patch.brief_hour = data.briefHour;
     if (data.briefPush !== undefined) patch.brief_push = data.briefPush;
+    if (data.monthlyBudgetUsd !== undefined) patch.monthly_budget_usd = data.monthlyBudgetUsd;
     const { data: row, error } = await supabase
       .from("user_settings")
       .upsert(patch, { onConflict: "owner_id" })
       .select(
-        "chat_routing, default_model, voice_language, wake_word_enabled, brief_hour, brief_push",
+        "chat_routing, default_model, voice_language, wake_word_enabled, brief_hour, brief_push, monthly_budget_usd",
       )
       .single();
     if (error) {
@@ -592,6 +599,7 @@ export const updateUserSettings = createServerFn({ method: "POST" })
       wakeWordEnabled: row.wake_word_enabled,
       briefHour: row.brief_hour ?? DEFAULT_SETTINGS.briefHour,
       briefPush: row.brief_push ?? DEFAULT_SETTINGS.briefPush,
+      monthlyBudgetUsd: Number(row.monthly_budget_usd ?? DEFAULT_SETTINGS.monthlyBudgetUsd),
     };
   });
 

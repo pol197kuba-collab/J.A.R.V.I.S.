@@ -172,7 +172,15 @@ export async function callAnthropic(opts: CallAnthropicOptions): Promise<ModelTu
       content?: AnthropicResponseBlock[];
       stop_reason?: string;
       stop_details?: { category?: string | null; explanation?: string | null };
-      usage?: { input_tokens?: number; output_tokens?: number };
+      usage?: {
+        input_tokens?: number;
+        output_tokens?: number;
+        // Rozliczane INACZEJ niż zwykłe wejście (odczyt ~0,1 stawki, zapis
+        // ~1,25). Pominięcie ich rozjeżdża licznik kosztów w obie strony,
+        // i to niezauważalnie — patrz src/lib/agents/pricing.ts.
+        cache_read_input_tokens?: number;
+        cache_creation_input_tokens?: number;
+      };
     };
 
     const blocks = data.content ?? [];
@@ -211,6 +219,8 @@ export async function callAnthropic(opts: CallAnthropicOptions): Promise<ModelTu
       functionCalls,
       tokensIn: data.usage?.input_tokens ?? 0,
       tokensOut: data.usage?.output_tokens ?? 0,
+      cacheReadTokens: data.usage?.cache_read_input_tokens ?? 0,
+      cacheWriteTokens: data.usage?.cache_creation_input_tokens ?? 0,
     };
   } finally {
     clearTimeout(timer);

@@ -22,6 +22,9 @@ const SETTINGS_QUERY_KEY = ["user-settings"] as const;
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 
+/** Progi limitu. 0 na pierwszym miejscu, bo „nie pilnuj" to wybór, nie brak. */
+const BUDGETS = [0, 5, 10, 20, 50, 100];
+
 export function BriefScheduleControls() {
   const qc = useQueryClient();
   const fetchSettings = useServerFn(getUserSettings);
@@ -40,7 +43,8 @@ export function BriefScheduleControls() {
   }, [settings.data, hour]);
 
   const mutate = useMutation({
-    mutationFn: (patch: { briefHour?: number; briefPush?: boolean }) => save({ data: patch }),
+    mutationFn: (patch: { briefHour?: number; briefPush?: boolean; monthlyBudgetUsd?: number }) =>
+      save({ data: patch }),
     onSuccess: (fresh) => {
       qc.setQueryData(SETTINGS_QUERY_KEY, fresh);
       setHour(fresh.briefHour);
@@ -53,6 +57,7 @@ export function BriefScheduleControls() {
   });
 
   const push = settings.data?.briefPush ?? true;
+  const budget = settings.data?.monthlyBudgetUsd ?? 5;
   const busy = settings.isLoading || mutate.isPending;
 
   return (
@@ -99,6 +104,31 @@ export function BriefScheduleControls() {
           {push ? "budzi telefon" : "tryb cichy"}
         </button>
       </div>
+
+      <label className="mt-4 block min-w-0 basis-40">
+        <span className="font-display block text-[8px] uppercase tracking-[0.25em] text-muted-foreground">
+          miesięczny limit na modele
+        </span>
+        <select
+          value={budget}
+          disabled={busy}
+          onChange={(e) => mutate.mutate({ monthlyBudgetUsd: Number(e.target.value) })}
+          className="mt-1 w-full min-w-0 max-w-[240px] rounded border border-primary/25 bg-transparent px-2 py-1 font-mono text-xs text-foreground disabled:opacity-40"
+        >
+          {BUDGETS.map((value) => (
+            <option key={value} value={value} className="bg-popover">
+              {value === 0 ? "bez limitu" : `$${value} / miesiąc`}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <PanelHint>
+        Po przekroczeniu limitu agenci schodzą o stopień na tańszy model (Opus → Sonnet → Haiku →
+        Gemini) zamiast odmawiać pracy — twarde „nie" znaczyłoby, że J.A.R.V.I.S. milknie w środku
+        rozmowy. Ostrzeżenie przychodzi przy 80%, żeby zmiana nie była niespodzianką. „Bez limitu"
+        wyłącza tylko degradację; licznik działa dalej.
+      </PanelHint>
 
       <PanelHint>
         Czas lokalny. Rubryka powstaje przy pierwszym przebiegu po tej godzinie — zaplanowane

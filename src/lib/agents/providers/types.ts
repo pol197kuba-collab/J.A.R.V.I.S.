@@ -24,4 +24,8 @@ export type ModelTurnResult = {
   functionCalls: Array<{ name: string; args: Record<string, unknown> }>;
   tokensIn: number;
   tokensOut: number;
+  /** Tokeny odczytane z cache'u dostawcy — rozliczane taniej niż wejście. */
+  cacheReadTokens?: number;
+  /** Tokeny zapisane do cache'u — rozliczane DROŻEJ niż wejście. */
+  cacheWriteTokens?: number;
 };

@@ -15,9 +15,13 @@ import {
   DEFAULT_GROQ_CLASSIFIER_MODEL,
   DEFAULT_GROQ_FALLBACK_MODEL,
   parseModelRef,
+  ANTHROPIC_PREFIX,
 } from "./models";
 import { callAnthropic } from "./providers/anthropic";
 import { callGroq } from "./providers/groq";
+import { costUsd } from "./pricing";
+import { chooseModel } from "./budget";
+import { currentBudget } from "./budget.server";
 import type { GeminiContent, GeminiPart } from "./providers/types";
 import { AGENT_SLUGS, isToolForcedForAgent } from "@/lib/constants/agentSlugs";
 import { UI_ACTIONS, type UiAction } from "@/lib/constants/uiActions";
@@ -686,6 +690,25 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
   let modelProvider = missingAnthropicKey ? "gemini" : parsedModel.provider;
   let model = missingAnthropicKey ? DEFAULT_GEMINI_MODEL : parsedModel.modelId;
 
+  // ---------- Budżet ----------
+  // Po przekroczeniu limitu miesięcznego schodzimy o jeden stopień w dół
+  // zamiast odmawiać pracy: twarde „nie" znaczyłoby, że J.A.R.V.I.S. milknie
+  // w środku rozmowy, a po dwóch takich wieczorach limit i tak zostałby
+  // podniesiony — czyli zabezpieczenie zniknęłoby zamiast zadziałać.
+  //
+  // Odczyt nigdy nie rzuca (patrz currentBudget): awaria odczytu budżetu nie
+  // może być powodem, dla którego agent nie odpowiada.
+  const budget = await currentBudget(supabase, userId);
+  const modelDecision = chooseModel(
+    modelProvider === "anthropic" ? `${ANTHROPIC_PREFIX}${model}` : model,
+    budget,
+  );
+  if (modelDecision.downgraded) {
+    const reparsed = parseModelRef(modelDecision.model);
+    modelProvider = reparsed.provider;
+    model = reparsed.modelId;
+  }
+
   const clampNum = (v: unknown, min: number, max: number, fallback: number) =>
     typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
   const temperature = clampNum(configObj.temperature, 0, 1, DEFAULT_TEMPERATURE);
@@ -763,6 +786,22 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       meta: (meta ?? {}) as Json,
     });
   };
+
+  // Zmiana modelu w połowie miesiąca bez śladu w logu wygląda jak awaria
+  // („dlaczego on nagle głupieje"). To jedyne miejsce, w którym da się
+  // później odtworzyć, że to był budżet, a nie model.
+  if (modelDecision.downgraded) {
+    await logEvent(
+      "warn",
+      AGENT_SLUGS.JARVIS,
+      `budżet wyczerpany · ${modelDecision.requested} → ${modelDecision.model}`,
+      {
+        run_id: runId,
+        spent_usd: Math.round(budget.spentUsd * 1_000_000) / 1_000_000,
+        limit_usd: budget.limitUsd,
+      } as Json,
+    );
+  }
 
   await logEvent("info", AGENT_SLUGS.JARVIS, `run started · model ${model}`, {
     run_id: runId,
@@ -871,6 +910,9 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     }
     let totalTokensIn = 0;
     let totalTokensOut = 0;
+    // Osobno, bo rozliczają się po innych stawkach niż zwykłe wejście.
+    let totalCacheRead = 0;
+    let totalCacheWrite = 0;
     let finalText = "";
     let uiAction: UiAction | null = null;
     const toolCallLog: Array<{ name: string; args: Record<string, unknown> }> = [];
@@ -930,6 +972,8 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           });
           totalTokensIn += claudeResult.tokensIn;
           totalTokensOut += claudeResult.tokensOut;
+          totalCacheRead += claudeResult.cacheReadTokens ?? 0;
+          totalCacheWrite += claudeResult.cacheWriteTokens ?? 0;
           functionCalls = claudeResult.functionCalls;
           textOut = claudeResult.text;
           if (functionCalls.length === 0 && !textOut) {
@@ -1449,6 +1493,18 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         output: { text: finalText, tool_calls: toolCallLog } as Json,
         tokens_input: totalTokensIn || null,
         tokens_output: totalTokensOut || null,
+        model,
+        cache_read_tokens: totalCacheRead || null,
+        cache_write_tokens: totalCacheWrite || null,
+        // Koszt liczony TERAZ, po dzisiejszym cenniku, i zapisany przy
+        // przebiegu — historia ma zostać tym, czym była, nawet gdy stawki
+        // się zmienią. `null` znaczy „model spoza cennika", nie „za darmo".
+        cost_usd: costUsd(model, {
+          input: totalTokensIn,
+          output: totalTokensOut,
+          cacheRead: totalCacheRead,
+          cacheWrite: totalCacheWrite,
+        }),
         latency_ms: latencyMs,
         finished_at: new Date().toISOString(),
       })

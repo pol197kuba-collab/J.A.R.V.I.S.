@@ -3,6 +3,7 @@ import { HudPanel } from "@/components/jarvis/HudPanel";
 import { CockpitHero } from "@/components/jarvis/CockpitHero";
 import { SystemPulsePanel } from "@/components/jarvis/SystemPulsePanel";
 import { MorningBriefPanel } from "@/components/jarvis/brief/MorningBriefPanel";
+import { BudgetPanel } from "@/components/jarvis/budget/BudgetPanel";
 import { TaskBoardPanel } from "@/components/jarvis/TaskBoardPanel";
 import { ArcReactorTriangle } from "@/components/jarvis/ArcReactorTriangle";
 import { useAgentStatus } from "@/components/jarvis/useAgentStatus";
@@ -67,9 +68,11 @@ function Index() {
           niżej jest na miejscu. */}
       <MorningBriefPanel index={1} />
 
-      <SystemPulsePanel index={2} />
+      <BudgetPanel index={2} />
 
-      <TaskBoardPanel index={3} />
+      <SystemPulsePanel index={3} />
+
+      <TaskBoardPanel index={4} />
     </div>
   );
 }

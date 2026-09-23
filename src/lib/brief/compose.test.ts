@@ -12,6 +12,7 @@ const quiet: BriefFacts = {
   firedOrders: [],
   tasks: { overdue: [], today: [] },
   failures: { count: 0, sample: null },
+  budget: null,
 };
 
 const facts = (patch: Partial<BriefFacts>): BriefFacts => ({ ...quiet, ...patch });
@@ -111,6 +112,23 @@ describe("composeBrief — kolejność i objętość", () => {
     const tasks = composeBrief(many).sections.find((s) => s.kind === "tasks")!;
     expect(tasks.lines).toHaveLength(4);
     expect(tasks.lines.at(-1)).toContain("4 więcej");
+  });
+});
+
+describe("composeBrief — budżet", () => {
+  it("milczy, dopóki budżet jest w normie", () => {
+    // Codzienne „zużyto 12% limitu" nauczyłoby przewijać całą rubrykę.
+    expect(kinds(quiet)).not.toContain("budget");
+  });
+
+  it("stawia budżet PRZED usterkami", () => {
+    // Wyczerpany limit zmienia zachowanie wszystkich agentów na resztę
+    // miesiąca — to więcej niż pojedyncza awaria.
+    const busy = facts({
+      budget: { spentUsd: 6, limitUsd: 5, message: "Limit miesięczny wyczerpany." },
+      failures: { count: 1, sample: "market-grid" },
+    });
+    expect(kinds(busy)).toEqual(["budget", "failures"]);
   });
 });
 
