@@ -13,6 +13,7 @@ import { RefreshCw, Volume2, VolumeX } from "lucide-react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { PanelHint } from "@/components/jarvis/fuel/chrome";
 import { getLatestBrief, refreshBrief } from "@/lib/brief/brief.functions";
+import { rescueDocumentJobsFn } from "@/lib/agents/documentJobs.functions";
 import { isSpeakingNow, onSpeaking, speak, speakCancel } from "@/lib/audio/speak";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +50,19 @@ export function MorningBriefPanel({ index = 0 }: { index?: number }) {
   // Cisza przy wyjściu ze strony. Bez tego briefing czyta się dalej po
   // przejściu do innego modułu i nie ma go czym zatrzymać.
   useEffect(() => () => speakCancel(), []);
+
+  // Wejście na pulpit podnosi zadania dokumentowe porzucone przy zamknięciu
+  // aplikacji. Panel briefingu jest do tego dobrym miejscem nie dlatego, że
+  // ma z nimi coś wspólnego, tylko dlatego, że montuje się dokładnie raz,
+  // przy wejściu na stronę główną — a tu właśnie wraca użytkownik, który
+  // zastanawia się, gdzie jego prezentacja. Wynik nie jest pokazywany:
+  // dokończone zadanie melduje się samo powiadomieniem.
+  const rescue = useServerFn(rescueDocumentJobsFn);
+  useEffect(() => {
+    void rescue({}).catch(() => {
+      /* pass w tle — nie ma prawa zepsuć wejścia na stronę */
+    });
+  }, [rescue]);
 
   const refresh = useMutation({
     mutationFn: () => rebuild(),

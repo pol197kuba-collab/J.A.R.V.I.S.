@@ -8,6 +8,11 @@
  * da się go ustawić per konto, więc wybór godziny musi być decyzją w kodzie,
  * a nie w cronie.
  *
+ * Przy okazji KAŻDEGO przebiegu (także tego, który briefingu nie składa) job
+ * podnosi porzucone zadania dokumentowe — potok prezentacji jest odpalany
+ * przez przeglądarkę, więc zamknięcie aplikacji w trakcie zostawiało je
+ * martwe na zawsze. To jedyne miejsce, które dokańcza je bez użytkownika.
+ *
  * Notowania w rubryce są z wieczornego przebiegu poprzedniego dnia — i tak
  * mają być: rano giełdy jeszcze nie otworzyły, a briefing ma opisywać
  * zamkniętą sesję, nie połowę następnej.
@@ -22,6 +27,7 @@ import { buildDailyBrief } from "../src/lib/brief/build.server";
 import { gatherFacts } from "../src/lib/brief/facts.server";
 import { composeBrief } from "../src/lib/brief/compose";
 import { decideBriefRun, DEFAULT_BRIEF_HOUR } from "../src/lib/brief/schedule";
+import { rescueDocumentJobs } from "../src/lib/agents/documentJobs.rescue";
 import { warsawDate, warsawHour } from "../src/lib/format/warsaw";
 
 const args = new Set(process.argv.slice(2));
@@ -112,6 +118,24 @@ async function main(): Promise<void> {
     if (composed.sections.length === 0) console.log("[dry-run] (spokojny dzień, brak sekcji)");
     notice("Tryb dry-run — nic nie zostało zapisane i nie wołano modelu.");
     return;
+  }
+
+  // ---------- Ratownik zadań dokumentowych ----------
+  // PRZED sprawdzeniem godziny briefingu i niezależnie od niego: potok
+  // dokumentów jest odpalany przez przeglądarkę, więc zamknięcie aplikacji
+  // w trakcie zostawia zadanie martwe. Ten przebieg jest jedynym miejscem,
+  // które podniesie je bez udziału użytkownika — więc biegnie co godzinę,
+  // a nie raz dziennie o siódmej.
+  try {
+    const rescue = await rescueDocumentJobs(db, ownerId);
+    for (const message of rescue.errors) warn(`zadania dokumentowe: ${message}`);
+    if (rescue.resumed > 0 || rescue.failed > 0) {
+      notice(
+        `zadania dokumentowe: ${rescue.resumed} wznowionych, ${rescue.failed} zamkniętych jako nieudane`,
+      );
+    }
+  } catch (err) {
+    warn(`zadania dokumentowe: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   // ---------- Czy to już ta godzina ----------

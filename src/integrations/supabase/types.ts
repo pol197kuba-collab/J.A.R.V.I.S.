@@ -452,6 +452,7 @@ export type Database = {
       };
       document_jobs: {
         Row: {
+          attempts: number;
           brief: string;
           created_at: string;
           error: string | null;
@@ -465,6 +466,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          attempts?: number;
           brief: string;
           created_at?: string;
           error?: string | null;
@@ -478,6 +480,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          attempts?: number;
           brief?: string;
           created_at?: string;
           error?: string | null;

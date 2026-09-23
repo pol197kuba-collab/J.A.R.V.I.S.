@@ -32,6 +32,9 @@ import type { DocSpec } from "./producer.server";
 
 const RunInput = z.object({ jobId: z.string().uuid() });
 
+/** Klient Supabase: sesja użytkownika z aplikacji albo logowanie z joba. */
+type JobDb = SupabaseClient<Database>;
+
 export type RunDocumentJobResult = { ok: true } | { ok: false; reason: string };
 
 // Transient failures (rate limits, 503 storms on the shared-capacity model)
@@ -165,24 +168,43 @@ async function judgeDocument(apiKey: string, brief: string, digest: string): Pro
   }
 }
 
-export const runDocumentJobFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => RunInput.parse(input))
-  .handler(async ({ data, context }): Promise<RunDocumentJobResult> => {
-    const { supabase, userId } = context;
-
+/**
+ * Wykonuje zadanie dokumentowe. Rdzeń — bez warstwy HTTP, żeby mógł go wołać
+ * zarówno klient (przez `runDocumentJobFn`), jak i ratownik z nocnego joba.
+ *
+ * `allowResume` wpuszcza zadanie, które utknęło w `running`. Domyślnie jest
+ * WYŁĄCZONE: kliknięcie klienta ma prawo uruchomić tylko świeżą kolejkę,
+ * inaczej podwójne kliknięcie zdublowałoby trwającą pracę. Ratownik włącza
+ * je świadomie, dopiero po sprawdzeniu, że zadanie od kwadransa nie daje
+ * znaku życia (documentJobs.recovery.ts).
+ */
+export async function runDocumentJobCore(
+  supabase: JobDb,
+  userId: string,
+  jobId: string,
+  options: { allowResume?: boolean } = {},
+): Promise<RunDocumentJobResult> {
+  {
     const { data: job, error: loadErr } = await supabase
       .from("document_jobs")
-      .select("id, run_id, title, brief, status")
-      .eq("id", data.jobId)
+      .select("id, run_id, title, brief, status, attempts")
+      .eq("id", jobId)
       .eq("owner_id", userId)
       .maybeSingle();
     if (loadErr || !job) return { ok: false, reason: "not_found" };
-    // Idempotency guard: a double-kick (e.g. a flaky network retry on the
-    // client) must not run the pipeline twice.
-    if (job.status !== "queued") return { ok: false, reason: "not_queued" };
+    // Strażnik idempotencji: podwójne kliknięcie klienta (np. ponowienie po
+    // zerwanej sieci) nie może uruchomić potoku dwa razy.
+    const startable = job.status === "queued" || (options.allowResume && job.status === "running");
+    if (!startable) return { ok: false, reason: "not_queued" };
 
-    await supabase.from("document_jobs").update({ status: "running" }).eq("id", job.id);
+    // Licznik rośnie PRZY STARCIE, nie na końcu — zadanie, które zginie w
+    // połowie, ma zostawić po sobie ślad, że ktoś już do niego podchodził.
+    // Bez tego zerwane podejście byłoby niewidzialne i ratownik wskrzeszałby
+    // je w nieskończoność.
+    await supabase
+      .from("document_jobs")
+      .update({ status: "running", attempts: (job.attempts ?? 0) + 1 })
+      .eq("id", job.id);
 
     try {
       const { data: secret } = await supabase
@@ -373,4 +395,28 @@ export const runDocumentJobFn = createServerFn({ method: "POST" })
       await failJob(supabase, userId, job.id, job.title, msg);
       return { ok: false, reason: msg };
     }
+  }
+}
+
+/**
+ * Podnosi zadania porzucone przy zamknięciu aplikacji.
+ *
+ * Wołane przy wejściu na pulpit. Najczęstszy scenariusz to „wróciłem i
+ * zastanawiam się, gdzie moja prezentacja" — wznowienie ma wtedy nastąpić od
+ * razu, a nie przy najbliższym przebiegu harmonogramu. Zwraca podsumowanie,
+ * nie rzuca: to pass w tle, a nie coś, co ma prawo zepsuć wejście na stronę.
+ */
+export const rescueDocumentJobsFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { rescueDocumentJobs } = await import("./documentJobs.rescue");
+    return rescueDocumentJobs(context.supabase, context.userId);
   });
+
+export const runDocumentJobFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => RunInput.parse(input))
+  .handler(
+    async ({ data, context }): Promise<RunDocumentJobResult> =>
+      runDocumentJobCore(context.supabase, context.userId, data.jobId),
+  );
