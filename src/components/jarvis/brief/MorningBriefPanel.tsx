@@ -14,6 +14,7 @@ import { HudPanel } from "@/components/jarvis/HudPanel";
 import { PanelHint } from "@/components/jarvis/fuel/chrome";
 import { getLatestBrief, refreshBrief } from "@/lib/brief/brief.functions";
 import { rescueDocumentJobsFn } from "@/lib/agents/documentJobs.functions";
+import { rescueStuckAgentsFn } from "@/lib/agents/runtime.functions";
 import { isSpeakingNow, onSpeaking, speak, speakCancel } from "@/lib/audio/speak";
 import { cn } from "@/lib/utils";
 
@@ -58,11 +59,18 @@ export function MorningBriefPanel({ index = 0 }: { index?: number }) {
   // zastanawia się, gdzie jego prezentacja. Wynik nie jest pokazywany:
   // dokończone zadanie melduje się samo powiadomieniem.
   const rescue = useServerFn(rescueDocumentJobsFn);
+  const freeAgents = useServerFn(rescueStuckAgentsFn);
   useEffect(() => {
     void rescue({}).catch(() => {
       /* pass w tle — nie ma prawa zepsuć wejścia na stronę */
     });
-  }, [rescue]);
+    // Przy okazji: agenci zostawieni w stanie „zajęty" przez to samo
+    // zerwane wywołanie. Osobne przejście, bo dotyczy innych tabel i musi
+    // zadziałać także wtedy, gdy żadnego zadania dokumentowego nie było.
+    void freeAgents({}).catch(() => {
+      /* jw. */
+    });
+  }, [rescue, freeAgents]);
 
   const refresh = useMutation({
     mutationFn: () => rebuild(),

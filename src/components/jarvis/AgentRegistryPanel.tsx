@@ -1,8 +1,13 @@
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Users, X } from "lucide-react";
-import { listAgentTools, type AgentSummary } from "@/lib/agents/runtime.functions";
+import {
+  listAgentTools,
+  resetAgentStatusFn,
+  type AgentSummary,
+} from "@/lib/agents/runtime.functions";
 import { FORCED_TOOLS_BY_SLUG } from "@/lib/constants/agentSlugs";
 
 // Left-side twin of HudOverlay's "Recent Network Assignments" panel — same
@@ -67,6 +72,63 @@ export function AgentRegistryPanel({ agents }: { agents: AgentSummary[] }) {
   );
 }
 
+/**
+ * Przycisk odwieszenia — pojawia się TYLKO przy agencie opisanym jako zajęty.
+ *
+ * Powód, dla którego w ogóle istnieje: `agents.status` ustawia się na starcie
+ * przebiegu, a zeruje na jego końcu — obie rzeczy w tym samym wywołaniu
+ * serwera. Zerwane wywołanie (uśpiona karta na telefonie) nie wykona ani
+ * jednej, ani drugiej, więc agent zostaje „zajęty" bez końca. Automat sprząta
+ * to po dwudziestu minutach; ten przycisk jest dla człowieka, który patrzy na
+ * kafel „ACTIVE TASK" i wie już teraz, że nic się tam nie dzieje.
+ *
+ * Widoczny warunkowo, bo przy bezczynnym agencie nie miałby co robić — a
+ * przycisk, który zwykle nic nie znaczy, uczy się go ignorować.
+ */
+function UnwedgeButton({ agent }: { agent: AgentSummary }) {
+  const qc = useQueryClient();
+  const reset = useServerFn(resetAgentStatusFn);
+
+  const mutation = useMutation({
+    mutationFn: () => reset({ data: { slug: agent.slug } }),
+    onSuccess: (result) => {
+      // Jeden prefiks pokrywa OBA zapytania, które to widzą: ["agents","list"]
+      // (rejestr i matryca 3D) oraz ["agents","flow"] (drzewo delegacji).
+      // Kafel „ACTIVE TASK" czyta pierwsze, krawędzie drugie — odświeżenie
+      // tylko jednego zostawiłoby drugie świecące.
+      void qc.invalidateQueries({ queryKey: ["agents"] });
+      if (result.errors.length > 0) {
+        toast("Nie udało się odwiesić", { description: result.errors.join("; ") });
+        return;
+      }
+      toast(`${agent.name}: odwieszony`, {
+        description:
+          result.closedRuns > 0
+            ? `Domknięto ${result.closedRuns} przerwanych przebiegów.`
+            : "Status wyczyszczony.",
+      });
+    },
+    onError: (err: unknown) =>
+      toast("Nie udało się odwiesić", {
+        description: err instanceof Error ? err.message : String(err),
+      }),
+  });
+
+  if (agent.status !== "busy") return null;
+
+  return (
+    <button
+      type="button"
+      disabled={mutation.isPending}
+      onClick={() => mutation.mutate()}
+      title="Wyczyść status „zajęty” i domknij przerwane przebiegi"
+      className="font-display shrink-0 rounded border border-[color:var(--warning)]/50 px-1.5 py-0.5 text-[7px] uppercase tracking-[0.2em] text-[color:var(--warning)] transition hover:bg-[color:var(--warning)]/10 disabled:opacity-40"
+    >
+      {mutation.isPending ? "…" : "odwieś"}
+    </button>
+  );
+}
+
 function AgentRegistryRow({ agent }: { agent: AgentSummary }) {
   const fetchTools = useServerFn(listAgentTools);
   const { data: tools = [] } = useQuery({
@@ -93,9 +155,12 @@ function AgentRegistryRow({ agent }: { agent: AgentSummary }) {
       className="border-l-2 border-cyan-400/40 pl-2"
       title={toolSlugs.length > 0 ? toolSlugs.join(", ") : undefined}
     >
-      <p className="line-clamp-1 font-display text-[10px] uppercase tracking-[0.15em] text-white/90">
-        {agent.name}
-      </p>
+      <div className="flex min-w-0 items-center gap-2">
+        <p className="line-clamp-1 min-w-0 flex-1 font-display text-[10px] uppercase tracking-[0.15em] text-white/90">
+          {agent.name}
+        </p>
+        <UnwedgeButton agent={agent} />
+      </div>
       <p className="line-clamp-1 font-mono text-[8px] leading-snug text-cyan-300/70">
         {agent.role ?? "—"}
       </p>

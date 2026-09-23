@@ -28,6 +28,7 @@ import { gatherFacts } from "../src/lib/brief/facts.server";
 import { composeBrief } from "../src/lib/brief/compose";
 import { decideBriefRun, DEFAULT_BRIEF_HOUR } from "../src/lib/brief/schedule";
 import { rescueDocumentJobs } from "../src/lib/agents/documentJobs.rescue";
+import { rescueStuckAgents } from "../src/lib/agents/agentStatus.rescue";
 import { warsawDate, warsawHour } from "../src/lib/format/warsaw";
 
 const args = new Set(process.argv.slice(2));
@@ -136,6 +137,23 @@ async function main(): Promise<void> {
     }
   } catch (err) {
     warn(`zadania dokumentowe: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // ---------- Odwieszanie agentów ----------
+  // Ta sama awaria, inna tabela: `agents.status` jest ustawiane na starcie
+  // przebiegu i zerowane na jego końcu, więc zerwane wywołanie zostawia
+  // agenta opisanego jako zajęty na zawsze. Widżet 3D czyta właśnie ten
+  // wiersz — stąd kafel „ACTIVE TASK" wiszący godzinami.
+  try {
+    const agents = await rescueStuckAgents(db, ownerId);
+    for (const message of agents.errors) warn(`agenci: ${message}`);
+    if (agents.freed.length > 0) {
+      notice(
+        `agenci odwieszeni: ${agents.freed.join(", ")} (${agents.closedRuns} przebiegów domkniętych)`,
+      );
+    }
+  } catch (err) {
+    warn(`agenci: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   // ---------- Czy to już ta godzina ----------
