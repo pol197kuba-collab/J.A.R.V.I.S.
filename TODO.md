@@ -77,6 +77,10 @@ paneli zewnętrznych. Trzymane tutaj, żeby nie zginęły między sesjami.
       licznik podejść zadań dokumentowych). Druga przy okazji zamyka wpisy
       zaklinowane w `running` sprzed wdrożenia ponowień.
 
+- [ ] **Wgrać migrację licznika kosztów** (`20260923130000_token_budget.sql`).
+      Bez niej panel BUDŻET nie ma skąd czytać, a degradacja przy limicie się
+      nie włączy. Limit startowy to $5/miesiąc — do zmiany w Ustawieniach.
+
 - [ ] **Kierunek docelowy: własna, niezależna instancja Supabase.** Stan na
       2026-09-21: buildy nie idą już przez Lovable — Lovable służy wyłącznie
       jako edytor SQL do bazy oraz jako hosting aplikacji. Docelowo baza ma

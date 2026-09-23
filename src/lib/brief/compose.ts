@@ -141,6 +141,15 @@ function failuresSection(facts: BriefFacts): BriefSection | null {
 }
 
 /**
+ * Budżet trafia do rubryki TYLKO wtedy, gdy przekroczył próg ostrzegawczy —
+ * o to zadbał już zbierający fakty. Tutaj zostaje samo złożenie zdania.
+ */
+function budgetSection(facts: BriefFacts): BriefSection | null {
+  if (!facts.budget) return null;
+  return { kind: "budget", heading: "Budżet", lines: [facts.budget.message] };
+}
+
+/**
  * Wersja mówiona: jeden ciąg zdań, bez list i bez znaków, których synteza
  * mowy nie przeczyta sensownie.
  *
@@ -167,6 +176,9 @@ function toSpoken(greeting: string, sections: BriefSection[]): string {
 /** Składa briefing z faktów. Sekcje w kolejności ważności, nie alfabetycznie. */
 export function composeBrief(facts: BriefFacts): ComposedBrief {
   const sections = [
+    // Budżet przed usterkami: wyczerpany limit zmienia zachowanie WSZYSTKICH
+    // agentów na resztę miesiąca, więc jest ważniejszy niż pojedyncza awaria.
+    budgetSection(facts),
     failuresSection(facts),
     ordersSection(facts),
     tasksSection(facts),
