@@ -697,6 +697,28 @@ export const setAgentToolEnabled = createServerFn({ method: "POST" })
 // Agent registry
 // ---------------------------------------------------------------------------
 
+/**
+ * Odwiesza agenta, który wisi na fałszywym „zajęty".
+ *
+ * Istnieje, bo automat ma próg czasowy, a użytkownik patrzy na kafel i widzi,
+ * że tam nic się nie dzieje. Ręczny reset nie czeka na próg.
+ */
+export const resetAgentStatusFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ slug: z.string().min(1).max(64) }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { resetAgentStatus } = await import("./agentStatus.rescue");
+    return resetAgentStatus(context.supabase, context.userId, data.slug);
+  });
+
+/** Odwiesza wszystkich agentów, którzy przekroczyli próg ciszy. */
+export const rescueStuckAgentsFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { rescueStuckAgents } = await import("./agentStatus.rescue");
+    return rescueStuckAgents(context.supabase, context.userId);
+  });
+
 export const listAgents = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<AgentSummary[]> => {
