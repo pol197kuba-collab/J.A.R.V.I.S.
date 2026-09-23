@@ -1,0 +1,66 @@
+name: Morning Brief
+
+# Składa poranną rubrykę: co zrobiły rynki, gdzie stoi typer, co z paliwami,
+# które stałe rozkazy się wyzwoliły, co jest po terminie i co się wysypało.
+#
+# Briefing nie zaciąga żadnych danych z zewnątrz — czyta to, co zapisały
+# pozostałe joby. Notowania są z wieczornego przebiegu poprzedniego dnia i
+# tak ma być: rano giełdy jeszcze nie otworzyły, a rubryka ma opisywać
+# zamkniętą sesję, nie połowę następnej.
+on:
+  schedule:
+    # CO GODZINĘ, ale rubryka powstaje tylko raz — przy pierwszym przebiegu
+    # po godzinie wybranej przez użytkownika (user_settings.brief_hour, czas
+    # warszawski). Crona nie da się ustawić per konto, więc wybór godziny
+    # jest decyzją w kodzie; przebiegi poza tą godziną kończą się w kilka
+    # sekund na jednym zapytaniu do bazy.
+    #
+    # Codziennie, także w weekend: zadania po terminie i awarie nie robią
+    # sobie wolnego, a krypto chodzi 24/7.
+    - cron: "20 * * * *"
+  workflow_dispatch:
+
+# Dwa przebiegi na raz napisałyby ten sam wiersz (UNIQUE po dniu przeżyje to
+# bez szkody), ale wysłałyby DWA powiadomienia — a to już widać.
+concurrency:
+  group: morning-brief
+  cancel-in-progress: false
+
+jobs:
+  brief:
+    name: briefing (składa się o godzinie wybranej przez użytkownika)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # npm (nie bun) — tak jak w ci.yml, orlen-prices.yml i market-grid.yml:
+      # package-lock.json jest lockfile'em, który weryfikuje `npm ci`.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build brief
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          # Dwie drogi uwierzytelnienia — wystarczy wypełnić jedną. Briefing
+          # jest per użytkownik, więc to konto (albo JARVIS_OWNER_ID) decyduje,
+          # czyje zadania, rozkazy i watchlista do niego trafią.
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          JARVIS_OWNER_ID: ${{ secrets.JARVIS_OWNER_ID }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          JARVIS_EMAIL: ${{ secrets.JARVIS_EMAIL }}
+          JARVIS_PASSWORD: ${{ secrets.JARVIS_PASSWORD }}
+          # Oba opcjonalne. Bez nich briefing powstaje z samych liczb —
+          # uboższy język, ten sam komplet informacji.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        # tsx CELOWO nie jest zależnością projektu, tylko wersją przypiętą
+        # tutaj — ten sam powód co w pozostałych jobach: dopisanie go do
+        # package.json podbijało esbuild w całym drzewie i rozjeżdżało
+        # bun.lock z package-lock.json, a bunem buduje Lovable.
+        run: npx --yes tsx@4.21.0 scripts/morning-brief.ts

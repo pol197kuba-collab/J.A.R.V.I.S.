@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { CockpitHero } from "@/components/jarvis/CockpitHero";
 import { SystemPulsePanel } from "@/components/jarvis/SystemPulsePanel";
+import { MorningBriefPanel } from "@/components/jarvis/brief/MorningBriefPanel";
 import { TaskBoardPanel } from "@/components/jarvis/TaskBoardPanel";
 import { ArcReactorTriangle } from "@/components/jarvis/ArcReactorTriangle";
 import { useAgentStatus } from "@/components/jarvis/useAgentStatus";
@@ -61,9 +62,14 @@ function Index() {
         </div>
       </HudPanel>
 
-      <SystemPulsePanel index={1} />
+      {/* Briefing zaraz pod nagłówkiem: to jedyny panel, który mówi, co się
+          zmieniło OD WCZORAJ. Reszta pulpitu pokazuje stan bieżący, więc
+          niżej jest na miejscu. */}
+      <MorningBriefPanel index={1} />
 
-      <TaskBoardPanel index={2} />
+      <SystemPulsePanel index={2} />
+
+      <TaskBoardPanel index={3} />
     </div>
   );
 }

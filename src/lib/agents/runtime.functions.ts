@@ -505,6 +505,10 @@ export type UserSettings = {
   defaultModel: string;
   voiceLanguage: "auto" | "en" | "pl";
   wakeWordEnabled: boolean;
+  /** Godzina LOKALNA (Europe/Warsaw), o której ma być gotowy briefing. */
+  briefHour: number;
+  /** Czy o gotowym briefingu powiadomić urządzenia (false = tryb cichy). */
+  briefPush: boolean;
 };
 
 const DEFAULT_SETTINGS: UserSettings = {
@@ -512,6 +516,8 @@ const DEFAULT_SETTINGS: UserSettings = {
   defaultModel: DEFAULT_GEMINI_MODEL,
   voiceLanguage: "auto",
   wakeWordEnabled: true,
+  briefHour: 7,
+  briefPush: true,
 };
 
 export const getUserSettings = createServerFn({ method: "GET" })
@@ -520,7 +526,9 @@ export const getUserSettings = createServerFn({ method: "GET" })
     const { supabase, userId } = context;
     const { data, error } = await supabase
       .from("user_settings")
-      .select("chat_routing, default_model, voice_language, wake_word_enabled")
+      .select(
+        "chat_routing, default_model, voice_language, wake_word_enabled, brief_hour, brief_push",
+      )
       .eq("owner_id", userId)
       .maybeSingle();
     if (error) throw new Error(error.message);
@@ -530,6 +538,8 @@ export const getUserSettings = createServerFn({ method: "GET" })
       defaultModel: data.default_model,
       voiceLanguage: data.voice_language as "auto" | "en" | "pl",
       wakeWordEnabled: data.wake_word_enabled,
+      briefHour: data.brief_hour ?? DEFAULT_SETTINGS.briefHour,
+      briefPush: data.brief_push ?? DEFAULT_SETTINGS.briefPush,
     };
   });
 
@@ -539,6 +549,8 @@ const UpdateSettingsInput = z
     defaultModel: GeminiModelId.optional(),
     voiceLanguage: z.enum(["auto", "en", "pl"]).optional(),
     wakeWordEnabled: z.boolean().optional(),
+    briefHour: z.number().int().min(0).max(23).optional(),
+    briefPush: z.boolean().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, "at least one field required");
 
@@ -553,15 +565,21 @@ export const updateUserSettings = createServerFn({ method: "POST" })
       default_model?: string;
       voice_language?: "auto" | "en" | "pl";
       wake_word_enabled?: boolean;
+      brief_hour?: number;
+      brief_push?: boolean;
     } = { owner_id: userId };
     if (data.chatRouting !== undefined) patch.chat_routing = data.chatRouting;
     if (data.defaultModel !== undefined) patch.default_model = data.defaultModel;
     if (data.voiceLanguage !== undefined) patch.voice_language = data.voiceLanguage;
     if (data.wakeWordEnabled !== undefined) patch.wake_word_enabled = data.wakeWordEnabled;
+    if (data.briefHour !== undefined) patch.brief_hour = data.briefHour;
+    if (data.briefPush !== undefined) patch.brief_push = data.briefPush;
     const { data: row, error } = await supabase
       .from("user_settings")
       .upsert(patch, { onConflict: "owner_id" })
-      .select("chat_routing, default_model, voice_language, wake_word_enabled")
+      .select(
+        "chat_routing, default_model, voice_language, wake_word_enabled, brief_hour, brief_push",
+      )
       .single();
     if (error) {
       await logServerError(supabase, userId, "settings.update", error);
@@ -572,6 +590,8 @@ export const updateUserSettings = createServerFn({ method: "POST" })
       defaultModel: row.default_model,
       voiceLanguage: row.voice_language as "auto" | "en" | "pl",
       wakeWordEnabled: row.wake_word_enabled,
+      briefHour: row.brief_hour ?? DEFAULT_SETTINGS.briefHour,
+      briefPush: row.brief_push ?? DEFAULT_SETTINGS.briefPush,
     };
   });
 

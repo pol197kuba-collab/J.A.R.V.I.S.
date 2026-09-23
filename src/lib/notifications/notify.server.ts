@@ -23,6 +23,14 @@ export type NotifyInput = {
   url?: string;
   /** Znacznik zastępowania na ekranie urządzenia; domyślnie rodzaj meldunku. */
   tag?: string;
+  /**
+   * Meldunek cichy: wiersz powstaje normalnie i zapala dzwonek w aplikacji,
+   * ale urządzenia nie dostają powiadomienia.
+   *
+   * Zapis zostaje ZAWSZE, bo to on jest zapisem kanonicznym — „cicho" znaczy
+   * „nie budź telefonu", a nie „nie mów wcale".
+   */
+  silent?: boolean;
 };
 
 export type NotifyResult = {
@@ -63,6 +71,9 @@ export async function notifyOwner(
   // Wiersz wyżej jest zapisem kanonicznym — dzwonek w aplikacji zapali się i
   // wtedy, gdy urządzenie nie odbierze powiadomienia albo gdy użytkownik nie
   // włączył ich wcale. Dlatego nieudane pukanie nie zmienia wyniku.
+  // Cichy meldunek kończy się tutaj: wiersz jest, telefon zostaje w spokoju.
+  if (input.silent) return { id: data.id, error: null, push: null };
+
   let push: PushResult | null = null;
   try {
     push = await sendPushToOwner(db, ownerId, {

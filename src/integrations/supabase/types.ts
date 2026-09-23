@@ -221,6 +221,45 @@ export type Database = {
           },
         ];
       };
+      daily_briefs: {
+        Row: {
+          brief_date: string;
+          created_at: string;
+          facts: Json;
+          generated_by: string;
+          greeting: string;
+          id: string;
+          owner_id: string;
+          sections: Json;
+          spoken: string;
+          updated_at: string;
+        };
+        Insert: {
+          brief_date: string;
+          created_at?: string;
+          facts?: Json;
+          generated_by?: string;
+          greeting: string;
+          id?: string;
+          owner_id: string;
+          sections?: Json;
+          spoken: string;
+          updated_at?: string;
+        };
+        Update: {
+          brief_date?: string;
+          created_at?: string;
+          facts?: Json;
+          generated_by?: string;
+          greeting?: string;
+          id?: string;
+          owner_id?: string;
+          sections?: Json;
+          spoken?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       dev_sessions: {
         Row: {
           created_at: string;
@@ -413,6 +452,7 @@ export type Database = {
       };
       document_jobs: {
         Row: {
+          attempts: number;
           brief: string;
           created_at: string;
           error: string | null;
@@ -426,6 +466,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          attempts?: number;
           brief: string;
           created_at?: string;
           error?: string | null;
@@ -439,6 +480,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          attempts?: number;
           brief?: string;
           created_at?: string;
           error?: string | null;
@@ -1474,6 +1516,8 @@ export type Database = {
       user_settings: {
         Row: {
           active_agent_slug: string;
+          brief_hour: number;
+          brief_push: boolean;
           chat_routing: string;
           created_at: string;
           default_model: string;
@@ -1484,6 +1528,8 @@ export type Database = {
         };
         Insert: {
           active_agent_slug?: string;
+          brief_hour?: number;
+          brief_push?: boolean;
           chat_routing?: string;
           created_at?: string;
           default_model?: string;
@@ -1494,6 +1540,8 @@ export type Database = {
         };
         Update: {
           active_agent_slug?: string;
+          brief_hour?: number;
+          brief_push?: boolean;
           chat_routing?: string;
           created_at?: string;
           default_model?: string;

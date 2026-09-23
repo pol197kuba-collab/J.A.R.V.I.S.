@@ -11,6 +11,8 @@
 // na pytanie „czy 'spadek o 5%' liczymy od wczoraj, czy od ostatniego
 // notowania". Warunek jest jeden, więc i kod jest jeden.
 
+import { money, signedPct } from "@/lib/format/number";
+
 export type SubjectKind = "market" | "fuel";
 
 export type OrderCondition =
@@ -208,32 +210,6 @@ export type SubjectLabels = {
 };
 
 /**
- * Liczba w meldunku: bez zbędnych zer, ale bez gubienia groszy.
- *
- * Formatujemy RĘCZNIE, a nie przez `toLocaleString("pl-PL")`, bo ten sam kod
- * biegnie w przeglądarce i w nocnym jobie na GitHub Actions, gdzie Node bywa
- * zbudowany z okrojonym ICU — tam „5200" nie dostaje spacji tysięcznej i ten
- * sam meldunek wygląda inaczej w zależności od tego, kto go złożył.
- * Separatorem jest spacja nierozdzielająca, żeby liczba nie łamała się w pół
- * na końcu wiersza.
- */
-export function money(value: number): string {
-  const abs = Math.abs(value);
-  const digits = abs >= 1000 ? 0 : abs >= 10 ? 2 : abs >= 1 ? 3 : 6;
-  const fixed = abs.toFixed(digits);
-  const [whole, fraction = ""] = fixed.split(".");
-  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-  // Zera na końcu części dziesiętnej tylko zaśmiecają: 5,50 → 5,5; 5,00 → 5.
-  const trimmed = fraction.replace(/0+$/, "");
-  const sign = value < 0 ? "-" : "";
-  return trimmed ? `${sign}${grouped},${trimmed}` : `${sign}${grouped}`;
-}
-
-const pct = (value: number): string => `${value > 0 ? "+" : ""}${money(round2(value))}%`;
-
-const round2 = (value: number): number => Math.round(value * 100) / 100;
-
-/**
  * Opis rozkazu jednym zdaniem — ten sam tekst idzie na listę w panelu i do
  * potwierdzenia, które agent wypowiada po założeniu rozkazu.
  */
@@ -274,7 +250,7 @@ export function formatHit(hit: OrderHit, labels: SubjectLabels): { title: string
   const parts: string[] = [];
   if (hit.changePct !== null && hit.reference !== null) {
     parts.push(
-      `${value} — ${pct(hit.changePct)} (${hit.changeAbs !== null && hit.changeAbs > 0 ? "+" : ""}` +
+      `${value} — ${signedPct(hit.changePct)} (${hit.changeAbs !== null && hit.changeAbs > 0 ? "+" : ""}` +
         `${money(hit.changeAbs ?? 0)} ${labels.unit}) od ${hit.referenceDate}.`,
     );
   } else {
