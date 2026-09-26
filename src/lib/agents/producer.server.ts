@@ -17,6 +17,33 @@
 // podzbiór TTF-a i fontkit. Zniknęła razem z formatem.
 
 import PptxGen from "pptxgenjs";
+
+/**
+ * KONSTRUKTOR WYŁUSKANY RĘCZNIE, A NIE WZIĘTY WPROST Z IMPORTU.
+ *
+ * `pptxgenjs` wysyła dwie postacie tego samego kodu: ESM-ową, która robi
+ * `export { PptxGenJS as default }`, i CommonJS-ową, która robi
+ * `module.exports = PptxGenJS`. Obie są poprawne. Problem powstaje o jeden
+ * poziom wyżej: przy zamianie CommonJS-u na moduł pakujący owija eksport w
+ * obiekt, i wtedy pod domyślnym importem nie leży klasa, tylko `{ default:
+ * klasa }`. `new` na takim obiekcie kończy się zdaniem „PptxGen is not a
+ * constructor" — i dokładnie to zobaczył użytkownik, mimo że biblioteka,
+ * jej wersja i kod budujący prezentację były bez zmian.
+ *
+ * Czego to NIE jest: to nie jest błąd `pptxgenjs` ani skutek aktualizacji
+ * (4.0.1 był i jest najnowszy). To skutek tego, w którą postać trafi
+ * pakowanie — a ta potrafi się zmienić przy przebudowie, bez żadnej zmiany
+ * w zależnościach. Dlatego nie „naprawiamy konfiguracji pakowania" tylko
+ * przyjmujemy OBIE postacie: kod, który działa niezależnie od tego, co
+ * akurat wyszło z bundlera, nie może się na tym wywrócić drugi raz.
+ */
+export function unwrapDefault<T>(mod: T): T {
+  if (typeof mod === "function") return mod;
+  const wrapped = (mod as { default?: T } | null)?.default;
+  return wrapped ?? mod;
+}
+
+const PptxGenClass: typeof PptxGen = unwrapDefault(PptxGen);
 import { AlignmentType, Document, HeadingLevel, ImageRun, Packer, Paragraph, TextRun } from "docx";
 import { DEFAULT_GEMINI_MODEL } from "./models";
 import { DOC_COLORS, DOC_FONTS, DECK_SLIDE } from "./docTheme";
@@ -553,7 +580,25 @@ const { surface: SURFACE_HEX, muted: MUTED_HEX, paper: PAPER_HEX } = DOC_COLORS;
 const SURFACE_LIGHT = DOC_COLORS.paper;
 
 async function buildPptx(spec: DeckSpec, images: DocImages): Promise<Uint8Array> {
-  const pres = new PptxGen();
+  // Gdyby pakowanie wymyśliło jeszcze trzecią postać eksportu, niech powie
+  // to wprost. „PptxGen is not a constructor" nie wskazuje ani biblioteki,
+  // ani przyczyny i kosztowało pełne śledztwo od strony użytkownika.
+  if (typeof PptxGenClass !== "function") {
+    // Gdyby pakowanie wymyśliło JESZCZE INNĄ postać eksportu, niech powie to
+    // wprost i z zawartością. „PptxGen is not a constructor" nie wskazuje ani
+    // biblioteki, ani przyczyny — i kosztowało pełne śledztwo od strony
+    // użytkownika. Nazwy pól wystarczą, żeby następnym razem poprawka poszła
+    // od razu w odpowiednie miejsce.
+    const shape =
+      PptxGenClass && typeof PptxGenClass === "object"
+        ? Object.keys(PptxGenClass).slice(0, 10).join(", ") || "obiekt bez pól"
+        : String(PptxGenClass);
+    throw new Error(
+      `pptxgenjs: domyślny eksport nie jest klasą (zgodność ESM/CJS w pakowaniu). ` +
+        `typeof=${typeof PptxGenClass}, zawartość: ${shape}`,
+    );
+  }
+  const pres = new PptxGenClass();
   pres.defineLayout({ name: "WIDE", ...DECK_SLIDE });
   // Kroje ustawiane raz, na poziomie prezentacji — zamiast powtarzać
   // `fontFace` przy każdym polu tekstowym i prędzej czy później gdzieś go
