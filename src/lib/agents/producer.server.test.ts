@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 import {
   blocksOf,
   buildDocument,
+  unwrapDefault,
   generateDocImages,
   normalizeDocSpec,
   pngDims,
@@ -453,5 +454,31 @@ describe("buildDocument", () => {
     });
     expect(bytes.byteLength).toBeGreaterThan(1000);
     expect(String.fromCharCode(bytes[0], bytes[1])).toBe("PK");
+  });
+});
+
+describe("unwrapDefault — zgodność ESM/CJS przy pakowaniu", () => {
+  // Prezentacje przestały się budować na „PptxGen is not a constructor",
+  // choć ani biblioteka, ani jej wersja, ani kod budujący się nie zmieniły.
+  // Zmieniła się POSTAĆ, w jakiej pakowanie podało domyślny eksport.
+  class Fake {}
+
+  it("przepuszcza klasę podaną wprost", () => {
+    expect(unwrapDefault(Fake)).toBe(Fake);
+  });
+
+  it("wyłuskuje klasę owiniętą w { default }", () => {
+    // Tak wygląda CommonJS przerobiony na moduł przez bundler.
+    expect(unwrapDefault({ default: Fake } as unknown as typeof Fake)).toBe(Fake);
+  });
+
+  it("nie gubi obiektu, który po prostu nie ma default", () => {
+    const plain = { a: 1 };
+    expect(unwrapDefault(plain)).toBe(plain);
+  });
+
+  it("znosi null i undefined bez wyjątku", () => {
+    expect(unwrapDefault(null)).toBeNull();
+    expect(unwrapDefault(undefined)).toBeUndefined();
   });
 });

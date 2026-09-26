@@ -2111,7 +2111,20 @@ const generateDocumentTool: Tool = {
           run_id: ctx.runId,
         } as Json,
       );
-      return { error: `build_failed: ${msg}` };
+      // NIE PONAWIAĆ. Budowa pliku nie zależy od treści, którą przysłał
+      // model — składanie bajtów albo działa, albo jest zepsute po stronie
+      // systemu. Bez tego zdania model traktował błąd jak podpowiedź „popraw
+      // i spróbuj jeszcze raz" i wywoływał narzędzie w kółko: pięć prób
+      // budowy na jedno zlecenie, każda po pełnej turze modelu, wszystkie
+      // skazane na ten sam wynik. Za każdą z nich płaci użytkownik.
+      return {
+        error: `build_failed: ${msg}`,
+        retryable: false,
+        instruction:
+          "Awaria po stronie systemu, nie treści. NIE wywołuj tego narzędzia ponownie " +
+          "i nie zmieniaj treści — to nic nie da. Zakończ i napisz krótko, że budowa " +
+          "pliku nie powiodła się z przyczyn technicznych.",
+      };
     }
 
     const path = `${ctx.userId}/${crypto.randomUUID()}/${spec.filename}`;
