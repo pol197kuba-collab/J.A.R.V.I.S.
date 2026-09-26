@@ -28,7 +28,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import type { AgentRunResult } from "./runtime.functions";
 import type { OrchestratorInput } from "./runtime.server";
-import type { DocSpec } from "./producer.server";
+import { blocksOf } from "./docSpec";
+import type { ProducerSpec } from "./producer.server";
 
 const RunInput = z.object({ jobId: z.string().uuid() });
 
@@ -101,14 +102,39 @@ async function failJob(
 
 type QaVerdict = { ok: boolean; reason: string };
 
-function buildDigest(spec: DocSpec): string {
+/**
+ * Skrót treści dla bramki jakości: tytuł i to, co naprawdę stoi w blokach.
+ *
+ * BIERZE `blocksOf`, A NIE `spec.sections` — i to jest tu cała historia.
+ * Wcześniej ta funkcja brała `DocSpec`, czyli kształt WORDOWY, i chodziła po
+ * `spec.sections`. Prezentacja ma `slides`, nie `sections`, więc dla każdej
+ * prezentacji zbudowanej w tle `spec.sections` było `undefined` i całe
+ * zadanie wywracało się na `.entries()` — już PO wygenerowaniu pliku, tuż
+ * przed dostarczeniem go użytkownikowi. Rzutowanie `as unknown as DocSpec`
+ * w wywołaniu zdejmowało jedyne ostrzeżenie, które mogło to złapać.
+ *
+ * Slajdy „metrics" i „compare" trzymają treść poza `content`/`bullets`.
+ * Bez nich sędzia widziałby puste pozycje i mógł odrzucić poprawną
+ * prezentację — a odrzucenie kosztuje ponowny przebieg Forge'a.
+ */
+export function buildDigest(spec: ProducerSpec): string {
   const lines = [`Tytuł: ${spec.title}`];
   if (spec.subtitle) lines.push(`Podtytuł: ${spec.subtitle}`);
-  for (const [i, s] of spec.sections.entries()) {
-    const bulletPreview = (s.bullets ?? []).slice(0, 3).join("; ");
-    const contentPreview = (s.content ?? "").slice(0, 200);
+  for (const [i, block] of blocksOf(spec).entries()) {
+    const parts: string[] = [];
+    const content = (block.content ?? "").slice(0, 200);
+    if (content) parts.push(content);
+    if ("metrics" in block && block.metrics?.length) {
+      parts.push(block.metrics.map((m) => `${m.value}${m.label ? ` ${m.label}` : ""}`).join("; "));
+    }
+    if ("columns" in block && block.columns) {
+      parts.push(
+        block.columns.map((c) => `${c.heading}: ${c.bullets.slice(0, 3).join(", ")}`).join(" | "),
+      );
+    }
+    const bulletPreview = (block.bullets ?? []).slice(0, 3).join("; ");
     lines.push(
-      `${i + 1}. ${s.heading} — ${contentPreview}${bulletPreview ? ` [${bulletPreview}]` : ""}`,
+      `${i + 1}. ${block.heading} — ${parts.join(" ")}${bulletPreview ? ` [${bulletPreview}]` : ""}`,
     );
   }
   return lines.join("\n").slice(0, 6000);
@@ -286,7 +312,7 @@ export async function runDocumentJobCore(
             .eq("id", fileId)
             .eq("user_id", userId)
             .maybeSingle();
-          if (fileRow?.spec) digest = buildDigest(fileRow.spec as unknown as DocSpec);
+          if (fileRow?.spec) digest = buildDigest(fileRow.spec as unknown as ProducerSpec);
         }
 
         return { forgeResult, attachment, digest };

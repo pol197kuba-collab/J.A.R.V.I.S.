@@ -1878,13 +1878,21 @@ const readGeneratedFileTool: Tool = {
     }
     if (!file) return { error: "file_not_found" };
 
+    // Prezentacja trzyma bloki pod `slides`, dokument pod `sections`. Czytamy
+    // oba: wcześniej ta funkcja znała tylko kształt wordowy i KAŻDEJ
+    // prezentacji odpowiadała „treść nie została zarchiwizowana" — choć
+    // była, tyle że pod drugą nazwą. Agent analizujący własny plik dostawał
+    // więc zapewnienie, że nie ma czego analizować.
+    type Block = { heading?: string; content?: string; bullets?: string[] };
     const spec = file.spec as {
       title?: string;
       subtitle?: string;
-      sections?: { heading?: string; content?: string; bullets?: string[] }[];
+      sections?: Block[];
+      slides?: Block[];
     } | null;
+    const blocks = spec?.sections ?? spec?.slides;
 
-    if (!spec?.sections) {
+    if (!blocks) {
       return {
         filename: file.filename,
         format: file.format,
@@ -1897,10 +1905,10 @@ const readGeneratedFileTool: Tool = {
     return {
       filename: file.filename,
       format: file.format,
-      title: spec.title ?? file.title,
-      subtitle: spec.subtitle ?? null,
+      title: spec?.title ?? file.title,
+      subtitle: spec?.subtitle ?? null,
       content_available: true,
-      sections: spec.sections.map((s) => ({
+      sections: blocks.map((s) => ({
         heading: s.heading ?? "",
         content: s.content ?? "",
         bullets: s.bullets ?? [],
