@@ -62,7 +62,25 @@ export type DocImages = { hero?: DocImage; sections: Map<number, DocImage> };
 const MAX_WEB_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
 const WEB_IMAGE_TIMEOUT_MS = 10_000;
 
-async function fetchWebImage(query: string): Promise<DocImage | null> {
+/**
+ * Nagłówek zgodny z polityką Wikimediów: nazwa narzędzia i adres kontaktowy.
+ * Gołe „Nazwa/1.0" bywa traktowane jak ruch anonimowego bota i dostaje 429.
+ */
+const USER_AGENT = "JARVIS-Forge/1.0 (https://github.com/pol197kuba-collab/J.A.R.V.I.S.)";
+
+/**
+ * Notatka z jednej warstwy szukania obrazu.
+ *
+ * ISTNIEJE PO TO, ŻEBY NIEPOWODZENIE MIAŁO TREŚĆ. Wcześniej cztery warstwy
+ * (Google CSE, Wikipedia, og:image, Openverse) mogły odpaść z czterech
+ * zupełnie różnych powodów, a do logu trafiało jedno zdanie: „no image
+ * resolved". Nie dało się z niego odczytać ani CZEGO szukano, ani KTÓRA
+ * warstwa i DLACZEGO odpadła — więc diagnoza wymagała zgadywania zamiast
+ * czytania. Teraz każda warstwa zostawia po sobie krótki ślad.
+ */
+type Note = (text: string) => void;
+
+async function fetchWebImage(query: string, note: Note): Promise<DocImage | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), WEB_IMAGE_TIMEOUT_MS);
   try {
@@ -71,13 +89,26 @@ async function fetchWebImage(query: string): Promise<DocImage | null> {
       `&license_type=all&mature=false&page_size=3`;
     const res = await fetch(searchUrl, {
       signal: ctrl.signal,
-      headers: { Accept: "application/json", "User-Agent": "JARVIS-Forge/1.0" },
+      headers: { Accept: "application/json", "User-Agent": USER_AGENT },
     });
-    if (!res.ok) throw new Error(`openverse HTTP ${res.status}`);
+    // Zwraca null jak każda inna warstwa, zamiast rzucać. Wyjątek z
+    // OSTATNIEJ warstwy przewracał całe szukanie obrazu i zamieniał
+    // „ta warstwa nie znalazła" w „zadanie się wysypało".
+    if (!res.ok) {
+      note(`openverse: HTTP ${res.status}`);
+      return null;
+    }
     const data = (await res.json()) as {
       results?: Array<{ url?: string; filetype?: string }>;
     };
-    for (const hit of data.results ?? []) {
+    const hits = data.results ?? [];
+    if (hits.length === 0) {
+      // Openverse indeksuje wyłącznie treści anglojęzyczne — zapytanie po
+      // polsku zwraca tutaj zero i to jest najczęstsza przyczyna pustki.
+      note("openverse: 0 wyników");
+      return null;
+    }
+    for (const hit of hits) {
       const url = hit.url;
       // Only fetch https from a public host — never a private/loopback target.
       if (!url || !/^https:\/\//i.test(url)) continue;
@@ -93,7 +124,7 @@ async function fetchWebImage(query: string): Promise<DocImage | null> {
       try {
         const imgRes = await fetch(url, {
           signal: ctrl.signal,
-          headers: { "User-Agent": "JARVIS-Forge/1.0" },
+          headers: { "User-Agent": USER_AGENT },
         });
         if (!imgRes.ok) continue;
         const mime = imgRes.headers.get("content-type") ?? "";
@@ -105,6 +136,10 @@ async function fetchWebImage(query: string): Promise<DocImage | null> {
         continue; // try the next candidate
       }
     }
+    note(`openverse: ${hits.length} wyników, żadnego nie dało się pobrać`);
+    return null;
+  } catch (err) {
+    note(`openverse: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   } finally {
     clearTimeout(timer);
@@ -130,50 +165,70 @@ async function fetchWebImage(query: string): Promise<DocImage | null> {
 // license), which is why it's tried BEFORE Openverse's clean-license search,
 // not instead of it — Openverse still gets a turn for generic/decorative
 // queries that have real CC alternatives.
-async function fetchWikipediaImage(query: string): Promise<DocImage | null> {
+async function fetchWikipediaImage(
+  query: string,
+  lang: "en" | "pl",
+  note: Note,
+): Promise<DocImage | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), WEB_IMAGE_TIMEOUT_MS);
   try {
     const searchUrl =
-      `https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*` +
+      `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&origin=*` +
       `&list=search&srlimit=1&srsearch=${encodeURIComponent(query)}`;
     const searchRes = await fetch(searchUrl, {
       signal: ctrl.signal,
-      headers: { "User-Agent": "JARVIS-Forge/1.0" },
+      headers: { "User-Agent": USER_AGENT },
     });
-    if (!searchRes.ok) return null;
+    if (!searchRes.ok) {
+      note(`wikipedia:${lang} HTTP ${searchRes.status}`);
+      return null;
+    }
     const searchData = (await searchRes.json()) as {
       query?: { search?: Array<{ title?: string }> };
     };
     const title = searchData.query?.search?.[0]?.title;
-    if (!title) return null;
+    if (!title) {
+      note(`wikipedia:${lang} brak artykułu`);
+      return null;
+    }
 
     const summaryRes = await fetch(
       `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
       {
         signal: ctrl.signal,
-        headers: { "User-Agent": "JARVIS-Forge/1.0", Accept: "application/json" },
+        headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
       },
     );
-    if (!summaryRes.ok) return null;
+    if (!summaryRes.ok) {
+      note(`wikipedia:${lang} streszczenie HTTP ${summaryRes.status}`);
+      return null;
+    }
     const summary = (await summaryRes.json()) as {
       originalimage?: { source?: string };
       thumbnail?: { source?: string };
     };
     const imageUrl = summary.originalimage?.source ?? summary.thumbnail?.source;
-    if (!imageUrl || !/^https:\/\/upload\.wikimedia\.org\//i.test(imageUrl)) return null;
+    if (!imageUrl || !/^https:\/\/upload\.wikimedia\.org\//i.test(imageUrl)) {
+      note(`wikipedia:${lang} „${title}" bez zdjęcia`);
+      return null;
+    }
 
     const imgRes = await fetch(imageUrl, {
       signal: ctrl.signal,
-      headers: { "User-Agent": "JARVIS-Forge/1.0" },
+      headers: { "User-Agent": USER_AGENT },
     });
-    if (!imgRes.ok) return null;
+    if (!imgRes.ok) {
+      note(`wikipedia:${lang} pobranie zdjęcia HTTP ${imgRes.status}`);
+      return null;
+    }
     const mime = imgRes.headers.get("content-type") ?? "";
     if (!mime.startsWith("image/")) return null;
     const buf = new Uint8Array(await imgRes.arrayBuffer());
     if (buf.byteLength === 0 || buf.byteLength > MAX_WEB_IMAGE_BYTES) return null;
     return { bytes: buf, mime: mime.split(";")[0], sourceUrl: imgRes.url };
-  } catch {
+  } catch (err) {
+    note(`wikipedia:${lang} ${err instanceof Error ? err.message : String(err)}`);
     return null;
   } finally {
     clearTimeout(timer);
@@ -190,7 +245,11 @@ export type GoogleCseCreds = { apiKey: string; cx: string };
 // skipped (see resolveOneImage). When a user sets one up (Settings →
 // console.cloud.google.com, 100 free queries/day), it's the most accurate
 // and broadest real-photo source available, so it goes first.
-async function fetchGoogleCseImage(query: string, creds: GoogleCseCreds): Promise<DocImage | null> {
+async function fetchGoogleCseImage(
+  query: string,
+  creds: GoogleCseCreds,
+  note: Note,
+): Promise<DocImage | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), WEB_IMAGE_TIMEOUT_MS);
   try {
@@ -199,15 +258,23 @@ async function fetchGoogleCseImage(query: string, creds: GoogleCseCreds): Promis
       `&cx=${encodeURIComponent(creds.cx)}&q=${encodeURIComponent(query)}` +
       `&searchType=image&num=3&safe=active`;
     const res = await fetch(url, { signal: ctrl.signal });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      note(`cse: HTTP ${res.status}`);
+      return null;
+    }
     const data = (await res.json()) as { items?: Array<{ link?: string }> };
-    for (const item of data.items ?? []) {
+    const items = data.items ?? [];
+    if (items.length === 0) {
+      note("cse: 0 wyników");
+      return null;
+    }
+    for (const item of items) {
       const link = item.link;
       if (!link || !/^https:\/\//i.test(link)) continue;
       try {
         const imgRes = await fetch(link, {
           signal: ctrl.signal,
-          headers: { "User-Agent": "JARVIS-Forge/1.0" },
+          headers: { "User-Agent": USER_AGENT },
         });
         if (!imgRes.ok) continue;
         const mime = imgRes.headers.get("content-type") ?? "";
@@ -246,6 +313,7 @@ const OG_IMAGE_TAG_RE =
 async function fetchWebSearchOgImage(
   query: string,
   geminiApiKey: string,
+  note: Note,
 ): Promise<DocImage | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), OG_IMAGE_TIMEOUT_MS);
@@ -263,7 +331,10 @@ async function fetchWebSearchOgImage(
         }),
       },
     );
-    if (!res.ok) return null;
+    if (!res.ok) {
+      note(`og-image: wyszukiwarka HTTP ${res.status}`);
+      return null;
+    }
     const data = (await res.json()) as {
       candidates?: Array<{
         groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string } }> };
@@ -272,12 +343,16 @@ async function fetchWebSearchOgImage(
     const urls = (data.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [])
       .flatMap((c) => (c.web?.uri ? [c.web.uri] : []))
       .slice(0, 4);
+    if (urls.length === 0) {
+      note("og-image: wyszukiwarka nie zwróciła stron");
+      return null;
+    }
 
     for (const pageUrl of urls) {
       try {
         const pageRes = await fetch(pageUrl, {
           signal: ctrl.signal,
-          headers: { "User-Agent": "Mozilla/5.0 (compatible; JARVIS-Forge/1.0)" },
+          headers: { "User-Agent": USER_AGENT },
         });
         if (!pageRes.ok) continue;
         const contentType = pageRes.headers.get("content-type") ?? "";
@@ -291,7 +366,7 @@ async function fetchWebSearchOgImage(
 
         const imgRes = await fetch(imageUrl, {
           signal: ctrl.signal,
-          headers: { "User-Agent": "JARVIS-Forge/1.0" },
+          headers: { "User-Agent": USER_AGENT },
         });
         if (!imgRes.ok) continue;
         const mime = imgRes.headers.get("content-type") ?? "";
@@ -303,8 +378,10 @@ async function fetchWebSearchOgImage(
         continue; // try the next candidate page
       }
     }
+    note(`og-image: ${urls.length} stron bez użytecznego og:image`);
     return null;
-  } catch {
+  } catch (err) {
+    note(`og-image: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   } finally {
     clearTimeout(timer);
@@ -343,29 +420,50 @@ async function resolveOneImage(
   job: { imageQuery?: string },
   apiKey: string,
   usedHashes: Set<string>,
+  note: Note,
   googleCse?: GoogleCseCreds,
 ): Promise<DocImage | null> {
-  const claim = async (candidate: DocImage | null): Promise<DocImage | null> => {
+  const claim = async (candidate: DocImage | null, tier: string): Promise<DocImage | null> => {
     if (!candidate) return null;
     const hash = await hashImageBytes(candidate.bytes);
-    if (usedHashes.has(hash)) return null; // duplicate — let the caller try the next tier
+    if (usedHashes.has(hash)) {
+      note(`${tier}: to samo zdjęcie już użyte w tym dokumencie`);
+      return null; // duplicate — let the caller try the next tier
+    }
     usedHashes.add(hash);
     return candidate;
   };
 
   if (!job.imageQuery) return null;
-  {
-    if (googleCse) {
-      const cse = await claim(await fetchGoogleCseImage(job.imageQuery, googleCse));
-      if (cse) return cse;
-    }
-    const wiki = await claim(await fetchWikipediaImage(job.imageQuery));
-    if (wiki) return wiki;
-    const webPhoto = await claim(await fetchWebSearchOgImage(job.imageQuery, apiKey));
-    if (webPhoto) return webPhoto;
-    const photo = await claim(await fetchWebImage(job.imageQuery));
-    if (photo) return photo;
+
+  if (googleCse) {
+    const cse = await claim(await fetchGoogleCseImage(job.imageQuery, googleCse, note), "cse");
+    if (cse) return cse;
+  } else {
+    note("cse: pominięte (brak klucza)");
   }
+
+  // NAJPIERW ANGIELSKA, POTEM POLSKA WIKIPEDIA. Opis obrazu ma być po
+  // angielsku (tak brzmi instrukcja narzędzia), ale w dokumencie pisanym po
+  // polsku model regularnie zjeżdża na polski mimo niej — a wtedy i
+  // angielska Wikipedia, i Openverse, oba indeksowane po angielsku, zwracają
+  // pustkę. Jedno dodatkowe zapytanie ratuje cały ten przypadek; przy
+  // zapytaniu angielskim druga próba i tak zwykle nie dochodzi do skutku,
+  // bo pierwsza trafia.
+  const wikiEn = await claim(await fetchWikipediaImage(job.imageQuery, "en", note), "wikipedia:en");
+  if (wikiEn) return wikiEn;
+  const wikiPl = await claim(await fetchWikipediaImage(job.imageQuery, "pl", note), "wikipedia:pl");
+  if (wikiPl) return wikiPl;
+
+  const webPhoto = await claim(
+    await fetchWebSearchOgImage(job.imageQuery, apiKey, note),
+    "og-image",
+  );
+  if (webPhoto) return webPhoto;
+
+  const photo = await claim(await fetchWebImage(job.imageQuery, note), "openverse");
+  if (photo) return photo;
+
   return null;
 }
 
@@ -396,17 +494,32 @@ export async function generateDocImages(
 
   const usedHashes = new Set<string>();
   for (const job of capped) {
+    // Notatki z warstw zbierane per zadanie. To one zamieniają meldunek
+    // „nie znalazłem" w meldunek, z którego wiadomo, co robić dalej.
+    const notes: string[] = [];
     try {
-      const result = await resolveOneImage(job, apiKey, usedHashes, googleCse);
+      const result = await resolveOneImage(
+        job,
+        apiKey,
+        usedHashes,
+        (text) => notes.push(text),
+        googleCse,
+      );
       if (result) {
         if (job.key === "hero") images.hero = result;
         else images.sections.set(job.key, result);
       } else {
-        await onWarn?.(`image resolution failed (${String(job.key)}): no image resolved`);
+        await onWarn?.(
+          `image resolution failed (${String(job.key)}) „${job.imageQuery}": ` +
+            (notes.length > 0 ? notes.join(" | ") : "no image resolved"),
+        );
       }
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      await onWarn?.(`image resolution failed (${String(job.key)}): ${reason}`);
+      await onWarn?.(
+        `image resolution failed (${String(job.key)}) „${job.imageQuery}": ${reason}` +
+          (notes.length > 0 ? ` | ${notes.join(" | ")}` : ""),
+      );
     }
   }
   return images;
