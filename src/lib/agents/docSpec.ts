@@ -181,6 +181,12 @@ function readMetrics(raw: unknown): SlideMetric[] | undefined {
     const m = item as Record<string, unknown>;
     const value = clip(m.value, MAX_METRIC_VALUE_CHARS);
     if (!value) continue; // liczba bez wartości nie jest liczbą
+    // KAFEL „metrics" JEST NA LICZBĘ, nie na zdanie. Model wpisał tu kiedyś
+    // „Najszybszy trailer w historii YouTube": obcięcie do 12 znaków dało
+    // „Najszybszy t", a render w wąskiej kolumnie 44-punktową czcionką
+    // pokazał „Najszyb szy t". Wpis bez ani jednej cyfry odpada — slajd z
+    // trzema liczbami wygląda dobrze, slajd z połamanym słowem nie.
+    if (!/\d/.test(value)) continue;
     out.push({ value, label: clip(m.label, MAX_METRIC_LABEL_CHARS) || undefined });
   }
   return out.length > 0 ? out : undefined;

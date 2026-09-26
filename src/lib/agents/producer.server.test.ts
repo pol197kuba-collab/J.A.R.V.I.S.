@@ -482,3 +482,39 @@ describe("unwrapDefault — zgodność ESM/CJS przy pakowaniu", () => {
     expect(unwrapDefault(undefined)).toBeUndefined();
   });
 });
+
+describe("kafle „metrics” — wartość musi być liczbą", () => {
+  // Żywy przypadek z prezentacji o GTA VI: czwarty kafel dostał
+  // „Najszybszy trailer w historii YouTube", obcięcie do 12 znaków dało
+  // „Najszybszy t", a render pokazał „Najszyb szy t".
+  const withMetrics = (metrics: unknown) => {
+    const res = normalizeDocSpec({
+      format: "pptx",
+      title: "T",
+      sections: [{ heading: "Liczby", layout: "metrics", metrics }],
+    });
+    if (!res.ok) throw new Error(res.error);
+    if (res.spec.format !== "pptx") throw new Error("spodziewano się prezentacji");
+    return res.spec.slides[0];
+  };
+
+  it("wyrzuca kafel bez ani jednej cyfry", () => {
+    const slide = withMetrics([
+      { value: "90+ mln", label: "wyświetlenia" },
+      { value: "Najszybszy trailer w historii YouTube", label: "rekord" },
+    ]);
+    expect(slide.metrics).toHaveLength(1);
+    expect(slide.metrics?.[0].value).toBe("90+ mln");
+  });
+
+  it("gdy nie zostanie żadna liczba, slajd wraca do punktów", () => {
+    // Lepiej zwykły slajd niż siatka pustych kafli.
+    const slide = withMetrics([{ value: "Rekord" }, { value: "Najszybszy" }]);
+    expect(slide.layout).toBe("bullets");
+  });
+
+  it("nie rusza liczb z jednostkami i przybliżeniami", () => {
+    const slide = withMetrics([{ value: "~475 tys." }, { value: "100+ mln" }, { value: "6,5 s" }]);
+    expect(slide.metrics).toHaveLength(3);
+  });
+});

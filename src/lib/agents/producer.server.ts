@@ -45,6 +45,7 @@ export function unwrapDefault<T>(mod: T): T {
 
 const PptxGenClass: typeof PptxGen = unwrapDefault(PptxGen);
 import { AlignmentType, Document, HeadingLevel, ImageRun, Packer, Paragraph, TextRun } from "docx";
+import { isOnTopic } from "./imageRelevance";
 import { DEFAULT_GEMINI_MODEL } from "./models";
 import { DOC_COLORS, DOC_FONTS, DECK_SLIDE } from "./docTheme";
 import {
@@ -126,7 +127,7 @@ async function fetchWebImage(query: string, note: Note): Promise<DocImage | null
       return null;
     }
     const data = (await res.json()) as {
-      results?: Array<{ url?: string; filetype?: string }>;
+      results?: Array<{ url?: string; filetype?: string; title?: string }>;
     };
     const hits = data.results ?? [];
     if (hits.length === 0) {
@@ -135,7 +136,12 @@ async function fetchWebImage(query: string, note: Note): Promise<DocImage | null
       note("openverse: 0 wyników");
       return null;
     }
+    let offTopic = 0;
     for (const hit of hits) {
+      if (!isOnTopic(query, hit.title)) {
+        offTopic++;
+        continue;
+      }
       const url = hit.url;
       // Only fetch https from a public host — never a private/loopback target.
       if (!url || !/^https:\/\//i.test(url)) continue;
@@ -163,7 +169,11 @@ async function fetchWebImage(query: string, note: Note): Promise<DocImage | null
         continue; // try the next candidate
       }
     }
-    note(`openverse: ${hits.length} wyników, żadnego nie dało się pobrać`);
+    note(
+      offTopic === hits.length
+        ? `openverse: ${hits.length} wyników, żaden nie o tym`
+        : `openverse: ${hits.length} wyników, żadnego nie dało się pobrać`,
+    );
     return null;
   } catch (err) {
     note(`openverse: ${err instanceof Error ? err.message : String(err)}`);
@@ -217,6 +227,13 @@ async function fetchWikipediaImage(
     const title = searchData.query?.search?.[0]?.title;
     if (!title) {
       note(`wikipedia:${lang} brak artykułu`);
+      return null;
+    }
+    // Wyszukiwarka ZAWSZE coś zwróci — dla „Rockstar Games logo office"
+    // zwróciła „Rockstar Leeds". Bez tego sprawdzenia zdjęcie z takiego
+    // artykułu ląduje na slajdzie jako ilustracja czegoś innego.
+    if (!isOnTopic(query, title)) {
+      note(`wikipedia:${lang} „${title}" nie o tym`);
       return null;
     }
 
@@ -289,15 +306,20 @@ async function fetchGoogleCseImage(
       note(`cse: HTTP ${res.status}`);
       return null;
     }
-    const data = (await res.json()) as { items?: Array<{ link?: string }> };
+    const data = (await res.json()) as { items?: Array<{ link?: string; title?: string }> };
     const items = data.items ?? [];
     if (items.length === 0) {
       note("cse: 0 wyników");
       return null;
     }
+    let cseOffTopic = 0;
     for (const item of items) {
       const link = item.link;
       if (!link || !/^https:\/\//i.test(link)) continue;
+      if (!isOnTopic(query, item.title)) {
+        cseOffTopic++;
+        continue;
+      }
       try {
         const imgRes = await fetch(link, {
           signal: ctrl.signal,
@@ -375,6 +397,7 @@ async function fetchWebSearchOgImage(
       return null;
     }
 
+    let offTopicPages = 0;
     for (const pageUrl of urls) {
       try {
         const pageRes = await fetch(pageUrl, {
@@ -387,6 +410,14 @@ async function fetchWebSearchOgImage(
         // Only the <head> realistically needs reading for a meta tag — caps
         // download size for pages that don't stream-truncate cleanly.
         const html = (await pageRes.text()).slice(0, 60_000);
+        // Tytuł strony to jedyne, co o tym kandydacie wiadomo — i musi
+        // mówić o temacie. Bez tego bierzemy pierwszą stronę, którą
+        // wyszukiwarka skojarzyła luźno, i jej zdjęcie otwierające.
+        const pageTitle = /<title[^>]*>([^<]{1,200})<\/title>/i.exec(html)?.[1];
+        if (!isOnTopic(query, pageTitle)) {
+          offTopicPages++;
+          continue;
+        }
         const match = OG_IMAGE_TAG_RE.exec(html);
         const imageUrl = match?.[1];
         if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) continue;
@@ -405,7 +436,11 @@ async function fetchWebSearchOgImage(
         continue; // try the next candidate page
       }
     }
-    note(`og-image: ${urls.length} stron bez użytecznego og:image`);
+    note(
+      offTopicPages === urls.length
+        ? `og-image: ${urls.length} stron nie o tym`
+        : `og-image: ${urls.length} stron bez użytecznego og:image`,
+    );
     return null;
   } catch (err) {
     note(`og-image: ${err instanceof Error ? err.message : String(err)}`);
@@ -654,7 +689,10 @@ async function buildPptx(spec: DeckSpec, images: DocImages): Promise<Uint8Array>
   }
   // Cover metadata line (section count) — the kind of small, quiet detail
   // that makes a report cover read as designed rather than a bare title.
-  title.addText(`${spec.slides.length} SLAJDÓW`, {
+  // +2 = slajd tytułowy i końcowy. Wcześniej okładka mówiła „13 SLAJDÓW",
+  // stopki „x/14", a PowerPoint pokazywał 15 — trzy różne liczby na jeden
+  // plik, z których żadna nie była prawdziwa.
+  title.addText(`${spec.slides.length + 2} SLAJDÓW`, {
     x: 0.85,
     y: 6.85,
     w: 4,
@@ -664,7 +702,7 @@ async function buildPptx(spec: DeckSpec, images: DocImages): Promise<Uint8Array>
     charSpacing: 2,
   });
 
-  const totalSlides = spec.slides.length + 1; // +1 na sam slajd tytułowy
+  const totalSlides = spec.slides.length + 2; // tytułowy + treść + końcowy
   for (const [i, slideSpec] of spec.slides.entries()) {
     const ctx: SlideCtx = {
       slide: pres.addSlide(),
