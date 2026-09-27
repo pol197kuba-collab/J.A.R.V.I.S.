@@ -34,6 +34,7 @@ const MAX_TITLE_CHARS = 200;
 const MAX_TEXT_CHARS = 4000;
 const MAX_BULLET_CHARS = 400;
 const MAX_IMAGE_PROMPT_CHARS = 600;
+const MAX_IMAGE_PAGE_URL_CHARS = 500;
 
 /** Twardy limit zdjęć na plik: 1 tytułowe + do 4 na bloki. Każde to kilka
  *  żądań sieciowych w łańcuchu źródeł, a całość mieści się w budżecie jednego
@@ -54,6 +55,12 @@ const MAX_METRIC_LABEL_CHARS = 60;
 type ImageRefs = {
   /** Fraza po angielsku do wyszukania zdjęcia. */
   imageQuery?: string;
+  /**
+   * Strona, z której wziąć zdjęcie — najczęściej oficjalna strona tematu.
+   * Model zna ją lepiej niż jakakolwiek wyszukiwarka bez klucza i podanie
+   * jej wprost zastępuje całe szukanie jednym żądaniem.
+   */
+  imagePageUrl?: string;
   /** Adres znalezionego zdjęcia, dopisywany PO fakcie — kiedy potok obrazów
    *  już je znalazł i wbudował w plik. Dzięki temu podgląd pokazuje dokładnie
    *  to zdjęcie, które siedzi w pliku, nie trzymając go drugi raz w storage. */
@@ -120,6 +127,8 @@ type SpecCommon = {
   subtitle?: string;
   filename: string;
   heroImageQuery?: string;
+  /** Strona, z której wziąć zdjęcie tytułowe — zwykle oficjalna strona tematu. */
+  heroImagePageUrl?: string;
   heroImageUrl?: string;
 };
 
@@ -276,6 +285,7 @@ export function normalizeDocSpec(args: Record<string, unknown>): NormalizeResult
     const columns = readColumns(s.columns);
     if (!heading && !content && bullets.length === 0 && !metrics && !columns) continue;
     const imageQuery = clip(s.image_query ?? s.imageQuery, MAX_IMAGE_PROMPT_CHARS);
+    const imagePageUrl = clip(s.image_page_url ?? s.imagePageUrl, MAX_IMAGE_PAGE_URL_CHARS);
     blocks.push({
       layout: resolveLayout(s.layout, { bullets, content, metrics, columns, imageQuery }),
       heading: heading || "—",
@@ -284,6 +294,7 @@ export function normalizeDocSpec(args: Record<string, unknown>): NormalizeResult
       metrics,
       columns,
       imageQuery: imageQuery || undefined,
+      imagePageUrl: imagePageUrl || undefined,
     });
   }
   if (blocks.length === 0) {
@@ -295,12 +306,17 @@ export function normalizeDocSpec(args: Record<string, unknown>): NormalizeResult
   const subtitle = clip(args.subtitle, MAX_TITLE_CHARS);
   const a = args as Record<string, unknown>;
   const heroImageQuery = clip(a.hero_image_query ?? a.heroImageQuery, MAX_IMAGE_PROMPT_CHARS);
+  const heroImagePageUrl = clip(
+    a.hero_image_page_url ?? a.heroImagePageUrl,
+    MAX_IMAGE_PAGE_URL_CHARS,
+  );
 
   const common = {
     title,
     subtitle: subtitle || undefined,
     filename: `${base}.${format}`,
     heroImageQuery: heroImageQuery || undefined,
+    heroImagePageUrl: heroImagePageUrl || undefined,
   };
 
   if (format === "pptx") return { ok: true, spec: { format: "pptx", ...common, slides: blocks } };
@@ -314,6 +330,7 @@ export function normalizeDocSpec(args: Record<string, unknown>): NormalizeResult
     content: b.content,
     bullets: b.bullets,
     imageQuery: b.imageQuery,
+    imagePageUrl: b.imagePageUrl,
   }));
   return { ok: true, spec: { format: "docx", ...common, sections } };
 }

@@ -518,3 +518,37 @@ describe("kafle „metrics” — wartość musi być liczbą", () => {
     expect(slide.metrics).toHaveLength(3);
   });
 });
+
+describe("wskazana strona jako źródło zdjęcia", () => {
+  const spec = (patch: Record<string, unknown>) => {
+    const res = normalizeDocSpec({
+      format: "pptx",
+      title: "T",
+      sections: [{ heading: "S", ...patch }],
+    });
+    if (!res.ok) throw new Error(res.error);
+    if (res.spec.format !== "pptx") throw new Error("spodziewano się prezentacji");
+    return res.spec.slides[0];
+  };
+
+  it("przyjmuje adres strony obok zapytania", () => {
+    const slide = spec({
+      image_query: "Grand Theft Auto VI",
+      image_page_url: "https://www.rockstargames.com/VI",
+    });
+    expect(slide.imagePageUrl).toBe("https://www.rockstargames.com/VI");
+    expect(slide.imageQuery).toBe("Grand Theft Auto VI");
+  });
+
+  it("czyta też zapis wielbłądzi", () => {
+    expect(spec({ imageQuery: "x", imagePageUrl: "https://example.com/a" }).imagePageUrl).toBe(
+      "https://example.com/a",
+    );
+  });
+
+  it("brak adresu nie jest błędem — to nadal zwykły slajd ze zdjęciem", () => {
+    const slide = spec({ image_query: "Grand Theft Auto VI" });
+    expect(slide.imagePageUrl).toBeUndefined();
+    expect(slide.imageQuery).toBe("Grand Theft Auto VI");
+  });
+});

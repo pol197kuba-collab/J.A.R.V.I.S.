@@ -202,6 +202,59 @@ async function fetchWebImage(query: string, note: Note): Promise<DocImage | null
 // license), which is why it's tried BEFORE Openverse's clean-license search,
 // not instead of it — Openverse still gets a turn for generic/decorative
 // queries that have real CC alternatives.
+/** Zdjęcie z podsumowania KONKRETNEGO artykułu; null, gdy artykuł go nie ma. */
+async function wikipediaSummaryImage(
+  lang: "en" | "pl",
+  title: string,
+  ctrl: AbortController,
+  note: Note,
+): Promise<DocImage | null> {
+  // HOST ZGODNY Z JĘZYKIEM. Wcześniej stało tu na sztywno `en`, więc polski
+  // tytuł z polskiego wyszukiwania szedł do angielskiej Wikipedii i wracał
+  // jako 404 — dokładnie ta linijka, którą widać było w logu.
+  const res = await fetch(
+    `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+    { signal: ctrl.signal, headers: { "User-Agent": USER_AGENT, Accept: "application/json" } },
+  );
+  if (!res.ok) {
+    note(`wikipedia:${lang} streszczenie „${title}” HTTP ${res.status}`);
+    return null;
+  }
+  const summary = (await res.json()) as {
+    originalimage?: { source?: string };
+    thumbnail?: { source?: string };
+  };
+  const imageUrl = summary.originalimage?.source ?? summary.thumbnail?.source;
+  if (!imageUrl || !/^https:\/\/upload\.wikimedia\.org\//i.test(imageUrl)) {
+    note(`wikipedia:${lang} „${title}” bez zdjęcia`);
+    return null;
+  }
+
+  const imgRes = await fetch(imageUrl, {
+    signal: ctrl.signal,
+    headers: { "User-Agent": USER_AGENT },
+  });
+  if (!imgRes.ok) {
+    note(`wikipedia:${lang} pobranie zdjęcia HTTP ${imgRes.status}`);
+    return null;
+  }
+  const mime = imgRes.headers.get("content-type") ?? "";
+  if (!mime.startsWith("image/")) return null;
+  const buf = new Uint8Array(await imgRes.arrayBuffer());
+  if (buf.byteLength === 0 || buf.byteLength > MAX_WEB_IMAGE_BYTES) return null;
+  return { bytes: buf, mime: mime.split(";")[0], sourceUrl: imgRes.url };
+}
+
+/**
+ * Zdjęcie z Wikipedii: NAJPIERW PROSTO W TYTUŁ, dopiero potem wyszukiwarka.
+ *
+ * Wyszukiwarka Wikipedii zwraca artykuł najlepiej pasujący SŁOWAMI, a nie
+ * ten właściwy: dla „Rockstar Games logo office” oddała „Rockstar Leeds”.
+ * Tymczasem zapytanie, które NAZYWA temat, trafia wprost — „Grand Theft
+ * Auto VI” jako tytuł artykułu daje oficjalną okładkę gry (sprawdzone na
+ * żywo). Jedno żądanie zamiast dwóch, bez rankingu po drodze i bez limitu
+ * zapytań, który potrafi odbić samo wyszukiwanie.
+ */
 async function fetchWikipediaImage(
   query: string,
   lang: "en" | "pl",
@@ -210,6 +263,10 @@ async function fetchWikipediaImage(
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), WEB_IMAGE_TIMEOUT_MS);
   try {
+    const direct = query.trim().replace(/\s+/g, "_");
+    const hit = await wikipediaSummaryImage(lang, direct, ctrl, note);
+    if (hit) return hit;
+
     const searchUrl =
       `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&origin=*` +
       `&list=search&srlimit=1&srsearch=${encodeURIComponent(query)}`;
@@ -218,7 +275,7 @@ async function fetchWikipediaImage(
       headers: { "User-Agent": USER_AGENT },
     });
     if (!searchRes.ok) {
-      note(`wikipedia:${lang} HTTP ${searchRes.status}`);
+      note(`wikipedia:${lang} szukanie HTTP ${searchRes.status}`);
       return null;
     }
     const searchData = (await searchRes.json()) as {
@@ -229,48 +286,12 @@ async function fetchWikipediaImage(
       note(`wikipedia:${lang} brak artykułu`);
       return null;
     }
-    // Wyszukiwarka ZAWSZE coś zwróci — dla „Rockstar Games logo office"
-    // zwróciła „Rockstar Leeds". Bez tego sprawdzenia zdjęcie z takiego
-    // artykułu ląduje na slajdzie jako ilustracja czegoś innego.
     if (!isOnTopic(query, title)) {
-      note(`wikipedia:${lang} „${title}" nie o tym`);
+      note(`wikipedia:${lang} „${title}” nie o tym`);
       return null;
     }
-
-    const summaryRes = await fetch(
-      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
-      {
-        signal: ctrl.signal,
-        headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
-      },
-    );
-    if (!summaryRes.ok) {
-      note(`wikipedia:${lang} streszczenie HTTP ${summaryRes.status}`);
-      return null;
-    }
-    const summary = (await summaryRes.json()) as {
-      originalimage?: { source?: string };
-      thumbnail?: { source?: string };
-    };
-    const imageUrl = summary.originalimage?.source ?? summary.thumbnail?.source;
-    if (!imageUrl || !/^https:\/\/upload\.wikimedia\.org\//i.test(imageUrl)) {
-      note(`wikipedia:${lang} „${title}" bez zdjęcia`);
-      return null;
-    }
-
-    const imgRes = await fetch(imageUrl, {
-      signal: ctrl.signal,
-      headers: { "User-Agent": USER_AGENT },
-    });
-    if (!imgRes.ok) {
-      note(`wikipedia:${lang} pobranie zdjęcia HTTP ${imgRes.status}`);
-      return null;
-    }
-    const mime = imgRes.headers.get("content-type") ?? "";
-    if (!mime.startsWith("image/")) return null;
-    const buf = new Uint8Array(await imgRes.arrayBuffer());
-    if (buf.byteLength === 0 || buf.byteLength > MAX_WEB_IMAGE_BYTES) return null;
-    return { bytes: buf, mime: mime.split(";")[0], sourceUrl: imgRes.url };
+    if (title.replace(/\s+/g, "_") === direct) return null; // już próbowane
+    return await wikipediaSummaryImage(lang, title, ctrl, note);
   } catch (err) {
     note(`wikipedia:${lang} ${err instanceof Error ? err.message : String(err)}`);
     return null;
@@ -450,6 +471,116 @@ async function fetchWebSearchOgImage(
   }
 }
 
+/** Czy adres nadaje się do pobrania: https i publiczny host. */
+function isFetchableUrl(url: string): boolean {
+  if (!/^https:\/\//i.test(url)) return false;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".internal")) {
+      return false;
+    }
+    // Goły adres IP odpada zawsze. Strona wydawcy ma nazwę domeny; adres
+    // liczbowy w tym miejscu to albo pomyłka modelu, albo próba sięgnięcia
+    // do sieci wewnętrznej — i żadnego z tych dwóch nie chcemy pobierać.
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(":")) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Zdjęcie otwierające ze WSKAZANEJ strony: znacznik `og:image`.
+ *
+ * To jest standard, który ustawia praktycznie każdy serwis — sklep, wiki,
+ * serwis informacyjny i strona wydawcy. Dla `rockstargames.com/VI` oddaje
+ * oficjalną grafikę gry: 865 kB, `image/jpeg`, bez klucza i bez logowania
+ * (sprawdzone na żywo). Czyli DOKŁADNIE to, czego archiwa na wolnych
+ * licencjach dać nie mogą.
+ *
+ * `requireTopic` rozstrzyga, czy tytuł strony musi zgadzać się z zapytaniem.
+ * Dla strony wyłowionej przez wyszukiwarkę — musi, bo nikt jej nie
+ * potwierdził. Dla strony WSKAZANEJ WPROST przez model — nie: wskazanie
+ * jest tym potwierdzeniem, a tytuł strony wydawcy bywa nazwą marki, nie
+ * nazwą produktu.
+ */
+async function pageOgImage(
+  pageUrl: string,
+  query: string,
+  ctrl: AbortController,
+  note: Note,
+  requireTopic: boolean,
+): Promise<DocImage | null> {
+  if (!isFetchableUrl(pageUrl)) return null;
+  const pageRes = await fetch(pageUrl, {
+    signal: ctrl.signal,
+    headers: { "User-Agent": USER_AGENT },
+  });
+  if (!pageRes.ok) {
+    note(`og-image: strona HTTP ${pageRes.status}`);
+    return null;
+  }
+  const contentType = pageRes.headers.get("content-type") ?? "";
+  if (!contentType.includes("html")) return null;
+  // Do znacznika w <head> wystarczy początek dokumentu — reszta to tylko
+  // transfer, którego nikt nie czyta.
+  const html = (await pageRes.text()).slice(0, 60_000);
+
+  if (requireTopic) {
+    const pageTitle = /<title[^>]*>([^<]{1,200})<\/title>/i.exec(html)?.[1];
+    if (!isOnTopic(query, pageTitle)) return null;
+  }
+
+  const imageUrl = OG_IMAGE_TAG_RE.exec(html)?.[1];
+  if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) {
+    note("og-image: strona bez znacznika og:image");
+    return null;
+  }
+
+  const imgRes = await fetch(imageUrl, {
+    signal: ctrl.signal,
+    headers: { "User-Agent": USER_AGENT },
+  });
+  if (!imgRes.ok) {
+    note(`og-image: pobranie HTTP ${imgRes.status}`);
+    return null;
+  }
+  const mime = imgRes.headers.get("content-type") ?? "";
+  if (!mime.startsWith("image/")) return null;
+  const buf = new Uint8Array(await imgRes.arrayBuffer());
+  if (buf.byteLength === 0 || buf.byteLength > MAX_WEB_IMAGE_BYTES) return null;
+  return { bytes: buf, mime: mime.split(";")[0], sourceUrl: imgRes.url };
+}
+
+/**
+ * Zdjęcie ze strony, którą NAZWAŁ MODEL — najpierw i najlepiej.
+ *
+ * Dlaczego to jest pierwsza warstwa. Ogólnej wyszukiwarki obrazów bez
+ * klucza po prostu nie ma: DuckDuckGo oddaje 403 na punkcie obrazów i 202
+ * z blokadą bota na wersji HTML, Bing odmawia. Za to model WIE, gdzie leży
+ * oficjalna strona tematu — dla GTA VI to `rockstargames.com/VI` — i podanie
+ * jej wprost zastępuje całe wyszukiwanie jednym żądaniem, które trafia w
+ * materiał wydawcy zamiast w to, co akurat leży na wolnej licencji.
+ */
+async function fetchNamedPageImage(
+  pageUrl: string,
+  query: string,
+  note: Note,
+): Promise<DocImage | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), OG_IMAGE_TIMEOUT_MS);
+  try {
+    const hit = await pageOgImage(pageUrl, query, ctrl, note, false);
+    if (!hit) note(`strona wskazana: ${pageUrl} bez użytecznego zdjęcia`);
+    return hit;
+  } catch (err) {
+    note(`strona wskazana: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function hashImageBytes(bytes: Uint8Array): Promise<string> {
   // Copy into a fresh, non-generic Uint8Array — TS's BufferSource type
   // rejects the ArrayBufferLike-backed view DocImage.bytes can carry.
@@ -479,7 +610,7 @@ async function hashImageBytes(bytes: Uint8Array): Promise<string> {
  *  it's treated as a miss and the next tier is tried instead, so a repeat
  *  never gets embedded twice. */
 async function resolveOneImage(
-  job: { imageQuery?: string },
+  job: { imageQuery?: string; pageUrl?: string },
   apiKey: string,
   usedHashes: Set<string>,
   note: Note,
@@ -497,6 +628,20 @@ async function resolveOneImage(
   };
 
   if (!job.imageQuery) return null;
+
+  // NAJPIERW STRONA WSKAZANA PRZEZ MODEL. Ogólnej wyszukiwarki obrazów bez
+  // klucza nie ma (DuckDuckGo: 403 na obrazach, 202 z blokadą bota na HTML;
+  // Bing odmawia), a model wie, gdzie leży oficjalna strona tematu. To ta
+  // warstwa przynosi materiał wydawcy zamiast tego, co akurat leży na
+  // wolnej licencji — czyli jedyna, która daje zdjęcie NAPRAWDĘ na temat
+  // przy premierze gry, nowym telefonie czy aucie z rocznika.
+  if (job.pageUrl) {
+    const named = await claim(
+      await fetchNamedPageImage(job.pageUrl, job.imageQuery, note),
+      "strona wskazana",
+    );
+    if (named) return named;
+  }
 
   if (googleCse) {
     const cse = await claim(await fetchGoogleCseImage(job.imageQuery, googleCse, note), "cse");
@@ -543,11 +688,15 @@ export async function generateDocImages(
   onWarn?: (message: string) => Promise<void> | void,
   googleCse?: GoogleCseCreds,
 ): Promise<DocImages> {
-  type Job = { key: "hero" | number; imageQuery: string };
+  type Job = { key: "hero" | number; imageQuery: string; pageUrl?: string };
   const jobs: Job[] = [];
-  if (spec.heroImageQuery) jobs.push({ key: "hero", imageQuery: spec.heroImageQuery });
+  if (spec.heroImageQuery) {
+    jobs.push({ key: "hero", imageQuery: spec.heroImageQuery, pageUrl: spec.heroImagePageUrl });
+  }
   for (const [i, section] of blocksOf(spec).entries()) {
-    if (section.imageQuery) jobs.push({ key: i, imageQuery: section.imageQuery });
+    if (section.imageQuery) {
+      jobs.push({ key: i, imageQuery: section.imageQuery, pageUrl: section.imagePageUrl });
+    }
   }
   const capped = jobs.slice(0, 1 + MAX_SECTION_IMAGES);
 
