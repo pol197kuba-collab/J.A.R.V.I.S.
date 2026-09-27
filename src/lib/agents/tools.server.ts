@@ -1999,7 +1999,7 @@ const generateDocumentTool: Tool = {
   declaration: {
     name: "generate_document",
     description:
-      "Generate a downloadable file — a presentation (pptx) or a Word document (docx) — from structured content, and return a download link. Call it ONCE with the complete, final content: a title and a list of sections, each with a heading plus paragraph text and/or bullet points. Write real content in the user's language, never placeholders. For visuals, set image_query (and hero_image_query): a short ENGLISH search phrase naming a real, concrete thing — a product, place, person, event or object, e.g. 'Samsung Galaxy S26 Ultra smartphone', 'Warsaw Old Town square'. The system finds a real photo on the web and embeds it. Be SPECIFIC: a vague phrase ('technology', 'business growth') returns generic stock filler, while a named subject returns the actual thing. Skip image_query entirely for a slide where no real photo would add anything — a slide with no image reads better than one with an unrelated picture. Photos are added in the background after the file is delivered. FOR PRESENTATIONS: give every slide a `layout` chosen to fit its content — a deck where every slide is the same bullet list reads as filler. Vary them.",
+      "Generate a downloadable file — a presentation (pptx) or a Word document (docx) — from structured content, and return a download link. Call it ONCE with the complete, final content: a title and a list of sections, each with a heading plus paragraph text and/or bullet points. Write real content in the user's language, never placeholders. For visuals, set image_query (and hero_image_query): the subject's EXACT English name, as an encyclopedia article would title it — 'Grand Theft Auto VI', 'Warsaw Old Town' — not a description of a photo. Whenever you know the subject's official page (publisher, manufacturer, studio, store), also set image_page_url (and hero_image_page_url): that page's own preview image is the best source there is. The system verifies every candidate is actually about the subject and DROPS it otherwise, so a vague or descriptive phrase usually ends with no image at all. Skip image_query entirely for a slide where no real photo would add anything — a slide with no image reads better than one with an unrelated picture. Photos are added in the background after the file is delivered. FOR PRESENTATIONS: give every slide a `layout` chosen to fit its content — a deck where every slide is the same bullet list reads as filler. Vary them.",
     parameters: {
       type: "object",
       properties: {
@@ -2017,7 +2017,12 @@ const generateDocumentTool: Tool = {
         hero_image_query: {
           type: "string",
           description:
-            "English search phrase for a REAL title-slide photo (a concrete product/place/person/thing), e.g. 'Samsung Galaxy S26 Ultra smartphone'.",
+            "NAME the title-slide subject exactly as an encyclopedia article would title it, in English: 'Grand Theft Auto VI', 'Samsung Galaxy S26 Ultra', 'Dodge Charger (LD)'. An exact name lands on the real article and its official artwork; a descriptive phrase ('Rockstar Games logo office') lands on whatever ranks nearest and gives an unrelated picture.",
+        },
+        hero_image_page_url: {
+          type: "string",
+          description:
+            "BEST SOURCE OF ALL, use it whenever you know one: the URL of the subject's official page — publisher, manufacturer, store or studio (e.g. 'https://www.rockstargames.com/VI'). Its preview image is the publisher's own artwork, which no free-licence archive can provide. Give the page for THIS subject, not a homepage.",
         },
         sections: {
           type: "array",
@@ -2072,7 +2077,12 @@ const generateDocumentTool: Tool = {
               image_query: {
                 type: "string",
                 description:
-                  "English search phrase for a REAL photo for this slide — name a concrete subject, not an abstraction (max 4 sections get an image, so pick the most important). e.g. 'smartphone camera module close-up'. Omit it when no real photo would add anything.",
+                  "NAME the subject of this slide's photo exactly, in English, as an encyclopedia article would title it — not a description. 'Vice City' beats 'Vice City neon skyline at night'; a descriptive phrase lands on whatever ranks nearest and gives an unrelated picture. Max 4 sections get an image, so pick the most important. Omit it when no real photo would add anything — a slide with no image reads better than one with the wrong picture, and the system WILL drop an image it cannot confirm is on topic.",
+              },
+              image_page_url: {
+                type: "string",
+                description:
+                  "The official page for THIS slide's subject, when you know it (publisher, manufacturer, store, studio). Its preview image is the publisher's own artwork and beats every other source — use it whenever you can.",
               },
             },
             required: ["heading"],
