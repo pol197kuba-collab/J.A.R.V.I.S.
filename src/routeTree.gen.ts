@@ -9,114 +9,34 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as VisionRouteImport } from './routes/vision'
-import { Route as TownRouteImport } from './routes/town'
-import { Route as TasksRouteImport } from './routes/tasks'
-import { Route as SystemLogsRouteImport } from './routes/system-logs'
-import { Route as SubSystemsRouteImport } from './routes/sub-systems'
-import { Route as SituationRoomRouteImport } from './routes/situation-room'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as SchemaRouteImport } from './routes/schema'
-import { Route as RynkiRouteImport } from './routes/rynki'
-import { Route as ResetPasswordRouteImport } from './routes/reset-password'
-import { Route as PaliwaRouteImport } from './routes/paliwa'
-import { Route as NotesRouteImport } from './routes/notes'
-import { Route as McpRouteImport } from './routes/mcp'
-import { Route as JarvisRouteImport } from './routes/jarvis'
-import { Route as FeedRouteImport } from './routes/feed'
-import { Route as DocumentsRouteImport } from './routes/documents'
-import { Route as CommandsRouteImport } from './routes/commands'
-import { Route as AgentHubRouteImport } from './routes/agent-hub'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AgentHubSlugRouteImport } from './routes/agent-hub_.$slug'
-import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
+import { Route as AgentHubRouteImport } from './routes/agent-hub'
+import { Route as CommandsRouteImport } from './routes/commands'
+import { Route as DocumentsRouteImport } from './routes/documents'
+import { Route as FeedRouteImport } from './routes/feed'
+import { Route as JarvisRouteImport } from './routes/jarvis'
+import { Route as McpRouteImport } from './routes/mcp'
+import { Route as NotesRouteImport } from './routes/notes'
+import { Route as PaliwaRouteImport } from './routes/paliwa'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as RynkiRouteImport } from './routes/rynki'
+import { Route as SchemaRouteImport } from './routes/schema'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SituationRoomRouteImport } from './routes/situation-room'
+import { Route as SubSystemsRouteImport } from './routes/sub-systems'
+import { Route as SystemLogsRouteImport } from './routes/system-logs'
+import { Route as TasksRouteImport } from './routes/tasks'
+import { Route as TownRouteImport } from './routes/town'
+import { Route as VisionRouteImport } from './routes/vision'
 import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
-import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
+import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
+import { Route as AgentHubSlugRouteImport } from './routes/agent-hub_.$slug'
 import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
+import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
 
-const VisionRoute = VisionRouteImport.update({
-  id: '/vision',
-  path: '/vision',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TownRoute = TownRouteImport.update({
-  id: '/town',
-  path: '/town',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TasksRoute = TasksRouteImport.update({
-  id: '/tasks',
-  path: '/tasks',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SystemLogsRoute = SystemLogsRouteImport.update({
-  id: '/system-logs',
-  path: '/system-logs',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SubSystemsRoute = SubSystemsRouteImport.update({
-  id: '/sub-systems',
-  path: '/sub-systems',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SituationRoomRoute = SituationRoomRouteImport.update({
-  id: '/situation-room',
-  path: '/situation-room',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SchemaRoute = SchemaRouteImport.update({
-  id: '/schema',
-  path: '/schema',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RynkiRoute = RynkiRouteImport.update({
-  id: '/rynki',
-  path: '/rynki',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ResetPasswordRoute = ResetPasswordRouteImport.update({
-  id: '/reset-password',
-  path: '/reset-password',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PaliwaRoute = PaliwaRouteImport.update({
-  id: '/paliwa',
-  path: '/paliwa',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const NotesRoute = NotesRouteImport.update({
-  id: '/notes',
-  path: '/notes',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const McpRoute = McpRouteImport.update({
-  id: '/mcp',
-  path: '/mcp',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const JarvisRoute = JarvisRouteImport.update({
-  id: '/jarvis',
-  path: '/jarvis',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FeedRoute = FeedRouteImport.update({
-  id: '/feed',
-  path: '/feed',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DocumentsRoute = DocumentsRouteImport.update({
-  id: '/documents',
-  path: '/documents',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CommandsRoute = CommandsRouteImport.update({
-  id: '/commands',
-  path: '/commands',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AgentHubRoute = AgentHubRouteImport.update({
@@ -124,39 +44,119 @@ const AgentHubRoute = AgentHubRouteImport.update({
   path: '/agent-hub',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const CommandsRoute = CommandsRouteImport.update({
+  id: '/commands',
+  path: '/commands',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AgentHubSlugRoute = AgentHubSlugRouteImport.update({
-  id: '/agent-hub_/$slug',
-  path: '/agent-hub/$slug',
+const DocumentsRoute = DocumentsRouteImport.update({
+  id: '/documents',
+  path: '/documents',
   getParentRoute: () => rootRouteImport,
 } as any)
-const Char91DotwellKnownChar93OauthProtectedResourceRoute =
-  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
-    id: '/.well-known/oauth-protected-resource',
-    path: '/.well-known/oauth-protected-resource',
-    getParentRoute: () => rootRouteImport,
-  } as any)
+const FeedRoute = FeedRouteImport.update({
+  id: '/feed',
+  path: '/feed',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JarvisRoute = JarvisRouteImport.update({
+  id: '/jarvis',
+  path: '/jarvis',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotesRoute = NotesRouteImport.update({
+  id: '/notes',
+  path: '/notes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PaliwaRoute = PaliwaRouteImport.update({
+  id: '/paliwa',
+  path: '/paliwa',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RynkiRoute = RynkiRouteImport.update({
+  id: '/rynki',
+  path: '/rynki',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SchemaRoute = SchemaRouteImport.update({
+  id: '/schema',
+  path: '/schema',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SituationRoomRoute = SituationRoomRouteImport.update({
+  id: '/situation-room',
+  path: '/situation-room',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SubSystemsRoute = SubSystemsRouteImport.update({
+  id: '/sub-systems',
+  path: '/sub-systems',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SystemLogsRoute = SystemLogsRouteImport.update({
+  id: '/system-logs',
+  path: '/system-logs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TasksRoute = TasksRouteImport.update({
+  id: '/tasks',
+  path: '/tasks',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TownRoute = TownRouteImport.update({
+  id: '/town',
+  path: '/town',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VisionRoute = VisionRouteImport.update({
+  id: '/vision',
+  path: '/vision',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const Char91DotmcpChar93ListToolsRoute =
   Char91DotmcpChar93ListToolsRouteImport.update({
     id: '/.mcp/list-tools',
     path: '/.mcp/list-tools',
     getParentRoute: () => rootRouteImport,
   } as any)
+const Char91DotwellKnownChar93OauthProtectedResourceRoute =
+  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
+    id: '/.well-known/oauth-protected-resource',
+    path: '/.well-known/oauth-protected-resource',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const AgentHubSlugRoute = AgentHubSlugRouteImport.update({
+  id: '/agent-hub_/$slug',
+  path: '/agent-hub/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
+  id: '/.lovable/oauth/consent',
+  path: '/.lovable/oauth/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const Char91DotmcpChar93InvokeToolToolRoute =
   Char91DotmcpChar93InvokeToolToolRouteImport.update({
     id: '/.mcp/invoke-tool/$tool',
     path: '/.mcp/invoke-tool/$tool',
     getParentRoute: () => rootRouteImport,
   } as any)
-const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
-  id: '/.lovable/oauth/consent',
-  path: '/.lovable/oauth/consent',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -347,123 +347,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/vision': {
-      id: '/vision'
-      path: '/vision'
-      fullPath: '/vision'
-      preLoaderRoute: typeof VisionRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/town': {
-      id: '/town'
-      path: '/town'
-      fullPath: '/town'
-      preLoaderRoute: typeof TownRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/tasks': {
-      id: '/tasks'
-      path: '/tasks'
-      fullPath: '/tasks'
-      preLoaderRoute: typeof TasksRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/system-logs': {
-      id: '/system-logs'
-      path: '/system-logs'
-      fullPath: '/system-logs'
-      preLoaderRoute: typeof SystemLogsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sub-systems': {
-      id: '/sub-systems'
-      path: '/sub-systems'
-      fullPath: '/sub-systems'
-      preLoaderRoute: typeof SubSystemsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/situation-room': {
-      id: '/situation-room'
-      path: '/situation-room'
-      fullPath: '/situation-room'
-      preLoaderRoute: typeof SituationRoomRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/schema': {
-      id: '/schema'
-      path: '/schema'
-      fullPath: '/schema'
-      preLoaderRoute: typeof SchemaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/rynki': {
-      id: '/rynki'
-      path: '/rynki'
-      fullPath: '/rynki'
-      preLoaderRoute: typeof RynkiRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/reset-password': {
-      id: '/reset-password'
-      path: '/reset-password'
-      fullPath: '/reset-password'
-      preLoaderRoute: typeof ResetPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/paliwa': {
-      id: '/paliwa'
-      path: '/paliwa'
-      fullPath: '/paliwa'
-      preLoaderRoute: typeof PaliwaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/notes': {
-      id: '/notes'
-      path: '/notes'
-      fullPath: '/notes'
-      preLoaderRoute: typeof NotesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/mcp': {
-      id: '/mcp'
-      path: '/mcp'
-      fullPath: '/mcp'
-      preLoaderRoute: typeof McpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/jarvis': {
-      id: '/jarvis'
-      path: '/jarvis'
-      fullPath: '/jarvis'
-      preLoaderRoute: typeof JarvisRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/feed': {
-      id: '/feed'
-      path: '/feed'
-      fullPath: '/feed'
-      preLoaderRoute: typeof FeedRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/documents': {
-      id: '/documents'
-      path: '/documents'
-      fullPath: '/documents'
-      preLoaderRoute: typeof DocumentsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/commands': {
-      id: '/commands'
-      path: '/commands'
-      fullPath: '/commands'
-      preLoaderRoute: typeof CommandsRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/agent-hub': {
@@ -473,25 +361,123 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AgentHubRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/commands': {
+      id: '/commands'
+      path: '/commands'
+      fullPath: '/commands'
+      preLoaderRoute: typeof CommandsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/agent-hub_/$slug': {
-      id: '/agent-hub_/$slug'
-      path: '/agent-hub/$slug'
-      fullPath: '/agent-hub/$slug'
-      preLoaderRoute: typeof AgentHubSlugRouteImport
+    '/documents': {
+      id: '/documents'
+      path: '/documents'
+      fullPath: '/documents'
+      preLoaderRoute: typeof DocumentsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/.well-known/oauth-protected-resource': {
-      id: '/.well-known/oauth-protected-resource'
-      path: '/.well-known/oauth-protected-resource'
-      fullPath: '/.well-known/oauth-protected-resource'
-      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
+    '/feed': {
+      id: '/feed'
+      path: '/feed'
+      fullPath: '/feed'
+      preLoaderRoute: typeof FeedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/jarvis': {
+      id: '/jarvis'
+      path: '/jarvis'
+      fullPath: '/jarvis'
+      preLoaderRoute: typeof JarvisRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/notes': {
+      id: '/notes'
+      path: '/notes'
+      fullPath: '/notes'
+      preLoaderRoute: typeof NotesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/paliwa': {
+      id: '/paliwa'
+      path: '/paliwa'
+      fullPath: '/paliwa'
+      preLoaderRoute: typeof PaliwaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rynki': {
+      id: '/rynki'
+      path: '/rynki'
+      fullPath: '/rynki'
+      preLoaderRoute: typeof RynkiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/schema': {
+      id: '/schema'
+      path: '/schema'
+      fullPath: '/schema'
+      preLoaderRoute: typeof SchemaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/situation-room': {
+      id: '/situation-room'
+      path: '/situation-room'
+      fullPath: '/situation-room'
+      preLoaderRoute: typeof SituationRoomRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sub-systems': {
+      id: '/sub-systems'
+      path: '/sub-systems'
+      fullPath: '/sub-systems'
+      preLoaderRoute: typeof SubSystemsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/system-logs': {
+      id: '/system-logs'
+      path: '/system-logs'
+      fullPath: '/system-logs'
+      preLoaderRoute: typeof SystemLogsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tasks': {
+      id: '/tasks'
+      path: '/tasks'
+      fullPath: '/tasks'
+      preLoaderRoute: typeof TasksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/town': {
+      id: '/town'
+      path: '/town'
+      fullPath: '/town'
+      preLoaderRoute: typeof TownRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/vision': {
+      id: '/vision'
+      path: '/vision'
+      fullPath: '/vision'
+      preLoaderRoute: typeof VisionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/.mcp/list-tools': {
@@ -501,11 +487,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof Char91DotmcpChar93ListToolsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/.mcp/invoke-tool/$tool': {
-      id: '/.mcp/invoke-tool/$tool'
-      path: '/.mcp/invoke-tool/$tool'
-      fullPath: '/.mcp/invoke-tool/$tool'
-      preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
+    '/.well-known/oauth-protected-resource': {
+      id: '/.well-known/oauth-protected-resource'
+      path: '/.well-known/oauth-protected-resource'
+      fullPath: '/.well-known/oauth-protected-resource'
+      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agent-hub_/$slug': {
+      id: '/agent-hub_/$slug'
+      path: '/agent-hub/$slug'
+      fullPath: '/agent-hub/$slug'
+      preLoaderRoute: typeof AgentHubSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/.lovable/oauth/consent': {
@@ -513,6 +506,13 @@ declare module '@tanstack/react-router' {
       path: '/.lovable/oauth/consent'
       fullPath: '/.lovable/oauth/consent'
       preLoaderRoute: typeof DotlovableOauthConsentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.mcp/invoke-tool/$tool': {
+      id: '/.mcp/invoke-tool/$tool'
+      path: '/.mcp/invoke-tool/$tool'
+      fullPath: '/.mcp/invoke-tool/$tool'
+      preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
