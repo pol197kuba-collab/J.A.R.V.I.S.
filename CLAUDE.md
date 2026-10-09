@@ -64,3 +64,16 @@ scroll to it. If a route genuinely needs a fixed, non-scrolling viewport
 (immersive full-bleed views only), give *that route's own wrapper* a
 definite height (e.g. `h-[100dvh]`) and `overflow-hidden`, matching the
 `/jarvis` pattern — never rely on `<main>` clipping for you.
+
+## Design skills: project rules win
+
+`.claude/skills/` holds third-party design skills (`design-taste-frontend`,
+`high-end-visual-design`, `redesign-existing-projects`, installed via
+`npx skills add Leonxlnx/taste-skill`, pinned in `skills-lock.json`). Use
+them for taste — typography, spacing, motion, avoiding generic AI-looking
+UI — but they are generic web guidance. Whenever a skill conflicts with
+this file, **this file wins**: keep the J.A.R.V.I.S. HUD aesthetic and
+colors from the theme tokens in `src/styles.css`, the `no-scrollbar` rule,
+container-query panel layout, and scrollable pages. Don't swap in a
+skill's suggested palette, fonts, or component library wholesale, and
+don't add dependencies a skill recommends without asking.
