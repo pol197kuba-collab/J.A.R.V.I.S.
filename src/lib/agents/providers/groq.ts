@@ -109,7 +109,66 @@ export type CallGroqOptions = {
   timeoutMs?: number;
 };
 
+// ── self-healing model choice ──────────────────────────────────────────────
+//
+// Groq retires models without notice. Live failure (2026-10-09): every
+// classifier pass 404'd with `llama-3.1-8b-instant` "does not exist or you do
+// not have access to it", silently pushing every turn onto the paid Gemini
+// classifier path. Instead of hard-coding the next model name (which will be
+// retired too), a model_not_found asks Groq which models this key can use and
+// picks a stand-in, remembered for the life of the server process.
+
+const GROQ_MODELS_ENDPOINT = "https://api.groq.com/openai/v1/models";
+const substitutes = new Map<string, string>();
+const NOT_A_CHAT_MODEL = /whisper|guard|tts|playai|vision|compound|embed|orpheus/i;
+
+/** Best available stand-in for a retired chat model — small/fast first. */
+export function chooseGroqModel(available: readonly string[], wanted: string): string | null {
+  const chat = available.filter((id) => !NOT_A_CHAT_MODEL.test(id));
+  if (chat.includes(wanted)) return wanted;
+  const prefs = [
+    /instant/i,
+    /llama.*8b/i,
+    /gpt-oss-20b/i,
+    /llama/i,
+    /gpt-oss/i,
+    /qwen|gemma|mistral/i,
+  ];
+  for (const re of prefs) {
+    const hit = chat.find((id) => re.test(id));
+    if (hit) return hit;
+  }
+  return chat[0] ?? null;
+}
+
+const isModelGone = (msg: string) => /model_not_found|does not exist|decommissioned/i.test(msg);
+
+async function availableGroqModels(apiKey: string): Promise<string[]> {
+  const res = await fetch(GROQ_MODELS_ENDPOINT, { headers: { Authorization: `Bearer ${apiKey}` } });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { data?: Array<{ id?: string; active?: boolean }> };
+  return (data.data ?? []).filter((m) => m.id && m.active !== false).map((m) => m.id as string);
+}
+
+/**
+ * One Groq chat turn. If the requested model has been retired, picks an
+ * available stand-in (see chooseGroqModel) and retries once.
+ */
 export async function callGroq(opts: CallGroqOptions): Promise<ModelTurnResult> {
+  const model = substitutes.get(opts.model) ?? opts.model;
+  try {
+    return await callGroqOnce({ ...opts, model });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!isModelGone(msg)) throw err;
+    const alt = chooseGroqModel(await availableGroqModels(opts.apiKey).catch(() => []), model);
+    if (!alt || alt === model) throw err;
+    substitutes.set(opts.model, alt);
+    return callGroqOnce({ ...opts, model: alt });
+  }
+}
+
+async function callGroqOnce(opts: CallGroqOptions): Promise<ModelTurnResult> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 30_000);
   try {

@@ -247,8 +247,8 @@ export async function runClassifierFallback(
   const queueTool = queueDocumentJobEnabled ? getToolByName(QUEUE_DOCUMENT_JOB_TOOL_NAME) : null;
 
   const classifierSystemPrompt = queueTool
-    ? 'Jesteś klasyfikatorem intencji dla interfejsu JARVIS HUD. Oceń wiadomość użytkownika i zdecyduj DOKŁADNIE JEDNO z trzech: (1) czy pasuje do jednej z dostępnych akcji UI — wywołaj perform_ui_action; (2) czy to prośba o przygotowanie dokumentu/prezentacji/raportu NA TEMAT wymagającym zebrania treści (np. "zrób mi prezentację o X", "przygotuj raport o Y") — wywołaj queue_document_job z krótkim tytułem i pełnym opisem zadania badawczego dla brief; (3) jeśli żadne z powyższych nie pasuje (zwykła pogawędka, pytanie merytoryczne bez prośby o plik) — wywołaj perform_ui_action z action="none". Zawsze wywołaj DOKŁADNIE jedno z tych dwóch narzędzi. Nie odpowiadaj tekstem, nie tłumacz się.'
-    : 'Jesteś klasyfikatorem intencji dla interfejsu JARVIS HUD. Oceń wiadomość użytkownika i zdecyduj, czy odpowiada ona DOKŁADNIE jednej z dostępnych akcji UI. Zawsze wywołaj narzędzie perform_ui_action z jedną wartością — jeśli żadna akcja nie pasuje (np. zwykła pogawędka, pytanie merytoryczne, prośba o treść), wybierz "none". Nie odpowiadaj tekstem, nie tłumacz się.';
+    ? 'Jesteś klasyfikatorem intencji dla interfejsu JARVIS HUD. Oceń wiadomość użytkownika i zdecyduj DOKŁADNIE JEDNO z trzech: (1) czy pasuje do jednej z dostępnych akcji UI — wywołaj perform_ui_action; (2) czy to prośba o przygotowanie dokumentu/prezentacji/raportu NA TEMAT wymagającym zebrania treści (np. "zrób mi prezentację o X", "przygotuj raport o Y") — wywołaj queue_document_job z krótkim tytułem i pełnym opisem zadania badawczego dla brief; (3) jeśli żadne z powyższych nie pasuje (zwykła pogawędka, pytanie merytoryczne bez prośby o plik) — wywołaj perform_ui_action z action="none". Zawsze wywołaj DOKŁADNIE jedno z tych dwóch narzędzi. Pytania i prośby o informację lub raport (np. „co się ostatnio wywaliło?”, „jak idzie zadanie?”, „niech SHIELD sprawdzi błędy”) to NIE są akcje UI — wybierz "none", nawet gdy dotyczą logów czy zadań. Akcję UI wybieraj tylko przy wyraźnym poleceniu otwarcia lub pokazania ekranu (np. „otwórz logi”, „pokaż dashboard”). Nie odpowiadaj tekstem, nie tłumacz się.'
+    : 'Jesteś klasyfikatorem intencji dla interfejsu JARVIS HUD. Oceń wiadomość użytkownika i zdecyduj, czy odpowiada ona DOKŁADNIE jednej z dostępnych akcji UI. Zawsze wywołaj narzędzie perform_ui_action z jedną wartością — jeśli żadna akcja nie pasuje (np. zwykła pogawędka, pytanie merytoryczne, prośba o treść), wybierz "none". Pytania i prośby o informację lub raport (np. „co się ostatnio wywaliło?”, „jak idzie zadanie?”, „niech SHIELD sprawdzi błędy”) to NIE są akcje UI — wybierz "none", nawet gdy dotyczą logów czy zadań. Akcję UI wybieraj tylko przy wyraźnym poleceniu otwarcia lub pokazania ekranu (np. „otwórz logi”, „pokaż dashboard”). Nie odpowiadaj tekstem, nie tłumacz się.';
   const classifierToolDeclaration = {
     name: UI_ACTION_TOOL_NAME,
     description:
@@ -952,8 +952,8 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
 
     for (let iter = 0; iter < maxToolIterations; iter++) {
       const forceGenerateDocument = isProducer && !producerCalledGenerate;
-      let functionCalls: Array<{ name: string; args: Record<string, unknown> }>;
-      let textOut: string;
+      let functionCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
+      let textOut = "";
       try {
         if (modelProvider === "anthropic") {
           // Claude path — same canonical `contents`, same tool declarations,
@@ -984,133 +984,153 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
             } as Json);
           }
         } else {
-          const requestBody = JSON.stringify({
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-            generationConfig: {
-              temperature,
-              maxOutputTokens,
-              // gemini-2.5-flash "thinks" by default, and those thinking
-              // tokens are deducted from the SAME maxOutputTokens budget as
-              // the actual response — for a forced structured call this can
-              // starve the function-call JSON of budget mid-generation,
-              // truncating it into invalid JSON (finishReason:
-              // MALFORMED_FUNCTION_CALL, 0 usable calls). Live failure
-              // (2026-08-14): generate_document forced via toolConfig ANY for
-              // a 10-slide deck came back empty on repeated attempts with
-              // exactly that finish reason. This call is pure mechanical
-              // structuring, not reasoning, so thinking buys nothing — turning
-              // it off frees the entire budget for the actual output. Must
-              // live INSIDE generationConfig — Gemini 400s on it as a
-              // top-level field ("Unknown name \"thinkingConfig\"").
-              ...(forceGenerateDocument ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
-            },
-            safetySettings: GEMINI_SAFETY_SETTINGS,
-            // Gemini rejects an empty functionDeclarations array, and an
-            // agent may legitimately have zero tools enabled (all toggled
-            // off in Settings) — omit the `tools` key entirely in that case.
-            ...(toolDeclarations.length > 0
-              ? { tools: [{ functionDeclarations: toolDeclarations }] }
-              : {}),
-            ...(forceGenerateDocument
-              ? {
-                  toolConfig: {
-                    functionCallingConfig: {
-                      mode: "ANY",
-                      allowedFunctionNames: [GENERATE_DOCUMENT_TOOL],
+          // PUSTA TURA GEMINI → JEDNA POWTÓRKA.
+          //
+          // Zaobserwowane na żywo (2026-10-09): po przełączeniu z Claude (brak
+          // środków) gemini-2.5-flash zwrócił turę bez tekstu i bez wywołania
+          // narzędzia (finishReason=STOP) — dwa razy z rzędu, na pytanie „co się
+          // ostatnio wywaliło?". Pętla traktowała to jak koniec rozmowy, a
+          // klasyfikator UI dokładał „Otwieram dziennik systemu." zamiast
+          // raportu od S.H.I.E.L.D. Taka tura to awaria modelu, nie decyzja:
+          // ponawiamy ją raz, na modelach flash z wyłączonym myśleniem (to ono
+          // najczęściej „zjada" odpowiedź), zanim pętla się podda.
+          for (let emptyRetry = 0; emptyRetry < 2; emptyRetry++) {
+            const thinkingOff = forceGenerateDocument || (emptyRetry > 0 && /flash/i.test(model));
+            const requestBody = JSON.stringify({
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              generationConfig: {
+                temperature,
+                maxOutputTokens,
+                // gemini-2.5-flash "thinks" by default, and those thinking
+                // tokens are deducted from the SAME maxOutputTokens budget as
+                // the actual response — for a forced structured call this can
+                // starve the function-call JSON of budget mid-generation,
+                // truncating it into invalid JSON (finishReason:
+                // MALFORMED_FUNCTION_CALL, 0 usable calls). Live failure
+                // (2026-08-14): generate_document forced via toolConfig ANY for
+                // a 10-slide deck came back empty on repeated attempts with
+                // exactly that finish reason. This call is pure mechanical
+                // structuring, not reasoning, so thinking buys nothing — turning
+                // it off frees the entire budget for the actual output. Must
+                // live INSIDE generationConfig — Gemini 400s on it as a
+                // top-level field ("Unknown name \"thinkingConfig\"").
+                ...(thinkingOff ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+              },
+              safetySettings: GEMINI_SAFETY_SETTINGS,
+              // Gemini rejects an empty functionDeclarations array, and an
+              // agent may legitimately have zero tools enabled (all toggled
+              // off in Settings) — omit the `tools` key entirely in that case.
+              ...(toolDeclarations.length > 0
+                ? { tools: [{ functionDeclarations: toolDeclarations }] }
+                : {}),
+              ...(forceGenerateDocument
+                ? {
+                    toolConfig: {
+                      functionCallingConfig: {
+                        mode: "ANY",
+                        allowedFunctionNames: [GENERATE_DOCUMENT_TOOL],
+                      },
                     },
+                  }
+                : {}),
+              contents,
+            });
+
+            // Gemini's shared-capacity models return HTTP 503 "high demand" in
+            // bursts (observed live 2026-07-22: a 503 storm broke every
+            // presentation run for minutes). Those are transient and usually
+            // clear within a second or two, so retry the SAME request a few
+            // times with backoff BEFORE falling over to Groq — the Groq failover
+            // can't reliably handle our tool-calling shape (it 400s on
+            // delegate_to_agent), so exhausting a quick retry against Gemini is
+            // far more likely to succeed than switching providers.
+            let res: Response | null = null;
+            for (let attempt = 0; attempt <= GEMINI_MAX_RETRIES; attempt++) {
+              const ctrl = new AbortController();
+              const timer = setTimeout(() => ctrl.abort(), 45_000);
+              try {
+                res = await fetch(
+                  `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+                  {
+                    method: "POST",
+                    signal: ctrl.signal,
+                    headers: { "Content-Type": "application/json" },
+                    body: requestBody,
                   },
-                }
-              : {}),
-            contents,
-          });
-
-          // Gemini's shared-capacity models return HTTP 503 "high demand" in
-          // bursts (observed live 2026-07-22: a 503 storm broke every
-          // presentation run for minutes). Those are transient and usually
-          // clear within a second or two, so retry the SAME request a few
-          // times with backoff BEFORE falling over to Groq — the Groq failover
-          // can't reliably handle our tool-calling shape (it 400s on
-          // delegate_to_agent), so exhausting a quick retry against Gemini is
-          // far more likely to succeed than switching providers.
-          let res: Response | null = null;
-          for (let attempt = 0; attempt <= GEMINI_MAX_RETRIES; attempt++) {
-            const ctrl = new AbortController();
-            const timer = setTimeout(() => ctrl.abort(), 45_000);
-            try {
-              res = await fetch(
-                `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-                {
-                  method: "POST",
-                  signal: ctrl.signal,
-                  headers: { "Content-Type": "application/json" },
-                  body: requestBody,
-                },
-              );
-            } finally {
-              clearTimeout(timer);
-            }
-            if (
-              res.ok ||
-              !GEMINI_RETRYABLE_STATUS.has(res.status) ||
-              attempt === GEMINI_MAX_RETRIES
-            ) {
-              break;
-            }
-            await logEvent(
-              "warn",
-              AGENT_SLUGS.JARVIS,
-              `gemini HTTP ${res.status}, retry ${attempt + 1}/${GEMINI_MAX_RETRIES}`,
-              { run_id: runId, iter } as Json,
-            );
-            await new Promise((r) => setTimeout(r, GEMINI_RETRY_BACKOFF_MS * (attempt + 1)));
-          }
-
-          if (!res || !res.ok) {
-            const bodyText = res ? await res.text().catch(() => "") : "";
-            throw new Error(`Gemini HTTP ${res?.status ?? "network"}: ${bodyText.slice(0, 300)}`);
-          }
-
-          const data = (await res.json()) as {
-            candidates?: Array<{
-              content?: { role?: string; parts?: GeminiPart[] };
-              finishReason?: string;
-            }>;
-            promptFeedback?: { blockReason?: string };
-            usageMetadata?: {
-              promptTokenCount?: number;
-              candidatesTokenCount?: number;
-            };
-          };
-          totalTokensIn += data.usageMetadata?.promptTokenCount ?? 0;
-          totalTokensOut += data.usageMetadata?.candidatesTokenCount ?? 0;
-
-          const parts = data.candidates?.[0]?.content?.parts ?? [];
-          functionCalls = parts.flatMap((p) =>
-            "functionCall" in p && p.functionCall ? [p.functionCall] : [],
-          );
-          textOut = parts
-            .flatMap((p) => ("text" in p && p.text ? [p.text] : []))
-            .join("")
-            .trim();
-
-          // A turn that comes back with nothing at all (no function call, no
-          // text) is otherwise silent — from the caller's perspective it looks
-          // identical to "the model chose to stop", when it's almost always
-          // Gemini's safety filter discarding the response server-side. Log
-          // the real reason so a stuck run (e.g. forceGenerateDocument ending
-          // with 0 tool calls) is diagnosable from System Logs instead of a
-          // guessing game.
-          if (functionCalls.length === 0 && !textOut) {
-            const finishReason = data.candidates?.[0]?.finishReason;
-            const blockReason = data.promptFeedback?.blockReason;
-            if (finishReason || blockReason) {
+                );
+              } finally {
+                clearTimeout(timer);
+              }
+              if (
+                res.ok ||
+                !GEMINI_RETRYABLE_STATUS.has(res.status) ||
+                attempt === GEMINI_MAX_RETRIES
+              ) {
+                break;
+              }
               await logEvent(
                 "warn",
                 AGENT_SLUGS.JARVIS,
-                `empty Gemini response · finishReason=${finishReason ?? "?"} blockReason=${blockReason ?? "?"}`,
-                { run_id: runId, iter, forceGenerateDocument } as Json,
+                `gemini HTTP ${res.status}, retry ${attempt + 1}/${GEMINI_MAX_RETRIES}`,
+                { run_id: runId, iter } as Json,
               );
+              await new Promise((r) => setTimeout(r, GEMINI_RETRY_BACKOFF_MS * (attempt + 1)));
             }
+
+            if (!res || !res.ok) {
+              const bodyText = res ? await res.text().catch(() => "") : "";
+              throw new Error(`Gemini HTTP ${res?.status ?? "network"}: ${bodyText.slice(0, 300)}`);
+            }
+
+            const data = (await res.json()) as {
+              candidates?: Array<{
+                content?: { role?: string; parts?: GeminiPart[] };
+                finishReason?: string;
+              }>;
+              promptFeedback?: { blockReason?: string };
+              usageMetadata?: {
+                promptTokenCount?: number;
+                candidatesTokenCount?: number;
+              };
+            };
+            totalTokensIn += data.usageMetadata?.promptTokenCount ?? 0;
+            totalTokensOut += data.usageMetadata?.candidatesTokenCount ?? 0;
+
+            const parts = data.candidates?.[0]?.content?.parts ?? [];
+            functionCalls = parts.flatMap((p) =>
+              "functionCall" in p && p.functionCall ? [p.functionCall] : [],
+            );
+            textOut = parts
+              .flatMap((p) => ("text" in p && p.text ? [p.text] : []))
+              .join("")
+              .trim();
+
+            // A turn that comes back with nothing at all (no function call, no
+            // text) is otherwise silent — from the caller's perspective it looks
+            // identical to "the model chose to stop", when it's almost always
+            // Gemini's safety filter discarding the response server-side. Log
+            // the real reason so a stuck run (e.g. forceGenerateDocument ending
+            // with 0 tool calls) is diagnosable from System Logs instead of a
+            // guessing game.
+            if (functionCalls.length === 0 && !textOut) {
+              const finishReason = data.candidates?.[0]?.finishReason;
+              const blockReason = data.promptFeedback?.blockReason;
+              if (finishReason || blockReason) {
+                await logEvent(
+                  "warn",
+                  AGENT_SLUGS.JARVIS,
+                  `empty Gemini response · finishReason=${finishReason ?? "?"} blockReason=${blockReason ?? "?"}`,
+                  { run_id: runId, iter, forceGenerateDocument, retry: emptyRetry } as Json,
+                );
+              }
+            }
+            if (functionCalls.length > 0 || textOut || emptyRetry > 0) break;
+            await logEvent(
+              "warn",
+              AGENT_SLUGS.JARVIS,
+              `pusta tura Gemini — ponawiam ją raz${/flash/i.test(model) ? " bez myślenia" : ""}`,
+              { run_id: runId, iter } as Json,
+            );
           }
         }
       } catch (geminiErr) {
@@ -1387,6 +1407,10 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // Herald/Metric runs ended up with phantom open_dashboard entries
     // (their real answers overwritten by a navigation confirmation).
     if (!isDelegatedRun && !uiAction && toolCallLog.length === 0) {
+      // Model nie zwrócił NIC (nawet po powtórce pustej tury) — wtedy akcja UI
+      // z klasyfikatora nie może udawać odpowiedzi. Mówimy wprost, że raportu
+      // nie ma, i dopiero potem, co otwieramy.
+      const mainReplyEmpty = !finalText.trim();
       await logEvent("info", AGENT_SLUGS.JARVIS, "classifier fallback: block entered", {
         run_id: runId,
       } as Json);
@@ -1409,7 +1433,9 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       if (classifierResult.toolCallLogEntry) toolCallLog.push(classifierResult.toolCallLogEntry);
       if (classifierResult.uiAction) {
         uiAction = classifierResult.uiAction;
-        finalText = classifierResult.finalText!;
+        finalText = mainReplyEmpty
+          ? `Nie udało mi się przygotować odpowiedzi — model jej nie zwrócił. Spróbuj zapytać jeszcze raz. Na razie: ${classifierResult.finalText!}`
+          : classifierResult.finalText!;
       }
       if (classifierResult.documentJob) {
         documentJob = classifierResult.documentJob;
