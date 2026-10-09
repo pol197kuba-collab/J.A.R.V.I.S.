@@ -115,7 +115,9 @@ companion, Marvel — keep it; it's a personal touch, not demo filler),
 `townTalk.ts` + `TownDialog.tsx` (walk-mode conversations; lines are built
 only from real run data — never invent agent activity), `townProps.ts` +
 `townPropActions.ts` + `TownArcade.tsx` (usable props in walk mode; any fact
-they state — documents, run stats — comes from real data) and `TownView.tsx`.
+they state — documents, run stats — comes from real data), `townIdle.ts`
+(what a free agent does; while any task runs they wait at their desks so
+hand-offs find them — pure, tested) and `TownView.tsx`.
 Walk mode never changes the zoom: the floor stays fully in view and zooming
 is the user's choice only. New agents need a room, a look and a
 home/visit spot there to appear on the map.

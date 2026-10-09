@@ -36,6 +36,7 @@ import {
 } from "./townArt";
 import { TownDog } from "./townDog";
 import { propAt, propById } from "./townProps";
+import { idleDelay, idlePlan } from "./townIdle";
 
 export type CharStatus = "idle" | "running" | "done" | "error" | "off";
 type Dir = "up" | "down" | "left" | "right";
@@ -53,6 +54,10 @@ type Char = {
   bubble: Bubble | null;
   idleAt: number;
   errands: number;
+  /** On a stroll / coffee run (not work) — `recall` may cut it short. */
+  idleTrip: boolean;
+  /** Called back to the desk during an idle trip. */
+  recalled: boolean;
 };
 export type Camera = { x: number; y: number; z: number };
 type Rect = { x: number; y: number; w: number; h: number };
@@ -121,6 +126,8 @@ export class TownWorld {
         bubble: null,
         idleAt: 2500 + Math.random() * 6000,
         errands: 0,
+        idleTrip: false,
+        recalled: false,
       };
       this.status[slug] = "idle";
     }
@@ -185,12 +192,65 @@ export class TownWorld {
         await fn();
       } finally {
         c.errands--;
-        c.idleAt = this.time + 3000 + Math.random() * 4000;
+        c.idleAt = this.time + idleDelay(Math.random());
       }
     };
     const next = (this.chains.get(slug) ?? Promise.resolve()).then(run, run);
     this.chains.set(slug, next);
     return next;
+  }
+
+  /** Any task running anywhere → idle agents wait at their desks. */
+  get onCall() {
+    return (Object.keys(this.status) as TownSlug[]).some((s) => this.status[s] === "running");
+  }
+  private wasOnCall = false;
+
+  private atHome(c: Char) {
+    const [hx, hy] = HOME[c.slug];
+    return c.tx === hx && c.ty === hy && !c.path.length;
+  }
+
+  /**
+   * Call an agent back to their desk (a task is coming their way): cuts a
+   * stroll short and turns a coffee run around. Work errands are untouched.
+   */
+  recall(slug: TownSlug) {
+    const c = this.chars[slug];
+    if (slug === "user" || slug === "jarvis" || this.status[slug] === "running") return;
+    if (c.errands && !c.idleTrip) return;
+    if (c.idleTrip) c.recalled = true;
+    if (!this.atHome(c)) void this.walkTo(slug, HOME[slug]);
+  }
+
+  /** Resolve once `slug` stands at their desk (or after `ms`, whichever first). */
+  async untilHome(slug: TownSlug, ms: number) {
+    const end = this.time + ms;
+    while (!this.atHome(this.chars[slug]) && this.time < end) await this.wait(150);
+  }
+
+  /** Turn `a` and `b` to face each other. */
+  faceEachOther(a: TownSlug, b: TownSlug) {
+    const ca = this.chars[a];
+    const cb = this.chars[b];
+    const dx = cb.x - ca.x;
+    const dy = cb.y - ca.y;
+    const h = Math.abs(dx) > Math.abs(dy);
+    ca.dir = h ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
+    cb.dir = h ? (dx > 0 ? "left" : "right") : dy > 0 ? "up" : "down";
+  }
+
+  /** An idle trip (stroll, coffee) — cancelled by `recall`. */
+  private idleTrip(c: Char, fn: () => Promise<void>) {
+    void this.actor(c.slug, async () => {
+      c.idleTrip = true;
+      try {
+        await fn();
+      } finally {
+        c.idleTrip = false;
+        c.recalled = false;
+      }
+    });
   }
 
   private idleLife(c: Char) {
@@ -204,15 +264,27 @@ export class TownWorld {
       return;
     const st = this.status[c.slug];
     if (st === "running") return;
-    c.idleAt = this.time + 4500 + Math.random() * 6000;
+    c.idleAt = this.time + idleDelay(Math.random());
     if (st === "off") {
       this.say(c.slug, "zzz", 2500, "zz");
       return;
     }
+    const plan = idlePlan(Math.random(), this.onCall, this.atHome(c));
+    if (plan === "home") {
+      void this.goHome(c.slug);
+      return;
+    }
+    if (plan === "stay") {
+      // look around at the desk now and then — alive, but not going anywhere
+      if (!this.reduceMotion && Math.random() < 0.4)
+        c.dir = (["down", "left", "right"] as const)[Math.floor(Math.random() * 3)];
+      return;
+    }
     if (this.reduceMotion) return;
-    if (Math.random() < 0.15) {
-      void this.actor(c.slug, async () => {
+    if (plan === "coffee") {
+      this.idleTrip(c, async () => {
         await this.walkTo(c.slug, COFFEE_SPOT);
+        if (this.onCall || c.recalled) return void (await this.goHome(c.slug));
         this.face(c.slug, "up");
         this.say(c.slug, "kawa", 1600, "coffee");
         await this.wait(1800);
@@ -224,15 +296,22 @@ export class TownWorld {
     for (let k = 0; k < 8; k++) {
       const tx = a.x0 + Math.floor(Math.random() * (a.x1 - a.x0 + 1));
       const ty = a.y0 + Math.floor(Math.random() * (a.y1 - a.y0 + 1));
-      if (!this.map.blocked[ty][tx]) {
-        void this.walkTo(c.slug, [tx, ty]);
-        break;
-      }
+      if (this.map.blocked[ty][tx]) continue;
+      this.idleTrip(c, async () => {
+        await this.walkTo(c.slug, [tx, ty]);
+        if (!this.onCall && !c.recalled) await this.wait(2500 + Math.random() * 3000);
+        await this.goHome(c.slug);
+      });
+      break;
     }
   }
 
   update(dt: number) {
     this.time += dt;
+    const onCall = this.onCall;
+    if (onCall && !this.wasOnCall)
+      for (const slug of Object.keys(this.chars) as TownSlug[]) this.recall(slug);
+    this.wasOnCall = onCall;
     for (let i = this.timers.length - 1; i >= 0; i--) {
       if (this.timers[i].at <= this.time) this.timers.splice(i, 1)[0].res();
     }

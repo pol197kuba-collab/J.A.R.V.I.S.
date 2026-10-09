@@ -158,8 +158,12 @@ export class TownDirector {
           w.say(slug, e.task, 2400, "mail");
           return;
         }
+        // call them back to their desk now, so they're in when we arrive
+        w.recall(slug);
         void w.actor(parent, async () => {
           await w.walkTo(parent, VISIT[slug]);
+          await w.untilHome(slug, 6000);
+          w.faceEachOther(parent, slug);
           w.say(parent, e.task, 2400, "mail");
           await w.wait(1200);
           w.say(slug, accepted(slug), 1100, "check", "ok");
