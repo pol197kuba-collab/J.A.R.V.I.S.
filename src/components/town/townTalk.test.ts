@@ -37,7 +37,9 @@ describe("statusLine (Jak idzie?)", () => {
   });
   it("says it is free and what it last did", () => {
     const done = run({ id: "c", agentSlug: "insight", parentRunId: "p" });
-    expect(statusLine("insight", [parent, done], null, true, now)).toMatch(/Mam wolne.*„Zbierz prognozy cen paliw” \(12 s\)/);
+    expect(statusLine("insight", [parent, done], null, true, now)).toMatch(
+      /Mam wolne.*„Zbierz prognozy cen paliw” \(12 s\)/,
+    );
   });
   it("uses feminine verb forms for H.E.R.A.L.D.", () => {
     expect(statusLine("herald", [], null, true, now)).toContain("nie robiłam");
@@ -60,7 +62,10 @@ describe("lastResultLine (Pokaż ostatni wynik)", () => {
       id: "c",
       agentSlug: "insight",
       parentRunId: "p",
-      toolCalls: [{ name: "web_search", args: {} }, { name: "fetch_url", args: {} }],
+      toolCalls: [
+        { name: "web_search", args: {} },
+        { name: "fetch_url", args: {} },
+      ],
     });
     const line = lastResultLine("insight", [parent, done], null, now);
     expect(line).toContain("gotowe w 12 s");
