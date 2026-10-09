@@ -2004,8 +2004,22 @@ Marvel też. Podejście do agenta → „E · Porozmawiaj” → okno dialogowe 
 odpowiedzi budowane z prawdziwych przebiegów (`townTalk.ts`, testowane,
 z żeńskimi formami dla H.E.R.A.L.D.). Wyniki poleceń są przypinane na
 tablicy w Rdzeniu jako notatki z „!”; w trybie spaceru J.A.R.V.I.S. zamiast
-nieść wynik do terminala przypina go na tablicy. Następne kroki spaceru:
-interakcje z otoczeniem (automat z kawą, regał = dokumenty, arcade).
+nieść wynik do terminala przypina go na tablicy.
+
+### Follow-up (2026-10-09): interakcje z otoczeniem + bez auto-zoomu
+
+Spacer nie przybliża już kamery — widok zostaje oddalony na całe piętro,
+kamera tylko przesuwa się za Tobą, a przybliżanie jest wyłącznie ręczne
+(+/−, kółko, szczypanie). Przedmioty na mapie (`townProps.ts`: gdzie stoją
+i z których kafli ich użyć; `townPropActions.ts`: co robią) pokazują
+„E · …” i otwierają okno dialogowe: ekspresy do kawy, automat z
+przekąskami (z dzieleniem się z Marvelem), regały = 5 najnowszych
+prawdziwych dokumentów + skrót do modułu Dokumenty, Twój komputer
+(skróty do Zadań / Notatek / Feedu / Agent Hub), kanapy, posłanie Marvela,
+stół do ping-ponga (aport), globus, tablica wyników w Laboratorium
+(dzisiejsze statystyki z prawdziwych przebiegów) i automat „Złap buga”
+(`TownArcade.tsx`, mini-gra na refleks z rekordem w localStorage). Okno
+dialogowe ustawia się w tej połowie mapy, w której Cię nie ma.
 
 ### Propozycje kolejnych poleceń i interakcji (do wyboru i priorytetu)
 

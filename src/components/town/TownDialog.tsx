@@ -2,8 +2,21 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { cn } from "@/lib/utils";
 import type { TownSlug } from "./townMap";
 import { GREETING } from "./townTalk";
+import { TownArcade } from "./TownArcade";
 
-export type DialogTarget = { kind: "agent"; slug: TownSlug } | { kind: "board" };
+export type DialogTarget =
+  | { kind: "agent"; slug: TownSlug }
+  | { kind: "board" }
+  | { kind: "prop"; id: string };
+/** What a prop's dialog can do in response to a menu choice. */
+export type PropUi = { say: (text: string) => void; game: () => void; close: () => void };
+export type PropContent = {
+  title: string;
+  /** Whose portrait to show: a character, or the dog. */
+  portrait: TownSlug | "dog";
+  line: string;
+  options: { label: string; run: (ui: PropUi) => void }[];
+};
 export type BoardNote = {
   id: string;
   title: string;
@@ -17,7 +30,8 @@ type View =
   | { kind: "menu" }
   | { kind: "say"; text: string }
   | { kind: "command" }
-  | { kind: "note"; note: BoardNote };
+  | { kind: "note"; note: BoardNote }
+  | { kind: "game" };
 type Option = { label: string; run: () => void };
 
 /**
@@ -34,16 +48,24 @@ export function TownDialog({
   onRead,
   onCommand,
   onClose,
+  propContent,
+  onArcadeScore,
+  placement = "bottom",
 }: {
   target: DialogTarget;
   name: (slug: TownSlug) => string;
-  drawPortrait: (cv: HTMLCanvasElement, slug: TownSlug) => void;
+  drawPortrait: (cv: HTMLCanvasElement, who: TownSlug | "dog") => void;
   statusText: (slug: TownSlug) => string;
   resultText: (slug: TownSlug) => string;
   notes: readonly BoardNote[];
   onRead: (id: string) => void;
   onCommand: (text: string, to: TownSlug | "auto") => void;
   onClose: () => void;
+  /** Content for a prop (coffee machine, shelf, arcade…). */
+  propContent?: (id: string) => PropContent;
+  onArcadeScore?: (score: number) => void;
+  /** Which edge of the map the box sits on (the half your character isn't in). */
+  placement?: "top" | "bottom";
 }) {
   const [view, setView] = useState<View>({ kind: "menu" });
   const [focus, setFocus] = useState(0);
@@ -51,15 +73,17 @@ export function TownDialog({
   const boxRef = useRef<HTMLDivElement | null>(null);
   const portraitRef = useRef<HTMLCanvasElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const prop = target.kind === "prop" ? (propContent?.(target.id) ?? null) : null;
   const slug = target.kind === "agent" ? target.slug : "jarvis";
-  const speaker = target.kind === "agent" ? name(target.slug) : "Tablica zadań";
+  const portrait: TownSlug | "dog" = prop ? prop.portrait : slug;
+  const speaker = target.kind === "agent" ? name(target.slug) : prop ? prop.title : "Tablica zadań";
 
   useEffect(() => {
-    if (portraitRef.current) drawPortrait(portraitRef.current, slug);
-  }, [drawPortrait, slug]);
+    if (portraitRef.current) drawPortrait(portraitRef.current, portrait);
+  }, [drawPortrait, portrait]);
   useEffect(() => {
     if (view.kind === "command") inputRef.current?.focus();
-    else boxRef.current?.focus();
+    else if (view.kind !== "game") boxRef.current?.focus();
     setFocus(0);
   }, [view]);
 
@@ -68,21 +92,40 @@ export function TownDialog({
       ? view.text
       : view.kind === "note"
         ? view.note.text
-        : view.kind === "command"
-          ? target.kind === "agent" && target.slug !== "jarvis"
-            ? "Co mam dla Ciebie zrobić?"
-            : "Napisz polecenie. J.A.R.V.I.S. rozdzieli pracę."
-          : target.kind === "board"
-            ? notes.length
-              ? `Na tablicy ${notes.length === 1 ? "wisi 1 wynik" : `wiszą wyniki: ${notes.length}`}${notes.some((n) => !n.read) ? ", w tym nieprzeczytane" : ""}.`
-              : "Tablica jest pusta. Wyniki Twoich poleceń pojawią się tutaj."
-            : GREETING[target.slug as Exclude<TownSlug, "user">];
+        : view.kind === "game"
+          ? "Złap buga! Każdy złapany zwęża cel i przyspiesza kursor."
+          : view.kind === "command"
+            ? target.kind === "agent" && target.slug !== "jarvis"
+              ? "Co mam dla Ciebie zrobić?"
+              : "Napisz polecenie. J.A.R.V.I.S. rozdzieli pracę."
+            : prop
+              ? prop.line
+              : target.kind === "board"
+                ? notes.length
+                  ? `Na tablicy ${notes.length === 1 ? "wisi 1 wynik" : `wiszą wyniki: ${notes.length}`}${notes.some((n) => !n.read) ? ", w tym nieprzeczytane" : ""}.`
+                  : "Tablica jest pusta. Wyniki Twoich poleceń pojawią się tutaj."
+                : target.kind === "agent"
+                  ? GREETING[target.slug as Exclude<TownSlug, "user">]
+                  : "";
   const typed = useTypewriter(line);
 
   const back = () => setView({ kind: "menu" });
-  const options: Option[] = useMemo(() => {
-    if (view.kind === "command") return [];
+  const ui: PropUi = {
+    say: (text) => setView({ kind: "say", text }),
+    game: () => setView({ kind: "game" }),
+    close: onClose,
+  };
+  const propOptions: Option[] | null =
+    prop && view.kind === "menu"
+      ? [
+          ...prop.options.map((o) => ({ label: o.label, run: () => o.run(ui) })),
+          { label: "Odejdź", run: onClose },
+        ]
+      : null;
+  const menuOptions: Option[] = useMemo(() => {
+    if (view.kind === "command" || view.kind === "game") return [];
     if (view.kind !== "menu") return [{ label: "Wróć", run: back }];
+    if (target.kind === "prop") return [];
     if (target.kind === "board")
       return [
         ...notes.slice(0, 5).map((n) => ({
@@ -104,6 +147,7 @@ export function TownDialog({
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, target, notes]);
+  const options = propOptions ?? menuOptions;
 
   const onKey = (e: KeyboardEvent) => {
     if (e.key === "Escape") {
@@ -112,7 +156,7 @@ export function TownDialog({
       else back();
       return;
     }
-    if (view.kind === "command" || !options.length) return;
+    if (view.kind === "command" || view.kind === "game" || !options.length) return;
     if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") {
       e.preventDefault();
       setFocus((f) => (f + 1) % options.length);
@@ -132,7 +176,10 @@ export function TownDialog({
       aria-label={`Rozmowa: ${speaker}`}
       tabIndex={-1}
       onKeyDown={onKey}
-      className="absolute inset-x-3 bottom-3 z-10 grid grid-cols-[64px_minmax(0,1fr)] gap-3 border-[3px] border-foreground/80 bg-card p-3 shadow-[4px_4px_0_rgba(0,0,0,0.6)] focus:outline-none @max-[420px]:inset-x-1 @max-[420px]:grid-cols-[48px_minmax(0,1fr)]"
+      className={cn(
+        "absolute inset-x-3 z-10 grid grid-cols-[64px_minmax(0,1fr)] gap-3 border-[3px] border-foreground/80 bg-card p-3 shadow-[4px_4px_0_rgba(0,0,0,0.6)] focus:outline-none @max-[420px]:inset-x-1 @max-[420px]:grid-cols-[48px_minmax(0,1fr)]",
+        placement === "top" ? "top-3" : "bottom-3",
+      )}
     >
       <canvas
         ref={portraitRef}
@@ -150,7 +197,14 @@ export function TownDialog({
         >
           {typed}
         </p>
-        {view.kind === "command" ? (
+        {view.kind === "game" ? (
+          <TownArcade
+            onExit={(score) => {
+              onArcadeScore?.(score);
+              back();
+            }}
+          />
+        ) : view.kind === "command" ? (
           <form
             className="mt-2 flex flex-wrap gap-2"
             onSubmit={(e) => {
