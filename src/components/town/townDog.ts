@@ -117,7 +117,7 @@ const RUN = 0.11; // px per ms — a spaniel trots faster than people walk
 const STROLL = 0.06;
 
 export class TownDog {
-  name = "Piesek";
+  name = "Marvel";
   x: number;
   y: number;
   tx: number;

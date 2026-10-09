@@ -16,7 +16,7 @@ export type DogMood = {
 
 const KEY = "jarvis.town.dogMood";
 const NAME_KEY = "jarvis.town.dogName";
-export const DEFAULT_DOG_NAME = "Piesek";
+export const DEFAULT_DOG_NAME = "Marvel";
 export const MAX_HEARTS = 5;
 /** One heart fades every six hours without attention — but never below one:
  *  he is always at least a bit glad to see you. */
