@@ -113,7 +113,11 @@ categorical palettes), `townWorld.ts` (characters, actors, render),
 pure and tested), `townDog.ts` + `dogMood.ts` (the owner's spaniel
 companion, Marvel — keep it; it's a personal touch, not demo filler),
 `townTalk.ts` + `TownDialog.tsx` (walk-mode conversations; lines are built
-only from real run data — never invent agent activity) and `TownView.tsx`. New agents need a room, a look and a
+only from real run data — never invent agent activity), `townProps.ts` +
+`townPropActions.ts` + `TownArcade.tsx` (usable props in walk mode; any fact
+they state — documents, run stats — comes from real data) and `TownView.tsx`.
+Walk mode never changes the zoom: the floor stays fully in view and zooming
+is the user's choice only. New agents need a room, a look and a
 home/visit spot there to appear on the map.
 
 ## Design skills: project rules win

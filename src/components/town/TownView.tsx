@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { useNavigate } from "@tanstack/react-router";
 import { Crosshair, Footprints, MessageCircle, Minus, Plus } from "lucide-react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { getAgentFlow, type FlowRun } from "@/lib/agents/flow.functions";
+import { listDocumentsFn } from "@/lib/documents/documents.functions";
 import type { AgentSummary } from "@/lib/agents/runtime.functions";
 import { useAgentChatChannel } from "@/lib/ai/useAgentChatChannel";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { cn } from "@/lib/utils";
-import { TOWN_AGENTS, VISIT, WORLD_H, WORLD_W, type TownSlug } from "./townMap";
+import { TOWN_AGENTS, TS, VISIT, WORLD_H, WORLD_W, type TownSlug } from "./townMap";
 import { AGENT_COLOR } from "./townArt";
 import { TAG, TownWorld, type Camera, type CharStatus } from "./townWorld";
 import { TownDirector, characterStatus, isActive, type TownCommand } from "./townDirector";
@@ -16,6 +18,8 @@ import { CompanionPanel } from "./CompanionPanel";
 import { applyAction, loadDogName, loadMood, saveMood, settle } from "./dogMood";
 import { TownDialog, type BoardNote, type DialogTarget } from "./TownDialog";
 import { lastResultLine, statusLine, taskOf } from "./townTalk";
+import { propById } from "./townProps";
+import { propContent } from "./townPropActions";
 
 const FALLBACK_NAMES: Record<TownSlug, string> = {
   jarvis: "J.A.R.V.I.S.",
@@ -68,6 +72,7 @@ export function TownView() {
     refetchInterval: 3000,
   });
   const runs = useMemo(() => flow?.runs ?? [], [flow]);
+  const navigate = useNavigate();
 
   const [selected, setSelected] = useState<TownSlug>("jarvis");
   const [commands, setCommands] = useState<TownCommand[]>([]);
@@ -80,6 +85,18 @@ export function TownView() {
   const [dogReady, setDogReady] = useState(false);
   const [walkMode, setWalkMode] = useState(false);
   const [dialog, setDialog] = useState<DialogTarget | null>(null);
+  const [dialogTop, setDialogTop] = useState(false);
+  const fetchDocuments = useServerFn(listDocumentsFn);
+  // Only the document shelf needs these — fetch when a prop dialog opens.
+  const {
+    data: documents,
+    isLoading: documentsLoading,
+    isError: documentsError,
+  } = useQuery({
+    queryKey: ["documents"],
+    queryFn: () => fetchDocuments(),
+    enabled: dialog?.kind === "prop" && propById(dialog.id)?.kind === "shelf",
+  });
   const [notes, setNotes] = useState<BoardNote[]>([]);
   const [nearby, setNearby] = useState<DialogTarget | null>(null);
   const walkRef = useRef(walkMode);
@@ -285,8 +302,8 @@ export function TownView() {
       const cv = canvasRef.current;
       const w = worldRef.current;
       if (!cv || !w) return;
+      // Pan only — the zoom level is the user's choice, never changed for them.
       const cam = camRef.current;
-      cam.z = Math.max(cam.z, Math.min(3 * dprRef.current, fitRef.current * 2.2));
       cam.x = w.chars[slug].x - cv.width / cam.z / 2;
       cam.y = w.chars[slug].y - cv.height / cam.z / 2;
       clampCam();
@@ -448,7 +465,20 @@ export function TownView() {
       w.talkingTo = t.slug;
       w.faceUser(t.slug);
       setSelected(t.slug);
+    } else if (t.kind === "prop") {
+      const prop = propById(t.id);
+      const me = w.chars.user;
+      if (prop) {
+        const dx = prop.anchor[0] * TS - me.x;
+        const dy = prop.anchor[1] * TS - me.y;
+        w.face(
+          "user",
+          Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up",
+        );
+      }
     } else w.face("user", "up");
+    // Keep yourself visible: the box goes to the half of the map you're not in.
+    setDialogTop(w.chars.user.y > WORLD_H / 2);
     setDialog(t);
   }, []);
   const closeDialog = useCallback(() => {
@@ -496,8 +526,8 @@ export function TownView() {
     w.walkMode = on;
     setWalkMode(on);
     if (on) {
-      const cam = camRef.current;
-      cam.z = Math.max(cam.z, Math.min(3.2 * dprRef.current, fitRef.current * 3));
+      // No auto-zoom: the whole floor stays in view; zooming in is optional
+      // (+ / wheel / pinch), and the camera only follows you once you have.
       pushLog("user", "Wychodzisz na spacer po biurze.");
       cv.focus();
     } else {
@@ -766,14 +796,19 @@ export function TownView() {
                 className="font-display absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-md border-2 border-foreground/80 bg-primary px-3 py-1.5 text-sm text-primary-foreground shadow-[3px_3px_0_rgba(0,0,0,0.6)]"
               >
                 <MessageCircle className="h-4 w-4" />
-                {nearby.kind === "board" ? "Otwórz tablicę" : `Porozmawiaj: ${TAG[nearby.slug]}`}
+                {nearby.kind === "board"
+                  ? "Otwórz tablicę"
+                  : nearby.kind === "prop"
+                    ? (propById(nearby.id)?.prompt ?? "Użyj")
+                    : `Porozmawiaj: ${TAG[nearby.slug]}`}
               </button>
             )}
             {dialog && (
               <TownDialog
                 target={dialog}
+                placement={dialogTop ? "top" : "bottom"}
                 name={nameOf}
-                drawPortrait={(cv, slug) => worldRef.current?.drawPortrait(cv, slug)}
+                drawPortrait={(cv, who) => worldRef.current?.drawPortrait(cv, who)}
                 statusText={(slug) =>
                   statusLine(
                     slug,
@@ -793,12 +828,28 @@ export function TownView() {
                 }
                 onCommand={(t, to) => submit(t, to)}
                 onClose={closeDialog}
+                propContent={(id) =>
+                  propContent(id, {
+                    world: worldRef.current!,
+                    dogName,
+                    runs,
+                    name: nameOf,
+                    documents,
+                    documentsLoading,
+                    documentsError,
+                    navigate: (to) => void navigate({ to }),
+                    log: pushLog,
+                  })
+                }
+                onArcadeScore={(score) =>
+                  score > 0 && pushLog("user", `Automat „Złap buga”: złapane bugi — ${score}.`)
+                }
               />
             )}
           </div>
           <p className="px-4 pb-3 text-xs text-muted-foreground @max-[420px]:px-2">
             {walkMode
-              ? "Spacer: WASD lub strzałki (albo dotknij mapy), E — rozmowa z agentem albo tablica. Wyniki poleceń czekają na tablicy w Rdzeniu."
+              ? "Spacer: WASD lub strzałki (albo dotknij mapy), E — rozmowa z agentem, tablica albo przedmiot (kawa, regał, automat do gier…). Wyniki poleceń czekają na tablicy w Rdzeniu."
               : "Włącz spacer (ikona stóp), żeby chodzić swoją postacią i rozmawiać z agentami."}
           </p>
         </HudPanel>

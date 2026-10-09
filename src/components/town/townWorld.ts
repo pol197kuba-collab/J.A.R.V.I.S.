@@ -35,6 +35,7 @@ import {
   type SpriteSet,
 } from "./townArt";
 import { TownDog } from "./townDog";
+import { propAt, propById } from "./townProps";
 
 export type CharStatus = "idle" | "running" | "done" | "error" | "off";
 type Dir = "up" | "down" | "left" | "right";
@@ -267,7 +268,11 @@ export class TownWorld {
   }
 
   /** Paint a character's front-facing sprite, scaled up, for the inspector. */
-  drawPortrait(cv: HTMLCanvasElement, slug: TownSlug) {
+  drawPortrait(cv: HTMLCanvasElement, slug: TownSlug | "dog") {
+    if (slug === "dog") {
+      this.dog.drawPortrait(cv);
+      return;
+    }
     const ctx = cv.getContext("2d");
     if (!ctx) return;
     ctx.imageSmoothingEnabled = false;
@@ -325,7 +330,11 @@ export class TownWorld {
     return wx >= 17 * TS && wx < 27 * TS && wy >= 13 * TS && wy < 15 * TS;
   }
   /** What you could interact with from where you stand, if anything. */
-  reachable(): { kind: "agent"; slug: TownSlug } | { kind: "board" } | null {
+  reachable():
+    | { kind: "agent"; slug: TownSlug }
+    | { kind: "board" }
+    | { kind: "prop"; id: string }
+    | null {
     const u = this.chars.user;
     if (u.path.length) return null;
     let best: TownSlug | null = null;
@@ -340,7 +349,8 @@ export class TownWorld {
     }
     if (best) return { kind: "agent", slug: best };
     if (BOARD_SPOTS.some(([x, y]) => x === u.tx && y === u.ty)) return { kind: "board" };
-    return null;
+    const prop = propAt(u.tx, u.ty);
+    return prop ? { kind: "prop", id: prop.id } : null;
   }
   /** Turn an agent to face you while you talk. */
   faceUser(slug: TownSlug) {
@@ -465,11 +475,15 @@ export class TownWorld {
     // walk mode: what's within reach
     const reach = this.walkMode ? this.reachable() : null;
     if (reach) {
-      const label = reach.kind === "board" ? "E · Tablica" : "E · Porozmawiaj";
+      const prop = reach.kind === "prop" ? propById(reach.id) : null;
+      const label =
+        reach.kind === "board" ? "E · Tablica" : prop ? `E · ${prop.prompt}` : "E · Porozmawiaj";
       const at =
         reach.kind === "board"
           ? { x: 22 * TS, y: 12 * TS }
-          : { x: this.chars[reach.slug].x, y: this.chars[reach.slug].y - 26 };
+          : reach.kind === "prop"
+            ? { x: (prop?.anchor[0] ?? 0) * TS, y: (prop?.anchor[1] ?? 0) * TS }
+            : { x: this.chars[reach.slug].x, y: this.chars[reach.slug].y - 26 };
       const ps = Math.round(fs * 0.85);
       ctx.font = font(700, ps);
       const w = ctx.measureText(label).width + ps;
