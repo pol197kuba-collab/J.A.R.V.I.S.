@@ -16,16 +16,41 @@
  * The @theme inline block maps CSS custom properties to Tailwind utility
  * classes (e.g. --color-primary -> bg-primary, text-primary).
  *
- * The :root and .dark blocks define the actual color values using oklch.
- * All colors MUST use oklch format.
+ * Colors live in two layers:
+ *
+ * 1. THEME SOURCE TOKENS — the `:root, [data-theme="jarvis"]` block below.
+ *    This is the ONLY place a theme's hues are written down. A new color
+ *    theme is a copy of that block under its own selector
+ *    (`[data-theme="<name>"]`) with different values — nothing else.
+ *    Themes are applied on <html> (data-theme="<name>"), because the
+ *    derived tokens below are resolved on the element that declares them.
+ *
+ * 2. DERIVED TOKENS — the plain `:root` block after it. Borders, glows,
+ *    grids, glass surfaces, chrome, sidebar, chart series 1-5: all computed
+ *    from the source tokens with var()/color-mix(), never from a literal
+ *    hue, so they follow whichever theme is active automatically.
+ *
+ * Components must use these tokens (Tailwind `text-primary`,
+ * `border-primary/30`, `var(--reactor)`, `color-mix(in oklab, var(--primary)
+ * 40%, transparent)` …), never a literal color or a Tailwind palette class
+ * like `text-cyan-300`. The exceptions are neutral black/white shading
+ * (shadows, vignettes, masks) and the deliberately fixed categorical
+ * palettes (--fuel-*, --market-*, per-agent sigil hues), whose colors mean
+ * a specific series/agent and must not change with the theme.
+ *
+ * All colors use oklch.
  *
  * To add a new semantic color:
- * 1. Add the variable to :root (light value) and .dark (dark value)
+ * 1. Add the variable to the theme source block (and to every other theme)
  * 2. Register it in @theme inline as --color-<name>: var(--<name>)
+ *
+ * Note: <html> carries class="dark" so shadcn's `dark:` variants apply —
+ * there is intentionally no `.dark { … }` palette block. (There used to be
+ * a leftover shadcn one; it came after :root with equal specificity and
+ * silently replaced the whole JARVIS palette with a generic gray one.)
  */
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
@@ -65,37 +90,62 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-reactor: var(--reactor);
+  --color-reactor-hot: var(--reactor-hot);
 }
 
-:root {
-  --radius: 1.25rem;
-  /* JARVIS dark palette */
+/* ── Theme: J.A.R.V.I.S. (default) — source tokens only ─────────────────── */
+:root,
+[data-theme="jarvis"] {
+  /* Base surfaces — blue-black, darkest first */
   --background: oklch(0.14 0.025 250);
-  --foreground: oklch(0.96 0.02 210);
+  --base-chrome: oklch(0.125 0.026 250); /* sidebar + topbar glass base */
+  --base-panel-floor: oklch(0.15 0.026 250); /* bottom of a HUD panel's gradient */
+  --base-1: oklch(0.17 0.03 250);
+  --base-2: oklch(0.2 0.03 250);
+  --base-3: oklch(0.23 0.032 250);
   --card: oklch(0.18 0.03 250);
-  --card-foreground: oklch(0.96 0.02 210);
-  --popover: oklch(0.17 0.03 250);
-  --popover-foreground: oklch(0.96 0.02 210);
-  --primary: oklch(0.84 0.15 205);
-  --primary-foreground: oklch(0.05 0.02 230);
-  --secondary: oklch(0.2 0.03 250);
-  --secondary-foreground: oklch(0.96 0.02 210);
-  --muted: oklch(0.2 0.03 250);
+  --popover: var(--base-1);
+  --secondary: var(--base-2);
+  --muted: var(--base-2);
+
+  /* Text */
+  --foreground: oklch(0.96 0.02 210);
   --muted-foreground: oklch(0.78 0.08 200);
-  --accent: oklch(0.78 0.13 250);
+
+  /* Brand */
+  --primary: oklch(0.84 0.15 205); /* HUD cyan */
+  --primary-foreground: oklch(0.05 0.02 230);
+  --accent: oklch(0.78 0.13 250); /* secondary blue */
   --accent-foreground: oklch(0.05 0.02 230);
-  --destructive: oklch(0.68 0.22 25);
-  --destructive-foreground: oklch(0.98 0.01 0);
-  --border: oklch(0.84 0.15 205 / 18%);
-  --input: oklch(0.84 0.15 205 / 14%);
-  --ring: oklch(0.84 0.15 205);
+
+  /* Arc-reactor amber — the 3D core, reboot/ark sequences, reactor sphere */
+  --reactor: oklch(0.85 0.2 65);
+  --reactor-hot: oklch(0.92 0.18 70);
+
+  /* Status — what a color MEANS, keep their roles stable across themes */
   --success: oklch(0.76 0.16 160);
   --warning: oklch(0.8 0.15 75);
-  --chart-1: oklch(0.84 0.15 205);
-  --chart-2: oklch(0.78 0.13 250);
-  --chart-3: oklch(0.76 0.16 160);
-  --chart-4: oklch(0.8 0.15 75);
-  --chart-5: oklch(0.68 0.22 25);
+  --destructive: oklch(0.68 0.22 25);
+  --destructive-foreground: oklch(0.98 0.01 0);
+}
+
+/* ── Derived tokens — computed from the theme, never edit per theme ────── */
+:root {
+  --radius: 1.25rem;
+  --card-foreground: var(--foreground);
+  --popover-foreground: var(--foreground);
+  --secondary-foreground: var(--foreground);
+  --border: color-mix(in oklab, var(--primary) 18%, transparent);
+  --input: color-mix(in oklab, var(--primary) 14%, transparent);
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--accent);
+  --chart-3: var(--success);
+  --chart-4: var(--warning);
+  --chart-5: var(--destructive);
   /*
    * Fuel Grid — paleta kategorialna pięciu serii paliw (/paliwa).
    *
@@ -141,30 +191,32 @@
   --market-7: oklch(0.82 0.13 175); /* turkus */
   --market-8: oklch(0.75 0.17 35); /* pomarańcz */
   --sidebar: var(--surface-chrome);
-  --sidebar-foreground: oklch(0.95 0.03 210);
-  --sidebar-primary: oklch(0.84 0.15 205);
-  --sidebar-primary-foreground: oklch(0.05 0.02 230);
-  --sidebar-accent: oklch(0.2 0.03 250);
-  --sidebar-accent-foreground: oklch(0.96 0.02 210);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--base-2);
+  --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: var(--chrome-border);
-  --sidebar-ring: oklch(0.84 0.15 205);
-  --glow-primary: 0 0 12px oklch(0.84 0.15 205 / 0.8), 0 0 36px oklch(0.84 0.15 205 / 0.35);
+  --sidebar-ring: var(--primary);
+  --glow-primary:
+    0 0 12px color-mix(in oklab, var(--primary) 80%, transparent),
+    0 0 36px color-mix(in oklab, var(--primary) 35%, transparent);
   --gradient-core: radial-gradient(
     circle at 50% 50%,
-    oklch(0.98 0.06 200 / 0.95) 0%,
-    oklch(0.78 0.17 200 / 0.6) 35%,
+    color-mix(in oklab, color-mix(in oklab, var(--primary) 30%, white) 95%, transparent) 0%,
+    color-mix(in oklab, var(--primary) 60%, transparent) 35%,
     transparent 70%
   );
   --grid-bg:
-    linear-gradient(oklch(0.84 0.15 205 / 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, oklch(0.84 0.15 205 / 0.05) 1px, transparent 1px);
+    linear-gradient(color-mix(in oklab, var(--primary) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--primary) 5%, transparent) 1px, transparent 1px);
   /* Premium AI OS surfaces */
-  --surface-1: color-mix(in oklab, oklch(0.84 0.15 205) 6%, oklch(0.17 0.03 250) 94%);
-  --surface-2: color-mix(in oklab, oklch(0.84 0.15 205) 9%, oklch(0.2 0.03 250) 91%);
-  --surface-3: color-mix(in oklab, oklch(0.84 0.15 205) 14%, oklch(0.23 0.032 250) 86%);
-  --holo-edge: color-mix(in oklab, oklch(0.84 0.15 205) 35%, transparent);
+  --surface-1: color-mix(in oklab, var(--primary) 6%, var(--base-1) 94%);
+  --surface-2: color-mix(in oklab, var(--primary) 9%, var(--base-2) 91%);
+  --surface-3: color-mix(in oklab, var(--primary) 14%, var(--base-3) 86%);
+  --holo-edge: color-mix(in oklab, var(--primary) 35%, transparent);
   /*
-   * Chrome (sidebar + topbar) — deliberately the SAME cyan-tinted glass
+   * Chrome (sidebar + topbar) — deliberately the SAME primary-tinted glass
    * family as --surface-*, one step darker than a quiet panel.
    *
    * Before this, the sidebar rendered on flat --background and the header
@@ -172,14 +224,30 @@
    * and the chrome read as a separate, colder application hosting the HUD.
    * Anything that frames the dashboard uses these, never a raw black.
    */
-  --surface-chrome: color-mix(in oklab, oklch(0.84 0.15 205) 6%, oklch(0.125 0.026 250) 94%);
+  --surface-chrome: color-mix(in oklab, var(--primary) 6%, var(--base-chrome) 94%);
   --gradient-chrome:
-    radial-gradient(ellipse at 0% 0%, oklch(0.84 0.15 205 / 0.09), transparent 58%),
-    radial-gradient(ellipse at 100% 100%, oklch(0.78 0.13 250 / 0.07), transparent 62%);
+    radial-gradient(
+      ellipse at 0% 0%,
+      color-mix(in oklab, var(--primary) 9%, transparent),
+      transparent 58%
+    ),
+    radial-gradient(
+      ellipse at 100% 100%,
+      color-mix(in oklab, var(--accent) 7%, transparent),
+      transparent 62%
+    );
   --chrome-border: color-mix(in oklab, var(--primary) 16%, transparent);
   --gradient-panel:
-    radial-gradient(ellipse at 20% 0%, oklch(0.84 0.15 205 / 0.1), transparent 55%),
-    radial-gradient(ellipse at 100% 100%, oklch(0.78 0.13 250 / 0.08), transparent 60%);
+    radial-gradient(
+      ellipse at 20% 0%,
+      color-mix(in oklab, var(--primary) 10%, transparent),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse at 100% 100%,
+      color-mix(in oklab, var(--accent) 8%, transparent),
+      transparent 60%
+    );
   --glow-soft:
     0 0 0 1px color-mix(in oklab, var(--primary) 12%, transparent),
     0 6px 24px -8px color-mix(in oklab, var(--primary) 30%, transparent),
@@ -192,41 +260,6 @@
     0 0 0 1px color-mix(in oklab, var(--primary) 30%, transparent),
     0 20px 60px -12px color-mix(in oklab, var(--primary) 55%, transparent),
     inset 0 1px 0 color-mix(in oklab, var(--primary) 30%, transparent);
-}
-
-.dark {
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.208 0.042 265.755);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.279 0.041 260.031);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.551 0.027 264.364);
 }
 
 @layer base {
@@ -503,10 +536,11 @@
 @keyframes triangle-pulse {
   0%,
   100% {
-    filter: drop-shadow(0 0 12px oklch(0.82 0.17 215 / 0.7)) brightness(1);
+    filter: drop-shadow(0 0 12px color-mix(in oklab, var(--primary) 70%, transparent)) brightness(1);
   }
   50% {
-    filter: drop-shadow(0 0 28px oklch(0.82 0.17 215 / 0.95)) brightness(1.25);
+    filter: drop-shadow(0 0 28px color-mix(in oklab, var(--primary) 95%, transparent))
+      brightness(1.25);
   }
 }
 @keyframes tile-build {
@@ -787,11 +821,12 @@
   0%,
   100% {
     transform: scale(1);
-    filter: brightness(1) drop-shadow(0 0 18px oklch(0.82 0.19 65 / 0.7));
+    filter: brightness(1) drop-shadow(0 0 18px color-mix(in oklab, var(--reactor) 70%, transparent));
   }
   50% {
     transform: scale(1.04);
-    filter: brightness(1.25) drop-shadow(0 0 36px oklch(0.85 0.2 65 / 0.95));
+    filter: brightness(1.25)
+      drop-shadow(0 0 36px color-mix(in oklab, var(--reactor) 95%, transparent));
   }
 }
 .animate-amber-pulse {
@@ -802,11 +837,12 @@
   0%,
   100% {
     transform: scale(1);
-    filter: brightness(1.1) drop-shadow(0 0 24px oklch(0.85 0.2 65 / 0.9));
+    filter: brightness(1.1)
+      drop-shadow(0 0 24px color-mix(in oklab, var(--reactor) 90%, transparent));
   }
   50% {
     transform: scale(1.09);
-    filter: brightness(1.55) drop-shadow(0 0 60px oklch(0.9 0.21 70 / 1));
+    filter: brightness(1.55) drop-shadow(0 0 60px var(--reactor-hot));
   }
 }
 .animate-amber-pulse-fast {
@@ -855,10 +891,10 @@
   width: 3px;
   height: 3px;
   border-radius: 9999px;
-  background: oklch(0.92 0.18 70);
+  background: var(--reactor-hot);
   box-shadow:
-    0 0 6px oklch(0.9 0.2 65),
-    0 0 14px oklch(0.85 0.2 65 / 0.7);
+    0 0 6px var(--reactor-hot),
+    0 0 14px color-mix(in oklab, var(--reactor) 70%, transparent);
   animation: particle-float 4s ease-out infinite;
 }
 
@@ -940,7 +976,7 @@
     linear-gradient(
       180deg,
       color-mix(in oklab, var(--surface-3) 92%, transparent),
-      color-mix(in oklab, oklch(0.15 0.026 250) 94%, transparent)
+      color-mix(in oklab, var(--base-panel-floor) 94%, transparent)
     );
   box-shadow:
     0 1px 0 color-mix(in oklab, var(--primary) 24%, transparent) inset,
@@ -1535,28 +1571,28 @@
 .sphere-meridian {
   position: absolute;
   inset: 0;
-  border: 0.7px solid color-mix(in oklab, oklch(0.85 0.2 65) 44%, transparent);
+  border: 0.7px solid color-mix(in oklab, var(--reactor) 44%, transparent);
   border-radius: 50%;
   box-shadow:
-    inset 0 0 10px color-mix(in oklab, oklch(0.85 0.2 65) 14%, transparent),
-    0 0 4px color-mix(in oklab, oklch(0.85 0.2 65) 24%, transparent);
+    inset 0 0 10px color-mix(in oklab, var(--reactor) 14%, transparent),
+    0 0 4px color-mix(in oklab, var(--reactor) 24%, transparent);
   backface-visibility: visible;
 }
 .sphere-latitude {
-  border-color: color-mix(in oklab, oklch(0.85 0.2 65) 36%, transparent);
+  border-color: color-mix(in oklab, var(--reactor) 36%, transparent);
 }
 .sphere-oblique {
-  border-color: color-mix(in oklab, oklch(0.85 0.2 65) 26%, transparent);
+  border-color: color-mix(in oklab, var(--reactor) 26%, transparent);
   box-shadow: none;
 }
 .sphere-silhouette {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 0.8px solid color-mix(in oklab, oklch(0.85 0.2 65) 50%, transparent);
+  border: 0.8px solid color-mix(in oklab, var(--reactor) 50%, transparent);
   box-shadow:
-    0 0 18px color-mix(in oklab, oklch(0.85 0.2 65) 32%, transparent),
-    inset 0 0 28px color-mix(in oklab, oklch(0.85 0.2 65) 12%, transparent);
+    0 0 18px color-mix(in oklab, var(--reactor) 32%, transparent),
+    inset 0 0 28px color-mix(in oklab, var(--reactor) 12%, transparent);
   pointer-events: none;
 }
 .sphere-blend {
@@ -1607,7 +1643,7 @@
 
 /* Listening — attentive but calm; cooler, bluer amber */
 .reactor-gpu.is-listening {
-  color: oklch(0.82 0.14 90);
+  color: var(--warning);
 }
 .reactor-gpu.is-listening .ring3d-a {
   animation-duration: 14s;
@@ -1628,10 +1664,16 @@
   animation-duration: 3s;
 }
 .reactor-gpu.is-listening .sphere-meridian {
-  border-color: color-mix(in oklab, oklch(0.82 0.14 220) 44%, transparent);
+  border-color: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--primary) 55%, var(--accent)) 44%,
+    transparent
+  );
   box-shadow:
-    inset 0 0 12px color-mix(in oklab, oklch(0.82 0.14 220) 16%, transparent),
-    0 0 4px color-mix(in oklab, oklch(0.82 0.14 220) 22%, transparent);
+    inset 0 0 12px
+      color-mix(in oklab, color-mix(in oklab, var(--primary) 55%, var(--accent)) 16%, transparent),
+    0 0 4px
+      color-mix(in oklab, color-mix(in oklab, var(--primary) 55%, var(--accent)) 22%, transparent);
 }
 
 /* Working — steady, busy cadence, cyan HUD tint */
@@ -1670,11 +1712,11 @@
   0%,
   100% {
     transform: scale(1);
-    filter: drop-shadow(0 0 12px oklch(0.9 0.22 70 / 0.7));
+    filter: drop-shadow(0 0 12px color-mix(in oklab, var(--reactor-hot) 70%, transparent));
   }
   50% {
     transform: scale(1.18);
-    filter: drop-shadow(0 0 38px oklch(0.95 0.24 75 / 1));
+    filter: drop-shadow(0 0 38px color-mix(in oklab, var(--reactor-hot) 80%, white));
   }
 }
 .animate-core-speak {
@@ -1686,13 +1728,17 @@
 /* One-shot outcome pulses (~1.2s) */
 @keyframes reactor-success-flash {
   0% {
-    filter: drop-shadow(0 0 0px oklch(0.98 0.18 80 / 0)) brightness(1);
+    filter: drop-shadow(0 0 0px transparent) brightness(1);
   }
   20% {
-    filter: drop-shadow(0 0 42px oklch(0.98 0.2 80 / 0.95)) brightness(1.35);
+    filter: drop-shadow(
+        0 0 42px
+          color-mix(in oklab, color-mix(in oklab, var(--reactor-hot) 70%, white) 95%, transparent)
+      )
+      brightness(1.35);
   }
   100% {
-    filter: drop-shadow(0 0 0px oklch(0.98 0.18 80 / 0)) brightness(1);
+    filter: drop-shadow(0 0 0px transparent) brightness(1);
   }
 }
 .reactor-gpu.pulse-success {
@@ -1707,8 +1753,8 @@
   15%,
   55% {
     box-shadow:
-      0 0 32px oklch(0.7 0.24 25 / 0.9),
-      inset 0 0 22px oklch(0.7 0.24 25 / 0.55);
+      0 0 32px color-mix(in oklab, var(--destructive) 90%, transparent),
+      inset 0 0 22px color-mix(in oklab, var(--destructive) 55%, transparent);
   }
   30%,
   70% {
@@ -1755,13 +1801,13 @@
   0%,
   100% {
     transform: scale(1);
-    filter: drop-shadow(0 0 30px oklch(0.85 0.22 65 / 0.7))
-      drop-shadow(0 0 80px oklch(0.9 0.2 60 / 0.5));
+    filter: drop-shadow(0 0 30px color-mix(in oklab, var(--reactor) 70%, transparent))
+      drop-shadow(0 0 80px color-mix(in oklab, var(--reactor-hot) 50%, transparent));
   }
   50% {
     transform: scale(1.06);
-    filter: drop-shadow(0 0 60px oklch(0.95 0.24 70 / 1))
-      drop-shadow(0 0 140px oklch(0.9 0.22 60 / 0.8));
+    filter: drop-shadow(0 0 60px color-mix(in oklab, var(--reactor-hot) 80%, white))
+      drop-shadow(0 0 140px color-mix(in oklab, var(--reactor-hot) 80%, transparent));
   }
 }
 .animate-ark-pulse {
@@ -1774,7 +1820,7 @@
     opacity: 1;
   }
   40% {
-    background: oklch(0.92 0.22 70 / 0.35);
+    background: color-mix(in oklab, var(--reactor-hot) 35%, transparent);
     opacity: 0.7;
   }
   100% {
@@ -1831,9 +1877,21 @@
   position: absolute;
   inset: -10%;
   background:
-    radial-gradient(ellipse 55% 40% at 12% 18%, oklch(0.72 0.19 215 / 0.22), transparent 65%),
-    radial-gradient(ellipse 50% 42% at 88% 82%, oklch(0.62 0.17 205 / 0.18), transparent 65%),
-    radial-gradient(ellipse 40% 35% at 50% 115%, oklch(0.55 0.14 195 / 0.14), transparent 60%);
+    radial-gradient(
+      ellipse 55% 40% at 12% 18%,
+      color-mix(in oklab, color-mix(in oklab, var(--primary) 85%, black) 22%, transparent),
+      transparent 65%
+    ),
+    radial-gradient(
+      ellipse 50% 42% at 88% 82%,
+      color-mix(in oklab, color-mix(in oklab, var(--primary) 72%, black) 18%, transparent),
+      transparent 65%
+    ),
+    radial-gradient(
+      ellipse 40% 35% at 50% 115%,
+      color-mix(in oklab, color-mix(in oklab, var(--primary) 64%, black) 14%, transparent),
+      transparent 60%
+    );
   filter: blur(30px);
   mix-blend-mode: screen;
   opacity: 1;
@@ -1884,10 +1942,10 @@
   width: 2px;
   height: 2px;
   border-radius: 9999px;
-  background: oklch(0.9 0.15 210);
+  background: color-mix(in oklab, var(--primary) 70%, white);
   box-shadow:
-    0 0 6px oklch(0.85 0.18 210 / 0.9),
-    0 0 14px oklch(0.75 0.18 210 / 0.5);
+    0 0 6px color-mix(in oklab, var(--primary) 90%, transparent),
+    0 0 14px color-mix(in oklab, color-mix(in oklab, var(--primary) 88%, black) 50%, transparent);
   animation: hud-particle-drift var(--dur, 12s) linear infinite;
   animation-delay: var(--delay, 0s);
   opacity: 0;

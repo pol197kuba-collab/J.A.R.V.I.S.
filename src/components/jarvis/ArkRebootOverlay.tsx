@@ -20,13 +20,14 @@ export function ArkRebootOverlay() {
 
       {/* Module label + streaming logs around the core. */}
       <div className="absolute inset-x-0 top-[8%] flex flex-col items-center gap-2 px-4">
-        <p className="font-display text-[10px] uppercase tracking-[0.45em] text-[oklch(0.85_0.2_65)]">
+        <p className="font-display text-[10px] uppercase tracking-[0.45em] text-reactor">
           PROTOCOL // ARK REBOOT
         </p>
         <p
-          className="font-display text-2xl uppercase tracking-[0.4em] text-[oklch(0.95_0.18_75)]"
+          className="font-display text-2xl uppercase tracking-[0.4em] text-reactor-hot"
           style={{
-            textShadow: "0 0 14px oklch(0.85 0.2 65 / 0.8), 0 0 32px oklch(0.85 0.2 65 / 0.5)",
+            textShadow:
+              "0 0 14px color-mix(in oklab, var(--reactor) 80%, transparent), 0 0 32px color-mix(in oklab, var(--reactor) 50%, transparent)",
           }}
         >
           {current?.module ?? "INITIALIZING"}
@@ -37,10 +38,10 @@ export function ArkRebootOverlay() {
         {logTail.map((line, i) => (
           <p
             key={`${line}-${i}`}
-            className="font-mono text-xs uppercase tracking-[0.25em] text-[oklch(0.85_0.2_65)] animate-log-streak"
+            className="font-mono text-xs uppercase tracking-[0.25em] text-reactor animate-log-streak"
             style={{
               opacity: 0.4 + i * 0.3,
-              textShadow: "0 0 8px oklch(0.85 0.2 65 / 0.6)",
+              textShadow: "0 0 8px color-mix(in oklab, var(--reactor) 60%, transparent)",
             }}
           >
             {line}

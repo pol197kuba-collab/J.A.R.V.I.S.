@@ -117,7 +117,7 @@ export function GeneratedFilePreview({ file, onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="flex h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-primary/30 bg-[#0a0f1a] shadow-[0_0_60px_-15px_var(--primary)]"
+        className="flex h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-primary/30 bg-background shadow-[0_0_60px_-15px_var(--primary)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-primary/20 bg-primary/5 px-4 py-2.5">
@@ -151,14 +151,14 @@ export function GeneratedFilePreview({ file, onClose }: Props) {
 
         <div className="relative flex-1 overflow-auto bg-white">
           {status === "loading" && (
-            <div className="absolute inset-0 flex items-center justify-center bg-[#0a0f1a] text-muted-foreground">
+            <div className="absolute inset-0 flex items-center justify-center bg-background text-muted-foreground">
               <span className="font-display text-[11px] uppercase tracking-[0.3em]">
                 ▸ ładowanie podglądu…
               </span>
             </div>
           )}
           {status === "error" && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#0a0f1a] px-6 text-center">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center">
               <p className="text-sm text-muted-foreground">{message}</p>
               <button
                 type="button"

@@ -3,6 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import type { Mesh } from "three";
 import { MATRIX_SCALE } from "./matrixScale";
+import { useThemeColors } from "@/lib/theme/themeColor";
 
 // Slim view over AgentSummary (src/lib/agents/runtime.functions.ts) — only
 // the fields this satellite node actually renders, kept decoupled from the
@@ -22,12 +23,14 @@ export type AgentNodeData = {
   busySince: string | null;
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  idle: "#00f0ff",
-  busy: "#ffaa00",
-  error: "#ff3b3b",
-};
-const DISABLED_COLOR = "#4b5563";
+// Status colors from the theme tokens (resolved to hex for three.js).
+const NODE_COLORS = {
+  idle: "var(--primary)",
+  busy: "var(--reactor)",
+  error: "var(--destructive)",
+  disabled: "color-mix(in oklab, var(--muted-foreground) 45%, var(--background))",
+} as const;
+const NODE_FALLBACKS = { idle: "#00f0ff", busy: "#ffaa00", error: "#ff3b3b", disabled: "#4b5563" };
 
 function formatElapsed(totalSeconds: number): string {
   const m = Math.floor(totalSeconds / 60);
@@ -48,9 +51,14 @@ export function AgentNode3D({
 }) {
   const meshRef = useRef<Mesh>(null);
   const [hovered, setHovered] = useState(false);
-  const color = agent.isEnabled
-    ? (STATUS_COLOR[agent.status] ?? STATUS_COLOR.idle)
-    : DISABLED_COLOR;
+  const colors = useThemeColors(NODE_COLORS, NODE_FALLBACKS);
+  const color = !agent.isEnabled
+    ? colors.disabled
+    : agent.status === "busy"
+      ? colors.busy
+      : agent.status === "error"
+        ? colors.error
+        : colors.idle;
   const busy = agent.status === "busy";
   const showCard = hovered || selected;
 

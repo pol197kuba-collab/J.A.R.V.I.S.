@@ -77,7 +77,7 @@ function AgentMatrix() {
       <div
         id="jarvis-chat-panel"
         data-slot="jarvis-chat-panel"
-        className="relative h-[40%] min-h-0 w-full shrink-0 border-t border-cyan-400/20 bg-black/40 backdrop-blur-sm"
+        className="relative h-[40%] min-h-0 w-full shrink-0 border-t border-primary/20 bg-black/40 backdrop-blur-sm"
       >
         <MatrixChatConsole />
       </div>

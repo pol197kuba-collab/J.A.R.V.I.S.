@@ -5,13 +5,27 @@ import { Line, OrbitControls, Points, PointMaterial } from "@react-three/drei";
 import { Core3D } from "./Core3D";
 import { AgentNode3D, type AgentNodeData } from "./AgentNode3D";
 import { MATRIX_SCALE as SCALE } from "./matrixScale";
+import { useThemeColors } from "@/lib/theme/themeColor";
 
-const PARTICLE_COLOR = "#4dd8ff";
+// three.js needs concrete colors — resolved from the theme tokens (see
+// src/lib/theme/themeColor.ts). Fallbacks match the default JARVIS theme.
+const SCENE_COLORS = {
+  particle: "var(--primary)",
+  lineActive: "var(--reactor)",
+  lineIdle: "color-mix(in oklab, var(--primary) 65%, black)",
+  void: "color-mix(in oklab, var(--base-chrome) 25%, black)",
+} as const;
+const SCENE_FALLBACKS = {
+  particle: "#4dd8ff",
+  lineActive: "#ffaa00",
+  lineIdle: "#0891b2",
+  void: "#020409",
+};
 
 // Soft dust field drifting around the core — @react-three/drei's <Points>
 // batches every particle into a single draw call, so this stays cheap even
 // with a few hundred points.
-function ParticleField({ count = 500 }: { count?: number }) {
+function ParticleField({ count = 500, color }: { count?: number; color: string }) {
   const positions = useMemo(() => {
     const arr = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
@@ -29,7 +43,7 @@ function ParticleField({ count = 500 }: { count?: number }) {
     <Points positions={positions} stride={3} frustumCulled>
       <PointMaterial
         transparent
-        color={PARTICLE_COLOR}
+        color={color}
         size={0.018}
         sizeAttenuation
         depthWrite={false}
@@ -43,7 +57,11 @@ function ParticleField({ count = 500 }: { count?: number }) {
 // agent is actively working a task, dim cyan at idle.
 function ConnectionLines({
   nodes,
+  activeColor,
+  idleColor,
 }: {
+  activeColor: string;
+  idleColor: string;
   nodes: Array<{
     slug: string;
     position: [number, number, number];
@@ -59,7 +77,7 @@ function ConnectionLines({
           <Line
             key={n.slug}
             points={[[0, 0, 0], n.position]}
-            color={active ? "#ffaa00" : "#0891b2"}
+            color={active ? activeColor : idleColor}
             transparent
             opacity={active ? 0.85 : n.isEnabled ? 0.28 : 0.12}
             lineWidth={active ? 1.6 : 0.8}
@@ -72,6 +90,7 @@ function ConnectionLines({
 
 export function JarvisCanvas({ agents }: { agents: AgentNodeData[] }) {
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+  const colors = useThemeColors(SCENE_COLORS, SCENE_FALLBACKS);
 
   const positioned = useMemo(() => {
     const n = Math.max(agents.length, 1);
@@ -97,14 +116,18 @@ export function JarvisCanvas({ agents }: { agents: AgentNodeData[] }) {
       gl={{ antialias: true, powerPreference: "high-performance" }}
       onPointerMissed={() => setSelectedSlug(null)}
     >
-      <color attach="background" args={["#020409"]} />
-      <fog attach="fog" args={["#020409", 8 * SCALE, 20 * SCALE]} />
-      <ambientLight intensity={0.25} color="#4dd8ff" />
+      <color attach="background" args={[colors.void]} />
+      <fog attach="fog" args={[colors.void, 8 * SCALE, 20 * SCALE]} />
+      <ambientLight intensity={0.25} color={colors.particle} />
       <directionalLight position={[5, 8, 5]} intensity={0.4} color="#ffffff" />
 
       <Suspense fallback={null}>
         <Core3D pulse={anyBusy ? 1 : 0} />
-        <ConnectionLines nodes={positioned} />
+        <ConnectionLines
+          nodes={positioned}
+          activeColor={colors.lineActive}
+          idleColor={colors.lineIdle}
+        />
         {positioned.map((a) => (
           <AgentNode3D
             key={a.slug}
@@ -114,7 +137,7 @@ export function JarvisCanvas({ agents }: { agents: AgentNodeData[] }) {
             onSelect={setSelectedSlug}
           />
         ))}
-        <ParticleField />
+        <ParticleField color={colors.particle} />
       </Suspense>
 
       <EffectComposer multisampling={0}>

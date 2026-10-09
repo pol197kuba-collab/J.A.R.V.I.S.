@@ -869,7 +869,7 @@ function EventLogPanel({ data }: { data: AgentDetail }) {
 
 function levelColor(level: string): string {
   if (level === "error") return "var(--destructive)";
-  if (level === "warn") return "oklch(0.75 0.15 80)";
+  if (level === "warn") return "var(--warning)";
   return "var(--primary)";
 }
 

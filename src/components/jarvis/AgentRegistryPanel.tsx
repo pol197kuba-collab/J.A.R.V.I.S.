@@ -33,10 +33,10 @@ export function AgentRegistryPanel({ agents }: { agents: AgentSummary[] }) {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open agent registry"
-        className="pointer-events-auto absolute left-4 top-16 flex items-center gap-1.5 rounded-lg border border-cyan-400/25 bg-black/60 px-2.5 py-1.5 shadow-[0_0_30px_-10px_rgba(77,216,255,0.5)] backdrop-blur-md transition hover:border-cyan-400/50 sm:left-6 sm:top-20"
+        className="pointer-events-auto absolute left-4 top-16 flex items-center gap-1.5 rounded-lg border border-primary/25 bg-black/60 px-2.5 py-1.5 shadow-[0_0_30px_-10px_color-mix(in_oklab,var(--primary)_50%,transparent)] backdrop-blur-md transition hover:border-primary/50 sm:left-6 sm:top-20"
       >
-        <Users className="h-3 w-3 text-cyan-300" strokeWidth={1.5} />
-        <span className="font-display text-[9px] uppercase tracking-[0.25em] text-cyan-300/90">
+        <Users className="h-3 w-3 text-primary" strokeWidth={1.5} />
+        <span className="font-display text-[9px] uppercase tracking-[0.25em] text-primary/90">
           Registry ({agents.length})
         </span>
       </button>
@@ -44,17 +44,17 @@ export function AgentRegistryPanel({ agents }: { agents: AgentSummary[] }) {
   }
 
   return (
-    <div className="pointer-events-auto absolute left-4 top-16 flex max-h-[50%] w-[220px] flex-col overflow-hidden rounded-lg border border-cyan-400/25 bg-black/60 shadow-[0_0_30px_-10px_rgba(77,216,255,0.5)] backdrop-blur-md sm:left-6 sm:top-20 sm:w-[260px]">
-      <div className="flex shrink-0 items-center gap-1.5 border-b border-cyan-400/20 px-3 py-2">
-        <Users className="h-3 w-3 text-cyan-300" strokeWidth={1.5} />
-        <span className="min-w-0 flex-1 truncate font-display text-[9px] uppercase tracking-[0.25em] text-cyan-300/90">
+    <div className="pointer-events-auto absolute left-4 top-16 flex max-h-[50%] w-[220px] flex-col overflow-hidden rounded-lg border border-primary/25 bg-black/60 shadow-[0_0_30px_-10px_color-mix(in_oklab,var(--primary)_50%,transparent)] backdrop-blur-md sm:left-6 sm:top-20 sm:w-[260px]">
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-primary/20 px-3 py-2">
+        <Users className="h-3 w-3 text-primary" strokeWidth={1.5} />
+        <span className="min-w-0 flex-1 truncate font-display text-[9px] uppercase tracking-[0.25em] text-primary/90">
           Agent Registry
         </span>
         <button
           type="button"
           onClick={() => setOpen(false)}
           aria-label="Close agent registry"
-          className="shrink-0 text-cyan-300/60 hover:text-cyan-300"
+          className="shrink-0 text-primary/60 hover:text-primary"
         >
           <X className="h-3 w-3" strokeWidth={1.75} />
         </button>
@@ -152,7 +152,7 @@ function AgentRegistryRow({ agent }: { agent: AgentSummary }) {
 
   return (
     <div
-      className="border-l-2 border-cyan-400/40 pl-2"
+      className="border-l-2 border-primary/40 pl-2"
       title={toolSlugs.length > 0 ? toolSlugs.join(", ") : undefined}
     >
       <div className="flex min-w-0 items-center gap-2">
@@ -161,7 +161,7 @@ function AgentRegistryRow({ agent }: { agent: AgentSummary }) {
         </p>
         <UnwedgeButton agent={agent} />
       </div>
-      <p className="line-clamp-1 font-mono text-[8px] leading-snug text-cyan-300/70">
+      <p className="line-clamp-1 font-mono text-[8px] leading-snug text-primary/70">
         {agent.role ?? "—"}
       </p>
       <p className="line-clamp-1 font-mono text-[8px] leading-snug text-white/40">{toolsLabel}</p>
