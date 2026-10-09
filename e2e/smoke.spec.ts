@@ -75,17 +75,16 @@ test("every screen renders cleanly", async ({ page }, testInfo) => {
   // Boot once (the ENGAGE screen), then move between screens in-app — a full
   // reload would replay the boot sequence for every route.
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  // The button renders before React hydrates (cold dev-server compile), so
-  // click until the boot screen actually goes away.
+  // The button renders before React hydrates (cold dev-server compile) and
+  // an early click can bounce back to the boot screen, so keep engaging
+  // until the dashboard's <main> is actually up.
   const engage = page.getByText(/ENGAGE/i).first();
   await expect(async () => {
-    await engage.click({ timeout: 5_000 });
-    await expect(engage).toBeHidden({ timeout: 4_000 });
-  }).toPass({ timeout: 120_000 });
-  await page.waitForTimeout(1_500);
-  const skip = page.getByText(/skip|pomiń/i).first();
-  if (await skip.count()) await skip.click().catch(() => {});
-  await expect(page.locator("main")).toBeVisible({ timeout: 60_000 });
+    if (await engage.isVisible()) await engage.click({ timeout: 5_000 });
+    const skip = page.getByText(/skip|pomiń/i).first();
+    if (await skip.isVisible().catch(() => false)) await skip.click().catch(() => {});
+    await expect(page.locator("main")).toBeVisible({ timeout: 10_000 });
+  }).toPass({ timeout: 180_000 });
 
   for (const route of ROUTES) {
     current = route;
