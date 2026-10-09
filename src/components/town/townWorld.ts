@@ -33,6 +33,7 @@ import {
   type BoardCard,
   type SpriteSet,
 } from "./townArt";
+import { TownDog } from "./townDog";
 
 export type CharStatus = "idle" | "running" | "done" | "error" | "off";
 type Dir = "up" | "down" | "left" | "right";
@@ -53,6 +54,7 @@ type Char = {
 };
 export type Camera = { x: number; y: number; z: number };
 type Rect = { x: number; y: number; w: number; h: number };
+type Speaker = { x: number; y: number; bubble: Bubble | null; tag: string };
 
 export const TAG: Record<TownSlug, string> = {
   jarvis: "JAR",
@@ -81,8 +83,12 @@ export class TownWorld {
   progress: Partial<Record<TownSlug, number | null>> = {};
   cards: BoardCard[] = [];
   reduceMotion = false;
+  /** Your companion. */
+  readonly dog: TownDog;
 
   constructor() {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- the dog host reads live time
+    const world = this;
     this.map = buildTownMap();
     this.sprites = buildSprites();
     this.staticLayer = buildStaticLayer(this.map);
@@ -110,6 +116,24 @@ export class TownWorld {
       };
       this.status[slug] = "idle";
     }
+    const owner = this.chars.user;
+    const butler = this.chars.jarvis;
+    this.dog = new TownDog({
+      get time() {
+        return world.time;
+      },
+      map: this.map,
+      wait: (ms) => this.wait(ms),
+      owner: () => ({
+        x: owner.x,
+        y: owner.y,
+        tx: owner.tx,
+        ty: owner.ty,
+        moving: owner.path.length > 0,
+      }),
+      butler: () => ({ x: butler.x, y: butler.y }),
+      ownerSay: (text, ms, icon) => this.say("user", text, ms, icon),
+    });
   }
 
   // ── time & actions ────────────────────────────────────────────────────────
@@ -225,6 +249,7 @@ export class TownWorld {
         c.y += (dy / d) * v;
       }
     }
+    this.dog.update(dt);
   }
 
   /** Paint a character's front-facing sprite, scaled up, for the inspector. */
@@ -271,7 +296,15 @@ export class TownWorld {
     f.drawImage(this.staticLayer, 0, 0);
     drawDynamic(f, t, (s) => this.status[s], this.cards);
     const order = Object.values(this.chars).sort((a, b) => a.y - b.y);
-    for (const c of order) this.drawChar(c, t);
+    let dogDrawn = false;
+    for (const c of order) {
+      if (!dogDrawn && this.dog.y < c.y) {
+        this.dog.drawSprite(f, t);
+        dogDrawn = true;
+      }
+      this.drawChar(c, t);
+    }
+    if (!dogDrawn) this.dog.drawSprite(f, t);
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = "#120d18";
@@ -404,13 +437,24 @@ export class TownWorld {
     }
     // Bottom-most speakers first, so a crowd stacks its bubbles upward
     // instead of drawing them on top of each other.
+    this.dog.drawHearts(ctx, toS, cam.z);
     const placed: Rect[] = [];
-    for (const c of [...order].reverse()) this.drawBubble(ctx, c, toS, fs, u, font, placed);
+    const dogTag = this.dog.name.toUpperCase().slice(0, 10);
+    const speakers: Speaker[] = [
+      ...order.map((c) => ({ x: c.x, y: c.y, bubble: c.bubble, tag: TAG[c.slug] })),
+      {
+        x: this.dog.x,
+        y: this.dog.y + 6,
+        bubble: this.dog.bubble ? { ...this.dog.bubble, tone: "plain" as const } : null,
+        tag: dogTag,
+      },
+    ].sort((a, b) => b.y - a.y);
+    for (const sp of speakers) this.drawBubble(ctx, sp, toS, fs, u, font, placed);
   }
 
   private drawBubble(
     ctx: CanvasRenderingContext2D,
-    c: Char,
+    c: Speaker,
     toS: (x: number, y: number) => { x: number; y: number },
     fs: number,
     u: number,
@@ -420,7 +464,7 @@ export class TownWorld {
     const bb = c.bubble;
     if (!bb || bb.until < this.time) return;
     const p = Math.max(1, Math.round(fs / 8));
-    const tag = TAG[c.slug] + ":";
+    const tag = c.tag + ":";
     ctx.font = font(700, fs);
     const tagW = ctx.measureText(tag).width;
     ctx.font = font(500, fs);

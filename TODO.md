@@ -1984,6 +1984,17 @@ Kod: `src/components/town/` (mapa i BFS, grafika, świat, reżyser
 zdarzeń, widok), `src/lib/theme/uiMode.ts`, sekcja „Town skin” w
 `src/styles.css`.
 
+### Follow-up (2026-10-09): towarzysz — cocker spaniel właściciela
+
+Rudy cocker spaniel (kolory ze zdjęcia: rudo-złota sierść, ciemniejsze
+uszy, czerwona obroża z blaszką) jako towarzysz Twojej postaci
+(`src/components/town/townDog.ts`). Chodzi za Tobą, gdy wychodzisz z
+terminala, ma posłanie w Twoim pokoju, sam z siebie węszy, siada, goni
+ogon, drzemie, szczeka na J.A.R.V.I.S.-a, gdy ten przynosi wynik. Panel
+„Towarzysz”: imię do edycji, humor 0–5 serc (zanika powoli, nigdy poniżej
+1), liczniki dnia, przyciski Pogłaszcz / Aport / Smakołyk / Do mnie / Spać;
+klik w psa na mapie = głaskanie. Stan per urządzenie (localStorage).
+
 ### Propozycje kolejnych poleceń i interakcji (do wyboru i priorytetu)
 
 1. **Przeciągnij kartkę do pokoju** — zadanie upuszczone na pokój agenta

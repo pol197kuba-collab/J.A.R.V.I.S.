@@ -12,6 +12,8 @@ import { TOWN_AGENTS, VISIT, WORLD_H, WORLD_W, type TownSlug } from "./townMap";
 import { AGENT_COLOR } from "./townArt";
 import { TAG, TownWorld, type Camera, type CharStatus } from "./townWorld";
 import { TownDirector, characterStatus, isActive, type TownCommand } from "./townDirector";
+import { CompanionPanel } from "./CompanionPanel";
+import { applyAction, loadDogName, loadMood, saveMood, settle } from "./dogMood";
 
 const FALLBACK_NAMES: Record<TownSlug, string> = {
   jarvis: "J.A.R.V.I.S.",
@@ -71,6 +73,11 @@ export function TownView() {
   const [text, setText] = useState("");
   const [target, setTarget] = useState<TownSlug | "auto">("auto");
   const [, setTick] = useState(0);
+  const [dogName, setDogName] = useState(() => loadDogName());
+  const [mood, setMood] = useState(() => loadMood(Date.now()));
+  const [dogReady, setDogReady] = useState(false);
+  const dogNameRef = useRef(dogName);
+  dogNameRef.current = dogName;
 
   // `agents` is a fresh [] on every render until the query has data, so key
   // the memo on content, not identity — otherwise the sync effect below
@@ -121,6 +128,16 @@ export function TownView() {
     const world = new TownWorld();
     world.reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     worldRef.current = world;
+    world.dog.name = dogNameRef.current;
+    world.dog.onAction = (action, line) => {
+      setMood((m) => {
+        const next = applyAction(m, action, Date.now());
+        saveMood(next);
+        return next;
+      });
+      pushLog("user", line);
+    };
+    setDogReady(true);
     directorRef.current = new TownDirector(world, {
       log: (slug, line) => pushLog(slug, line),
       takeCommand: (runId) => {
@@ -157,6 +174,10 @@ export function TownView() {
   useEffect(() => {
     if (portraitRef.current) worldRef.current?.drawPortrait(portraitRef.current, selected);
   }, [selected]);
+
+  useEffect(() => {
+    if (worldRef.current) worldRef.current.dog.name = dogName;
+  }, [dogName]);
 
   // real data → events
   useEffect(() => {
@@ -335,6 +356,11 @@ export function TownView() {
         const cam = camRef.current;
         const wx = cam.x + ((e.clientX - r.left) * dprRef.current) / cam.z;
         const wy = cam.y + ((e.clientY - r.top) * dprRef.current) / cam.z;
+        const dog = worldRef.current?.dog;
+        if (dog?.hit(wx, wy)) {
+          void dog.interact("pet");
+          return;
+        }
         const hit = worldRef.current?.pick(wx, wy);
         if (hit) setSelected(hit);
       }
@@ -718,7 +744,15 @@ export function TownView() {
           )}
         </HudPanel>
 
-        <HudPanel index={3} title="DZIENNIK" tone="quiet">
+        <CompanionPanel
+          index={3}
+          dog={dogReady ? (worldRef.current?.dog ?? null) : null}
+          name={dogName}
+          onRename={setDogName}
+          mood={settle(mood, Date.now())}
+        />
+
+        <HudPanel index={4} title="DZIENNIK" tone="quiet">
           <ol className="no-scrollbar grid max-h-72 gap-1 overflow-y-auto overflow-x-hidden p-4 @max-[420px]:p-3">
             {log.map((l) => (
               <li key={l.id} className="grid grid-cols-[64px_minmax(0,1fr)] gap-2 text-sm">
