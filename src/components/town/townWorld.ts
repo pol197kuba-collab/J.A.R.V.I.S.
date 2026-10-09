@@ -12,6 +12,7 @@ import {
   feet,
   roomArea,
   HOME,
+  BOARD_SPOTS,
   COFFEE_SPOT,
   ROOMS,
   TS,
@@ -33,6 +34,7 @@ import {
   type BoardCard,
   type SpriteSet,
 } from "./townArt";
+import { TownDog } from "./townDog";
 
 export type CharStatus = "idle" | "running" | "done" | "error" | "off";
 type Dir = "up" | "down" | "left" | "right";
@@ -53,6 +55,7 @@ type Char = {
 };
 export type Camera = { x: number; y: number; z: number };
 type Rect = { x: number; y: number; w: number; h: number };
+type Speaker = { x: number; y: number; bubble: Bubble | null; tag: string };
 
 export const TAG: Record<TownSlug, string> = {
   jarvis: "JAR",
@@ -81,8 +84,18 @@ export class TownWorld {
   progress: Partial<Record<TownSlug, number | null>> = {};
   cards: BoardCard[] = [];
   reduceMotion = false;
+  /** Walk mode: you steer your own character (see TownView). */
+  walkMode = false;
+  /** The agent you're talking to stays put and faces you. */
+  talkingTo: TownSlug | null = null;
+  /** Unread results pinned on the board — drawn as a "!" over it. */
+  boardAlert = 0;
+  /** Your companion. */
+  readonly dog: TownDog;
 
   constructor() {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- the dog host reads live time
+    const world = this;
     this.map = buildTownMap();
     this.sprites = buildSprites();
     this.staticLayer = buildStaticLayer(this.map);
@@ -110,6 +123,24 @@ export class TownWorld {
       };
       this.status[slug] = "idle";
     }
+    const owner = this.chars.user;
+    const butler = this.chars.jarvis;
+    this.dog = new TownDog({
+      get time() {
+        return world.time;
+      },
+      map: this.map,
+      wait: (ms) => this.wait(ms),
+      owner: () => ({
+        x: owner.x,
+        y: owner.y,
+        tx: owner.tx,
+        ty: owner.ty,
+        moving: owner.path.length > 0,
+      }),
+      butler: () => ({ x: butler.x, y: butler.y }),
+      ownerSay: (text, ms, icon) => this.say("user", text, ms, icon),
+    });
   }
 
   // ── time & actions ────────────────────────────────────────────────────────
@@ -162,7 +193,14 @@ export class TownWorld {
   }
 
   private idleLife(c: Char) {
-    if (c.slug === "user" || c.errands || c.path.length || this.time < c.idleAt) return;
+    if (
+      c.slug === "user" ||
+      c.slug === this.talkingTo ||
+      c.errands ||
+      c.path.length ||
+      this.time < c.idleAt
+    )
+      return;
     const st = this.status[c.slug];
     if (st === "running") return;
     c.idleAt = this.time + 4500 + Math.random() * 6000;
@@ -225,6 +263,7 @@ export class TownWorld {
         c.y += (dy / d) * v;
       }
     }
+    this.dog.update(dt);
   }
 
   /** Paint a character's front-facing sprite, scaled up, for the inspector. */
@@ -242,6 +281,75 @@ export class TownWorld {
       size,
       size,
     );
+  }
+
+  // ── walk mode: your character ────────────────────────────────────────────
+  /** One step in a direction (arrow keys / WASD). Ignored mid-step. */
+  userStep(dx: number, dy: number) {
+    const c = this.chars.user;
+    if (c.path.length) return;
+    c.dir = dx > 0 ? "right" : dx < 0 ? "left" : dy > 0 ? "down" : "up";
+    const tx = c.tx + dx;
+    const ty = c.ty + dy;
+    if (this.map.blocked[ty]?.[tx] === false) void this.walkTo("user", [tx, ty]);
+  }
+  /** Walk your character to a tile (tap / click on the map). */
+  userWalkTo(tile: Tile) {
+    return this.walkTo("user", tile);
+  }
+  /** A free tile right next to an agent, nearest to you — where you stand to talk. */
+  besideAgent(slug: TownSlug): Tile {
+    const a = this.chars[slug];
+    const u = this.chars.user;
+    const cands: Tile[] = [
+      [a.tx - 1, a.ty],
+      [a.tx + 1, a.ty],
+      [a.tx, a.ty + 1],
+      [a.tx, a.ty - 1],
+    ];
+    const free = cands.filter(([x, y]) => this.map.blocked[y]?.[x] === false);
+    free.sort(
+      (p, q) => Math.hypot(p[0] - u.tx, p[1] - u.ty) - Math.hypot(q[0] - u.tx, q[1] - u.ty),
+    );
+    return free[0] ?? [a.tx, a.ty];
+  }
+  /** The board spot nearest to you. */
+  nearestBoardSpot(): Tile {
+    const u = this.chars.user;
+    return [...BOARD_SPOTS].sort(
+      (p, q) => Math.hypot(p[0] - u.tx, p[1] - u.ty) - Math.hypot(q[0] - u.tx, q[1] - u.ty),
+    )[0];
+  }
+  /** Is a world point on the task board (or the floor right in front of it)? */
+  isBoard(wx: number, wy: number) {
+    return wx >= 17 * TS && wx < 27 * TS && wy >= 13 * TS && wy < 15 * TS;
+  }
+  /** What you could interact with from where you stand, if anything. */
+  reachable(): { kind: "agent"; slug: TownSlug } | { kind: "board" } | null {
+    const u = this.chars.user;
+    if (u.path.length) return null;
+    let best: TownSlug | null = null;
+    let bd = TS * 1.6;
+    for (const c of Object.values(this.chars)) {
+      if (c.slug === "user") continue;
+      const d = Math.hypot(c.x - u.x, c.y - u.y);
+      if (d < bd) {
+        bd = d;
+        best = c.slug;
+      }
+    }
+    if (best) return { kind: "agent", slug: best };
+    if (BOARD_SPOTS.some(([x, y]) => x === u.tx && y === u.ty)) return { kind: "board" };
+    return null;
+  }
+  /** Turn an agent to face you while you talk. */
+  faceUser(slug: TownSlug) {
+    const a = this.chars[slug];
+    const u = this.chars.user;
+    const dx = u.x - a.x;
+    const dy = u.y - a.y;
+    a.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
+    u.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "left" : "right") : dy > 0 ? "up" : "down";
   }
 
   // ── picking ───────────────────────────────────────────────────────────────
@@ -271,7 +379,15 @@ export class TownWorld {
     f.drawImage(this.staticLayer, 0, 0);
     drawDynamic(f, t, (s) => this.status[s], this.cards);
     const order = Object.values(this.chars).sort((a, b) => a.y - b.y);
-    for (const c of order) this.drawChar(c, t);
+    let dogDrawn = false;
+    for (const c of order) {
+      if (!dogDrawn && this.dog.y < c.y) {
+        this.dog.drawSprite(f, t);
+        dogDrawn = true;
+      }
+      this.drawChar(c, t);
+    }
+    if (!dogDrawn) this.dog.drawSprite(f, t);
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = "#120d18";
@@ -332,6 +448,36 @@ export class TownWorld {
         ctx.fillStyle = "#fbe9c9";
         ctx.fillText(label, s.x + ls / 2, s.y + h / 2 + 1);
       }
+    }
+
+    // "!" over the task board while results wait unread
+    if (this.boardAlert > 0) {
+      const bob = this.reduceMotion ? 0 : Math.abs(Math.sin(this.time / 300)) * 4;
+      const s = toS(22 * TS, 13 * TS - 6 - bob);
+      const bs = Math.round(fs * 1.5);
+      pixelBox(ctx, s.x - bs / 2, s.y - bs, bs, bs, u, "#f2c94c", INK);
+      ctx.font = font(700, Math.round(fs * 1.1));
+      ctx.fillStyle = INK;
+      ctx.textAlign = "center";
+      ctx.fillText(this.boardAlert > 1 ? String(this.boardAlert) : "!", s.x, s.y - bs / 2 + 1);
+      ctx.textAlign = "left";
+    }
+    // walk mode: what's within reach
+    const reach = this.walkMode ? this.reachable() : null;
+    if (reach) {
+      const label = reach.kind === "board" ? "E · Tablica" : "E · Porozmawiaj";
+      const at =
+        reach.kind === "board"
+          ? { x: 22 * TS, y: 12 * TS }
+          : { x: this.chars[reach.slug].x, y: this.chars[reach.slug].y - 26 };
+      const ps = Math.round(fs * 0.85);
+      ctx.font = font(700, ps);
+      const w = ctx.measureText(label).width + ps;
+      const h = Math.round(ps * 1.6);
+      const s = toS(at.x, at.y);
+      pixelBox(ctx, s.x - w / 2, s.y - h, w, h, Math.max(1, u - 1), "#f2a93b", INK);
+      ctx.fillStyle = INK;
+      ctx.fillText(label, s.x - w / 2 + ps / 2, s.y - h / 2 + 1);
     }
 
     for (const c of order) {
@@ -404,13 +550,24 @@ export class TownWorld {
     }
     // Bottom-most speakers first, so a crowd stacks its bubbles upward
     // instead of drawing them on top of each other.
+    this.dog.drawHearts(ctx, toS, cam.z);
     const placed: Rect[] = [];
-    for (const c of [...order].reverse()) this.drawBubble(ctx, c, toS, fs, u, font, placed);
+    const dogTag = this.dog.name.toUpperCase().slice(0, 10);
+    const speakers: Speaker[] = [
+      ...order.map((c) => ({ x: c.x, y: c.y, bubble: c.bubble, tag: TAG[c.slug] })),
+      {
+        x: this.dog.x,
+        y: this.dog.y + 6,
+        bubble: this.dog.bubble ? { ...this.dog.bubble, tone: "plain" as const } : null,
+        tag: dogTag,
+      },
+    ].sort((a, b) => b.y - a.y);
+    for (const sp of speakers) this.drawBubble(ctx, sp, toS, fs, u, font, placed);
   }
 
   private drawBubble(
     ctx: CanvasRenderingContext2D,
-    c: Char,
+    c: Speaker,
     toS: (x: number, y: number) => { x: number; y: number },
     fs: number,
     u: number,
@@ -420,7 +577,7 @@ export class TownWorld {
     const bb = c.bubble;
     if (!bb || bb.until < this.time) return;
     const p = Math.max(1, Math.round(fs / 8));
-    const tag = TAG[c.slug] + ":";
+    const tag = c.tag + ":";
     ctx.font = font(700, fs);
     const tagW = ctx.measureText(tag).width;
     ctx.font = font(500, fs);

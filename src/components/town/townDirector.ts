@@ -13,6 +13,7 @@
 import type { FlowResult, FlowRun } from "@/lib/agents/flow.functions";
 import { BOARD_SPOTS, VISIT, isTownAgent, type TownSlug } from "./townMap";
 import { iconForTool } from "./townArt";
+import { accepted } from "./townTalk";
 import type { CharStatus, TownWorld } from "./townWorld";
 
 export type RunSnapshot = Map<string, { status: string; tools: number }>;
@@ -101,6 +102,8 @@ export type DirectorHooks = {
   commandFinished: (runId: string, ok: boolean) => void;
   /** The newest J.A.R.V.I.S. reply in the chat, for the hand-back bubble. */
   latestReply: () => string | null;
+  /** A finished request's answer, pinned on the board as a note to read. */
+  resultReady: (runId: string, ok: boolean, text: string) => void;
   name: (slug: TownSlug) => string;
 };
 
@@ -159,7 +162,7 @@ export class TownDirector {
           await w.walkTo(parent, VISIT[slug]);
           w.say(parent, e.task, 2400, "mail");
           await w.wait(1200);
-          w.say(slug, "Przyjąłem!", 1100, "check", "ok");
+          w.say(slug, accepted(slug), 1100, "check", "ok");
           await w.wait(600);
           void w.goHome(parent);
         });
@@ -179,8 +182,20 @@ export class TownDirector {
           const text = !e.ok
             ? "Coś poszło nie tak, szczegóły w czacie"
             : (reply ?? "Gotowe, odpowiedź w czacie");
+          h.resultReady(e.run.id, e.ok, text);
           if (w.backlog("jarvis") >= BACKLOG_LIMIT) {
             w.say("jarvis", text, 2800, e.ok ? "check" : "cross", e.ok ? "ok" : "bad");
+            return;
+          }
+          if (w.walkMode) {
+            // you're out walking — he pins the answer on the board for you
+            void w.actor("jarvis", async () => {
+              await w.walkTo("jarvis", VISIT.jarvis);
+              w.face("jarvis", "up");
+              w.say("jarvis", "Wynik czeka na tablicy!", 2600, "pin", e.ok ? "ok" : "bad");
+              await w.wait(1500);
+              await w.goHome("jarvis");
+            });
             return;
           }
           void w.actor("jarvis", async () => {

@@ -113,7 +113,8 @@ export type ObjKind =
   | "mic"
   | "spot"
   | "camera"
-  | "tree";
+  | "tree"
+  | "dogbed";
 export type TownObject = {
   kind: ObjKind;
   tx: number;
@@ -198,6 +199,7 @@ O("chair", 20, 25, 1, 1, false);
 O("coffee", 27, 23);
 O("sofa", 24, 28, 3, 1);
 O("plant", 16, 28);
+O("dogbed", 17, 26, 1, 1, false); // the spaniel's bed (see townDog.ts)
 // Studio
 O("stage", 33, 23, 5, 2, false);
 O("poster", 30, 22, 2, 1, false);

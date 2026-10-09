@@ -158,6 +158,36 @@ export const ICON: Record<string, readonly string[]> = {
     "........",
     "........",
   ],
+  heart: [
+    ".##.##..",
+    "########",
+    "########",
+    ".######.",
+    "..####..",
+    "...##...",
+    "........",
+    "........",
+  ],
+  bone: [
+    "........",
+    "##....##",
+    "########",
+    ".######.",
+    "########",
+    "##....##",
+    "........",
+    "........",
+  ],
+  paw: [
+    "..#.#...",
+    ".#...#..",
+    "........",
+    "..###...",
+    ".#####..",
+    ".#####..",
+    "..###...",
+    "........",
+  ],
   zz: [
     "####....",
     "...#....",
@@ -916,6 +946,20 @@ export function buildStaticLayer(map: TownMap): HTMLCanvasElement {
       R(x + 2, y, 4, 2, "#5d6168");
       outline(x, y + 2, 10, 7);
       R(x + 2, y + 4, 2, 2, "#e05f5f");
+    },
+    dogbed(o) {
+      // the spaniel's cushion: a round basket with a soft pillow
+      const x = o.tx * TS + 1,
+        y = o.ty * TS + 3;
+      R(x + 1, y, 12, 11, "#7a4a2c");
+      R(x, y + 1, 14, 9, "#7a4a2c");
+      R(x + 2, y + 2, 10, 7, "#c45b6a");
+      R(x + 3, y + 3, 8, 4, "#e07f8c");
+      outline(x + 1, y, 12, 11);
+      R(x, y + 1, 1, 9, INK);
+      R(x + 13, y + 1, 1, 9, INK);
+      R(x + 4, y + 8, 2, 1, "#fbf3df");
+      R(x + 8, y + 8, 2, 1, "#fbf3df");
     },
     tree(o) {
       const x = o.tx * TS,
