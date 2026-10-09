@@ -11,7 +11,14 @@
 // diffFlow() is pure (tested); TownDirector applies its events to a world.
 
 import type { FlowResult, FlowRun } from "@/lib/agents/flow.functions";
-import { BOARD_SPOTS, VISIT, isTownAgent, type TownSlug } from "./townMap";
+import {
+  BOARD_SPOTS,
+  MEETING_HEAD,
+  MEETING_SEATS,
+  VISIT,
+  isTownAgent,
+  type TownSlug,
+} from "./townMap";
 import { iconForTool } from "./townArt";
 import { accepted } from "./townTalk";
 import type { CharStatus, TownWorld } from "./townWorld";
@@ -110,9 +117,23 @@ export type DirectorHooks = {
 /** Too many queued errands → skip the walk, keep the bubble. */
 const BACKLOG_LIMIT = 3;
 
+/**
+ * J.A.R.V.I.S. delegates one task at a time (tools run in sequence), so the
+ * first hand-off is a walk to the colleague's room. A second delegation in
+ * the same request turns it into a meeting: everyone involved gathers at the
+ * Core table and stays seated until his run finishes. Pure (tested).
+ */
+export function isMeeting(delegatesSoFar: number) {
+  return delegatesSoFar >= 2;
+}
+
 export class TownDirector {
   private snapshot: RunSnapshot | null = null;
   private boardSlot = 0;
+  /** Parent run id → agents it delegated to, in order. */
+  private delegates = new Map<string, TownSlug[]>();
+  /** Parent run ids whose delegations became a meeting at the table. */
+  private meetings = new Set<string>();
   constructor(
     private world: TownWorld,
     private hooks: DirectorHooks,
@@ -154,12 +175,17 @@ export class TownDirector {
       case "delegated": {
         const parent = e.parent ? this.slugOf(e.parent) : null;
         h.log(slug, `${parent ? h.name(parent) : "Ktoś"} → ${h.name(slug)}: „${e.task}”`);
+        if (parent === "jarvis" && e.parent && this.joinMeeting(e.parent.id, slug, e.task)) return;
         if (!parent || parent === slug || w.backlog(parent) >= BACKLOG_LIMIT) {
           w.say(slug, e.task, 2400, "mail");
           return;
         }
+        // call them back to their desk now, so they're in when we arrive
+        w.recall(slug);
         void w.actor(parent, async () => {
           await w.walkTo(parent, VISIT[slug]);
+          await w.untilHome(slug, 6000);
+          w.faceEachOther(parent, slug);
           w.say(parent, e.task, 2400, "mail");
           await w.wait(1200);
           w.say(slug, accepted(slug), 1100, "check", "ok");
@@ -174,6 +200,7 @@ export class TownDirector {
         return;
       }
       case "finished": {
+        this.endMeeting(e.run.id);
         const msg = e.ok ? "Gotowe" : "Błąd";
         h.log(slug, `${h.name(slug)} ${e.ok ? "skończył" : "zgłasza błąd"}`);
         if (!e.run.parentRunId && slug === "jarvis") {
@@ -224,5 +251,57 @@ export class TownDirector {
         return;
       }
     }
+  }
+
+  /**
+   * Track a delegation; from the second one on, hold it at the Core table.
+   * Returns true when the meeting took care of the hand-off.
+   */
+  private joinMeeting(parentRunId: string, slug: TownSlug, task: string): boolean {
+    const w = this.world;
+    const list = this.delegates.get(parentRunId) ?? [];
+    if (!list.includes(slug)) list.push(slug);
+    this.delegates.set(parentRunId, list);
+    if (!isMeeting(list.length)) return false;
+    const seatOf = (s: TownSlug) => MEETING_SEATS[list.indexOf(s) % MEETING_SEATS.length];
+    if (!this.meetings.has(parentRunId)) {
+      this.meetings.add(parentRunId);
+      this.hooks.log(
+        "jarvis",
+        `Narada w Rdzeniu: ${list.map((s) => this.hooks.name(s)).join(", ")}`,
+      );
+      w.seat("jarvis", MEETING_HEAD, "right");
+      for (const s of list) w.seat(s, seatOf(s), "up");
+      void w.actor("jarvis", async () => {
+        if (!this.meetings.has(parentRunId)) return;
+        await w.goHome("jarvis");
+        w.face("jarvis", "right");
+        w.say("jarvis", "Narada! Zbierzcie się przy stole.", 2400, "mail");
+        await w.wait(1200);
+      });
+    } else w.seat(slug, seatOf(slug), "up");
+    void w.actor("jarvis", async () => {
+      // the request may already be over by the time this errand comes up
+      if (!this.meetings.has(parentRunId)) return;
+      await w.goHome("jarvis");
+      await w.untilHome(slug, 8000);
+      w.faceEachOther("jarvis", slug);
+      w.say("jarvis", task, 2400, "mail");
+      await w.wait(1200);
+      w.say(slug, accepted(slug), 1100, "check", "ok");
+      await w.wait(500);
+      w.face("jarvis", "right");
+      w.face(slug, "up");
+    });
+    return true;
+  }
+
+  /** The delegating run finished: the meeting (if any) breaks up. */
+  private endMeeting(runId: string) {
+    const list = this.delegates.get(runId);
+    if (!list) return;
+    this.delegates.delete(runId);
+    if (!this.meetings.delete(runId)) return;
+    this.world.release(["jarvis", ...list]);
   }
 }

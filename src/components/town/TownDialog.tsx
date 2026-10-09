@@ -150,6 +150,10 @@ export function TownDialog({
   const options = propOptions ?? menuOptions;
 
   const onKey = (e: KeyboardEvent) => {
+    // Keys pressed in the dialog stay in the dialog: otherwise the E that
+    // picks "Odejdź" reaches the map's "E = use" handler right after the
+    // dialog closes and reopens it on the spot.
+    e.stopPropagation();
     if (e.key === "Escape") {
       e.preventDefault();
       if (view.kind === "menu") onClose();

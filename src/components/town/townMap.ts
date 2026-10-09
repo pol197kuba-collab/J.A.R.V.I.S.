@@ -316,6 +316,16 @@ export const BOARD_SPOTS: readonly Tile[] = [
   [26, 16],
 ];
 export const COFFEE_SPOT: Tile = [3, 13];
+/** A meeting at the Core table: J.A.R.V.I.S. at its head, agents along its south side. */
+export const MEETING_HEAD: Tile = [18, 16];
+export const MEETING_SEATS: readonly Tile[] = [
+  [19, 17],
+  [20, 17],
+  [22, 17],
+  [23, 17],
+  [24, 17],
+  [21, 17],
+];
 
 export function roomArea(slug: TownSlug) {
   const r = ROOMS[slug];

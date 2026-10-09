@@ -261,14 +261,18 @@ export function propContent(id: string, d: PropDeps): PropContent {
           { label: "Zakręć", run: (ui) => ui.say(`Palec zatrzymuje się na: ${pick(GLOBE_SPOTS)}`) },
         ],
       };
-    case "whiteboard":
+    case "whiteboard": {
+      const board = () => {
+        const best = readArcadeBest();
+        const record = best ? `\nRekord automatu „Złap buga”: ${best}.` : "";
+        return dailyStats(d.runs, Date.now(), d.name) + record;
+      };
       return {
         ...base,
-        line: dailyStats(d.runs, Date.now(), d.name),
-        options: [
-          { label: "Odśwież", run: (ui) => ui.say(dailyStats(d.runs, Date.now(), d.name)) },
-        ],
+        line: board(),
+        options: [{ label: "Odśwież", run: (ui) => ui.say(board()) }],
       };
+    }
     default:
       return { ...base, line: "Nic tu nie ma.", options: [] };
   }

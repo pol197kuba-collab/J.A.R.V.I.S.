@@ -2021,6 +2021,29 @@ stół do ping-ponga (aport), globus, tablica wyników w Laboratorium
 (`TownArcade.tsx`, mini-gra na refleks z rekordem w localStorage). Okno
 dialogowe ustawia się w tej połowie mapy, w której Cię nie ma.
 
+### Follow-up (2026-10-09): agenci „na dyżurze”, spokojniejszy idle
+
+Gdy trwa jakiekolwiek zadanie, wolni agenci wracają do biurek i tam czekają
+(`townIdle.ts`, czyste i testowane), a przy delegacji adresat jest
+dodatkowo wołany do biurka i J.A.R.V.I.S. czeka na niego (do 6 s), zanim
+przekaże zadanie — nikt już nie przekazuje zadania pustemu pokojowi. Gdy
+w biurze cisza: decyzja co 9–18 s, ~62% zostaje przy biurku (rozgląda się),
+~30% krótki spacer po własnym pokoju z powrotem, ~8% kawa. Rekord automatu
+„Złap buga” widać na tablicy wyników. Poprawka: E na „Odejdź” w oknie
+dialogowym nie otwiera go od razu ponownie.
+
+### Follow-up (2026-10-09): „!” nad Twoją postacią + dzwonek, narady
+
+Gdy na tablicy czeka nieprzeczytany wynik, „!” świeci też nad Twoją
+postacią, a wynik trafia do dzwonka (`townResult.functions.ts`: cichy
+meldunek `town_result`, jeden na przebieg; odczytanie kartki na tablicy
+oznacza go jako przeczytany). Narada: J.A.R.V.I.S. deleguje po kolei
+(narzędzia wykonują się sekwencyjnie), więc pierwsza delegacja to spacer do
+pokoju, a od drugiej w tym samym poleceniu wszyscy zaangażowani siadają
+przy stole w Rdzeniu (`MEETING_HEAD` / `MEETING_SEATS`), J.A.R.V.I.S. na
+szczycie przekazuje im zadania i narada trwa, aż jego przebieg się
+skończy — wtedy wszyscy wracają do biurek.
+
 ### Propozycje kolejnych poleceń i interakcji (do wyboru i priorytetu)
 
 1. **Przeciągnij kartkę do pokoju** — zadanie upuszczone na pokój agenta
