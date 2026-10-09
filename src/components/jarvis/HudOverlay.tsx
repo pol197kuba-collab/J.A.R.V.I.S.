@@ -12,10 +12,10 @@ import { listSystemEvents, type SystemEvent } from "@/lib/system/events.function
 // the satellite as the camera orbits; this layer only holds chrome that's
 // fixed to the viewport.
 const LEVEL_COLOR: Record<SystemEvent["level"], string> = {
-  info: "#4dd8ff",
-  debug: "#8892a6",
-  warn: "#f5b942",
-  error: "#ff4d4d",
+  info: "var(--primary)",
+  debug: "var(--muted-foreground)",
+  warn: "var(--warning)",
+  error: "var(--destructive)",
 };
 
 function formatSource(source: string): string {
@@ -50,7 +50,7 @@ export function HudOverlay({
       {/* Title bar */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="font-display text-base font-bold uppercase tracking-[0.3em] text-cyan-300/90 [text-shadow:0_0_16px_rgba(77,216,255,0.6)] sm:text-lg">
+          <p className="font-display text-base font-bold uppercase tracking-[0.3em] text-primary/90 [text-shadow:0_0_16px_color-mix(in_oklab,var(--primary)_60%,transparent)] sm:text-lg">
             J.A.R.V.I.S. // STARK AGENT MATRIX
           </p>
           <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-white/40">
@@ -61,17 +61,17 @@ export function HudOverlay({
 
       {/* Right log panel — collapsed to a button by default, see `open` above. */}
       {open ? (
-        <div className="pointer-events-auto absolute right-4 top-16 flex max-h-[50%] w-[220px] flex-col overflow-hidden rounded-lg border border-cyan-400/25 bg-black/60 shadow-[0_0_30px_-10px_rgba(77,216,255,0.5)] backdrop-blur-md sm:right-6 sm:top-20 sm:w-[260px]">
-          <div className="flex shrink-0 items-center gap-1.5 border-b border-cyan-400/20 px-3 py-2">
-            <Activity className="h-3 w-3 text-cyan-300" strokeWidth={1.5} />
-            <span className="min-w-0 flex-1 truncate font-display text-[9px] uppercase tracking-[0.25em] text-cyan-300/90">
+        <div className="pointer-events-auto absolute right-4 top-16 flex max-h-[50%] w-[220px] flex-col overflow-hidden rounded-lg border border-primary/25 bg-black/60 shadow-[0_0_30px_-10px_color-mix(in_oklab,var(--primary)_50%,transparent)] backdrop-blur-md sm:right-6 sm:top-20 sm:w-[260px]">
+          <div className="flex shrink-0 items-center gap-1.5 border-b border-primary/20 px-3 py-2">
+            <Activity className="h-3 w-3 text-primary" strokeWidth={1.5} />
+            <span className="min-w-0 flex-1 truncate font-display text-[9px] uppercase tracking-[0.25em] text-primary/90">
               Recent Network Assignments
             </span>
             <button
               type="button"
               onClick={() => setOpen(false)}
               aria-label="Close network log"
-              className="shrink-0 text-cyan-300/60 hover:text-cyan-300"
+              className="shrink-0 text-primary/60 hover:text-primary"
             >
               <X className="h-3 w-3" strokeWidth={1.75} />
             </button>
@@ -104,22 +104,22 @@ export function HudOverlay({
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Open network log"
-          className="pointer-events-auto absolute right-4 top-16 flex items-center gap-1.5 rounded-lg border border-cyan-400/25 bg-black/60 px-2.5 py-1.5 shadow-[0_0_30px_-10px_rgba(77,216,255,0.5)] backdrop-blur-md transition hover:border-cyan-400/50 sm:right-6 sm:top-20"
+          className="pointer-events-auto absolute right-4 top-16 flex items-center gap-1.5 rounded-lg border border-primary/25 bg-black/60 px-2.5 py-1.5 shadow-[0_0_30px_-10px_color-mix(in_oklab,var(--primary)_50%,transparent)] backdrop-blur-md transition hover:border-primary/50 sm:right-6 sm:top-20"
         >
-          <Activity className="h-3 w-3 text-cyan-300" strokeWidth={1.5} />
-          <span className="font-display text-[9px] uppercase tracking-[0.25em] text-cyan-300/90">
+          <Activity className="h-3 w-3 text-primary" strokeWidth={1.5} />
+          <span className="font-display text-[9px] uppercase tracking-[0.25em] text-primary/90">
             Network ({events.length})
           </span>
         </button>
       )}
 
       {/* Bottom status bar */}
-      <div className="pointer-events-auto mt-auto flex flex-wrap items-center justify-between gap-2 rounded-lg border border-cyan-400/15 bg-black/40 px-4 py-2 backdrop-blur-sm">
+      <div className="pointer-events-auto mt-auto flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/15 bg-black/40 px-4 py-2 backdrop-blur-sm">
         <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-white/40">
           drag to orbit · scroll to zoom · click a node for details
         </span>
-        <span className="flex items-center gap-1.5 font-display text-[9px] uppercase tracking-[0.25em] text-cyan-300/90">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300 shadow-[0_0_6px_#4dd8ff]" />
+        <span className="flex items-center gap-1.5 font-display text-[9px] uppercase tracking-[0.25em] text-primary/90">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary shadow-[0_0_6px_var(--primary)]" />
           matrix live
         </span>
       </div>

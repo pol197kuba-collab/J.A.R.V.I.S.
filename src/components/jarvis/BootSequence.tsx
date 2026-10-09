@@ -100,7 +100,7 @@ export function BootSequence({
         <div className="pointer-events-none absolute left-1/2 top-6 z-20 -translate-x-1/2 text-center animate-fade-up">
           <p
             className="font-display text-[11px] uppercase tracking-[0.5em] text-primary md:text-sm"
-            style={{ textShadow: "0 0 12px oklch(0.82 0.17 215 / 0.8)" }}
+            style={{ textShadow: "0 0 12px color-mix(in oklab, var(--primary) 80%, transparent)" }}
           >
             ACCESS GRANTED. WELCOME BACK, MR. JACOB SLAWINSKY.
           </p>
@@ -119,7 +119,7 @@ export function BootSequence({
                 style={{
                   top: `${(i + 1) * 5}%`,
                   background:
-                    "linear-gradient(90deg, transparent, oklch(0.82 0.17 215 / 0.7) 50%, transparent)",
+                    "linear-gradient(90deg, transparent, color-mix(in oklab, var(--primary) 70%, transparent) 50%, transparent)",
                   animation: `line-trace 1.4s ease-out ${i * 0.08}s both`,
                   transform: "scaleX(0)",
                   transformOrigin: i % 2 === 0 ? "left" : "right",
@@ -206,7 +206,9 @@ export function BootSequence({
           <div className="relative z-10 text-center">
             <h1
               className="font-display text-5xl font-bold tracking-[0.3em] text-foreground md:text-6xl"
-              style={{ textShadow: "0 0 24px oklch(0.82 0.17 215 / 0.7)" }}
+              style={{
+                textShadow: "0 0 24px color-mix(in oklab, var(--primary) 70%, transparent)",
+              }}
             >
               {JARVIS.slice(0, typed)}
               <span className="ml-1 inline-block h-[1em] w-[2px] translate-y-[0.15em] animate-blink bg-primary" />

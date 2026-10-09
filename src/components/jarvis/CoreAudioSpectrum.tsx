@@ -1,5 +1,9 @@
 import { useEffect, useRef } from "react";
 import { acquireMic, releaseMic } from "@/lib/audio/micShared";
+import { hexWithAlpha, useThemeColors } from "@/lib/theme/themeColor";
+
+const SPECTRUM_COLORS = { bar: "color-mix(in oklab, var(--primary) 85%, white)" } as const;
+const SPECTRUM_FALLBACKS = { bar: "#7ee7ff" };
 
 /**
  * Radial frequency-spectrum visualizer rendered on a single canvas.
@@ -8,6 +12,7 @@ import { acquireMic, releaseMic } from "@/lib/audio/micShared";
  */
 export function CoreAudioSpectrum({ active }: { active: boolean }) {
   const ref = useRef<HTMLCanvasElement | null>(null);
+  const { bar } = useThemeColors(SPECTRUM_COLORS, SPECTRUM_FALLBACKS);
 
   useEffect(() => {
     const cvs = ref.current;
@@ -74,9 +79,9 @@ export function CoreAudioSpectrum({ active }: { active: boolean }) {
         const x2 = cx + Math.cos(a) * (baseR + len);
         const y2 = cy + Math.sin(a) * (baseR + len);
         const alpha = 0.45 + v * 0.55;
-        ctx.strokeStyle = `oklch(0.88 0.17 200 / ${alpha.toFixed(3)})`;
+        ctx.strokeStyle = hexWithAlpha(bar, Number(alpha.toFixed(3)));
         ctx.lineWidth = Math.max(1, dpr * 1.6);
-        ctx.shadowColor = "oklch(0.88 0.17 200 / 0.9)";
+        ctx.shadowColor = hexWithAlpha(bar, 0.9);
         ctx.shadowBlur = 6 * dpr * (0.4 + v);
         ctx.beginPath();
         ctx.moveTo(x1, y1);
@@ -93,7 +98,7 @@ export function CoreAudioSpectrum({ active }: { active: boolean }) {
       ro.disconnect();
       if (acquired) releaseMic();
     };
-  }, [active]);
+  }, [active, bar]);
 
   return (
     <canvas

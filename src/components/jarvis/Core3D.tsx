@@ -3,14 +3,19 @@ import { useFrame } from "@react-three/fiber";
 import { MeshDistortMaterial } from "@react-three/drei";
 import type { Mesh, PointLight } from "three";
 import { MATRIX_SCALE } from "./matrixScale";
+import { useThemeColors } from "@/lib/theme/themeColor";
 
 // Central J.A.R.V.I.S. reactor core — a molten, distorting sphere (drei's
 // MeshDistortMaterial extends MeshPhysicalMaterial, so emissive/roughness/
 // metalness all apply on top of the animated surface noise) wrapped in
 // three independently-tumbling rings, Stark-reactor style.
-const CORE_BASE_COLOR = "#3a1400";
-const CORE_EMISSIVE = "#ffaa00";
-const RING_ACCENT = "#00f0ff";
+// Colors come from the theme tokens (resolved to hex for three.js).
+const CORE_COLORS = {
+  base: "color-mix(in oklab, var(--reactor) 22%, black)",
+  emissive: "var(--reactor)",
+  ring: "var(--primary)",
+} as const;
+const CORE_FALLBACKS = { base: "#3a1400", emissive: "#ffaa00", ring: "#00f0ff" };
 
 export function Core3D({ pulse = 0 }: { pulse?: number }) {
   const coreRef = useRef<Mesh>(null);
@@ -18,6 +23,7 @@ export function Core3D({ pulse = 0 }: { pulse?: number }) {
   const ringB = useRef<Mesh>(null);
   const ringC = useRef<Mesh>(null);
   const lightRef = useRef<PointLight>(null);
+  const colors = useThemeColors(CORE_COLORS, CORE_FALLBACKS);
 
   useFrame((state, delta) => {
     const t = state.clock.elapsedTime;
@@ -38,7 +44,7 @@ export function Core3D({ pulse = 0 }: { pulse?: number }) {
     <group>
       <pointLight
         ref={lightRef}
-        color={CORE_EMISSIVE}
+        color={colors.emissive}
         intensity={6}
         distance={14 * MATRIX_SCALE}
         decay={2}
@@ -47,8 +53,8 @@ export function Core3D({ pulse = 0 }: { pulse?: number }) {
       <mesh ref={coreRef}>
         <sphereGeometry args={[MATRIX_SCALE, 96, 96]} />
         <MeshDistortMaterial
-          color={CORE_BASE_COLOR}
-          emissive={CORE_EMISSIVE}
+          color={colors.base}
+          emissive={colors.emissive}
           emissiveIntensity={3}
           roughness={0.15}
           metalness={0.7}
@@ -59,15 +65,15 @@ export function Core3D({ pulse = 0 }: { pulse?: number }) {
 
       <mesh ref={ringA} rotation={[Math.PI / 2.3, 0, 0]}>
         <torusGeometry args={[1.55 * MATRIX_SCALE, 0.012, 8, 128]} />
-        <meshBasicMaterial color={CORE_EMISSIVE} transparent opacity={0.55} />
+        <meshBasicMaterial color={colors.emissive} transparent opacity={0.55} />
       </mesh>
       <mesh ref={ringB} rotation={[Math.PI / 3.1, Math.PI / 5, 0]}>
         <torusGeometry args={[1.85 * MATRIX_SCALE, 0.008, 8, 128]} />
-        <meshBasicMaterial color={RING_ACCENT} transparent opacity={0.4} />
+        <meshBasicMaterial color={colors.ring} transparent opacity={0.4} />
       </mesh>
       <mesh ref={ringC} rotation={[0, Math.PI / 2.4, Math.PI / 6]}>
         <torusGeometry args={[2.1 * MATRIX_SCALE, 0.006, 8, 128]} />
-        <meshBasicMaterial color={CORE_EMISSIVE} transparent opacity={0.3} />
+        <meshBasicMaterial color={colors.emissive} transparent opacity={0.3} />
       </mesh>
     </group>
   );

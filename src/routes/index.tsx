@@ -47,7 +47,7 @@ function Index() {
           className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full opacity-60 blur-3xl"
           style={{
             background:
-              "radial-gradient(circle at center, oklch(0.85 0.18 210 / 0.35), transparent 70%)",
+              "radial-gradient(circle at center, color-mix(in oklab, var(--primary) 35%, transparent), transparent 70%)",
           }}
         />
         <div className="relative flex flex-wrap items-start justify-between gap-8 @max-[420px]:gap-4">

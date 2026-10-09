@@ -70,7 +70,7 @@ export function HeaderVoiceToggle() {
       className={cn(
         "group relative flex h-8 items-center gap-2 rounded-full border px-3 font-display uppercase transition landscape:max-md:h-6 landscape:max-md:gap-1 landscape:max-md:px-2 short:h-6 short:gap-1 short:px-2",
         active
-          ? "border-primary bg-primary/10 text-primary shadow-[0_0_14px_rgba(56,189,248,0.55),inset_0_0_10px_rgba(56,189,248,0.25)]"
+          ? "border-primary bg-primary/10 text-primary shadow-[0_0_14px_color-mix(in_oklab,var(--primary)_55%,transparent),inset_0_0_10px_color-mix(in_oklab,var(--primary)_25%,transparent)]"
           : "border-primary/40 bg-primary/5 text-muted-foreground hover:text-primary hover:border-primary/70",
         !supported && "cursor-not-allowed opacity-40",
       )}

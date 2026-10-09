@@ -17,10 +17,10 @@ export function RebootButton() {
       aria-label="Reboot system"
       className="font-display group relative flex items-center gap-1.5 border px-2 py-1 text-[10px] uppercase tracking-[0.3em] transition disabled:cursor-not-allowed disabled:opacity-50 portrait:h-6 portrait:w-6 portrait:justify-center portrait:px-0 portrait:py-0 landscape:max-md:px-1.5 landscape:max-md:py-0.5 landscape:max-md:text-[8px] landscape:max-md:tracking-[0.2em] short:px-1.5 short:py-0.5 short:text-[8px] short:tracking-[0.2em]"
       style={{
-        color: "oklch(0.92 0.18 70)",
-        borderColor: "oklch(0.85 0.2 65 / 0.6)",
-        backgroundColor: "oklch(0.85 0.2 65 / 0.08)",
-        boxShadow: "0 0 12px oklch(0.85 0.2 65 / 0.4)",
+        color: "var(--reactor-hot)",
+        borderColor: "color-mix(in oklab, var(--reactor) 60%, transparent)",
+        backgroundColor: "color-mix(in oklab, var(--reactor) 8%, transparent)",
+        boxShadow: "0 0 12px color-mix(in oklab, var(--reactor) 40%, transparent)",
       }}
     >
       <Zap

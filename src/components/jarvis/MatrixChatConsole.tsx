@@ -110,10 +110,10 @@ export function MatrixChatConsole() {
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
       {/* Channel header */}
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-cyan-400/20 bg-gradient-to-r from-cyan-400/[0.07] to-transparent px-4 py-2">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-primary/20 bg-gradient-to-r from-primary/[0.07] to-transparent px-4 py-2">
         <div className="flex items-center gap-2">
-          <Radio className="h-3 w-3 text-cyan-300" strokeWidth={1.5} />
-          <span className="font-display text-[9px] uppercase tracking-[0.28em] text-cyan-300/90 [text-shadow:0_0_12px_rgba(77,216,255,0.5)]">
+          <Radio className="h-3 w-3 text-primary" strokeWidth={1.5} />
+          <span className="font-display text-[9px] uppercase tracking-[0.28em] text-primary/90 [text-shadow:0_0_12px_color-mix(in_oklab,var(--primary)_50%,transparent)]">
             Direct Channel // {activeAgent.name.toUpperCase()}
           </span>
         </div>
@@ -121,7 +121,7 @@ export function MatrixChatConsole() {
           <span
             className={cn(
               "font-mono text-[8px] uppercase tracking-[0.2em]",
-              typing ? "text-cyan-200" : "text-white/35",
+              typing ? "text-primary" : "text-white/35",
             )}
           >
             {typing ? "link · active" : "link · idle"}
@@ -165,7 +165,7 @@ export function MatrixChatConsole() {
               key={m.id}
               className={cn(
                 "grid grid-cols-[52px_1fr] gap-2 border-l-2 pl-2",
-                jarvis ? "border-cyan-400/70" : "border-white/25",
+                jarvis ? "border-primary/70" : "border-white/25",
               )}
             >
               <span className="pt-[3px] font-mono text-[8px] leading-none text-white/35">
@@ -175,7 +175,7 @@ export function MatrixChatConsole() {
                 <p
                   className={cn(
                     "font-display text-[8px] uppercase tracking-[0.28em]",
-                    jarvis ? "text-cyan-300/90" : "text-white/45",
+                    jarvis ? "text-primary/90" : "text-white/45",
                   )}
                 >
                   {jarvis ? (m.agentName ?? "J.A.R.V.I.S.").toUpperCase() : "OPERATOR"}
@@ -183,7 +183,7 @@ export function MatrixChatConsole() {
                 <p
                   className={cn(
                     "mt-0.5 whitespace-pre-wrap break-words font-mono text-[11px] leading-snug",
-                    jarvis ? "text-cyan-50/90" : "text-white/70",
+                    jarvis ? "text-foreground/90" : "text-white/70",
                   )}
                 >
                   {m.text}
@@ -195,22 +195,22 @@ export function MatrixChatConsole() {
 
         {/* HUD processing indicator — scanning bar, not a spinner */}
         {typing ? (
-          <div className="grid grid-cols-[52px_1fr] gap-2 border-l-2 border-cyan-400/70 pl-2">
+          <div className="grid grid-cols-[52px_1fr] gap-2 border-l-2 border-primary/70 pl-2">
             <span className="pt-[3px] font-mono text-[8px] leading-none text-white/35">
               {nowStamp()}
             </span>
             <div>
-              <p className="font-display text-[8px] uppercase tracking-[0.28em] text-cyan-300/90">
+              <p className="font-display text-[8px] uppercase tracking-[0.28em] text-primary/90">
                 decrypting response
               </p>
-              <div className="mt-1.5 h-[3px] w-full overflow-hidden rounded-full bg-cyan-400/10">
-                <div className="h-full w-1/3 animate-[hud-scan_1.4s_ease-in-out_infinite] rounded-full bg-cyan-300/80 shadow-[0_0_10px_rgba(77,216,255,0.8)]" />
+              <div className="mt-1.5 h-[3px] w-full overflow-hidden rounded-full bg-primary/10">
+                <div className="h-full w-1/3 animate-[hud-scan_1.4s_ease-in-out_infinite] rounded-full bg-primary/80 shadow-[0_0_10px_color-mix(in_oklab,var(--primary)_80%,transparent)]" />
               </div>
               <div className="mt-1 flex gap-1">
                 {Array.from({ length: 12 }).map((_, i) => (
                   <span
                     key={i}
-                    className="h-2 w-[3px] origin-bottom bg-cyan-300/60"
+                    className="h-2 w-[3px] origin-bottom bg-primary/60"
                     style={{
                       animation: `wave-bar ${0.5 + (i % 4) * 0.12}s ease-in-out ${i * 0.05}s infinite`,
                     }}
@@ -223,9 +223,9 @@ export function MatrixChatConsole() {
       </div>
 
       {/* Command bar */}
-      <div className="shrink-0 border-t border-cyan-400/20 bg-black/40 px-3 py-2.5">
-        <div className="flex items-center gap-2 rounded-md border border-cyan-400/25 bg-black/50 px-2 py-1.5 shadow-[0_0_24px_-12px_rgba(77,216,255,0.7)] focus-within:border-cyan-300/60">
-          <span className="font-mono text-[11px] text-cyan-300/70">&gt;</span>
+      <div className="shrink-0 border-t border-primary/20 bg-black/40 px-3 py-2.5">
+        <div className="flex items-center gap-2 rounded-md border border-primary/25 bg-black/50 px-2 py-1.5 shadow-[0_0_24px_-12px_color-mix(in_oklab,var(--primary)_70%,transparent)] focus-within:border-primary/60">
+          <span className="font-mono text-[11px] text-primary/70">&gt;</span>
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -236,7 +236,7 @@ export function MatrixChatConsole() {
               }
             }}
             placeholder="wpisz komendę dla J.A.R.V.I.S.…"
-            className="min-w-0 flex-1 bg-transparent font-mono text-[11px] text-cyan-50 placeholder:text-white/25 focus:outline-none"
+            className="min-w-0 flex-1 bg-transparent font-mono text-[11px] text-foreground placeholder:text-white/25 focus:outline-none"
           />
           <button
             type="button"
@@ -246,8 +246,8 @@ export function MatrixChatConsole() {
             className={cn(
               "flex h-7 w-7 items-center justify-center rounded-md border transition-colors",
               capturing
-                ? "border-cyan-300 bg-cyan-400/20 text-cyan-200 shadow-[0_0_14px_rgba(77,216,255,0.6)]"
-                : "border-cyan-400/25 text-cyan-300/70 hover:bg-cyan-400/10",
+                ? "border-primary bg-primary/20 text-primary shadow-[0_0_14px_color-mix(in_oklab,var(--primary)_60%,transparent)]"
+                : "border-primary/25 text-primary/70 hover:bg-primary/10",
               !micSupported && "opacity-40",
             )}
           >
@@ -261,7 +261,7 @@ export function MatrixChatConsole() {
             type="button"
             onClick={handleSend}
             aria-label="Wyślij"
-            className="flex h-7 items-center gap-1.5 rounded-md border border-cyan-400/40 bg-cyan-400/15 px-2.5 font-display text-[8px] uppercase tracking-[0.22em] text-cyan-200 transition-colors hover:bg-cyan-400/25"
+            className="flex h-7 items-center gap-1.5 rounded-md border border-primary/40 bg-primary/15 px-2.5 font-display text-[8px] uppercase tracking-[0.22em] text-primary transition-colors hover:bg-primary/25"
           >
             <SendHorizonal className="h-3 w-3" strokeWidth={1.5} />
             send

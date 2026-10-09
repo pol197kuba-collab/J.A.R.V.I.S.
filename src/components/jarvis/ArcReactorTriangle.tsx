@@ -22,10 +22,22 @@ export function ArcReactorTriangle({
       >
         <defs>
           <radialGradient id="arc-core" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="oklch(0.98 0.05 215)" stopOpacity="1" />
-            <stop offset="35%" stopColor="oklch(0.85 0.18 215)" stopOpacity="0.95" />
-            <stop offset="70%" stopColor="oklch(0.6 0.2 230)" stopOpacity="0.5" />
-            <stop offset="100%" stopColor="oklch(0.3 0.1 240)" stopOpacity="0" />
+            <stop
+              offset="0%"
+              style={{ stopColor: "color-mix(in oklab, var(--primary) 12%, white)" }}
+              stopOpacity="1"
+            />
+            <stop offset="35%" style={{ stopColor: "var(--primary)" }} stopOpacity="0.95" />
+            <stop
+              offset="70%"
+              style={{ stopColor: "color-mix(in oklab, var(--primary) 70%, black)" }}
+              stopOpacity="0.5"
+            />
+            <stop
+              offset="100%"
+              style={{ stopColor: "color-mix(in oklab, var(--primary) 35%, black)" }}
+              stopOpacity="0"
+            />
           </radialGradient>
         </defs>
         <circle
@@ -65,7 +77,12 @@ export function ArcReactorTriangle({
             </g>
           ))}
         </g>
-        <circle cx="100" cy="100" r="14" fill="oklch(0.98 0.04 215)" />
+        <circle
+          cx="100"
+          cy="100"
+          r="14"
+          style={{ fill: "color-mix(in oklab, var(--primary) 10%, white)" }}
+        />
         <circle cx="100" cy="100" r="6" fill="white" />
       </svg>
     </div>

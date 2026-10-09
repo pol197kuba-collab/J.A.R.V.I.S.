@@ -65,6 +65,36 @@ scroll to it. If a route genuinely needs a fixed, non-scrolling viewport
 definite height (e.g. `h-[100dvh]`) and `overflow-hidden`, matching the
 `/jarvis` pattern — never rely on `<main>` clipping for you.
 
+## Colors & themes: tokens only
+
+All colors come from theme tokens in `src/styles.css`, so a new color theme
+is one CSS block, not a hunt through components:
+
+- **Source tokens** live only in the `:root, [data-theme="jarvis"]` block
+  (`--background`, `--base-*`, `--primary`, `--accent`, `--reactor`,
+  `--reactor-hot`, `--success`, `--warning`, `--destructive`, text colors).
+  A new theme = copy that block as `[data-theme="<name>"]` with new values,
+  applied on `<html>`.
+- **Derived tokens** (borders, glows, grids, `--surface-*`, chrome, sidebar,
+  `--chart-1..5`) are computed from the source tokens with `var()` /
+  `color-mix()` — never write a literal hue there.
+- In components use Tailwind token classes (`text-primary`,
+  `border-primary/25`, `bg-background`, `text-reactor`, `text-warning`) or
+  `var(--token)` / `color-mix(in oklab, var(--primary) 40%, transparent)` in
+  arbitrary values and inline styles. **Never** a literal color (`#4dd8ff`,
+  `oklch(...)`, `rgba(...)`) or a Tailwind palette class (`text-cyan-300`,
+  `bg-amber-400`).
+- SVG gradient stops/fills: set via `style={{ stopColor: "var(--primary)" }}`
+  (CSS vars don't resolve in presentation attributes).
+- three.js / `<canvas>` can't read CSS vars: use `useThemeColors` /
+  `resolveCssColor` from `src/lib/theme/themeColor.ts`.
+- Allowed exceptions: neutral black/white shading (shadows, vignettes,
+  masks) and the fixed categorical palettes whose color _means_ a
+  series/agent (`--fuel-*`, `--market-*`, per-agent sigil hues).
+- Don't reintroduce a `.dark { ... }` palette block: `<html>` has
+  `class="dark"` for shadcn's `dark:` variants, and such a block silently
+  overrides the whole JARVIS palette (that bug shipped once).
+
 ## Design skills: project rules win
 
 `.claude/skills/` holds third-party design skills (`design-taste-frontend`,

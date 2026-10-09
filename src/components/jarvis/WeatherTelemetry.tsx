@@ -248,7 +248,7 @@ function WeatherRadar() {
           className="absolute left-1/2 top-1/2 h-1/2 w-1/2 origin-top-left"
           style={{
             background:
-              "conic-gradient(from 0deg, oklch(0.78 0.18 160 / 0.55), oklch(0.78 0.18 160 / 0) 80deg)",
+              "conic-gradient(from 0deg, color-mix(in oklab, var(--success) 55%, transparent), transparent 80deg)",
           }}
         />
       </div>

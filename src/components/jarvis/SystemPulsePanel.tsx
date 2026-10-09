@@ -150,7 +150,9 @@ function AgentRow({
   active: boolean;
   onClick: () => void;
 }) {
-  const color = agent.isEnabled ? (STATUS_COLOR[agent.status] ?? STATUS_COLOR.idle) : "#4b5563";
+  const color = agent.isEnabled
+    ? (STATUS_COLOR[agent.status] ?? STATUS_COLOR.idle)
+    : "color-mix(in oklab, var(--muted-foreground) 45%, var(--background))";
   return (
     <button
       type="button"
