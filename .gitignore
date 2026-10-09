@@ -34,3 +34,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Playwright smoke test output
+/test-results/
+/playwright-report/

@@ -124,6 +124,18 @@ Walk mode never changes the zoom: the floor stays fully in view and zooming
 is the user's choice only. New agents need a room, a look and a
 home/visit spot there to appear on the map.
 
+## Testing
+
+- `npm test` (Vitest, `src/**/*.test.ts`) — pure logic; CI runs it with
+  lint and typecheck.
+- `npm run test:e2e` (Playwright, `e2e/smoke.spec.ts`) — every screen in HUD
+  and Town mode on desktop and phone against a dummy backend; fails on
+  uncaught errors, sideways scroll and visible native scrollbars. CI runs it
+  as "screens smoke". **Adding a page → add its path to `ROUTES` there.**
+  How to run it here and how to script ad-hoc checks: `.claude/skills/smoke-test/`.
+- Neither covers real agent runs, LLM calls or DB writes — say so rather
+  than implying they were tested.
+
 ## Design skills: project rules win
 
 `.claude/skills/` holds third-party design skills (`design-taste-frontend`,

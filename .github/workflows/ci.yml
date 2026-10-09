@@ -32,3 +32,37 @@ jobs:
 
       - name: Test
         run: npm test
+
+  screens:
+    name: screens smoke (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # Every screen in HUD and Town mode, desktop and phone, against a dummy
+      # backend: fails on uncaught errors, sideways page scroll and visible
+      # native scrollbars. See playwright.config.ts.
+      - name: Smoke test all screens
+        run: npm run test:e2e
+
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
