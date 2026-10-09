@@ -78,6 +78,11 @@ export function VisionScanner() {
   // Voice-command bridge: scan queued before the camera finished booting.
   const wantScanRef = useRef(false);
 
+  // A camera request can still be pending when the page is left (or the tab
+  // is hidden): a stream granted after that is stopped right away instead of
+  // being kept by an unmounted component with the camera light on.
+  const aliveRef = useRef(true);
+
   const stopStream = useCallback(() => {
     const s = streamRef.current;
     if (s) s.getTracks().forEach((t) => t.stop());
@@ -119,6 +124,10 @@ export function VisionScanner() {
       };
       try {
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (!aliveRef.current || document.visibilityState === "hidden") {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
         streamRef.current = stream;
         const video = videoRef.current;
         if (video) {
@@ -194,8 +203,10 @@ export function VisionScanner() {
 
   // Initial mount
   useEffect(() => {
+    aliveRef.current = true;
     void start({ facingMode: "environment" });
     return () => {
+      aliveRef.current = false;
       stopStream();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -797,7 +808,7 @@ export function VisionScanner() {
                     </button>
                   </span>
                 </div>
-                <p className="max-h-28 min-w-0 overflow-y-auto whitespace-normal break-words px-3 py-2 font-mono text-[11px] leading-snug text-foreground/90 landscape:max-md:max-h-16 landscape:max-md:text-[9px] short:max-h-16 short:text-[9px]">
+                <p className="no-scrollbar max-h-28 min-w-0 overflow-y-auto overflow-x-hidden whitespace-normal break-words px-3 py-2 font-mono text-[11px] leading-snug text-foreground/90 landscape:max-md:max-h-16 landscape:max-md:text-[9px] short:max-h-16 short:text-[9px]">
                   {analysis.text}
                 </p>
               </div>

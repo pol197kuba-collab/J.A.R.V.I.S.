@@ -82,7 +82,7 @@ export function CockpitHero() {
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-4 @[480px]:grid-cols-2 @[860px]:grid-cols-3">
-          <div>
+          <div className="min-w-0">
             <ColumnLabel icon={AlertTriangle}>
               Zaległe {cockpit.overdueTasks.length > 0 && `(${cockpit.overdueTasks.length})`}
             </ColumnLabel>
@@ -97,7 +97,7 @@ export function CockpitHero() {
             )}
           </div>
 
-          <div>
+          <div className="min-w-0">
             <ColumnLabel icon={Clock}>Najbliższe zadania</ColumnLabel>
             {cockpit.upcomingTasks.length === 0 ? (
               <p className="font-mono text-[11px] text-muted-foreground/60">brak otwartych zadań</p>
@@ -110,7 +110,7 @@ export function CockpitHero() {
             )}
           </div>
 
-          <div>
+          <div className="min-w-0">
             <ColumnLabel icon={FileDown}>Ostatnie pliki</ColumnLabel>
             {cockpit.recentFiles.length === 0 ? (
               <p className="font-mono text-[11px] text-muted-foreground/60">

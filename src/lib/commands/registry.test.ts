@@ -61,3 +61,21 @@ describe("COMMAND_REGISTRY", () => {
     });
   });
 });
+
+describe("katalog komend mówi prawdę", () => {
+  it("każda przykładowa fraza uruchamia właśnie swoją komendę", () => {
+    const bad: string[] = [];
+    for (const c of COMMAND_REGISTRY)
+      for (const p of c.phrases) {
+        const hit = COMMAND_REGISTRY.find((d) => d.pattern.test(p));
+        if (hit?.id !== c.id) bad.push(`${c.id}: "${p}" → ${hit?.id ?? "nic"}`);
+      }
+    expect(bad).toEqual([]);
+  });
+
+  it("łapie frazy kończące się polską literą", () => {
+    expect(firstMatch("Jarvis, pokaż wizję")).toBe("open_vision");
+    expect(firstMatch("otwórz mapę")).toBe("open_telemetry");
+    expect(firstMatch("lista zadań")).toBe("open_tasks");
+  });
+});

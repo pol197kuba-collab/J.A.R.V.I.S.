@@ -91,7 +91,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
   const title = mode === "forgot" ? "RECOVER CIPHER" : "SECURE LOGIN";
 
   return (
-    <div className="fixed inset-0 z-[100] flex h-[100dvh] w-full items-center justify-center overflow-y-auto bg-black text-primary">
+    <div className="fixed inset-0 z-[100] flex h-[100dvh] w-full items-center justify-center no-scrollbar overflow-y-auto overflow-x-hidden bg-black text-primary">
       <div
         className="animate-grid-pan pointer-events-none absolute inset-0 opacity-30"
         style={{ backgroundImage: "var(--grid-bg)", backgroundSize: "40px 40px" }}

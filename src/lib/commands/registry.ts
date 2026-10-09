@@ -65,7 +65,7 @@ export const COMMAND_REGISTRY = [
     category: "Navigation",
     kind: { type: "route", path: "/jarvis" },
     pattern:
-      /\b(open\s+jarvis(?:\s+(?:panel|core|module))?|jarvis\s+panel|otwórz\s+jarvisa|otworz\s+jarvisa|pokaż\s+jarvisa|pokaz\s+jarvisa|panel\s+jarvisa)\b/i,
+      /\b(open\s+jarvis(?:\s+(?:panel|core|module))?|jarvis\s+panel|otwórz\s+jarvisa|otw[óo]rz\s+panel\s+jarvis|otworz\s+jarvisa|pokaż\s+jarvisa|pokaz\s+jarvisa|panel\s+jarvisa)\b/i,
     confirmation: "Otwieram panel JARVIS.",
     label: "Open JARVIS",
     phrases: ["Open JARVIS panel", "Jarvis, otwórz panel JARVIS", "Jarvis, pokaż JARVISA"],
@@ -128,7 +128,7 @@ export const COMMAND_REGISTRY = [
     category: "Navigation",
     kind: { type: "module", module: "fuel-monitor" },
     pattern:
-      /\b(open\s+fuel|launch\s+monitor|jarvis\s+fuel|otwórz\s+paliwo|otworz\s+paliwo|monitor\s+paliwa)\b/i,
+      /\b(open\s+fuel|launch\s+monitor|launch\s+fuel\s+monitor|poka[żz]\s+paliwo|jarvis\s+fuel|otwórz\s+paliwo|otworz\s+paliwo|monitor\s+paliwa)\b/i,
     confirmation: "Ładuję Fuel Monitor Matrix, Panie Sławiński.",
     label: "Open Fuel Monitor",
     phrases: [
@@ -159,7 +159,8 @@ export const COMMAND_REGISTRY = [
     id: "open_jobfit",
     category: "Navigation",
     kind: { type: "module", module: "jobfit-ai" },
-    pattern: /\b(open\s+jobfit|launch\s+ai|jarvis\s+job|otwórz\s+jobfit|otworz\s+jobfit)\b/i,
+    pattern:
+      /\b(open\s+jobfit|launch\s+ai|jarvis\s+job|otwórz\s+jobfit|otworz\s+jobfit|optymalizator\s+cv)\b/i,
     confirmation: "Uruchamiam optymalizator CV.",
     label: "Open JobFit AI",
     phrases: [
@@ -175,7 +176,7 @@ export const COMMAND_REGISTRY = [
     category: "Navigation",
     kind: { type: "route", path: "/situation-room" },
     pattern:
-      /\b(show\s+telemetry|open\s+map|geo[-\s]?tracking|otwórz\s+mapę|otworz\s+mape|pokaż\s+mapę|pokaz\s+mape|geolokalizacja)\b/i,
+      /\b(show\s+telemetry|open\s+map|geo[-\s]?tracking|otwórz\s+mapę|otworz\s+mape|pokaż\s+mapę|pokaz\s+mape|geolokalizacj[aęiy])\b/i,
     confirmation: "Uruchamiam telemetrię satelitarną.",
     label: "Open Situation Room",
     phrases: [
@@ -203,7 +204,7 @@ export const COMMAND_REGISTRY = [
     category: "Navigation",
     kind: { type: "route", path: "/agent-hub" },
     pattern:
-      /\b(open\s+agents?|agent\s+hub|otwórz\s+agentów|otworz\s+agentow|pokaż\s+agentów|pokaz\s+agentow)\b/i,
+      /\b(open\s+agents?|show\s+agents?|agent\s+hub|otwórz\s+agentów|otworz\s+agentow|pokaż\s+agentów|pokaz\s+agentow)\b/i,
     confirmation: "Przechodzę do Agent Hub, sir.",
     label: "Open Agent Hub",
     phrases: ["Open Agent Hub", "Show agents", "Jarvis, otwórz Agent Hub", "Jarvis, pokaż agentów"],
@@ -251,7 +252,7 @@ export const COMMAND_REGISTRY = [
     // is handled by the chat agent's open_document tool (it finds the file);
     // this only opens the module.
     pattern:
-      /\b(open\s+documents?|show\s+files?|otwórz\s+dokumenty|otworz\s+dokumenty|pokaż\s+dokumenty|pokaz\s+dokumenty|otwórz\s+pliki|otworz\s+pliki|moduł\s+dokumentów|modul\s+dokumentow|archiwum\s+plików|archiwum\s+plikow)\b/i,
+      /\b(open\s+documents?|show\s+files?|otwórz\s+dokumenty|otworz\s+dokumenty|pokaż\s+dokumenty|pokaz\s+dokumenty|otwórz\s+pliki|poka[żz]\s+pliki|otworz\s+pliki|moduł\s+dokumentów|modul\s+dokumentow|archiwum\s+plików|archiwum\s+plikow)\b/i,
     confirmation: "Otwieram moduł dokumentów, sir.",
     label: "Open Documents",
     phrases: ["Open documents", "Show files", "Jarvis, otwórz dokumenty", "Jarvis, pokaż pliki"],
@@ -286,7 +287,7 @@ export const COMMAND_REGISTRY = [
     category: "Navigation",
     kind: { type: "route", path: "/commands" },
     pattern:
-      /\b(open\s+commands?|command\s+directory|command\s+playground|otwórz\s+komendy|otworz\s+komendy|pokaż\s+komendy|pokaz\s+komendy|lista\s+komend|katalog\s+komend)\b/i,
+      /\b(open\s+commands?|command\s+directory|command\s+playground|otwórz\s+komendy|otworz\s+komendy|pokaż\s+komendy|pokaz\s+komendy|lista\s+komend|list[ęe]\s+komend|katalog\s+komend)\b/i,
     confirmation: "Otwieram katalog komend.",
     label: "Open Commands",
     phrases: [
@@ -361,7 +362,7 @@ export const COMMAND_REGISTRY = [
     category: "System",
     kind: { type: "special" },
     pattern:
-      /\b(system\s+check|sprawdź\s+system|sprawdz\s+system|status\s+systemu|raport\s+systemu)\b/i,
+      /\b(system\s+check|sprawdź\s+system|sprawdz\s+system|status\s+systemu|status\s+report|raport\s+systemu)\b/i,
     confirmation: "Wszystkie systemy sprawne, Panie Sławiński. Temperatura rdzenia nominalna.",
     label: "System Check",
     phrases: [
@@ -419,6 +420,23 @@ export const COMMAND_REGISTRY = [
       "Triggers Protocol: Ark Reboot — a cinematic full-stack module diagnostic sweep, then returns to the dashboard.",
   },
 ] as const satisfies readonly CommandDef[];
+
+/**
+ * `\b` is ASCII-only: without the `u` flag ę, ń, ó… count as non-word
+ * characters, so "pokaż wizję" or "lista zadań" — an alternative ending in a
+ * Polish letter — could never match. Every pattern above is written as
+ * `\b(...)\b`; swap those outer boundaries for Unicode-aware lookarounds
+ * once, here, instead of hand-editing thirty regexes.
+ */
+export function polishBoundaries(re: RegExp): RegExp {
+  const source = re.source
+    .replace(/^\\b/, "(?<![\\p{L}\\p{N}_])")
+    .replace(/\\b$/, "(?![\\p{L}\\p{N}_])");
+  return new RegExp(source, re.flags.includes("u") ? re.flags : re.flags + "u");
+}
+for (const c of COMMAND_REGISTRY) {
+  (c as { pattern: RegExp }).pattern = polishBoundaries(c.pattern);
+}
 
 /** Literal union of every command id — derived, never hand-maintained. */
 export type CommandActionId = (typeof COMMAND_REGISTRY)[number]["id"];

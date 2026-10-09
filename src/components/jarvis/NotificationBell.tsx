@@ -51,7 +51,10 @@ export function NotificationBell() {
 
   useEffect(() => {
     const channel = supabase
-      .channel("notifications-feed")
+      // Unique topic per mount: the header swaps between two bells (compact
+      // ↔ full), and a fixed topic made the new bell reuse the old, still
+      // "leaving" channel — which never subscribes, so live toasts stopped.
+      .channel(`notifications-feed-${Math.random().toString(36).slice(2)}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notifications" },
