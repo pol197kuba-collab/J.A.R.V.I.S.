@@ -1,3 +1,4 @@
+import type { ErrorComponentProps } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { UI_MODE_BOOT_SCRIPT } from "@/lib/theme/uiMode";
 import {
