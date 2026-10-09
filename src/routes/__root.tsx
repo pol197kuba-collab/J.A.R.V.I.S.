@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { UI_MODE_BOOT_SCRIPT } from "@/lib/theme/uiMode";
 import {
   Link,
   createRootRouteWithContext,
@@ -123,7 +124,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@500;600;700&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@500;600;700&family=Pixelify+Sans:wght@400;500;600;700&display=swap",
       },
     ],
   }),
@@ -135,8 +136,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className="dark">
+    // data-theme is set before paint by UI_MODE_BOOT_SCRIPT (HUD vs Town),
+    // so the server-rendered attribute set legitimately differs.
+    <html lang="en" className="dark" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: UI_MODE_BOOT_SCRIPT }} />
         <HeadContent />
       </head>
       <body className="bg-background text-foreground">

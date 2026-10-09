@@ -95,6 +95,24 @@ is one CSS block, not a hunt through components:
   `class="dark"` for shadcn's `dark:` variants, and such a block silently
   overrides the whole JARVIS palette (that bug shipped once).
 
+## Agent Town (`/town`) and UI modes
+
+The app has two UI modes (`src/lib/theme/uiMode.ts`): **HUD** (theme
+`jarvis`) and **Town** (theme `town`, pixel RPG). A mode is a theme plus a
+home view; the header's HUD/TOWN switch changes both. Town reskins every
+module through the theme tokens plus the "Town skin" section at the end of
+`src/styles.css`, so new modules must keep using tokens and the existing
+panel classes (`HudPanel`, `.hud-chrome`, …) to look right in both modes —
+check new UI in both before shipping.
+
+The Town map itself lives in `src/components/town/`: `townMap.ts` (floor
+plan, BFS — pure, tested), `townArt.ts` (sprites and furniture; its fixed
+pixel palette is artwork and is exempt from the token rule, like the
+categorical palettes), `townWorld.ts` (characters, actors, render),
+`townDirector.ts` (real `agent_runs` → character actions; `diffFlow` is
+pure and tested) and `TownView.tsx`. New agents need a room, a look and a
+home/visit spot there to appear on the map.
+
 ## Design skills: project rules win
 
 `.claude/skills/` holds third-party design skills (`design-taste-frontend`,

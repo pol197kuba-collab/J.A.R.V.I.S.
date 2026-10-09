@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VisionRouteImport } from './routes/vision'
+import { Route as TownRouteImport } from './routes/town'
 import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as SystemLogsRouteImport } from './routes/system-logs'
 import { Route as SubSystemsRouteImport } from './routes/sub-systems'
@@ -36,6 +37,11 @@ import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.
 const VisionRoute = VisionRouteImport.update({
   id: '/vision',
   path: '/vision',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TownRoute = TownRouteImport.update({
+  id: '/town',
+  path: '/town',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TasksRoute = TasksRouteImport.update({
@@ -170,6 +176,7 @@ export interface FileRoutesByFullPath {
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
   '/tasks': typeof TasksRoute
+  '/town': typeof TownRoute
   '/vision': typeof VisionRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
@@ -195,6 +202,7 @@ export interface FileRoutesByTo {
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
   '/tasks': typeof TasksRoute
+  '/town': typeof TownRoute
   '/vision': typeof VisionRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
@@ -221,6 +229,7 @@ export interface FileRoutesById {
   '/sub-systems': typeof SubSystemsRoute
   '/system-logs': typeof SystemLogsRoute
   '/tasks': typeof TasksRoute
+  '/town': typeof TownRoute
   '/vision': typeof VisionRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
@@ -248,6 +257,7 @@ export interface FileRouteTypes {
     | '/sub-systems'
     | '/system-logs'
     | '/tasks'
+    | '/town'
     | '/vision'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
@@ -273,6 +283,7 @@ export interface FileRouteTypes {
     | '/sub-systems'
     | '/system-logs'
     | '/tasks'
+    | '/town'
     | '/vision'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
@@ -298,6 +309,7 @@ export interface FileRouteTypes {
     | '/sub-systems'
     | '/system-logs'
     | '/tasks'
+    | '/town'
     | '/vision'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
@@ -324,6 +336,7 @@ export interface RootRouteChildren {
   SubSystemsRoute: typeof SubSystemsRoute
   SystemLogsRoute: typeof SystemLogsRoute
   TasksRoute: typeof TasksRoute
+  TownRoute: typeof TownRoute
   VisionRoute: typeof VisionRoute
   Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
   Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
@@ -339,6 +352,13 @@ declare module '@tanstack/react-router' {
       path: '/vision'
       fullPath: '/vision'
       preLoaderRoute: typeof VisionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/town': {
+      id: '/town'
+      path: '/town'
+      fullPath: '/town'
+      preLoaderRoute: typeof TownRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tasks': {
@@ -516,6 +536,7 @@ const rootRouteChildren: RootRouteChildren = {
   SubSystemsRoute: SubSystemsRoute,
   SystemLogsRoute: SystemLogsRoute,
   TasksRoute: TasksRoute,
+  TownRoute: TownRoute,
   VisionRoute: VisionRoute,
   Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
   Char91DotwellKnownChar93OauthProtectedResourceRoute:
