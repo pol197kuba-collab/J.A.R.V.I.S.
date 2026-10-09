@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FlowRun } from "@/lib/agents/flow.functions";
-import { characterStatus, diffFlow, snapshotRuns } from "./townDirector";
+import { characterStatus, diffFlow, isMeeting, snapshotRuns } from "./townDirector";
 
 const run = (p: Partial<FlowRun> & Pick<FlowRun, "id" | "agentSlug">): FlowRun => ({
   agentName: p.agentSlug,
@@ -102,5 +102,13 @@ describe("characterStatus", () => {
       finishedAt: "2026-10-09T08:00:57.000Z",
     });
     expect(characterStatus("metric", [ok], true, now)).toBe("done");
+  });
+});
+
+describe("isMeeting", () => {
+  it("hands the first delegation over in person and gathers from the second", () => {
+    expect(isMeeting(1)).toBe(false);
+    expect(isMeeting(2)).toBe(true);
+    expect(isMeeting(4)).toBe(true);
   });
 });

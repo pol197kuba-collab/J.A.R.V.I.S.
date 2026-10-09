@@ -3,6 +3,8 @@ import {
   BOARD_SPOTS,
   COFFEE_SPOT,
   HOME,
+  MEETING_HEAD,
+  MEETING_SEATS,
   VISIT,
   buildTownMap,
   findPath,
@@ -57,6 +59,21 @@ describe("town floor plan", () => {
       const a = roomArea(s);
       expect(map.roomOf[a.y0][a.x0]).toBe(s);
       expect(map.roomOf[a.y1][a.x1]).toBe(s);
+    }
+  });
+});
+
+describe("meeting at the Core table", () => {
+  it("has walkable, reachable, distinct places for the head and every seat", () => {
+    const all = [MEETING_HEAD, ...MEETING_SEATS];
+    expect(new Set(all.map((t) => t.join(","))).size).toBe(all.length);
+    expect(MEETING_SEATS.length).toBeGreaterThanOrEqual(slugs.length - 2);
+    for (const t of all) {
+      expect(free(t), t.join(",")).toBe(true);
+      for (const from of slugs) {
+        const same = HOME[from][0] === t[0] && HOME[from][1] === t[1];
+        expect(same || findPath(map.blocked, HOME[from], t).length > 0).toBe(true);
+      }
     }
   });
 });

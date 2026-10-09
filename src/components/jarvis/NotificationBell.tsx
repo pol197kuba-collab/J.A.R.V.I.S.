@@ -56,9 +56,16 @@ export function NotificationBell() {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notifications" },
         (payload) => {
-          const row = payload.new as { kind: string; title: string; body: string | null };
+          const row = payload.new as {
+            kind: string;
+            title: string;
+            body: string | null;
+            payload: { ok?: boolean } | null;
+          };
           qc.invalidateQueries({ queryKey: ["notifications", "list"] });
-          const failed = row.kind === "document_failed";
+          const failed =
+            row.kind === "document_failed" ||
+            (row.kind === "town_result" && row.payload?.ok === false);
           toast(row.title, { description: row.body ?? undefined });
           if (failed) audio.playAccessDenied();
           else audio.playAccessGranted();
@@ -140,13 +147,15 @@ function NotificationRow({
   notification: AppNotification;
   onDelete: () => void;
 }) {
-  const failed = notification.kind === "document_failed";
   const payload =
     notification.payload &&
     typeof notification.payload === "object" &&
     !Array.isArray(notification.payload)
       ? (notification.payload as Record<string, unknown>)
       : undefined;
+  const failed =
+    notification.kind === "document_failed" ||
+    (notification.kind === "town_result" && payload?.ok === false);
   const downloadUrl = typeof payload?.download_url === "string" ? payload.download_url : undefined;
 
   // Swipe-left-to-delete (mobile): tracks the raw touch delta rather than

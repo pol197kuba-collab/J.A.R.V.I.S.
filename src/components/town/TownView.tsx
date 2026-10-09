@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useNavigate } from "@tanstack/react-router";
 import { Crosshair, Footprints, MessageCircle, Minus, Plus } from "lucide-react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { getAgentFlow, type FlowRun } from "@/lib/agents/flow.functions";
 import { listDocumentsFn } from "@/lib/documents/documents.functions";
+import { markNotificationRead } from "@/lib/notifications/notifications.functions";
+import { notifyTownResult } from "@/lib/notifications/townResult.functions";
 import type { AgentSummary } from "@/lib/agents/runtime.functions";
 import { useAgentChatChannel } from "@/lib/ai/useAgentChatChannel";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
@@ -153,17 +155,47 @@ export function TownView() {
     setLog((l) => [{ id: ++logSeq.current, time: clock(), slug, text: line }, ...l].slice(0, 40));
   }, []);
 
+  // The bell mirrors the board: a new result lights it, reading the note on
+  // the board marks it read there too.
+  const qc = useQueryClient();
+  const notifyBell = useServerFn(notifyTownResult);
+  const markBellRead = useServerFn(markNotificationRead);
+  const bellIds = useRef(new Map<string, string>());
+
   /** Pin a finished request's answer on the board as a note to read. */
-  const addNote = useCallback((id: string, ok: boolean, text: string) => {
-    const cmd = commandsRef.current.find((c) => c.runId === id || c.id === id);
-    const title = (cmd?.text ?? `Wynik z ${clock()}`).slice(0, 48);
-    setNotes((ns) =>
-      [
-        { id, title, text, ok, at: Date.now(), read: false },
-        ...ns.filter((n) => n.id !== id),
-      ].slice(0, 12),
-    );
-  }, []);
+  const addNote = useCallback(
+    (id: string, ok: boolean, text: string) => {
+      const cmd = commandsRef.current.find((c) => c.runId === id || c.id === id);
+      const title = (cmd?.text ?? `Wynik z ${clock()}`).slice(0, 48);
+      setNotes((ns) =>
+        [
+          { id, title, text, ok, at: Date.now(), read: false },
+          ...ns.filter((n) => n.id !== id),
+        ].slice(0, 12),
+      );
+      notifyBell({ data: { runId: id, title, text, ok } })
+        .then((r) => {
+          if (r.id) bellIds.current.set(id, r.id);
+          void qc.invalidateQueries({ queryKey: ["notifications", "list"] });
+        })
+        .catch(() => {
+          /* the note on the board is what counts; the bell is a bonus */
+        });
+    },
+    [notifyBell, qc],
+  );
+  const readNote = useCallback(
+    (id: string) => {
+      setNotes((ns) => ns.map((n) => (n.id === id ? { ...n, read: true } : n)));
+      const bellId = bellIds.current.get(id);
+      if (!bellId) return;
+      bellIds.current.delete(id);
+      markBellRead({ data: { id: bellId } })
+        .then(() => qc.invalidateQueries({ queryKey: ["notifications", "list"] }))
+        .catch(() => {});
+    },
+    [markBellRead, qc],
+  );
   const addNoteRef = useRef(addNote);
   addNoteRef.current = addNote;
 
@@ -823,9 +855,7 @@ export function TownView() {
                   return lastResultLine(slug, runs, last?.text?.trim() || null, Date.now());
                 }}
                 notes={notes}
-                onRead={(id) =>
-                  setNotes((ns) => ns.map((n) => (n.id === id ? { ...n, read: true } : n)))
-                }
+                onRead={readNote}
                 onCommand={(t, to) => submit(t, to)}
                 onClose={closeDialog}
                 propContent={(id) =>

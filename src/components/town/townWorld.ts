@@ -170,8 +170,9 @@ export class TownWorld {
       c.arrive = res;
     });
   }
+  /** Back to where this character belongs right now: their seat at a meeting, else their desk. */
   goHome(slug: TownSlug) {
-    return this.walkTo(slug, HOME[slug]);
+    return this.walkTo(slug, this.post(slug));
   }
   say(slug: TownSlug, text: string, ms = 2200, icon: string | null = null, tone: Tone = "plain") {
     this.chars[slug].bubble = { text, until: this.time + ms, icon, tone };
@@ -192,7 +193,8 @@ export class TownWorld {
         await fn();
       } finally {
         c.errands--;
-        c.idleAt = this.time + idleDelay(Math.random());
+        // seated at a meeting → take the seat right away; else a calm pause
+        c.idleAt = this.time + (this.posts.has(slug) ? 300 : idleDelay(Math.random()));
       }
     };
     const next = (this.chains.get(slug) ?? Promise.resolve()).then(run, run);
@@ -206,9 +208,37 @@ export class TownWorld {
   }
   private wasOnCall = false;
 
+  /** Temporary places (a meeting at the Core table) that override the desk. */
+  private posts = new Map<TownSlug, { tile: Tile; dir: Dir }>();
+  post(slug: TownSlug): Tile {
+    return this.posts.get(slug)?.tile ?? HOME[slug];
+  }
+
   private atHome(c: Char) {
-    const [hx, hy] = HOME[c.slug];
+    const [hx, hy] = this.post(c.slug);
     return c.tx === hx && c.ty === hy && !c.path.length;
+  }
+
+  /**
+   * Seat a character at `tile` until `release`: they go there now (unless
+   * they're mid-work, in which case they go there as soon as it's done) and
+   * stay put instead of wandering.
+   */
+  seat(slug: TownSlug, tile: Tile, dir: Dir) {
+    const c = this.chars[slug];
+    this.posts.set(slug, { tile, dir });
+    if (c.errands && !c.idleTrip) return;
+    if (c.idleTrip) c.recalled = true;
+    if (!this.atHome(c)) void this.walkTo(slug, tile);
+    else c.dir = dir;
+  }
+  /** End a meeting for these characters: they head back to their desks. */
+  release(slugs: Iterable<TownSlug>) {
+    for (const slug of slugs) {
+      if (!this.posts.delete(slug)) continue;
+      const c = this.chars[slug];
+      c.idleAt = this.time + 400 + Math.random() * 1200;
+    }
   }
 
   /**
@@ -220,7 +250,7 @@ export class TownWorld {
     if (slug === "user" || slug === "jarvis" || this.status[slug] === "running") return;
     if (c.errands && !c.idleTrip) return;
     if (c.idleTrip) c.recalled = true;
-    if (!this.atHome(c)) void this.walkTo(slug, HOME[slug]);
+    if (!this.atHome(c)) void this.walkTo(slug, this.post(slug));
   }
 
   /** Resolve once `slug` stands at their desk (or after `ms`, whichever first). */
@@ -263,13 +293,19 @@ export class TownWorld {
     )
       return;
     const st = this.status[c.slug];
-    if (st === "running") return;
+    // working agents stay where they are — unless they've been seated at a meeting
+    if (st === "running" && !this.posts.has(c.slug)) return;
     c.idleAt = this.time + idleDelay(Math.random());
     if (st === "off") {
       this.say(c.slug, "zzz", 2500, "zz");
       return;
     }
-    const plan = idlePlan(Math.random(), this.onCall, this.atHome(c));
+    const posted = this.posts.get(c.slug);
+    const plan = idlePlan(Math.random(), this.onCall || !!posted, this.atHome(c));
+    if (posted && plan === "stay") {
+      c.dir = posted.dir;
+      return;
+    }
     if (plan === "home") {
       void this.goHome(c.slug);
       return;
@@ -549,6 +585,19 @@ export class TownWorld {
       ctx.fillStyle = INK;
       ctx.textAlign = "center";
       ctx.fillText(this.boardAlert > 1 ? String(this.boardAlert) : "!", s.x, s.y - bs / 2 + 1);
+      ctx.textAlign = "left";
+    }
+    // …and over your own character, so you notice wherever you are
+    if (this.boardAlert > 0) {
+      const me = this.chars.user;
+      const bob = this.reduceMotion ? 0 : Math.abs(Math.sin(this.time / 260)) * 3;
+      const s = toS(me.x, me.y - 30 - bob);
+      const bs = Math.round(fs * 1.2);
+      pixelBox(ctx, s.x - bs / 2, s.y - bs, bs, bs, u, "#f2c94c", INK);
+      ctx.font = font(700, Math.round(fs * 0.95));
+      ctx.fillStyle = INK;
+      ctx.textAlign = "center";
+      ctx.fillText("!", s.x, s.y - bs / 2 + 1);
       ctx.textAlign = "left";
     }
     // walk mode: what's within reach
