@@ -27,6 +27,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useHeaderDensity } from "@/components/jarvis/useHeaderDensity";
 
 import { GlobalVoiceCommand } from "@/components/jarvis/GlobalVoiceCommand";
+import { UiModeToggle } from "@/components/jarvis/UiModeToggle";
 import { isFullscreen, onFullscreenChange, toggleAppFullscreen } from "@/lib/fullscreen";
 import type { AppPhase } from "@/components/jarvis/PhaseContext";
 
@@ -186,6 +187,7 @@ function HudHeader({ onShutdown }: { onShutdown: () => void }) {
       </div>
 
       <div className="flex shrink-0 items-center gap-2 portrait:gap-1.5">
+        <UiModeToggle compact={compact} />
         {/* STATUS — passive telemetry. Below "full" the label drops and the
             dot carries the state on its own, which is what buys the action
             cluster the room it needs before anything has to move. */}

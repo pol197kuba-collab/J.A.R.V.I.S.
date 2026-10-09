@@ -1970,3 +1970,41 @@ tak, a długiej odpowiedzi nie da się przyswoić ze słuchu.
     JARVIS hands back a link and the user opens/reviews/tests it
     themselves — "JARVIS watches it finish and reports back" is not
     currently buildable without a further, unconfirmed capability.
+
+## 19. [W] Agent Town — tryb TOWN (`/town`) — **v1 shipped 2026-10-09**
+
+Drugi tryb aplikacji obok HUD. Przełącznik HUD/TOWN w górnym pasku (plus
+„Tryb przy starcie” w Ustawieniach) zmienia motyw całej aplikacji
+(`data-theme="town"`: ciemny, przytulny RPG, pikselowa czcionka, okna z
+obrysem) i otwiera `/town`: pixel-artowe biuro, w którym agenci chodzą,
+rozmawiają i pracują na podstawie prawdziwych `agent_runs` (ten sam
+`getAgentFlow` co drzewo delegacji, polling 3 s). Polecenia z okna „Nowe
+polecenie” idą przez `useAgentChatChannel().send` — ta sama ścieżka co czat.
+Kod: `src/components/town/` (mapa i BFS, grafika, świat, reżyser
+zdarzeń, widok), `src/lib/theme/uiMode.ts`, sekcja „Town skin” w
+`src/styles.css`.
+
+### Propozycje kolejnych poleceń i interakcji (do wyboru i priorytetu)
+
+1. **Przeciągnij kartkę do pokoju** — zadanie upuszczone na pokój agenta
+   trafia prosto do niego (dziś: wybór z listy „Dla:”).
+2. **Rozmowa z agentem na mapie** — klik w postać otwiera okienko
+   dialogowe RPG z historią rozmowy z tym agentem i polem odpowiedzi.
+3. **Zatrzymaj / ponów zadanie** — przyciski w panelu agenta: przerwij
+   bieżący przebieg, ponów ostatni z błędem (wymaga endpointu do
+   anulowania przebiegu).
+4. **Priorytet i termin na kartce** — kolor pinezki = pilność, termin
+   widoczny na tablicy; spięte z modułem Tasks.
+5. **Zadania cykliczne jako „dyżury”** — standing orders widoczne jako
+   grafik na ścianie Rdzenia; agent sam wstaje o danej porze.
+6. **Spotkanie przy stole** — polecenie „naradźcie się” zbiera kilku
+   agentów przy stole w Rdzeniu; każdy dokłada swoją część, J.A.R.V.I.S.
+   składa wynik.
+7. **Głos na mapie** — komenda głosowa z HeaderVoiceToggle widoczna jako
+   dymek Twojej postaci (dziś trafia tylko do czatu).
+8. **Powiadomienie, gdy wynik czeka** — Twoja postać dostaje „!” nad
+   głową, a dzwonek pokazuje, który agent coś przyniósł.
+9. **Skróty klawiszowe** — 1–6 zaznacza agenta, Enter otwiera polecenie,
+   F śledzi kamerą zaznaczonego agenta.
+10. **Ulepszenia pokojów jako statystyki** — np. więcej regałów w
+    Archiwum = więcej dokumentów w RAG; lekka grywalizacja postępu.

@@ -41,7 +41,7 @@ export function HudTag({
   };
   return (
     <span
-      className={`pointer-events-none absolute ${pos[corner]} font-display text-[8px] tracking-[0.25em] text-primary/60 ${className}`}
+      className={`hud-tag pointer-events-none absolute ${pos[corner]} font-display text-[8px] tracking-[0.25em] text-primary/60 ${className}`}
     >
       {text}
     </span>

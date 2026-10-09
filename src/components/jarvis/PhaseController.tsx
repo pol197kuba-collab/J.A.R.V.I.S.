@@ -11,6 +11,7 @@ import { VoiceCommandProvider } from "@/components/jarvis/VoiceCommandContext";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { audio } from "@/lib/audio/AudioEngine";
 import { supabase } from "@/integrations/supabase/client";
+import { MODE_HOME, getUiMode } from "@/lib/theme/uiMode";
 
 // Suppress unused-import warning — kept so refactors don't drop the dep.
 void AppSidebar;
@@ -101,7 +102,7 @@ export function PhaseController() {
       {phase === "login_screen" && (
         <StarkLogin
           onGranted={() => {
-            void navigate({ to: "/jarvis" });
+            void navigate({ to: MODE_HOME[getUiMode()] });
             setPhase("initializing");
           }}
         />

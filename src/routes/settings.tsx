@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
+import { UiModeSettings } from "@/components/jarvis/UiModeSettings";
 import { PushToggle } from "@/components/jarvis/orders/PushToggle";
 import { BriefScheduleControls } from "@/components/jarvis/brief/BriefScheduleControls";
 import { useAudioSettings } from "@/lib/audio/useAudioSettings";
@@ -486,6 +487,7 @@ function Settings() {
           SECURE PROFILE // JACOB.SLAWINSKY @ JARVIS.LOCAL
         </p>
       </HudPanel>
+      <UiModeSettings index={1} />
       <HudPanel index={1} title="AI CORE CONFIGURATION" className="p-5">
         <div className="mt-4 space-y-3">
           <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">

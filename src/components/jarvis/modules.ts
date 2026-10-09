@@ -15,6 +15,7 @@ import {
   Rss,
   CandlestickChart,
   Fuel,
+  Castle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -51,6 +52,13 @@ export const MODULE_GROUPS: readonly ModuleGroup[] = [
     label: "Core",
     items: [
       { title: "J.A.R.V.I.S.", shortTitle: "JARVIS", url: "/jarvis", icon: Hexagon },
+      {
+        title: "Agent Town",
+        shortTitle: "Town",
+        url: "/town",
+        icon: Castle,
+        keywords: "miasto świat agenci pixel rpg",
+      },
       { title: "Dashboard", shortTitle: "Dashboard", url: "/", icon: LayoutDashboard },
       { title: "Feed", shortTitle: "Feed", url: "/feed", icon: Rss, keywords: "aktualności news" },
     ],

@@ -130,6 +130,10 @@
   --warning: oklch(0.8 0.15 75);
   --destructive: oklch(0.68 0.22 25);
   --destructive-foreground: oklch(0.98 0.01 0);
+
+  /* Type — themes may swap the faces (Town uses a pixel font) */
+  --font-body: "JetBrains Mono", "Share Tech Mono", ui-monospace, monospace;
+  --font-display: "Share Tech Mono", "JetBrains Mono", ui-monospace, monospace;
 }
 
 /* ── Derived tokens — computed from the theme, never edit per theme ────── */
@@ -262,6 +266,63 @@
     inset 0 1px 0 color-mix(in oklab, var(--primary) 30%, transparent);
 }
 
+/* ── Theme: Agent Town — dark cozy RPG (pixel world) ─────────────────────
+ * Switched on with data-theme="town" on <html> (see src/lib/theme/uiMode.ts).
+ * Source tokens first, exactly like the jarvis block; then the handful of
+ * derived tokens Town deliberately replaces (hairline primary-tinted borders
+ * become solid ink outlines, radii go square). The structural skin — panel
+ * frames, chrome, hiding HUD-only decoration — lives in the "Town skin"
+ * section at the end of this file. */
+[data-theme="town"] {
+  --background: oklch(0.19 0.035 305);
+  --base-chrome: oklch(0.16 0.03 305);
+  --base-panel-floor: oklch(0.21 0.035 305);
+  --base-1: oklch(0.23 0.04 305);
+  --base-2: oklch(0.26 0.045 305);
+  --base-3: oklch(0.3 0.05 305);
+  --card: oklch(0.24 0.04 305);
+  --popover: var(--base-1);
+  --secondary: var(--base-2);
+  --muted: var(--base-2);
+
+  --foreground: oklch(0.93 0.04 85); /* parchment */
+  --muted-foreground: oklch(0.76 0.05 75);
+
+  --primary: oklch(0.8 0.14 70); /* RPG cursor gold */
+  --primary-foreground: oklch(0.19 0.035 305);
+  --accent: oklch(0.66 0.18 35); /* ember red-orange */
+  --accent-foreground: oklch(0.97 0.02 80);
+
+  --reactor: oklch(0.8 0.14 70);
+  --reactor-hot: oklch(0.88 0.12 85);
+
+  --success: oklch(0.74 0.17 140);
+  --warning: oklch(0.84 0.14 90);
+  --destructive: oklch(0.64 0.19 25);
+  --destructive-foreground: oklch(0.97 0.02 80);
+
+  --font-body: "Pixelify Sans", "JetBrains Mono", ui-monospace, monospace;
+  --font-display: "Pixelify Sans", "JetBrains Mono", ui-monospace, monospace;
+  --font-mono: var(--font-body);
+  --font-sans: var(--font-body);
+
+  /* Town-only: the pixel frame every window gets */
+  --town-ink: oklch(0.12 0.02 305);
+  --town-bevel: oklch(0.36 0.05 305);
+  --town-drop: oklch(0.09 0.02 305);
+  --town-wood: oklch(0.36 0.06 50);
+  --town-wood-dark: oklch(0.3 0.055 50);
+
+  /* derived overrides */
+  --radius: 0px;
+  --border: color-mix(in oklab, var(--foreground) 22%, transparent);
+  --input: color-mix(in oklab, var(--foreground) 18%, transparent);
+  --glow-primary: none;
+  --glow-soft: 3px 3px 0 var(--town-drop);
+  --glow-md: 4px 4px 0 var(--town-drop);
+  --glow-lg: 5px 5px 0 var(--town-drop);
+}
+
 @layer base {
   * {
     border-color: var(--color-border);
@@ -276,11 +337,11 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-family: "JetBrains Mono", "Share Tech Mono", ui-monospace, monospace;
+    font-family: var(--font-body);
   }
 
   .font-display {
-    font-family: "Share Tech Mono", "JetBrains Mono", ui-monospace, monospace;
+    font-family: var(--font-display);
     letter-spacing: 0.08em;
   }
 
@@ -1965,3 +2026,110 @@
     display: none;
   }
 }
+
+
+/* ===========================================================================
+   Town skin — structural restyle for data-theme="town".
+
+   The HUD look is glass, glow and hairlines; Town is an RPG window: a solid
+   panel, a thick ink outline, a 2px inner bevel and a hard drop shadow, with
+   square corners and a pixel font. Everything here only reshapes existing
+   classes (.hud-panel, .hud-chrome, .hud-slot …), so every module reskins
+   without per-component changes. HUD-only ornaments (corner brackets, panel
+   tags, scanlines, particles, glows) are hidden rather than recoloured.
+   =========================================================================== */
+[data-theme="town"] body,
+[data-theme="town"] .jarvis-town-bg {
+  background-color: var(--background);
+  background-image: repeating-conic-gradient(
+    var(--background) 0 25%,
+    color-mix(in oklab, var(--background) 88%, var(--foreground)) 0 50%
+  );
+  background-size: 16px 16px;
+}
+[data-theme="town"] .jarvis-bg-root,
+[data-theme="town"] .hud-corner,
+[data-theme="town"] .hud-tag,
+[data-theme="town"] .hud-chrome-edge,
+[data-theme="town"] .hud-chrome-rule {
+  display: none;
+}
+[data-theme="town"] .hud-panel::before,
+[data-theme="town"] .hud-panel::after {
+  content: none;
+}
+[data-theme="town"] .hud-panel--elevated,
+[data-theme="town"] .hud-panel--quiet {
+  border: 3px solid var(--town-ink);
+  background: var(--card);
+  box-shadow:
+    inset 0 0 0 2px var(--town-bevel),
+    4px 4px 0 var(--town-drop);
+  backdrop-filter: none;
+  transform: none;
+}
+[data-theme="town"] .hud-panel--quiet {
+  background: var(--base-1);
+}
+[data-theme="town"] .hud-panel--elevated:hover,
+[data-theme="town"] .hud-panel--quiet:hover {
+  border-color: var(--town-ink);
+  box-shadow:
+    inset 0 0 0 2px var(--primary),
+    4px 4px 0 var(--town-drop);
+  transform: none;
+}
+[data-theme="town"] .hud-chrome {
+  background: var(--base-chrome);
+  backdrop-filter: none;
+  border-color: var(--town-ink);
+}
+/* the rail reads as a wooden shelf, the header as a window */
+[data-theme="town"] [data-sidebar="sidebar"].hud-chrome,
+[data-theme="town"] .hud-chrome[data-town-wood] {
+  background: repeating-linear-gradient(
+    180deg,
+    var(--town-wood) 0 14px,
+    var(--town-wood-dark) 14px 16px
+  );
+}
+[data-theme="town"] header.hud-chrome {
+  border-bottom: 3px solid var(--town-ink);
+  box-shadow: 0 4px 0 var(--town-drop);
+}
+[data-theme="town"] .hud-slot[data-active="true"] {
+  background: var(--card);
+  border: 2px solid var(--town-ink);
+  color: var(--primary);
+}
+[data-theme="town"] .hud-slot[data-active="true"]::before {
+  box-shadow: none;
+}
+[data-theme="town"] .icon-neon {
+  filter: none;
+}
+/* Pixel type: the HUD's wide letter-spacing and 8-9px micro labels are
+   unreadable in a pixel face, so tighten and floor them — a theme-wide
+   override is the one place this can be done without touching every module. */
+[data-theme="town"] [class*="tracking-"] {
+  letter-spacing: 0.04em !important;
+}
+[data-theme="town"] [class*="text-[8px]"],
+[data-theme="town"] [class*="text-[9px]"] {
+  font-size: 11px !important;
+}
+[data-theme="town"] [class*="text-[10px]"] {
+  font-size: 12px !important;
+}
+[data-theme="town"] [class*="shadow-[0_0"],
+[data-theme="town"] [class*="drop-shadow"] {
+  --tw-shadow: 0 0 #0000;
+  filter: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-theme="town"] .animate-hud-shell-in,
+  [data-theme="town"] .animate-hud-tile-in {
+    animation-duration: 0.2s;
+  }
+}
+
