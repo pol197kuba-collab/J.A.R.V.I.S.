@@ -298,9 +298,12 @@ export class TownDog {
   private idle() {
     const h = this.host;
     this.nextIdle = h.time + 6000 + Math.random() * 7000;
+    const o = h.owner();
+    const atHome = o.tx === HOME.user[0] && o.ty === HOME.user[1];
     const r = Math.random();
     if (r < 0.35) {
-      const [hx, hy] = HOME.user;
+      // potter around you — at the terminal, or wherever you're standing
+      const [hx, hy] = atHome ? HOME.user : [o.tx, o.ty];
       for (let k = 0; k < 10; k++) {
         const t: Tile = [
           hx - 4 + Math.floor(Math.random() * 9),
@@ -321,6 +324,9 @@ export class TownDog {
     } else if (r < 0.85) {
       this.say("Hau!", 1000);
       this.wagUntil = h.time + 1200;
+    } else if (!atHome) {
+      // away from home he won't go off to his bed — a quick sit instead
+      this.pose = "sit";
     } else {
       void this.walkTo(DOG_BED).then(() => {
         if (this.path.length) return;
@@ -334,13 +340,14 @@ export class TownDog {
   update(dt: number) {
     const h = this.host;
     const o = h.owner();
-    // follow your character whenever it leaves the terminal
+    // follow your character whenever it leaves the terminal; once you stop
+    // and he's caught up, he gets on with his own little things nearby
     const away = o.moving || o.tx !== HOME.user[0] || o.ty !== HOME.user[1];
-    if (!this.busy && away && h.time >= this.nextFollow) {
+    const far = Math.hypot(o.x - this.x, o.y - this.y) > TS * (o.moving ? 1.6 : 3.5);
+    if (!this.busy && away && far && h.time >= this.nextFollow) {
       this.nextFollow = h.time + 350;
-      if (Math.hypot(o.x - this.x, o.y - this.y) > TS * 1.6)
-        void this.walkTo(this.besideOwner(), RUN);
-    } else if (!this.busy && !away && !this.path.length && h.time >= this.nextIdle) {
+      void this.walkTo(this.besideOwner(), RUN);
+    } else if (!this.busy && (!away || !o.moving) && !this.path.length && h.time >= this.nextIdle) {
       this.idle();
     }
     // bark at J.A.R.V.I.S. when he comes over with news

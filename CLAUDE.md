@@ -111,8 +111,9 @@ pixel palette is artwork and is exempt from the token rule, like the
 categorical palettes), `townWorld.ts` (characters, actors, render),
 `townDirector.ts` (real `agent_runs` → character actions; `diffFlow` is
 pure and tested), `townDog.ts` + `dogMood.ts` (the owner's spaniel
-companion — keep it; it's a personal touch, not demo filler) and
-`TownView.tsx`. New agents need a room, a look and a
+companion, Marvel — keep it; it's a personal touch, not demo filler),
+`townTalk.ts` + `TownDialog.tsx` (walk-mode conversations; lines are built
+only from real run data — never invent agent activity) and `TownView.tsx`. New agents need a room, a look and a
 home/visit spot there to appear on the map.
 
 ## Design skills: project rules win

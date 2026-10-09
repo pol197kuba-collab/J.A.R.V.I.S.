@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Crosshair, Minus, Plus } from "lucide-react";
+import { Crosshair, Footprints, MessageCircle, Minus, Plus } from "lucide-react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { getAgentFlow, type FlowRun } from "@/lib/agents/flow.functions";
 import type { AgentSummary } from "@/lib/agents/runtime.functions";
@@ -14,6 +14,8 @@ import { TAG, TownWorld, type Camera, type CharStatus } from "./townWorld";
 import { TownDirector, characterStatus, isActive, type TownCommand } from "./townDirector";
 import { CompanionPanel } from "./CompanionPanel";
 import { applyAction, loadDogName, loadMood, saveMood, settle } from "./dogMood";
+import { TownDialog, type BoardNote, type DialogTarget } from "./TownDialog";
+import { lastResultLine, statusLine, taskOf } from "./townTalk";
 
 const FALLBACK_NAMES: Record<TownSlug, string> = {
   jarvis: "J.A.R.V.I.S.",
@@ -76,6 +78,15 @@ export function TownView() {
   const [dogName, setDogName] = useState(() => loadDogName());
   const [mood, setMood] = useState(() => loadMood(Date.now()));
   const [dogReady, setDogReady] = useState(false);
+  const [walkMode, setWalkMode] = useState(false);
+  const [dialog, setDialog] = useState<DialogTarget | null>(null);
+  const [notes, setNotes] = useState<BoardNote[]>([]);
+  const [nearby, setNearby] = useState<DialogTarget | null>(null);
+  const walkRef = useRef(walkMode);
+  walkRef.current = walkMode;
+  const dialogRef = useRef(dialog);
+  dialogRef.current = dialog;
+  const heldKeys = useRef(new Set<string>());
   const dogNameRef = useRef(dogName);
   dogNameRef.current = dogName;
 
@@ -101,6 +112,8 @@ export function TownView() {
   // refs the imperative world/director read without re-subscribing
   const commandsRef = useRef(commands);
   commandsRef.current = commands;
+  const notesRef = useRef(notes);
+  notesRef.current = notes;
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   const nameRef = useRef(nameOf);
@@ -122,6 +135,20 @@ export function TownView() {
   const pushLog = useCallback((slug: TownSlug, line: string) => {
     setLog((l) => [{ id: ++logSeq.current, time: clock(), slug, text: line }, ...l].slice(0, 40));
   }, []);
+
+  /** Pin a finished request's answer on the board as a note to read. */
+  const addNote = useCallback((id: string, ok: boolean, text: string) => {
+    const cmd = commandsRef.current.find((c) => c.runId === id || c.id === id);
+    const title = (cmd?.text ?? `Wynik z ${clock()}`).slice(0, 48);
+    setNotes((ns) =>
+      [
+        { id, title, text, ok, at: Date.now(), read: false },
+        ...ns.filter((n) => n.id !== id),
+      ].slice(0, 12),
+    );
+  }, []);
+  const addNoteRef = useRef(addNote);
+  addNoteRef.current = addNote;
 
   // ── world + director, created once on the client ─────────────────────────
   useEffect(() => {
@@ -156,6 +183,7 @@ export function TownView() {
         const last = [...messagesRef.current].reverse().find((m) => m.role === "jarvis");
         return last?.text?.replace(/\s+/g, " ").trim() || null;
       },
+      resultReady: (runId, ok, text) => addNoteRef.current(runId, ok, text),
       name: (slug) => nameRef.current(slug),
     });
     if (!openedLogged.current) {
@@ -212,12 +240,13 @@ export function TownView() {
           .slice(0, 8)
           .map((r) => ({ color: color(r.agentSlug), col: 2 as const })),
       ];
+      w.boardAlert = notesRef.current.filter((n) => !n.read).length;
       setTick((t) => (t + 1) % 1e6);
     };
     sync();
     const id = window.setInterval(sync, 1000);
     return () => window.clearInterval(id);
-  }, [runs, summaries, commands]);
+  }, [runs, summaries, commands, notes]);
 
   // ── canvas: size, camera, render loop ────────────────────────────────────
   const clampCam = useCallback(() => {
@@ -302,7 +331,23 @@ export function TownView() {
       last = now;
       const w = worldRef.current;
       if (w) {
+        if (w.walkMode && !dialogRef.current) {
+          const k = heldKeys.current;
+          const dx = (k.has("right") ? 1 : 0) - (k.has("left") ? 1 : 0);
+          const dy = (k.has("down") ? 1 : 0) - (k.has("up") ? 1 : 0);
+          if (dx || dy) w.userStep(dx, dx ? 0 : dy);
+        }
         w.update(dt);
+        if (w.walkMode) {
+          // the camera glides after your character
+          const cam = camRef.current;
+          const u = w.chars.user;
+          const tx = u.x - cv.width / cam.z / 2;
+          const ty = u.y - cv.height / cam.z / 2;
+          cam.x += (tx - cam.x) * Math.min(1, dt / 120);
+          cam.y += (ty - cam.y) * Math.min(1, dt / 120);
+          clampCam();
+        }
         w.draw(ctx, camRef.current, dprRef.current, selectedRef.current);
       }
       raf = requestAnimationFrame(loop);
@@ -361,7 +406,12 @@ export function TownView() {
           void dog.interact("pet");
           return;
         }
-        const hit = worldRef.current?.pick(wx, wy);
+        const w = worldRef.current;
+        if (w?.walkMode && !dialogRef.current) {
+          tapWalkRef.current(wx, wy);
+          return;
+        }
+        const hit = w?.pick(wx, wy);
         if (hit) setSelected(hit);
       }
     };
@@ -390,6 +440,143 @@ export function TownView() {
     };
   }, [clampCam, fitView, zoomAt]);
 
+  // ── walk mode ────────────────────────────────────────────────────────────
+  const openDialog = useCallback((t: DialogTarget) => {
+    const w = worldRef.current;
+    if (!w) return;
+    if (t.kind === "agent") {
+      w.talkingTo = t.slug;
+      w.faceUser(t.slug);
+      setSelected(t.slug);
+    } else w.face("user", "up");
+    setDialog(t);
+  }, []);
+  const closeDialog = useCallback(() => {
+    if (worldRef.current) worldRef.current.talkingTo = null;
+    setDialog(null);
+    canvasRef.current?.focus();
+  }, []);
+
+  /** Tap/click while walking: talk to whoever you tapped, read the board, or walk there. */
+  const tapWalk = useCallback(
+    (wx: number, wy: number) => {
+      const w = worldRef.current;
+      if (!w) return;
+      const who = (Object.values(w.chars) as { slug: TownSlug; x: number; y: number }[]).find(
+        (c) => c.slug !== "user" && Math.hypot(c.x - wx, c.y - 6 - wy) < 12,
+      );
+      if (who) {
+        const slug = who.slug;
+        void w.userWalkTo(w.besideAgent(slug)).then(() => {
+          const r = w.reachable();
+          if (r?.kind === "agent" && r.slug === slug) openDialog({ kind: "agent", slug });
+        });
+        return;
+      }
+      if (w.isBoard(wx, wy)) {
+        void w.userWalkTo(w.nearestBoardSpot()).then(() => {
+          if (w.reachable()?.kind === "board") openDialog({ kind: "board" });
+        });
+        return;
+      }
+      const tx = Math.floor(wx / 16);
+      const ty = Math.floor(wy / 16);
+      if (w.map.blocked[ty]?.[tx] === false) void w.userWalkTo([tx, ty]);
+    },
+    [openDialog],
+  );
+  const tapWalkRef = useRef(tapWalk);
+  tapWalkRef.current = tapWalk;
+
+  const toggleWalk = useCallback(() => {
+    const w = worldRef.current;
+    const cv = canvasRef.current;
+    if (!w || !cv) return;
+    const on = !w.walkMode;
+    w.walkMode = on;
+    setWalkMode(on);
+    if (on) {
+      const cam = camRef.current;
+      cam.z = Math.max(cam.z, Math.min(3.2 * dprRef.current, fitRef.current * 3));
+      pushLog("user", "Wychodzisz na spacer po biurze.");
+      cv.focus();
+    } else {
+      closeDialog();
+      heldKeys.current.clear();
+      void w.goHome("user").then(() => w.face("user", "up"));
+    }
+  }, [closeDialog, pushLog]);
+
+  // what's within reach, for the touch-friendly "talk" button
+  useEffect(() => {
+    if (!walkMode) {
+      setNearby(null);
+      return;
+    }
+    const id = window.setInterval(() => {
+      const r = worldRef.current?.reachable() ?? null;
+      setNearby((prev) =>
+        prev?.kind === r?.kind &&
+        (prev?.kind !== "agent" || (r?.kind === "agent" && prev.slug === r.slug))
+          ? prev
+          : r,
+      );
+    }, 200);
+    return () => window.clearInterval(id);
+  }, [walkMode]);
+
+  // keyboard: arrows / WASD walk, E / Enter / Space talk
+  useEffect(() => {
+    if (!walkMode) return;
+    const KEYS: Record<string, string> = {
+      ArrowUp: "up",
+      w: "up",
+      W: "up",
+      ArrowDown: "down",
+      s: "down",
+      S: "down",
+      ArrowLeft: "left",
+      a: "left",
+      A: "left",
+      ArrowRight: "right",
+      d: "right",
+      D: "right",
+    };
+    const typing = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+    };
+    const down = (e: KeyboardEvent) => {
+      if (typing(e) || dialogRef.current || e.ctrlKey || e.metaKey || e.altKey) return;
+      const dir = KEYS[e.key];
+      if (dir) {
+        e.preventDefault();
+        heldKeys.current.add(dir);
+        return;
+      }
+      if (e.key === "e" || e.key === "E" || e.key === "Enter" || e.key === " ") {
+        const r = worldRef.current?.reachable();
+        if (r) {
+          e.preventDefault();
+          openDialog(r);
+        }
+      }
+    };
+    const up = (e: KeyboardEvent) => {
+      const dir = KEYS[e.key];
+      if (dir) heldKeys.current.delete(dir);
+    };
+    const blur = () => heldKeys.current.clear();
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", blur);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", blur);
+    };
+  }, [walkMode, openDialog]);
+
   // ── commands ─────────────────────────────────────────────────────────────
   const submit = useCallback(
     (raw: string, to: TownSlug | "auto") => {
@@ -412,6 +599,7 @@ export function TownView() {
           w.face("user", "up");
           w.say("user", body, 2400, "pin");
           await w.wait(1200);
+          if (w.walkMode) return; // you're out walking — stay where you are
           await w.goHome("user");
           w.face("user", "up");
         });
@@ -431,6 +619,11 @@ export function TownView() {
             setCommands((cs) => cs.map((c) => (c.id === cmd.id ? { ...c, state: "done" } : c)));
             const w2 = worldRef.current;
             const last = [...messagesRef.current].reverse().find((m) => m.role === "jarvis");
+            addNoteRef.current(
+              cmd.id,
+              true,
+              last?.text?.replace(/\s+/g, " ").trim() || "Gotowe — odpowiedź jest w czacie.",
+            );
             if (w2) {
               void w2.actor("jarvis", async () => {
                 await w2.walkTo("jarvis", VISIT.user);
@@ -513,11 +706,27 @@ export function TownView() {
           <div className="relative p-3 @max-[420px]:p-2">
             <canvas
               ref={canvasRef}
+              tabIndex={0}
               aria-label="Mapa biura agentów. Wybierz agenta z listy powyżej, aby zobaczyć szczegóły."
               className="block aspect-[704/512] max-h-[70vh] min-h-[260px] w-full cursor-grab touch-none bg-black active:cursor-grabbing"
               style={{ imageRendering: "pixelated" }}
             />
             <div className="absolute right-5 top-5 grid gap-1.5">
+              <button
+                type="button"
+                aria-pressed={walkMode}
+                aria-label={walkMode ? "Zakończ spacer" : "Spacer: chodź swoją postacią"}
+                title={walkMode ? "Zakończ spacer" : "Spacer: chodź swoją postacią"}
+                onClick={toggleWalk}
+                className={cn(
+                  "grid h-9 w-9 place-items-center rounded-md border",
+                  walkMode
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card text-foreground hover:border-primary hover:text-primary",
+                )}
+              >
+                <Footprints className="h-4 w-4" />
+              </button>
               {[
                 {
                   label: "Przybliż",
@@ -550,7 +759,48 @@ export function TownView() {
                 Brak połączenia z danymi agentów. Biuro pokazuje ostatni znany stan.
               </p>
             )}
+            {walkMode && nearby && !dialog && (
+              <button
+                type="button"
+                onClick={() => openDialog(nearby)}
+                className="font-display absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-md border-2 border-foreground/80 bg-primary px-3 py-1.5 text-sm text-primary-foreground shadow-[3px_3px_0_rgba(0,0,0,0.6)]"
+              >
+                <MessageCircle className="h-4 w-4" />
+                {nearby.kind === "board" ? "Otwórz tablicę" : `Porozmawiaj: ${TAG[nearby.slug]}`}
+              </button>
+            )}
+            {dialog && (
+              <TownDialog
+                target={dialog}
+                name={nameOf}
+                drawPortrait={(cv, slug) => worldRef.current?.drawPortrait(cv, slug)}
+                statusText={(slug) =>
+                  statusLine(
+                    slug,
+                    runs,
+                    summaries.get(slug)?.currentTask ?? null,
+                    summaries.get(slug)?.isEnabled,
+                    Date.now(),
+                  )
+                }
+                resultText={(slug) => {
+                  const last = [...messages].reverse().find((m) => m.role === "jarvis");
+                  return lastResultLine(slug, runs, last?.text?.trim() || null, Date.now());
+                }}
+                notes={notes}
+                onRead={(id) =>
+                  setNotes((ns) => ns.map((n) => (n.id === id ? { ...n, read: true } : n)))
+                }
+                onCommand={(t, to) => submit(t, to)}
+                onClose={closeDialog}
+              />
+            )}
           </div>
+          <p className="px-4 pb-3 text-xs text-muted-foreground @max-[420px]:px-2">
+            {walkMode
+              ? "Spacer: WASD lub strzałki (albo dotknij mapy), E — rozmowa z agentem albo tablica. Wyniki poleceń czekają na tablicy w Rdzeniu."
+              : "Włącz spacer (ikona stóp), żeby chodzić swoją postacią i rozmawiać z agentami."}
+          </p>
         </HudPanel>
 
         <HudPanel index={1} title="NOWE POLECENIE" tone="quiet">
@@ -780,11 +1030,4 @@ function Section({ label, children }: { label: string; children: React.ReactNode
       {children}
     </div>
   );
-}
-
-/** A run's task text: what its parent delegated to it, if anything. */
-function taskOf(run: FlowRun | undefined, runs: readonly FlowRun[]): string | null {
-  if (!run?.parentRunId) return null;
-  const parent = runs.find((r) => r.id === run.parentRunId);
-  return parent?.delegations.find((d) => d.toSlug === run.agentSlug)?.task ?? null;
 }
