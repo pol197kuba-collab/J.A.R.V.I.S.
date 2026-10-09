@@ -96,6 +96,8 @@ function buildDogSprites(): DogSprites {
 
 /** Where the dog's bed is (a cushion in your terminal room). */
 export const DOG_BED: Tile = [17, 26];
+/** Where he picks up a result note: in front of the task board in the Core. */
+const LETTER_PICKUP: Tile = [17, 16];
 
 export type DogAction = "pet" | "fetch" | "treat" | "call" | "sleep";
 type Bubble = { text: string; until: number; icon: string | null };
@@ -137,6 +139,11 @@ export class TownDog {
   private hearts: Heart[] = [];
   private ball: { x: number; y: number; z: number } | null = null;
   private carrying = false;
+  /** Holding a result from the board for you — take it by clicking him / E. */
+  letter = false;
+  private wantDeliver = false;
+  /** Night: he sleeps on his bed unless you call him. */
+  night = false;
   private sprites: DogSprites;
   /** Called after each finished interaction (for mood, counters, the log). */
   onAction: ((action: DogAction, line: string) => void) | null = null;
@@ -244,6 +251,44 @@ export class TownDog {
     }
   }
 
+  /**
+   * A new result is on the board: he trots over, takes the note in his
+   * mouth and brings it to you, then waits beside you until you take it.
+   */
+  deliver() {
+    if (this.busy) {
+      this.wantDeliver = true;
+      return;
+    }
+    this.wantDeliver = false;
+    this.busy = true;
+    const h = this.host;
+    void (async () => {
+      try {
+        this.say("Hau!", 900);
+        await this.walkTo(LETTER_PICKUP, RUN);
+        this.letter = true;
+        this.say("*chwyta kartkę*", 1200, "pin");
+        await h.wait(500);
+        await this.walkTo(this.besideOwner(), RUN);
+        this.faceOwner();
+        this.pose = "sit";
+        this.wagUntil = h.time + 3000;
+        this.say("Mam coś dla Ciebie!", 2400, "pin");
+        this.nextIdle = h.time + 8000;
+      } finally {
+        this.busy = false;
+      }
+    })();
+  }
+  /** You took the note from him. */
+  takeLetter() {
+    if (!this.letter) return;
+    this.letter = false;
+    this.heart();
+    this.wagUntil = this.host.time + 1500;
+  }
+
   private async fetch() {
     const h = this.host;
     const o = h.owner();
@@ -298,6 +343,28 @@ export class TownDog {
   private idle() {
     const h = this.host;
     this.nextIdle = h.time + 6000 + Math.random() * 7000;
+    if (this.letter) {
+      // still holding your note: stay put and remind you now and then
+      this.pose = "sit";
+      if (Math.random() < 0.5) this.say("Hau! (kartka)", 1400, "pin");
+      return;
+    }
+    if (this.night) {
+      // after dark he sleeps on his bed, unless he's out walking with you
+      const o0 = h.owner();
+      if (o0.tx === HOME.user[0] && o0.ty === HOME.user[1] && this.pose !== "sleep") {
+        void this.walkTo(DOG_BED).then(() => {
+          if (this.path.length) return;
+          this.pose = "sleep";
+        });
+        return;
+      }
+      if (this.pose === "sleep") {
+        if (Math.random() < 0.3) this.say("zzz", 2200, "zz");
+        this.nextIdle = h.time + 15000;
+        return;
+      }
+    }
     const o = h.owner();
     const atHome = o.tx === HOME.user[0] && o.ty === HOME.user[1];
     const r = Math.random();
@@ -344,6 +411,7 @@ export class TownDog {
     // and he's caught up, he gets on with his own little things nearby
     const away = o.moving || o.tx !== HOME.user[0] || o.ty !== HOME.user[1];
     const far = Math.hypot(o.x - this.x, o.y - this.y) > TS * (o.moving ? 1.6 : 3.5);
+    if (this.wantDeliver && !this.busy) this.deliver();
     if (!this.busy && away && far && h.time >= this.nextFollow) {
       this.nextFollow = h.time + 350;
       void this.walkTo(this.besideOwner(), RUN);
@@ -422,6 +490,16 @@ export class TownDog {
       f.fillStyle = PAL.f;
       if (pose === "sit") f.fillRect(x + 5 + k, y - 3 - k, 2, 2);
       else f.fillRect(flip ? x + 7 - k : x - 9 + k, y - 7 - k, 2, 2);
+    }
+    if (this.letter) {
+      // a folded note in his mouth
+      const lx = this.dir === "right" || pose === "sit" ? x + 4 : x - 9;
+      f.fillStyle = INK;
+      f.fillRect(lx - 1, y - 8, 7, 5);
+      f.fillStyle = "#fbf3df";
+      f.fillRect(lx, y - 7, 5, 3);
+      f.fillStyle = "#c9b48a";
+      f.fillRect(lx + 1, y - 6, 3, 1);
     }
     if (this.carrying) {
       f.fillStyle = "#d8f04a";

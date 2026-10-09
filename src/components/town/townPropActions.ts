@@ -4,11 +4,13 @@
 // (documents, run statistics) comes from real data — nothing is invented.
 
 import type { FlowRun } from "@/lib/agents/flow.functions";
+import type { BudgetReport } from "@/lib/agents/budget.functions";
 import type { DocumentSummary } from "@/lib/documents/documents.functions";
-import type { PropContent } from "./TownDialog";
+import type { PropContent, PropUi } from "./TownDialog";
 import type { TownWorld } from "./townWorld";
 import { isTownAgent, type TownSlug } from "./townMap";
 import { propById } from "./townProps";
+import { explainError, type ProviderTrouble } from "./townInsights";
 
 // ── pure helpers (tested) ──────────────────────────────────────────────────
 
@@ -96,6 +98,10 @@ export type PropDeps = {
   documentsLoading: boolean;
   documentsError: boolean;
   navigate: (to: string) => void;
+  /** The Vault: this month's AI spend and a provider refusing requests, if any. */
+  budget?: BudgetReport;
+  budgetLoading?: boolean;
+  trouble?: ProviderTrouble | null;
   log: (slug: TownSlug, text: string) => void;
 };
 
@@ -271,6 +277,41 @@ export function propContent(id: string, d: PropDeps): PropContent {
         ...base,
         line: board(),
         options: [{ label: "Odśwież", run: (ui) => ui.say(board()) }],
+      };
+    }
+    case "vault": {
+      const usd = (n: number) => `${n.toFixed(2)} $`;
+      const b = d.budget;
+      const money = d.budgetLoading
+        ? "Liczę wydatki…"
+        : b
+          ? [
+              `Ten miesiąc: ${usd(b.spentUsd)} z ${usd(b.limitUsd)} (${Math.round(b.ratio * 100)}%).`,
+              `Dziś: ${usd(b.todayUsd)} · przebiegi: ${b.runs}.`,
+              b.byModel[0]
+                ? `Najdroższy model: ${b.byModel[0].label} (${usd(b.byModel[0].costUsd)}).`
+                : "",
+            ]
+              .filter(Boolean)
+              .join("\n")
+          : "Nie udało się wczytać wydatków.";
+      const alarm = d.trouble
+        ? `ALARM: ${d.trouble.provider ?? "dostawca AI"} odrzuca zapytania od ${new Date(d.trouble.at).toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" })}.`
+        : "Dostawcy AI odpowiadają normalnie.";
+      return {
+        ...base,
+        line: `${alarm}\n${money}`,
+        options: [
+          ...(d.trouble
+            ? [
+                {
+                  label: "Co się stało?",
+                  run: (ui: PropUi) => ui.say(explainError(d.trouble!.message)),
+                },
+              ]
+            : []),
+          { label: "Otwórz Agent Hub", run: () => d.navigate("/agent-hub") },
+        ],
       };
     }
     default:

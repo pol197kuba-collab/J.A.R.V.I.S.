@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
+import type { RunFile } from "@/lib/agents/flow.functions";
 import type { TownSlug } from "./townMap";
 import { GREETING } from "./townTalk";
 import { TownArcade } from "./TownArcade";
 
 export type DialogTarget =
   | { kind: "agent"; slug: TownSlug }
-  | { kind: "board" }
+  /** `noteId`: open straight on that note (Marvel brought it to you). */
+  | { kind: "board"; noteId?: string }
   | { kind: "prop"; id: string };
+/** A result's full answer and files, fetched when its note is opened. */
+export type NoteDetail = { text: string | null; files: RunFile[]; loading: boolean };
 /** What a prop's dialog can do in response to a menu choice. */
 export type PropUi = { say: (text: string) => void; game: () => void; close: () => void };
 export type PropContent = {
@@ -31,6 +35,7 @@ type View =
   | { kind: "say"; text: string }
   | { kind: "command" }
   | { kind: "note"; note: BoardNote }
+  | { kind: "fault"; text: string }
   | { kind: "game" };
 type Option = { label: string; run: () => void };
 
@@ -51,6 +56,12 @@ export function TownDialog({
   propContent,
   onArcadeScore,
   placement = "bottom",
+  faultText,
+  onRetry,
+  noteDetail,
+  onDownload,
+  onOpenNote,
+  onFaultSeen,
 }: {
   target: DialogTarget;
   name: (slug: TownSlug) => string;
@@ -66,8 +77,25 @@ export function TownDialog({
   onArcadeScore?: (score: number) => void;
   /** Which edge of the map the box sits on (the half your character isn't in). */
   placement?: "top" | "bottom";
+  /** "Co się stało?" — why this agent's last task failed; null when it didn't. */
+  faultText?: (slug: TownSlug) => string | null;
+  /** Retry that failed task; null when it can't be retried. */
+  onRetry?: (slug: TownSlug) => (() => void) | null;
+  noteDetail?: (id: string) => NoteDetail;
+  onDownload?: (file: RunFile) => void;
+  /** A note was opened — fetch its full answer and files. */
+  onOpenNote?: (id: string) => void;
+  /** You read why an agent's task failed. */
+  onFaultSeen?: (slug: TownSlug) => void;
 }) {
-  const [view, setView] = useState<View>({ kind: "menu" });
+  const [view, setView] = useState<View>(() => {
+    const n =
+      target.kind === "board" && target.noteId
+        ? notes.find((x) => x.id === target.noteId)
+        : undefined;
+    if (n) onRead(n.id);
+    return n ? { kind: "note", note: n } : { kind: "menu" };
+  });
   const [focus, setFocus] = useState(0);
   const [draft, setDraft] = useState("");
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -82,16 +110,22 @@ export function TownDialog({
     if (portraitRef.current) drawPortrait(portraitRef.current, portrait);
   }, [drawPortrait, portrait]);
   useEffect(() => {
+    if (view.kind === "note") onOpenNote?.(view.note.id);
+    if (view.kind === "fault" && target.kind === "agent") onFaultSeen?.(target.slug);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+  useEffect(() => {
     if (view.kind === "command") inputRef.current?.focus();
     else if (view.kind !== "game") boxRef.current?.focus();
     setFocus(0);
   }, [view]);
 
+  const detail = view.kind === "note" ? noteDetail?.(view.note.id) : undefined;
   const line =
-    view.kind === "say"
+    view.kind === "say" || view.kind === "fault"
       ? view.text
       : view.kind === "note"
-        ? view.note.text
+        ? detail?.text?.trim() || view.note.text
         : view.kind === "game"
           ? "Złap buga! Każdy złapany zwęża cel i przyspiesza kursor."
           : view.kind === "command"
@@ -107,7 +141,8 @@ export function TownDialog({
                 : target.kind === "agent"
                   ? GREETING[target.slug as Exclude<TownSlug, "user">]
                   : "";
-  const typed = useTypewriter(line);
+  // a full answer can be long — show it at once instead of typing it out
+  const typed = useTypewriter(line, view.kind === "note");
 
   const back = () => setView({ kind: "menu" });
   const ui: PropUi = {
@@ -124,6 +159,35 @@ export function TownDialog({
       : null;
   const menuOptions: Option[] = useMemo(() => {
     if (view.kind === "command" || view.kind === "game") return [];
+    if (view.kind === "fault" && target.kind === "agent") {
+      const retry = onRetry?.(target.slug);
+      return [
+        ...(retry
+          ? [
+              {
+                label: "Ponów zadanie",
+                run: () => {
+                  retry();
+                  setView({
+                    kind: "say",
+                    text: `${name(target.slug)}: Spróbuję jeszcze raz.`,
+                  });
+                },
+              },
+            ]
+          : []),
+        { label: "Wróć", run: back },
+      ];
+    }
+    if (view.kind === "note") {
+      return [
+        ...(detail?.files ?? []).map((f) => ({
+          label: `Pobierz: ${f.filename}`,
+          run: () => onDownload?.(f),
+        })),
+        { label: "Wróć", run: back },
+      ];
+    }
     if (view.kind !== "menu") return [{ label: "Wróć", run: back }];
     if (target.kind === "prop") return [];
     if (target.kind === "board")
@@ -139,14 +203,18 @@ export function TownDialog({
         { label: "Odejdź", run: onClose },
       ];
     const s = target.slug;
+    const fault = faultText?.(s);
     return [
+      ...(fault
+        ? [{ label: "! Co się stało?", run: () => setView({ kind: "fault", text: fault }) }]
+        : []),
       { label: "Zleć zadanie", run: () => setView({ kind: "command" }) },
       { label: "Jak idzie?", run: () => setView({ kind: "say", text: statusText(s) }) },
       { label: "Pokaż ostatni wynik", run: () => setView({ kind: "say", text: resultText(s) }) },
       { label: "Do zobaczenia", run: onClose },
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, target, notes]);
+  }, [view, target, notes, detail?.files, detail?.loading]);
   const options = propOptions ?? menuOptions;
 
   const onKey = (e: KeyboardEvent) => {
@@ -196,7 +264,10 @@ export function TownDialog({
       <div className="min-w-0">
         <p className="font-display text-sm text-primary">{speaker}</p>
         <p
-          className="no-scrollbar mt-1 max-h-32 overflow-y-auto overflow-x-hidden whitespace-pre-line break-words text-sm text-foreground"
+          className={cn(
+            "no-scrollbar mt-1 overflow-y-auto overflow-x-hidden whitespace-pre-line break-words text-sm text-foreground",
+            view.kind === "note" ? "max-h-64" : "max-h-32",
+          )}
           aria-live="polite"
         >
           {typed}
@@ -280,10 +351,10 @@ export function TownDialog({
 }
 
 /** Reveal `text` a few characters at a time, like an RPG text box. */
-function useTypewriter(text: string) {
+function useTypewriter(text: string, instant = false) {
   const [n, setN] = useState(0);
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (instant || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setN(text.length);
       return;
     }
@@ -298,6 +369,6 @@ function useTypewriter(text: string) {
       });
     }, 18);
     return () => window.clearInterval(id);
-  }, [text]);
+  }, [text, instant]);
   return text.slice(0, n);
 }

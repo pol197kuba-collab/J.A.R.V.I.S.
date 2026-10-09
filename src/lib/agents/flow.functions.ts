@@ -15,6 +15,7 @@
 // no detail yet" — the frontend just needs to keep polling.
 
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { logServerError } from "@/lib/system/logServerError";
 import type { Json } from "@/integrations/supabase/types";
@@ -50,6 +51,12 @@ export type FlowRun = {
   latencyMs: number | null;
   createdAt: string;
   finishedAt: string | null;
+  /** The run's error message, when it failed. */
+  error?: string | null;
+  /** What the agent was asked (truncated) — lets a failed task be retried. */
+  inputText?: string | null;
+  /** Model that produced the answer (set on success). */
+  model?: string | null;
 };
 
 export type FlowResult = { agents: FlowAgent[]; runs: FlowRun[] };
@@ -78,7 +85,9 @@ export const getAgentFlow = createServerFn({ method: "GET" })
 
     const { data: runs, error } = await supabase
       .from("agent_runs")
-      .select("id, agent_id, parent_run_id, status, output, latency_ms, created_at, finished_at")
+      .select(
+        "id, agent_id, parent_run_id, status, input, output, error, model, latency_ms, created_at, finished_at",
+      )
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(40);
@@ -94,6 +103,7 @@ export const getAgentFlow = createServerFn({ method: "GET" })
       runs: (runs ?? []).map((r) => {
         const agent = agentById.get(r.agent_id);
         const output = (r.output ?? {}) as { tool_calls?: RawToolCall[] };
+        const input = (r.input ?? {}) as { text?: string };
         const rawCalls = output.tool_calls ?? [];
 
         // classifier_* entries are runOrchestrator's internal UI-action
@@ -126,7 +136,57 @@ export const getAgentFlow = createServerFn({ method: "GET" })
           latencyMs: r.latency_ms,
           createdAt: r.created_at,
           finishedAt: r.finished_at,
+          error: r.error ? r.error.slice(0, 500) : null,
+          inputText: typeof input.text === "string" ? input.text.slice(0, 500) : null,
+          model: r.model,
         };
       }),
+    };
+  });
+
+// ---------------------------------------------------------------------------
+// getRunDetail — one run's full answer and the files it produced, fetched on
+// demand (opening a result in Agent Town) rather than in the 3 s flow poll.
+// ---------------------------------------------------------------------------
+
+export type RunFile = { id: string; filename: string; format: string };
+export type RunDetail = {
+  text: string | null;
+  error: string | null;
+  /** Files generated while this run (or its delegated sub-runs) was working. */
+  files: RunFile[];
+};
+
+const RunDetailInput = z.object({ runId: z.string().uuid() });
+
+export const getRunDetail = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => RunDetailInput.parse(input))
+  .handler(async ({ data, context }): Promise<RunDetail> => {
+    const { supabase, userId } = context;
+    const { data: run, error } = await supabase
+      .from("agent_runs")
+      .select("output, error, created_at, finished_at")
+      .eq("id", data.runId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!run) return { text: null, error: null, files: [] };
+    const text = ((run.output ?? {}) as { text?: unknown }).text;
+    // generated_files has no run id; a file created while the run was going
+    // (plus a few seconds of slack for the upload) is that run's file.
+    const until = new Date(Date.parse(run.finished_at ?? new Date().toISOString()) + 15_000);
+    const { data: files } = await supabase
+      .from("generated_files")
+      .select("id, filename, format")
+      .eq("user_id", userId)
+      .gte("created_at", run.created_at)
+      .lte("created_at", until.toISOString())
+      .order("created_at", { ascending: true })
+      .limit(10);
+    return {
+      text: typeof text === "string" ? text : null,
+      error: run.error,
+      files: (files ?? []).map((f) => ({ id: f.id, filename: f.filename, format: f.format })),
     };
   });

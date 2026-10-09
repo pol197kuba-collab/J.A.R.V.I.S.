@@ -2044,6 +2044,45 @@ przy stole w Rdzeniu (`MEETING_HEAD` / `MEETING_SEATS`), J.A.R.V.I.S. na
 szczycie przekazuje im zadania i narada trwa, aż jego przebieg się
 skończy — wtedy wszyscy wracają do biurek.
 
+### Follow-up (2026-10-09): diagnoza, raport, noc, Marvel z kartką, Skarbiec, pełne wyniki
+
+Czyste reguły w `townInsights.ts` (testowane): klasyfikacja błędów
+(brak środków / limit / klucz / timeout / sieć), ponowienie zadania tymi
+samymi słowami, alarm dostawcy AI, raport „od ostatniej wizyty”, pora dnia.
+- **Diagnoza:** agent, którego ostatnie zadanie (z ostatnich 24 h) padło,
+  ma nad sobą dym i czerwony „!”; w rozmowie „! Co się stało?” tłumaczy
+  błąd po ludzku i pozwala „Ponów zadanie” (`getAgentFlow` zwraca teraz
+  `error`, `inputText`, `model`). Obejrzany błąd przestaje dymić.
+- **Raport:** po przerwie ≥ 30 min J.A.R.V.I.S. podchodzi do terminala z
+  podsumowaniem (polecenia, błędy, najaktywniejszy agent, powiadomienia)
+  i przypina całość na tablicy.
+- **Pora dnia:** 18–21 zmierzch, 21–5 noc, 5–7 świt; świecą lampy,
+  monitory, piec; wolni agenci drzemią, Marvel śpi na posłaniu.
+- **Marvel z kartką:** nowy wynik → pies bierze kartkę z tablicy i
+  przynosi ją Tobie; klik / E otwiera wynik od razu.
+- **Skarbiec:** nowy przedmiot — wydatki z `getBudgetReport` i stan
+  dostawców; alarm „$” nad skarbcem, gdy dostawca odmawia albo budżet
+  przekroczony.
+- **Pełne wyniki:** kartka pobiera na żądanie (`getRunDetail`) całą
+  odpowiedź i pliki wygenerowane w czasie przebiegu, z „Pobierz: …”.
+
+### Follow-up (2026-10-09): tematyczne pokoje i więcej detali
+
+Każdy pokój urządzony pod rolę agenta (nowe obiekty w `townMap.ts`,
+rysowane w `townArt.ts`): Archiwum — tablica korkowa ze sznurkami,
+katalog kartkowy, drabinka, fotel z lampą, pulpit z księgą, szafki na akta;
+Laboratorium — ściana karteczek, ploter z wykresem, sztaluga, stół z
+hologramem; Kuźnia — plany, prasa drukarska, stosy papieru, szlifierka,
+węgiel; Rdzeń — reaktor łukowy i zegar z prawdziwą godziną; Skarbiec —
+ściana CCTV, szafki depozytowe, pasy ostrzegawcze, emblemat, gaśnica;
+Twój terminal — okno, zdjęcie z Marvelem, lampy, zabawki psa; Studio —
+neon ON AIR, ściana social, softboxy, stanowisko montażowe. Hol: chodniki,
+aneks kuchenny, akwarium, stołki; salon gier z szafą grającą, TV z konsolą,
+piłkarzykami i dywanem. Ogród: krzewy, rabaty, latarnie. Animacje (hologram,
+reaktor, zegar, CCTV, neon, rybki, prasa, nuty, TV) reagują na prawdziwą
+pracę agentów; nocą świecą nowe lampy. Istniejące meble dopracowane
+(zasłony, szuflady, oparcia, poduszki, frędzle, trzy rodzaje roślin).
+
 ### Propozycje kolejnych poleceń i interakcji (do wyboru i priorytetu)
 
 1. **Przeciągnij kartkę do pokoju** — zadanie upuszczone na pokój agenta

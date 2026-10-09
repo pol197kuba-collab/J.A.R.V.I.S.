@@ -4,9 +4,19 @@ import { useServerFn } from "@tanstack/react-start";
 import { useNavigate } from "@tanstack/react-router";
 import { Crosshair, Footprints, MessageCircle, Minus, Plus } from "lucide-react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
-import { getAgentFlow, type FlowRun } from "@/lib/agents/flow.functions";
+import {
+  getAgentFlow,
+  getRunDetail,
+  type FlowRun,
+  type RunFile,
+} from "@/lib/agents/flow.functions";
+import { getBudgetReport } from "@/lib/agents/budget.functions";
+import { getGeneratedFileUrlFn } from "@/lib/documents/generated.functions";
 import { listDocumentsFn } from "@/lib/documents/documents.functions";
-import { markNotificationRead } from "@/lib/notifications/notifications.functions";
+import {
+  listNotifications,
+  markNotificationRead,
+} from "@/lib/notifications/notifications.functions";
 import { notifyTownResult } from "@/lib/notifications/townResult.functions";
 import type { AgentSummary } from "@/lib/agents/runtime.functions";
 import { useAgentChatChannel } from "@/lib/ai/useAgentChatChannel";
@@ -18,7 +28,15 @@ import { TAG, TownWorld, type Camera, type CharStatus } from "./townWorld";
 import { TownDirector, characterStatus, isActive, type TownCommand } from "./townDirector";
 import { CompanionPanel } from "./CompanionPanel";
 import { applyAction, loadDogName, loadMood, saveMood, settle } from "./dogMood";
-import { TownDialog, type BoardNote, type DialogTarget } from "./TownDialog";
+import { TownDialog, type BoardNote, type DialogTarget, type NoteDetail } from "./TownDialog";
+import {
+  explainError,
+  failedRunOf,
+  nightLevel,
+  providerTrouble,
+  retryPlan,
+  visitReport,
+} from "./townInsights";
 import { lastResultLine, statusLine, taskOf } from "./townTalk";
 import { propById } from "./townProps";
 import { propContent } from "./townPropActions";
@@ -65,6 +83,26 @@ const fmtDur = (r: FlowRun) => {
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
 };
 
+type Reach = DialogTarget | { kind: "letter" } | null;
+
+const LAST_VISIT_KEY = "jarvis.town.lastVisit";
+const SEEN_FAULTS_KEY = "jarvis.town.seenFaults";
+const readLocal = (k: string) => {
+  try {
+    return window.localStorage.getItem(k);
+  } catch {
+    return null;
+  }
+};
+const writeLocal = (k: string, v: string) => {
+  try {
+    window.localStorage.setItem(k, v);
+  } catch {
+    /* private mode — fine */
+  }
+};
+const isUuid = (id: string) => /^[0-9a-f-]{36}$/i.test(id);
+
 export function TownView() {
   const { send, agents, messages, activeAgent } = useAgentChatChannel();
   const fetchFlow = useServerFn(getAgentFlow);
@@ -88,6 +126,68 @@ export function TownView() {
   const [walkMode, setWalkMode] = useState(false);
   const [dialog, setDialog] = useState<DialogTarget | null>(null);
   const [dialogTop, setDialogTop] = useState(false);
+  // ── the Vault, faults, results, the visit report ─────────────────────────
+  const fetchBudget = useServerFn(getBudgetReport);
+  const { data: budget, isLoading: budgetLoading } = useQuery({
+    queryKey: ["budget", "report"],
+    queryFn: () => fetchBudget(),
+    refetchInterval: 5 * 60_000,
+  });
+  const trouble = useMemo(() => providerTrouble(runs, Date.now()), [runs]);
+  const fetchNotifications = useServerFn(listNotifications);
+  const { data: notifications, isFetched: notificationsFetched } = useQuery({
+    queryKey: ["notifications", "list"],
+    queryFn: () => fetchNotifications({ data: { limit: 30 } }),
+    refetchInterval: 60_000,
+  });
+
+  // failed tasks you've already looked at ("Co się stało?") stop smoking
+  const [seenFaults, setSeenFaults] = useState<Set<string>>(() => {
+    try {
+      return new Set(JSON.parse(readLocal(SEEN_FAULTS_KEY) ?? "[]") as string[]);
+    } catch {
+      return new Set();
+    }
+  });
+  const markFaultSeen = useCallback((runId: string) => {
+    setSeenFaults((prev) => {
+      if (prev.has(runId)) return prev;
+      const next = new Set([...prev, runId].slice(-100));
+      writeLocal(SEEN_FAULTS_KEY, JSON.stringify([...next]));
+      return next;
+    });
+  }, []);
+
+  // a result's full answer + files, fetched when its note is opened
+  const fetchRunDetail = useServerFn(getRunDetail);
+  const fetchFileUrl = useServerFn(getGeneratedFileUrlFn);
+  const [details, setDetails] = useState<Record<string, NoteDetail>>({});
+  const openNote = useCallback(
+    (id: string) => {
+      if (!isUuid(id)) return;
+      setDetails((d) => (d[id] ? d : { ...d, [id]: { text: null, files: [], loading: true } }));
+      fetchRunDetail({ data: { runId: id } })
+        .then((r) =>
+          setDetails((d) => ({ ...d, [id]: { text: r.text, files: r.files, loading: false } })),
+        )
+        .catch(() =>
+          setDetails((d) => ({ ...d, [id]: { text: null, files: [], loading: false } })),
+        );
+    },
+    [fetchRunDetail],
+  );
+  const download = useCallback(
+    (f: RunFile) => {
+      fetchFileUrl({ data: { fileId: f.id, kind: "download" } })
+        .then((r) => {
+          if (r.ok) window.location.assign(r.url);
+          else pushLogRef.current("jarvis", `Nie udało się pobrać: ${f.filename}`);
+        })
+        .catch(() => pushLogRef.current("jarvis", `Nie udało się pobrać: ${f.filename}`));
+    },
+    [fetchFileUrl],
+  );
+
   const fetchDocuments = useServerFn(listDocumentsFn);
   // Only the document shelf needs these — fetch when a prop dialog opens.
   const {
@@ -100,7 +200,7 @@ export function TownView() {
     enabled: dialog?.kind === "prop" && propById(dialog.id)?.kind === "shelf",
   });
   const [notes, setNotes] = useState<BoardNote[]>([]);
-  const [nearby, setNearby] = useState<DialogTarget | null>(null);
+  const [nearby, setNearby] = useState<Reach>(null);
   const walkRef = useRef(walkMode);
   walkRef.current = walkMode;
   const dialogRef = useRef(dialog);
@@ -154,6 +254,8 @@ export function TownView() {
   const pushLog = useCallback((slug: TownSlug, line: string) => {
     setLog((l) => [{ id: ++logSeq.current, time: clock(), slug, text: line }, ...l].slice(0, 40));
   }, []);
+  const pushLogRef = useRef(pushLog);
+  pushLogRef.current = pushLog;
 
   // The bell mirrors the board: a new result lights it, reading the note on
   // the board marks it read there too.
@@ -164,15 +266,18 @@ export function TownView() {
 
   /** Pin a finished request's answer on the board as a note to read. */
   const addNote = useCallback(
-    (id: string, ok: boolean, text: string) => {
+    (id: string, ok: boolean, text: string, opts?: { title?: string; quiet?: boolean }) => {
       const cmd = commandsRef.current.find((c) => c.runId === id || c.id === id);
-      const title = (cmd?.text ?? `Wynik z ${clock()}`).slice(0, 48);
+      const title = (opts?.title ?? cmd?.text ?? `Wynik z ${clock()}`).slice(0, 48);
       setNotes((ns) =>
         [
           { id, title, text, ok, at: Date.now(), read: false },
           ...ns.filter((n) => n.id !== id),
         ].slice(0, 12),
       );
+      if (opts?.quiet) return;
+      // Marvel fetches it from the board and brings it to you
+      worldRef.current?.dog.deliver();
       notifyBell({ data: { runId: id, title, text, ok } })
         .then((r) => {
           if (r.id) bellIds.current.set(id, r.id);
@@ -261,6 +366,51 @@ export function TownView() {
     if (flow) directorRef.current?.ingest(flow);
   }, [flow]);
 
+  // "Since you were last here": once per visit, when the data is in,
+  // J.A.R.V.I.S. comes to your terminal with a short report (pinned on the
+  // board too). Only after a real break (30+ min) — not on every reload.
+  const lastVisit = useRef<number | null>(null);
+  const reported = useRef(false);
+  useEffect(() => {
+    lastVisit.current = Number(readLocal(LAST_VISIT_KEY)) || null;
+    const stamp = () => writeLocal(LAST_VISIT_KEY, String(Date.now()));
+    const id = window.setInterval(stamp, 60_000);
+    window.addEventListener("pagehide", stamp);
+    return () => {
+      stamp();
+      window.clearInterval(id);
+      window.removeEventListener("pagehide", stamp);
+    };
+  }, []);
+  useEffect(() => {
+    if (reported.current || !flow || !notificationsFetched) return;
+    reported.current = true;
+    const since = lastVisit.current;
+    writeLocal(LAST_VISIT_KEY, String(Date.now()));
+    if (!since || Date.now() - since < 30 * 60_000) return;
+    const lines = visitReport(flow.runs, notifications ?? [], since, nameOf);
+    const w = worldRef.current;
+    if (!lines) {
+      w?.say("jarvis", "Witaj z powrotem. Bez nowości.", 2600, "check", "ok");
+      return;
+    }
+    addNote(`report-${Date.now()}`, true, ["Od Twojej ostatniej wizyty:", ...lines].join("\n"), {
+      title: "Raport od ostatniej wizyty",
+      quiet: true,
+    });
+    pushLog("jarvis", `Raport: ${lines[0]}`);
+    if (!w) return;
+    void w.actor("jarvis", async () => {
+      await w.walkTo("jarvis", VISIT.user);
+      w.face("jarvis", "left");
+      w.say("jarvis", "Witaj z powrotem! " + lines[0], 3200, "pin");
+      await w.wait(3400);
+      w.say("jarvis", "Całość przypiąłem na tablicy.", 2200, "pin");
+      await w.wait(2200);
+      await w.goHome("jarvis");
+    });
+  }, [flow, notificationsFetched, notifications, nameOf, addNote, pushLog]);
+
   // statuses, progress bars and board cards (also re-evaluated every second
   // so "done"/"error" states fade on their own)
   useEffect(() => {
@@ -290,12 +440,24 @@ export function TownView() {
           .map((r) => ({ color: color(r.agentSlug), col: 2 as const })),
       ];
       w.boardAlert = notesRef.current.filter((n) => !n.read).length;
+      w.faults = new Set(
+        TOWN_AGENTS.filter((slug) => {
+          const f = failedRunOf(slug, runs);
+          return !!f && !seenFaults.has(f.id) && now - Date.parse(f.createdAt) < 24 * 3600_000;
+        }),
+      );
+      w.vaultAlarm = !!trouble || budget?.level === "over";
+      const forced = import.meta.env.DEV
+        ? (window as unknown as { __townNight?: number }).__townNight
+        : undefined;
+      w.night = forced ?? nightLevel(new Date());
+      w.dog.night = w.night >= 0.6;
       setTick((t) => (t + 1) % 1e6);
     };
     sync();
     const id = window.setInterval(sync, 1000);
     return () => window.clearInterval(id);
-  }, [runs, summaries, commands, notes]);
+  }, [runs, summaries, commands, notes, seenFaults, trouble, budget]);
 
   // ── canvas: size, camera, render loop ────────────────────────────────────
   const clampCam = useCallback(() => {
@@ -452,7 +614,8 @@ export function TownView() {
         const wy = cam.y + ((e.clientY - r.top) * dprRef.current) / cam.z;
         const dog = worldRef.current?.dog;
         if (dog?.hit(wx, wy)) {
-          void dog.interact("pet");
+          if (dog.letter) openDialogRef.current({ kind: "letter" });
+          else void dog.interact("pet");
           return;
         }
         const w = worldRef.current;
@@ -490,9 +653,17 @@ export function TownView() {
   }, [clampCam, fitView, zoomAt]);
 
   // ── walk mode ────────────────────────────────────────────────────────────
-  const openDialog = useCallback((t: DialogTarget) => {
+  const openDialog = useCallback((reach: Exclude<Reach, null>) => {
     const w = worldRef.current;
     if (!w) return;
+    let t: DialogTarget;
+    if (reach.kind === "letter") {
+      // take the note from Marvel and read it right away
+      w.dog.takeLetter();
+      const ns = notesRef.current;
+      const note = ns.find((n) => !n.read) ?? ns[0];
+      t = { kind: "board", noteId: note?.id };
+    } else t = reach;
     if (t.kind === "agent") {
       w.talkingTo = t.slug;
       w.faceUser(t.slug);
@@ -549,6 +720,8 @@ export function TownView() {
   );
   const tapWalkRef = useRef(tapWalk);
   tapWalkRef.current = tapWalk;
+  const openDialogRef = useRef(openDialog);
+  openDialogRef.current = openDialog;
 
   const toggleWalk = useCallback(() => {
     const w = worldRef.current;
@@ -828,11 +1001,13 @@ export function TownView() {
                 className="font-display absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-md border-2 border-foreground/80 bg-primary px-3 py-1.5 text-sm text-primary-foreground shadow-[3px_3px_0_rgba(0,0,0,0.6)]"
               >
                 <MessageCircle className="h-4 w-4" />
-                {nearby.kind === "board"
-                  ? "Otwórz tablicę"
-                  : nearby.kind === "prop"
-                    ? (propById(nearby.id)?.prompt ?? "Użyj")
-                    : `Porozmawiaj: ${TAG[nearby.slug]}`}
+                {nearby.kind === "letter"
+                  ? "Weź kartkę od psa"
+                  : nearby.kind === "board"
+                    ? "Otwórz tablicę"
+                    : nearby.kind === "prop"
+                      ? (propById(nearby.id)?.prompt ?? "Użyj")
+                      : `Porozmawiaj: ${TAG[nearby.slug]}`}
               </button>
             )}
             {dialog && (
@@ -856,6 +1031,27 @@ export function TownView() {
                 }}
                 notes={notes}
                 onRead={readNote}
+                faultText={(slug) => {
+                  const f = failedRunOf(slug, runs);
+                  if (!f) return null;
+                  return explainError(f.error);
+                }}
+                onRetry={(slug) => {
+                  const f = failedRunOf(slug, runs);
+                  const plan = f ? retryPlan(f, runs) : null;
+                  if (!f || !plan) return null;
+                  return () => {
+                    markFaultSeen(f.id);
+                    submit(plan.text, plan.to);
+                  };
+                }}
+                onFaultSeen={(slug) => {
+                  const f = failedRunOf(slug, runs);
+                  if (f) markFaultSeen(f.id);
+                }}
+                noteDetail={(id) => details[id] ?? { text: null, files: [], loading: false }}
+                onOpenNote={openNote}
+                onDownload={download}
                 onCommand={(t, to) => submit(t, to)}
                 onClose={closeDialog}
                 propContent={(id) =>
@@ -867,6 +1063,9 @@ export function TownView() {
                     documents,
                     documentsLoading,
                     documentsError,
+                    budget,
+                    budgetLoading,
+                    trouble,
                     navigate: (to) => void navigate({ to }),
                     log: pushLog,
                   })
