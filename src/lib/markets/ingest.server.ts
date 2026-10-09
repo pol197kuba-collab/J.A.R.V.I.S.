@@ -261,9 +261,14 @@ export async function buildOutlook(
   supabase: Db,
   userId: string,
   keys: ModelKeys,
+  /** Limit the outlook to some assets (the weekend run: crypto only). */
+  only?: (asset: MarketAsset) => boolean,
 ): Promise<{ rows: OutlookRow[]; model: string | null }> {
-  const symbols = await loadWatchlist(supabase, userId);
-  const assets = symbols.map(assetBySymbol).filter((a): a is MarketAsset => Boolean(a));
+  const assets = (await loadWatchlist(supabase, userId))
+    .map(assetBySymbol)
+    .filter((a): a is MarketAsset => Boolean(a))
+    .filter((a) => !only || only(a));
+  const symbols = assets.map((a) => a.symbol);
 
   // Notowania bierzemy z cache'u — typer nie odświeża danych sam, żeby
   // jedno kliknięcie nie odpalało dwudziestu żądań do darmowych API.
@@ -490,8 +495,15 @@ export async function resolveDuePredictions(supabase: Db, userId: string): Promi
     .eq("owner_id", userId)
     .is("outcome", null)
     .lte("due_at", nowIso)
+    // Newest first: predictions that can never resolve (a symbol dropped
+    // from the watchlist has no quotes after its due date) pile up at the
+    // old end and must not crowd fresh ones out of the 200-row window.
+    .order("due_at", { ascending: false })
     .limit(200);
-  if (error || !due || due.length === 0) return 0;
+  // A read failure is a failure — not "0 resolved", which the job would
+  // report as a quiet success.
+  if (error) throw new Error(`Odczyt prognoz do rozliczenia: ${error.message}`);
+  if (!due || due.length === 0) return 0;
 
   let resolved = 0;
   for (const prediction of due) {

@@ -42,3 +42,12 @@ export function warsawDate(date: Date): string {
   const shifted = new Date(date.getTime() + warsawOffsetHours(date) * 3_600_000);
   return shifted.toISOString().slice(0, 10);
 }
+
+/** Koniec warszawskiej doby (23:59:59.999 lokalnie) jako chwila UTC w ISO —
+ *  granica „na dziś" w zapytaniach do bazy, która trzyma czas w UTC. */
+export function warsawDayEndIso(date: Date): string {
+  const [y, m, d] = warsawDate(date).split("-").map(Number);
+  const nextMidnightLocal = Date.UTC(y, m - 1, d + 1);
+  const offset = warsawOffsetHours(new Date(nextMidnightLocal - 3_600_000));
+  return new Date(nextMidnightLocal - offset * 3_600_000 - 1).toISOString();
+}

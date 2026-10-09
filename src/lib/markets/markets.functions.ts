@@ -47,8 +47,8 @@ const MIN_OUTLOOK_REFRESH_MS = 60 * 60_000;
 let refreshInFlight: Promise<void> | null = null;
 let lastNewsIngestAt = 0;
 let newsInFlight: Promise<string[]> | null = null;
-let lastOutlookAt = 0;
-let outlookCache: MarketOutlook | null = null;
+/** Per user — the outlook is built from that user's watchlist and API key. */
+const outlookCache = new Map<string, { at: number; result: MarketOutlook }>();
 
 export type MarketSeries = {
   symbol: string;
@@ -121,6 +121,7 @@ export const addToWatchlist = createServerFn({ method: "POST" })
         { onConflict: "owner_id,symbol" },
       );
     if (error) throw new Error(error.message);
+    outlookCache.delete(userId); // the watchlist changed — rebuild next time
     return { ok: true as const, symbol: asset.symbol };
   });
 
@@ -134,6 +135,7 @@ export const removeFromWatchlist = createServerFn({ method: "POST" })
       .eq("owner_id", context.userId)
       .eq("symbol", data.symbol.trim().toUpperCase());
     if (error) throw new Error(error.message);
+    outlookCache.delete(context.userId); // the watchlist changed — rebuild next time
     return { ok: true as const };
   });
 
@@ -364,13 +366,14 @@ export const getMarketOutlook = createServerFn({ method: "GET" })
     // jeszcze pusty cache notowań — zapamiętanie tego na godzinę zostawiało
     // panel z komunikatem „za mało notowań" długo po tym, jak notowania już
     // były w bazie. (Zaobserwowane na żywo przy pierwszym uruchomieniu.)
+    const cached = outlookCache.get(userId);
     if (
       !force &&
-      outlookCache &&
-      outlookCache.rows.length > 0 &&
-      Date.now() - lastOutlookAt < MIN_OUTLOOK_REFRESH_MS
+      cached &&
+      cached.result.rows.length > 0 &&
+      Date.now() - cached.at < MIN_OUTLOOK_REFRESH_MS
     ) {
-      return outlookCache;
+      return cached.result;
     }
 
     const { buildOutlook, HORIZON_DAYS } = await import("./ingest.server");
@@ -384,10 +387,7 @@ export const getMarketOutlook = createServerFn({ method: "GET" })
       generatedAt: new Date().toISOString(),
     };
     // Jak wyżej: zapamiętujemy tylko wynik, który cokolwiek zawiera.
-    if (result.rows.length > 0) {
-      outlookCache = result;
-      lastOutlookAt = Date.now();
-    }
+    if (result.rows.length > 0) outlookCache.set(userId, { at: Date.now(), result });
     return result;
   });
 
@@ -417,7 +417,8 @@ export const getPredictionScoreboard = createServerFn({ method: "GET" })
     // tygodnia ma się rozliczyć sama, gdy ktokolwiek wejdzie na stronę.
     // Nocny job robi to samo, gdy nie wejdzie nikt.
     const { resolveDuePredictions } = await import("./ingest.server");
-    const justResolved = await resolveDuePredictions(supabase, userId);
+    // A failed resolve must not take the scoreboard down with it.
+    const justResolved = await resolveDuePredictions(supabase, userId).catch(() => 0);
 
     const { data: rows, error } = await supabase
       .from("market_predictions")

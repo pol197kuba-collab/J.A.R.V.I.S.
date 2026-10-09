@@ -6,6 +6,7 @@
 // view. No new tables — agent_runs and agents already carry everything this
 // needs.
 
+import { fetchAllPages } from "@/lib/db/paginate";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
@@ -86,14 +87,18 @@ export const getSystemPulse = createServerFn({ method: "GET" })
 
     // Bounded to 7 days server-side (not just a row LIMIT) so a heavy user
     // can't silently truncate the 7d window before the 24h one is even full.
-    const { data: runsRaw } = await supabase
-      .from("agent_runs")
-      .select("agent_id, status, created_at, tokens_input, tokens_output")
-      .eq("user_id", userId)
-      .gte("created_at", new Date(D7).toISOString())
-      .order("created_at", { ascending: false })
-      .limit(5000);
-    const runs = runsRaw ?? [];
+    // Paged: `.limit(5000)` can't get past PostgREST's 1000-row cap, so a
+    // busy week used to lose its oldest days from the 7d sparklines.
+    const runs = await fetchAllPages((from, to) =>
+      supabase
+        .from("agent_runs")
+        .select("agent_id, status, created_at, tokens_input, tokens_output")
+        .eq("user_id", userId)
+        .gte("created_at", new Date(D7).toISOString())
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, to),
+    ).catch(() => []);
 
     const { count: warnEvents24h } = await supabase
       .from("system_events")

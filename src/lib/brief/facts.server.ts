@@ -13,7 +13,7 @@ import { assetBySymbol } from "@/lib/markets/assets";
 import { productById, DEFAULT_PRODUCT_ID } from "@/lib/fuel/orlen";
 import { labelsFor } from "@/lib/orders/subjects";
 import { describeOrder, type StandingOrder } from "@/lib/orders/rules";
-import { warsawDate } from "@/lib/format/warsaw";
+import { warsawDayEndIso, warsawDate } from "@/lib/format/warsaw";
 import { currentBudget } from "@/lib/agents/budget.server";
 import { fetchDayWeather } from "@/lib/weather/openMeteo.server";
 import { logServerError } from "@/lib/system/logServerError";
@@ -197,7 +197,9 @@ async function loadFiredOrders(db: Db, ownerId: string): Promise<BriefFacts["fir
 }
 
 async function loadTasks(db: Db, ownerId: string): Promise<BriefFacts["tasks"]> {
-  const todayEnd = `${isoDate(new Date())}T23:59:59.999Z`;
+  // Koniec doby WARSZAWSKIEJ: zadanie na 00:30 jutra lokalnie to w UTC
+  // jeszcze „dziś" i nie może trafić do dzisiejszej rubryki.
+  const todayEnd = warsawDayEndIso(new Date());
   const { data } = await db
     .from("tasks")
     .select("title, due_at")

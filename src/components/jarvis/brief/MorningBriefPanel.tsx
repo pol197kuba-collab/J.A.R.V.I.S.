@@ -18,13 +18,14 @@ import { rescueStuckAgentsFn } from "@/lib/agents/runtime.functions";
 import { isSpeakingNow, onSpeaking, speak, speakCancel } from "@/lib/audio/speak";
 import { cn } from "@/lib/utils";
 
+import { warsawDate } from "@/lib/format/warsaw";
 const BRIEF_QUERY_KEY = ["brief", "latest"] as const;
 
 /** „dziś" / „wczoraj" / „z 21 września" — wiek rubryki bez liczenia w głowie. */
 function ageLabel(date: string, now: Date): string {
   const days = Math.round(
-    (Date.parse(`${now.toISOString().slice(0, 10)}T00:00:00Z`) - Date.parse(`${date}T00:00:00Z`)) /
-      86_400_000,
+    // the brief is dated by the Warsaw day — compare against the same day
+    (Date.parse(`${warsawDate(now)}T00:00:00Z`) - Date.parse(`${date}T00:00:00Z`)) / 86_400_000,
   );
   if (days <= 0) return "dziś";
   if (days === 1) return "wczoraj";

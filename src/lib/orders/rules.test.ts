@@ -250,3 +250,27 @@ describe("opis i meldunek", () => {
     expect(msg.body).toContain("-6%");
   });
 });
+
+describe("meldunki zmianowe nie wracają z tych samych danych", () => {
+  const friday = [
+    { date: "2026-10-01", value: 100 },
+    { date: "2026-10-02", value: 94 },
+  ];
+  const rule = order({
+    condition: "change_pct_down",
+    threshold: 5,
+    windowDays: 1,
+    cooldownHours: 24,
+    lastTriggeredAt: "2026-10-02T18:10:00Z",
+  });
+
+  it("weekend na piątkowym zamknięciu nie melduje drugi raz", () => {
+    expect(evaluateOrder(rule, friday, new Date("2026-10-03T18:10:00Z"))).toBeNull();
+    expect(evaluateOrder(rule, friday, new Date("2026-10-04T18:10:00Z"))).toBeNull();
+  });
+
+  it("nowy ruch nazajutrz melduje nawet przy starcie crona kwadrans wcześniej", () => {
+    const tuesday = [...friday, { date: "2026-10-03", value: 88 }];
+    expect(evaluateOrder(rule, tuesday, new Date("2026-10-03T17:55:00Z"))).not.toBeNull();
+  });
+});

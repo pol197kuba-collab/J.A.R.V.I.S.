@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { warsawDate, warsawHour, warsawOffsetHours } from "./warsaw";
+import { warsawDate, warsawDayEndIso, warsawHour, warsawOffsetHours } from "./warsaw";
 
 describe("warsawOffsetHours", () => {
   it("zimą trzyma UTC+1", () => {
@@ -47,5 +47,16 @@ describe("warsawDate", () => {
   it("liczy dobę lokalnie, nie w UTC", () => {
     // 00:30 czasu warszawskiego 15 lipca to jeszcze 14 lipca w UTC.
     expect(warsawDate(new Date("2026-07-14T22:30:00Z"))).toBe("2026-07-15");
+  });
+});
+
+describe("warsawDayEndIso", () => {
+  it("ends the day at local midnight, in summer and winter", () => {
+    // 9 Oct (UTC+2): local day ends 21:59:59.999Z
+    expect(warsawDayEndIso(new Date("2026-10-09T10:00:00Z"))).toBe("2026-10-09T21:59:59.999Z");
+    // 00:30 local on 10 Oct is still 9 Oct in UTC — but it's the 10th here
+    expect(warsawDayEndIso(new Date("2026-10-09T22:30:00Z"))).toBe("2026-10-10T21:59:59.999Z");
+    // winter (UTC+1)
+    expect(warsawDayEndIso(new Date("2026-12-15T12:00:00Z"))).toBe("2026-12-15T22:59:59.999Z");
   });
 });
