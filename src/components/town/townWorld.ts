@@ -80,6 +80,18 @@ const LIGHTS: readonly Light[] = OBJECTS.flatMap((o): Light[] => {
     return [{ x: cx, y: cy, r: 26, rgb: warm, a: 0.32 }];
   if (o.kind === "spot") return [{ x: cx, y: cy, r: 60, rgb: "255,230,170", a: 0.45 }];
   if (o.kind === "board") return [{ x: cx, y: cy + 10, r: 70, rgb: warm, a: 0.3 }];
+  if (o.kind === "floorlamp") return [{ x: cx, y: cy - 12, r: 46, rgb: warm, a: 0.55 }];
+  if (o.kind === "lamppost") return [{ x: cx, y: cy - 8, r: 52, rgb: warm, a: 0.6 }];
+  if (o.kind === "reactor") return [{ x: cx, y: cy - 4, r: 50, rgb: cool, a: 0.55 }];
+  if (o.kind === "aquarium") return [{ x: cx, y: cy + 4, r: 30, rgb: "90,170,255", a: 0.45 }];
+  if (o.kind === "holotable") return [{ x: cx, y: cy - 4, r: 34, rgb: cool, a: 0.45 }];
+  if (o.kind === "jukebox") return [{ x: cx, y: cy - 4, r: 34, rgb: "255,120,150", a: 0.4 }];
+  if (o.kind === "tvconsole" || o.kind === "cctv" || o.kind === "editdesk")
+    return [{ x: cx, y: cy - 4, r: 30, rgb: cool, a: 0.35 }];
+  if (o.kind === "neon") return [{ x: cx, y: cy, r: 36, rgb: "255,80,110", a: 0.35 }];
+  if (o.kind === "softbox") return [{ x: cx, y: cy - 8, r: 34, rgb: "255,243,196", a: 0.4 }];
+  if (o.kind === "fridge" || o.kind === "watercooler")
+    return [{ x: cx, y: cy, r: 20, rgb: cool, a: 0.2 }];
   return [];
 });
 

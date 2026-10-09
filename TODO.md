@@ -2066,6 +2066,23 @@ samymi słowami, alarm dostawcy AI, raport „od ostatniej wizyty”, pora dnia.
 - **Pełne wyniki:** kartka pobiera na żądanie (`getRunDetail`) całą
   odpowiedź i pliki wygenerowane w czasie przebiegu, z „Pobierz: …”.
 
+### Follow-up (2026-10-09): tematyczne pokoje i więcej detali
+
+Każdy pokój urządzony pod rolę agenta (nowe obiekty w `townMap.ts`,
+rysowane w `townArt.ts`): Archiwum — tablica korkowa ze sznurkami,
+katalog kartkowy, drabinka, fotel z lampą, pulpit z księgą, szafki na akta;
+Laboratorium — ściana karteczek, ploter z wykresem, sztaluga, stół z
+hologramem; Kuźnia — plany, prasa drukarska, stosy papieru, szlifierka,
+węgiel; Rdzeń — reaktor łukowy i zegar z prawdziwą godziną; Skarbiec —
+ściana CCTV, szafki depozytowe, pasy ostrzegawcze, emblemat, gaśnica;
+Twój terminal — okno, zdjęcie z Marvelem, lampy, zabawki psa; Studio —
+neon ON AIR, ściana social, softboxy, stanowisko montażowe. Hol: chodniki,
+aneks kuchenny, akwarium, stołki; salon gier z szafą grającą, TV z konsolą,
+piłkarzykami i dywanem. Ogród: krzewy, rabaty, latarnie. Animacje (hologram,
+reaktor, zegar, CCTV, neon, rybki, prasa, nuty, TV) reagują na prawdziwą
+pracę agentów; nocą świecą nowe lampy. Istniejące meble dopracowane
+(zasłony, szuflady, oparcia, poduszki, frędzle, trzy rodzaje roślin).
+
 ### Propozycje kolejnych poleceń i interakcji (do wyboru i priorytetu)
 
 1. **Przeciągnij kartkę do pokoju** — zadanie upuszczone na pokój agenta

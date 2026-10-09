@@ -114,7 +114,49 @@ export type ObjKind =
   | "spot"
   | "camera"
   | "tree"
-  | "dogbed";
+  | "dogbed"
+  // themed furnishing (one look per agent's job) + common areas + garden
+  | "corkboard"
+  | "cabinet"
+  | "armchair"
+  | "floorlamp"
+  | "catalog"
+  | "lectern"
+  | "ladder"
+  | "papers"
+  | "stickies"
+  | "chartstand"
+  | "plotter"
+  | "holotable"
+  | "press"
+  | "paperstack"
+  | "grindstone"
+  | "coal"
+  | "blueprint"
+  | "reactor"
+  | "clock"
+  | "cctv"
+  | "lockers"
+  | "hazard"
+  | "emblem"
+  | "extinguisher"
+  | "photo"
+  | "toys"
+  | "neon"
+  | "softbox"
+  | "editdesk"
+  | "socialwall"
+  | "fridge"
+  | "counter"
+  | "watercooler"
+  | "aquarium"
+  | "stool"
+  | "foosball"
+  | "jukebox"
+  | "tvconsole"
+  | "bush"
+  | "flowerbed"
+  | "lamppost";
 export type TownObject = {
   kind: ObjKind;
   tx: number;
@@ -154,6 +196,17 @@ O("desk", 7, 6, 2, 1, true, { books: true, lamp: true });
 O("chair", 8, 7, 1, 1, false);
 O("globe", 13, 8);
 O("plant", 3, 9);
+// …research den: evidence board, card catalogue, reading corner, files
+O("corkboard", 10, 3, 1, 1, false);
+O("ladder", 7, 4, 1, 1, false);
+O("catalog", 3, 7);
+O("armchair", 12, 6);
+O("floorlamp", 13, 6);
+O("lectern", 11, 7);
+O("cabinet", 14, 6);
+O("cabinet", 14, 7);
+O("papers", 5, 9, 1, 1, false);
+O("papers", 11, 9, 1, 1, false);
 // Laboratorium
 O("whiteboard", 16, 3, 3, 1, false);
 O("window", 20, 3, 1, 1, false);
@@ -164,6 +217,11 @@ O("chair", 24, 7, 1, 1, false);
 O("plant", 16, 9);
 O("plant", 27, 9);
 O("rug", 18, 7, 3, 2, false, { c: "#6fb7a4", b: "#4d8f7e" });
+// …data lab: sticky-note wall, plotter printing charts, chart easel, holo table
+O("stickies", 21, 3, 2, 1, false);
+O("plotter", 16, 7);
+O("chartstand", 27, 6);
+O("holotable", 25, 8);
 // Kuźnia
 O("furnace", 29, 4, 2, 1);
 O("window", 33, 3, 1, 1, false);
@@ -174,6 +232,12 @@ O("crate", 40, 8);
 O("crate", 40, 9);
 O("crate", 39, 9);
 O("barrel", 29, 9);
+// …document forge: blueprints, printing press, paper stacks, grindstone, coal
+O("blueprint", 31, 3, 2, 1, false);
+O("coal", 31, 4, 1, 1, false);
+O("grindstone", 29, 7);
+O("press", 37, 7, 2, 1);
+O("paperstack", 39, 7);
 // Rdzeń — the task board is where commands are pinned and results delivered
 O("rug", 18, 15, 8, 3, false, { c: "#a8433a", b: "#7d2f29" });
 O("board", 17, 14, 10, 1);
@@ -181,7 +245,8 @@ O("table", 19, 15, 6, 2);
 O("plant", 16, 14);
 O("plant", 27, 14);
 O("plant", 16, 18);
-O("plant", 27, 18);
+O("reactor", 27, 18);
+O("clock", 16, 13, 1, 1, false);
 // Skarbiec
 O("vault", 3, 22, 3, 1, false);
 O("rack", 10, 23);
@@ -191,6 +256,13 @@ O("rack", 13, 23);
 O("desk", 4, 26, 3, 1, true, { monitor: true, cams: true });
 O("chair", 5, 27, 1, 1, false);
 O("plant", 14, 28);
+// …security: CCTV wall, deposit lockers, hazard stripes, shield emblem
+O("cctv", 6, 22, 2, 1, false);
+O("lockers", 14, 24);
+O("lockers", 14, 25);
+O("hazard", 10, 24, 4, 1, false);
+O("emblem", 8, 26, 2, 2, false);
+O("extinguisher", 3, 28);
 // Twój terminal
 O("rug", 18, 25, 6, 3, false, { c: "#3f7a8c", b: "#2c5a68" });
 O("shelf", 16, 23, 2, 1);
@@ -200,6 +272,11 @@ O("coffee", 27, 23);
 O("sofa", 24, 28, 3, 1);
 O("plant", 16, 28);
 O("dogbed", 17, 26, 1, 1, false); // the spaniel's bed (see townDog.ts)
+O("window", 18, 22, 2, 1, false);
+O("photo", 23, 22, 2, 1, false); // a framed photo of Marvel
+O("floorlamp", 25, 23);
+O("floorlamp", 27, 28);
+O("toys", 18, 27, 1, 1, false);
 // Studio
 O("stage", 33, 23, 5, 2, false);
 O("poster", 30, 22, 2, 1, false);
@@ -210,7 +287,16 @@ O("camera", 31, 27);
 O("sofa", 37, 28, 3, 1);
 O("plant", 29, 23);
 O("plant", 40, 28);
-// Hall + lounges
+// …broadcast studio: ON AIR neon, social wall, softboxes, editing desk
+O("neon", 32, 22, 2, 1, false);
+O("socialwall", 36, 22, 2, 1, false);
+O("softbox", 29, 25);
+O("softbox", 40, 25);
+O("editdesk", 38, 26, 2, 1);
+// Hall + lounges — corridor runners first (flat, drawn under everything)
+O("rug", 3, 11, 38, 1, false, { c: "#9a7a5a", b: "#7a5a3e" });
+O("rug", 3, 20, 38, 1, false, { c: "#9a7a5a", b: "#7a5a3e" });
+O("rug", 7, 14, 5, 3, false, { c: "#c97b4a", b: "#9a5a32" });
 O("vending", 3, 12);
 O("coffee", 4, 12);
 O("sofa", 5, 19, 3, 1);
@@ -225,6 +311,18 @@ O("plant", 29, 12);
 O("plant", 40, 19);
 O("beanbag", 31, 19);
 O("mat", 21, 28, 2, 1, false);
+// west lounge = kitchenette & café corner
+O("fridge", 6, 12);
+O("counter", 7, 12, 2, 1);
+O("watercooler", 12, 12);
+O("aquarium", 3, 15, 1, 2);
+O("stool", 8, 15, 1, 1, false);
+O("stool", 11, 15, 1, 1, false);
+// east lounge = games room
+O("rug", 31, 14, 7, 4, false, { c: "#4a6a8a", b: "#34506c" });
+O("jukebox", 31, 12);
+O("tvconsole", 34, 12, 2, 1);
+O("foosball", 38, 17, 2, 1);
 // Garden
 for (const [x, y] of [
   [0, 0],
@@ -237,6 +335,29 @@ for (const [x, y] of [
   [31, 30],
 ] as const)
   O("tree", x, y, 2, 2, false);
+for (const [x, y] of [
+  [4, 0],
+  [9, 1],
+  [16, 0],
+  [25, 1],
+  [33, 0],
+  [38, 1],
+  [0, 5],
+  [1, 9],
+  [0, 20],
+  [1, 25],
+  [42, 6],
+  [43, 10],
+  [42, 22],
+  [43, 26],
+] as const)
+  O("bush", x, y, 1, 1, false);
+O("flowerbed", 5, 30, 3, 1, false);
+O("flowerbed", 15, 30, 4, 1, false);
+O("flowerbed", 25, 30, 4, 1, false);
+O("flowerbed", 35, 30, 3, 1, false);
+O("lamppost", 20, 30, 1, 1, false);
+O("lamppost", 23, 30, 1, 1, false);
 
 export const OBJECTS: readonly TownObject[] = OBJ;
 
