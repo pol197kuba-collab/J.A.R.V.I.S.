@@ -1,5 +1,6 @@
 // Budżet — odczyt wydatków z bazy. Decyzja, co z nimi zrobić, siedzi w
 // budget.ts i jest pokryta testami bez bazy.
+import { fetchAllPages } from "@/lib/db/paginate";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { budgetStatus, type BudgetStatus } from "./budget";
@@ -23,16 +24,26 @@ export function monthStart(now: Date = new Date()): string {
  * jako zera byłoby dopiero kłamstwem.
  */
 export async function monthSpendUsd(db: Db, ownerId: string, now: Date = new Date()) {
-  const { data, error } = await db
-    .from("agent_runs")
-    .select("cost_usd")
-    .eq("user_id", ownerId)
-    .gte("created_at", monthStart(now))
-    .not("cost_usd", "is", null);
+  // Paged: PostgREST silently caps a select at 1000 rows, and a busy month
+  // (chat turns + delegations + document jobs) easily passes that — the sum
+  // would undercount and the budget would never trip.
+  let rows: { cost_usd: number | null }[];
+  try {
+    rows = await fetchAllPages((from, to) =>
+      db
+        .from("agent_runs")
+        .select("cost_usd")
+        .eq("user_id", ownerId)
+        .gte("created_at", monthStart(now))
+        .not("cost_usd", "is", null)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+  } catch (e) {
+    return { spentUsd: 0, runs: 0, error: e instanceof Error ? e.message : String(e) };
+  }
 
-  if (error) return { spentUsd: 0, runs: 0, error: error.message };
-
-  const rows = data ?? [];
   const spentUsd = rows.reduce((sum, r) => sum + Number(r.cost_usd ?? 0), 0);
   return { spentUsd, runs: rows.length, error: null as string | null };
 }

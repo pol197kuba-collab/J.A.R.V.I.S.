@@ -54,3 +54,11 @@ describe("formatUsd", () => {
     expect(formatUsd(1.27)).toBe("$1,27");
   });
 });
+
+describe("dated model ids", () => {
+  it("prices a dated Anthropic release like its family", () => {
+    expect(bareModelId("anthropic:claude-haiku-4-5-20251001")).toBe("claude-haiku-4-5");
+    expect(hasPricing("claude-haiku-4-5-20251001")).toBe(true);
+    expect(costUsd("claude-haiku-4-5-20251001", { input: 1_000_000, output: 0 })).toBe(1);
+  });
+});

@@ -818,6 +818,37 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     );
   }
 
+  // Token counters live outside the try so the error path can still bill
+  // what was spent before the failure.
+  let totalTokensIn = 0;
+  let totalTokensOut = 0;
+  // Osobno, bo rozliczają się po innych stawkach niż zwykłe wejście.
+  let totalCacheRead = 0;
+  let totalCacheWrite = 0;
+  // A run can switch models midway (Claude → Gemini on failure): tokens are
+  // priced per segment, at the rate of the model that actually spent them.
+  let billed = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  let billedUsd: number | null = null;
+  const billSegment = () => {
+    const seg = costUsd(model, {
+      input: totalTokensIn - billed.input,
+      output: totalTokensOut - billed.output,
+      cacheRead: totalCacheRead - billed.cacheRead,
+      cacheWrite: totalCacheWrite - billed.cacheWrite,
+    });
+    if (seg !== null) billedUsd = (billedUsd ?? 0) + seg;
+    billed = {
+      input: totalTokensIn,
+      output: totalTokensOut,
+      cacheRead: totalCacheRead,
+      cacheWrite: totalCacheWrite,
+    };
+  };
+  const runCostUsd = () => {
+    billSegment();
+    return billedUsd;
+  };
+
   // 4. Call Gemini with function-calling loop.
   try {
     const contents: GeminiContent[] = [
@@ -908,11 +939,6 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         },
       });
     }
-    let totalTokensIn = 0;
-    let totalTokensOut = 0;
-    // Osobno, bo rozliczają się po innych stawkach niż zwykłe wejście.
-    let totalCacheRead = 0;
-    let totalCacheWrite = 0;
     let finalText = "";
     let uiAction: UiAction | null = null;
     const toolCallLog: Array<{ name: string; args: Record<string, unknown> }> = [];
@@ -1158,6 +1184,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
             `Claude (${model}) nie odpowiedział — ta tura i reszta runu idą na ${DEFAULT_GEMINI_MODEL}: ${geminiMsg}`,
             { run_id: runId, iter, configured_model: modelRef } as Json,
           );
+          billSegment(); // Claude's tokens so far, at Claude's rate
           modelProvider = "gemini";
           model = DEFAULT_GEMINI_MODEL;
           // Powtórka tego samego kroku pętli: `iter` wróci do bieżącej
@@ -1288,7 +1315,9 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
               agentId: agent.id,
               runId,
               apiKey,
-              model,
+              // Tools that call Google (web_search grounding) need a Gemini
+              // model id — `model` is a bare Claude id on Claude-served turns.
+              model: modelProvider === "gemini" ? model : DEFAULT_GEMINI_MODEL,
               logEvent,
             });
             if (call.name === GENERATE_DOCUMENT_TOOL) {
@@ -1418,7 +1447,8 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       const classifierResult = await runClassifierFallback({
         groqApiKey,
         input,
-        model,
+        // the classifier's Gemini leg needs a Gemini id even on Claude turns
+        model: modelProvider === "gemini" ? model : DEFAULT_GEMINI_MODEL,
         apiKey,
         effectiveUiActionsWithNone,
         runId,
@@ -1525,12 +1555,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         // Koszt liczony TERAZ, po dzisiejszym cenniku, i zapisany przy
         // przebiegu — historia ma zostać tym, czym była, nawet gdy stawki
         // się zmienią. `null` znaczy „model spoza cennika", nie „za darmo".
-        cost_usd: costUsd(model, {
-          input: totalTokensIn,
-          output: totalTokensOut,
-          cacheRead: totalCacheRead,
-          cacheWrite: totalCacheWrite,
-        }),
+        cost_usd: runCostUsd(),
         latency_ms: latencyMs,
         finished_at: new Date().toISOString(),
       })
@@ -1623,6 +1648,13 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         error: msg,
         finished_at: new Date().toISOString(),
         latency_ms: Date.now() - startedAt,
+        // what was spent before the failure still counts toward the budget
+        tokens_input: totalTokensIn || null,
+        tokens_output: totalTokensOut || null,
+        cache_read_tokens: totalCacheRead || null,
+        cache_write_tokens: totalCacheWrite || null,
+        model,
+        cost_usd: totalTokensIn || totalTokensOut ? runCostUsd() : null,
       })
       .eq("id", runId);
     await supabase

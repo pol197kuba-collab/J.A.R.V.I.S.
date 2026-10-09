@@ -230,8 +230,10 @@ export function useAgentChatChannel(): AgentChatChannel {
       setTyping(true);
       try {
         if (hasServerKey()) {
-          emitChat("user", text);
+          // History first: emitChat persists this message, and the server
+          // appends `input` itself — reading after would send it twice.
           const history = getRecentHistory(3);
+          emitChat("user", text);
           setAgentBusy(true);
           try {
             const result = await runAgentFn({

@@ -16,14 +16,16 @@ import { DEFAULT_GEMINI_MODEL, RECOMMENDED_AGENT_MODELS } from "./models";
 import { logServerError } from "@/lib/system/logServerError";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
-// Accept any Gemini model id — the enum used to be a small whitelist which
-// made every new Gemini release require a code change. The Google API itself
-// is the source of truth; if the id is wrong the call fails and we surface it.
+// Accept any Gemini model id or an "anthropic:"-prefixed Claude id (the
+// pickers in Settings and Agent Hub offer both) — the enum used to be a small
+// whitelist which made every new release require a code change. The provider
+// API is the source of truth; if the id is wrong the call fails and we
+// surface it.
 const GeminiModelId = z
   .string()
   .min(1)
   .max(80)
-  .regex(/^gemini[-a-z0-9.]*$/i, "invalid gemini model id");
+  .regex(/^(gemini[-a-z0-9.]*|anthropic:claude[-a-z0-9.]*)$/i, "invalid model id");
 
 // ---------------------------------------------------------------------------
 // Types shared with the client
