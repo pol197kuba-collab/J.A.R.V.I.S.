@@ -119,7 +119,14 @@ export async function getPullRequestStatus(
   if (checks.check_runs.length > 0) {
     const anyPending = checks.check_runs.some((c) => c.status !== "completed");
     const anyFailed = checks.check_runs.some(
-      (c) => c.status === "completed" && c.conclusion !== "success" && c.conclusion !== "neutral",
+      // "skipped" is not red: jobs with an `if:` (e.g. claude-dev.yml on
+      // review events) report it on the PR head and must not mark green CI
+      // as failing.
+      (c) =>
+        c.status === "completed" &&
+        c.conclusion !== "success" &&
+        c.conclusion !== "neutral" &&
+        c.conclusion !== "skipped",
     );
     ci = anyPending ? "pending" : anyFailed ? "failure" : "success";
   }

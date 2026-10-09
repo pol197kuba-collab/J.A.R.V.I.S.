@@ -68,6 +68,15 @@ export function GeneratedFilePreview({ file, onClose }: Props) {
           return;
         }
 
+        // Only pptx (above) and docx can be previewed here — anything else
+        // used to end on an empty white pane marked "ready".
+        if (file.format !== "docx") {
+          setStatus("error");
+          setMessage(
+            "Tego formatu nie da się podejrzeć w aplikacji — pobierz plik, aby go otworzyć.",
+          );
+          return;
+        }
         const res = await getUrl({ data: { fileId: file.id, kind: "preview" } });
         if (cancelled) return;
         if (!res.ok) {
@@ -77,6 +86,7 @@ export function GeneratedFilePreview({ file, onClose }: Props) {
         }
 
         const resp = await fetch(res.url);
+        if (!resp.ok) throw new Error(`Nie udało się pobrać pliku (HTTP ${resp.status}).`);
         const blob = await resp.blob();
         if (cancelled) return;
         const { renderAsync } = await import("docx-preview");
@@ -149,7 +159,7 @@ export function GeneratedFilePreview({ file, onClose }: Props) {
           </div>
         </div>
 
-        <div className="relative flex-1 overflow-auto bg-white">
+        <div className="no-scrollbar relative flex-1 overflow-auto bg-white">
           {status === "loading" && (
             <div className="absolute inset-0 flex items-center justify-center bg-background text-muted-foreground">
               <span className="font-display text-[11px] uppercase tracking-[0.3em]">

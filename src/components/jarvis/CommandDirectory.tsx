@@ -37,7 +37,7 @@ export function CommandDirectory({ index = 99 }: { index?: number }) {
           </span>
         </div>
 
-        <div className="overflow-x-auto border border-primary/20">
+        <div className="no-scrollbar overflow-x-auto border border-primary/20">
           <table className="min-w-full border-collapse font-mono text-[11px]">
             <thead className="bg-primary/10 text-primary">
               <tr className="text-left uppercase tracking-widest">

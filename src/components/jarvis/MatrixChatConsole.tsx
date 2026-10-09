@@ -132,7 +132,7 @@ export function MatrixChatConsole() {
               onClick={clear}
               aria-label="Wyczyść czat"
               title="Wyczyść czat"
-              className="flex h-5 w-5 items-center justify-center rounded text-white/35 transition-colors hover:bg-red-400/10 hover:text-red-300"
+              className="flex h-5 w-5 items-center justify-center rounded text-white/35 transition-colors hover:bg-destructive/10 hover:text-destructive"
             >
               <Trash2 className="h-3 w-3" strokeWidth={1.5} />
             </button>

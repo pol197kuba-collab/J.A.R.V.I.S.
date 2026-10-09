@@ -72,7 +72,10 @@ function DocumentsPage() {
   const [preview, setPreview] = useState<GeneratedFileSummary | null>(null);
   // A file id requested by chat/voice ("otwórz prezentację o X") that we
   // must open once the generated-files list has loaded and contains it.
-  const pendingOpenRef = useRef<string | null>(consumePendingOpenDocument());
+  // State, not a ref: a live "open this file" request for a file that is
+  // already in the list must re-run the effect below (the list itself
+  // doesn't change, so a ref never triggered it).
+  const [pendingOpen, setPendingOpen] = useState<string | null>(() => consumePendingOpenDocument());
 
   const {
     data: documents = [],
@@ -99,20 +102,19 @@ function DocumentsPage() {
   });
 
   // Chat/voice "open this file" requests arriving while we're already mounted.
-  useEffect(() => onOpenDocument((id) => (pendingOpenRef.current = id)), []);
+  useEffect(() => onOpenDocument((id) => setPendingOpen(id)), []);
 
   // Once a pending id is set (from navigation or a live event) and the list
   // contains it, open that file's preview. Runs whenever the list changes so
   // it fires as soon as the target file is present.
   useEffect(() => {
-    const id = pendingOpenRef.current;
-    if (!id) return;
-    const match = generated.find((f) => f.id === id);
+    if (!pendingOpen) return;
+    const match = generated.find((f) => f.id === pendingOpen);
     if (match) {
-      pendingOpenRef.current = null;
+      setPendingOpen(null);
       setPreview(match);
     }
-  }, [generated]);
+  }, [generated, pendingOpen]);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["documents"] });
 
@@ -167,6 +169,10 @@ function DocumentsPage() {
         });
       if (uploadErr) {
         toast.error(`Upload nieudany: ${uploadErr.message}`);
+        // Don't leave a row stuck in "uploading" forever — nothing else
+        // would ever move it on.
+        await remove({ data: { documentId: created.documentId } }).catch(() => {});
+        invalidate();
         return;
       }
       invalidate();

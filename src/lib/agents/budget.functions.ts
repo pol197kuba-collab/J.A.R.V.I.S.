@@ -1,6 +1,7 @@
 // Server functions budżetu: ile wydano, na co i ile zostało.
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { fetchAllPages } from "@/lib/db/paginate";
 import { budgetStatus, type BudgetLevel } from "./budget";
 import { monthStart, monthlyBudgetUsd } from "./budget.server";
 import { bareModelId, PRICING_VERIFIED_ON } from "./pricing";
@@ -33,15 +34,20 @@ export const getBudgetReport = createServerFn({ method: "GET" })
     const { supabase, userId } = context;
     const now = new Date();
 
-    const [{ data: runs, error }, limitUsd] = await Promise.all([
-      supabase
-        .from("agent_runs")
-        .select("cost_usd, model, created_at, agent_id")
-        .eq("user_id", userId)
-        .gte("created_at", monthStart(now)),
+    // Paged — PostgREST caps a select at 1000 rows (see lib/db/paginate.ts).
+    const [runs, limitUsd] = await Promise.all([
+      fetchAllPages((from, to) =>
+        supabase
+          .from("agent_runs")
+          .select("cost_usd, model, created_at, agent_id")
+          .eq("user_id", userId)
+          .gte("created_at", monthStart(now))
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to),
+      ),
       monthlyBudgetUsd(supabase, userId),
     ]);
-    if (error) throw new Error(error.message);
 
     const { data: agents } = await supabase
       .from("agents")

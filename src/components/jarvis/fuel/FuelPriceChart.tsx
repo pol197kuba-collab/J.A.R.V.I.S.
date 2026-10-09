@@ -152,8 +152,8 @@ export function FuelPriceChart({
         <ComposedChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id="fuelAreaFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={primary.colorToken} stopOpacity={0.35} />
-              <stop offset="100%" stopColor={primary.colorToken} stopOpacity={0.02} />
+              <stop offset="0%" style={{ stopColor: primary.colorToken, stopOpacity: 0.35 }} />
+              <stop offset="100%" style={{ stopColor: primary.colorToken, stopOpacity: 0.02 }} />
             </linearGradient>
           </defs>
 

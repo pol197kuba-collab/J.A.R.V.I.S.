@@ -199,7 +199,17 @@ async function main(): Promise<void> {
   // ---------- 3. Typer ----------
   // Po notowaniach i newsach, bo liczy z jednego i drugiego.
   try {
-    const { rows, model } = await buildOutlook(db, ownerId, keys);
+    // Weekends: only crypto trades. A stock/index/fx prediction would be
+    // built from Friday's close again — three near-identical samples per
+    // weekend that skew the scoreboard.
+    const day = new Date().getUTCDay();
+    const weekend = day === 0 || day === 6;
+    const { rows, model } = await buildOutlook(
+      db,
+      ownerId,
+      keys,
+      weekend ? (a) => a.assetClass === "crypto" : undefined,
+    );
     const up = rows.filter((r) => r.direction === "up").length;
     const down = rows.filter((r) => r.direction === "down").length;
     notice(

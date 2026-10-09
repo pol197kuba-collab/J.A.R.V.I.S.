@@ -152,6 +152,11 @@ const COMMANDS: Array<{ re: RegExp; action: LocalAction }> = COMMAND_REGISTRY.ma
 
 export function VoiceCommandProvider({ children }: { children: ReactNode }) {
   const { go } = useHudNavigate();
+  // `go` changes identity on every navigation step; reading it through a ref
+  // keeps fire → route → routeFromMic stable, so the speech recognizer isn't
+  // torn down and rebuilt (dropping what you were saying) on each route change.
+  const goRef = useRef(go);
+  goRef.current = go;
   const { setPhase } = usePhase();
   const Ctor = getSpeechCtor();
   const supported = !!Ctor;
@@ -300,13 +305,13 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       // bespoke side effects and is handled explicitly below.
       if (cmd.kind.type === "route") {
         say(cmd.confirmation);
-        go(cmd.kind.path);
+        goRef.current(cmd.kind.path);
         return;
       }
       if (cmd.kind.type === "module") {
         pendingRef.current = cmd.kind.module;
         say(cmd.confirmation);
-        go("/sub-systems");
+        goRef.current("/sub-systems");
         return;
       }
 
@@ -347,7 +352,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
             /* ignore */
           }
           window.dispatchEvent(new CustomEvent("jarvis:vision-scan"));
-          go("/vision");
+          goRef.current("/vision");
           break;
         case "demo_showcase":
           // Bridge to ShowcaseProvider (mounted below this provider). It
@@ -364,7 +369,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
           console.error("[voice] no special-case handler for action", action);
       }
     },
-    [go, setPhase],
+    [setPhase],
   );
 
   /**

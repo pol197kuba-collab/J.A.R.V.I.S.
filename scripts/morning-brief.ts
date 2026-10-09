@@ -160,7 +160,7 @@ async function main(): Promise<void> {
   // Job biegnie CO GODZINĘ, bo harmonogram GitHuba jest jeden dla wszystkich,
   // a godzina briefingu należy do użytkownika. Ta decyzja jest czysta i
   // przetestowana (src/lib/brief/schedule.ts) — tutaj tylko odczyt ustawień.
-  const { data: settings } = await db
+  const { data: settings, error: settingsErr } = await db
     .from("user_settings")
     .select("brief_hour, brief_push")
     .eq("owner_id", ownerId)
@@ -171,13 +171,23 @@ async function main(): Promise<void> {
     push: settings?.brief_push ?? true,
   };
 
-  const { data: lastBrief } = await db
+  const { data: lastBrief, error: lastBriefErr } = await db
     .from("daily_briefs")
     .select("brief_date")
     .eq("owner_id", ownerId)
     .order("brief_date", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  // A failed read must not look like "no brief yet": that rebuilt today's
+  // brief and sent a second notification + push. Skip; the next hourly run
+  // decides with real data.
+  if (settingsErr || lastBriefErr) {
+    warn(
+      `odczyt ustawień/ostatniej rubryki nie powiódł się — pomijam ten przebieg: ${(settingsErr ?? lastBriefErr)!.message}`,
+    );
+    return;
+  }
 
   const now = new Date();
   const decision = decideBriefRun(schedule, now, lastBrief?.brief_date ?? null);

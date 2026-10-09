@@ -227,10 +227,20 @@ export async function runDocumentJobCore(
     // połowie, ma zostawić po sobie ślad, że ktoś już do niego podchodził.
     // Bez tego zerwane podejście byłoby niewidzialne i ratownik wskrzeszałby
     // je w nieskończoność.
-    await supabase
+    //
+    // The claim is conditional on the state we just read (status + attempts):
+    // two callers racing for the same job (two tabs, the app plus the hourly
+    // rescue cron) both read it as startable, but only one update matches —
+    // the other sees 0 rows and backs off instead of running the whole
+    // Insight → Forge pipeline a second time.
+    const { data: claimed, error: claimErr } = await supabase
       .from("document_jobs")
       .update({ status: "running", attempts: (job.attempts ?? 0) + 1 })
-      .eq("id", job.id);
+      .eq("id", job.id)
+      .eq("status", job.status)
+      .eq("attempts", job.attempts ?? 0)
+      .select("id");
+    if (claimErr || !claimed?.length) return { ok: false, reason: "not_queued" };
 
     try {
       const { data: secret } = await supabase
@@ -272,6 +282,10 @@ export async function runDocumentJobCore(
         attachment: { filename: string; url: string } | undefined;
         digest: string | null;
       }> => {
+        // Heartbeat: the update bumps `updated_at` (trigger), so a long
+        // pipeline isn't taken for stuck by the rescuer (STALE_AFTER_MS)
+        // and claimed a second time while it is still working.
+        await supabase.from("document_jobs").update({ status: "running" }).eq("id", job.id);
         const forgeResult = await runOrchestratorWithRetry({
           supabase,
           userId,

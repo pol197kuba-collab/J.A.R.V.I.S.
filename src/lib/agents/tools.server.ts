@@ -9,8 +9,7 @@
 // OpenSearch, public HTTP fetch) or the user's own Supabase row-level data.
 // No paid keys are touched here.
 
-import { isIP } from "node:net";
-import { lookup } from "node:dns/promises";
+import { safeFetch } from "./netGuard.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
@@ -161,73 +160,35 @@ const webSearch: Tool = {
 
 const MAX_FETCH_BYTES = 12_000;
 
-// SSRF guard: the agent decides what URL to fetch (often steered by search
-// results or page content it just read), so a prompt injection could try to
-// point it at cloud metadata endpoints or other internal services. Block
-// loopback/private/link-local targets, resolving hostnames first so a
-// public domain that merely points at an internal IP is caught too.
-export function isPrivateIp(ip: string): boolean {
-  const version = isIP(ip);
-  if (version === 4) {
-    const [a, b] = ip.split(".").map(Number);
-    if (a === 127 || a === 10 || a === 0) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 169 && b === 254) return true; // includes 169.254.169.254 metadata
-    return false;
-  }
-  if (version === 6) {
-    const lower = ip.toLowerCase();
-    if (lower === "::1" || lower === "::") return true;
-    if (lower.startsWith("fc") || lower.startsWith("fd")) return true; // unique local
-    if (/^fe[89ab]/.test(lower)) return true; // link-local
-    if (lower.startsWith("::ffff:")) return isPrivateIp(lower.slice("::ffff:".length));
-    return false;
-  }
-  return true; // not a literal IP — caller should have resolved it first
-}
+// SSRF guard + manual-redirect fetch live in netGuard.server.ts (shared with
+// the document producer's image fetching).
+export { isPrivateIp, isBlockedTarget } from "./netGuard.server";
 
-export async function isBlockedTarget(hostname: string): Promise<boolean> {
-  const lower = hostname.toLowerCase();
-  if (
-    lower === "localhost" ||
-    lower.endsWith(".localhost") ||
-    lower === "metadata.google.internal"
-  ) {
-    return true;
-  }
-  if (isIP(hostname)) return isPrivateIp(hostname);
-  try {
-    const results = await lookup(hostname, { all: true });
-    return results.length === 0 || results.some((r) => isPrivateIp(r.address));
-  } catch {
-    return true; // DNS failure — fail closed rather than let it through unresolved
-  }
-}
+/** Raw bytes read from a page before stripping tags (≫ the 12 kB text kept). */
+const MAX_FETCH_RAW_BYTES = 400_000;
 
-// Follows redirects manually (instead of letting fetch() auto-follow) so
-// every hop's target is re-validated — otherwise a public URL could 302 to
-// an internal address and slip past the initial check.
-async function safeFetch(
-  startUrl: string,
-  init: { signal: AbortSignal; headers: Record<string, string> },
-  maxRedirects = 3,
-): Promise<Response> {
-  let current = startUrl;
-  for (let i = 0; i <= maxRedirects; i++) {
-    const parsed = new URL(current);
-    if (!/^https?:$/.test(parsed.protocol)) throw new Error("invalid_url");
-    if (await isBlockedTarget(parsed.hostname)) throw new Error("blocked_target");
-    const res = await fetch(current, { ...init, redirect: "manual" });
-    if (res.status >= 300 && res.status < 400) {
-      const loc = res.headers.get("location");
-      if (!loc) return res;
-      current = new URL(loc, current).toString();
-      continue;
-    }
-    return res;
+/** Read a response body as text, stopping after `max` bytes. */
+async function readCapped(res: Response, max: number): Promise<string> {
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (size < max) {
+    const { done, value } = await reader.read();
+    if (done || !value) break;
+    chunks.push(value);
+    size += value.byteLength;
   }
-  throw new Error("too_many_redirects");
+  await reader.cancel().catch(() => {});
+  const buf = new Uint8Array(Math.min(size, max));
+  let off = 0;
+  for (const c of chunks) {
+    const n = Math.min(c.byteLength, buf.length - off);
+    buf.set(c.subarray(0, n), off);
+    off += n;
+    if (off >= buf.length) break;
+  }
+  return new TextDecoder().decode(buf);
 }
 
 const fetchUrl: Tool = {
@@ -250,15 +211,19 @@ const fetchUrl: Tool = {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 10_000);
       let res: Response;
+      let raw: string;
       try {
         res = await safeFetch(url, {
           signal: ctrl.signal,
           headers: { "user-agent": "JARVIS-Agent/1.0 (+https://jarvisbyjacob.lovable.app)" },
         });
+        // The timeout covers the body too, and the read stops at a cap: a
+        // huge file or a server that trickles bytes must not hang the run
+        // (or buffer gigabytes) while the agent row sits in `running`.
+        raw = await readCapped(res, MAX_FETCH_RAW_BYTES);
       } finally {
         clearTimeout(timer);
       }
-      const raw = await res.text();
       const stripped = raw
         .replace(/<script[\s\S]*?<\/script>/gi, "")
         .replace(/<style[\s\S]*?<\/style>/gi, "")

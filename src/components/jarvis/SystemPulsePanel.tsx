@@ -96,8 +96,8 @@ function RunsChart({ values, range }: { values: number[]; range: Range }) {
         <AreaChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: 4 }}>
           <defs>
             <linearGradient id="pulseAreaFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.35} />
-              <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.02} />
+              <stop offset="0%" style={{ stopColor: "var(--primary)", stopOpacity: 0.35 }} />
+              <stop offset="100%" style={{ stopColor: "var(--primary)", stopOpacity: 0.02 }} />
             </linearGradient>
           </defs>
           <CartesianGrid vertical={false} stroke="var(--muted-foreground)" strokeOpacity={0.12} />

@@ -46,6 +46,7 @@ export function unwrapDefault<T>(mod: T): T {
 const PptxGenClass: typeof PptxGen = unwrapDefault(PptxGen);
 import { AlignmentType, Document, HeadingLevel, ImageRun, Packer, Paragraph, TextRun } from "docx";
 import { isOnTopic } from "./imageRelevance";
+import { safeFetch } from "./netGuard.server";
 import { DEFAULT_GEMINI_MODEL } from "./models";
 import { DOC_COLORS, DOC_FONTS, DECK_SLIDE } from "./docTheme";
 import {
@@ -512,7 +513,9 @@ async function pageOgImage(
   requireTopic: boolean,
 ): Promise<DocImage | null> {
   if (!isFetchableUrl(pageUrl)) return null;
-  const pageRes = await fetch(pageUrl, {
+  // Model-chosen URLs: resolve the host and re-check every redirect hop, so
+  // a public page can't bounce the fetch into the internal network.
+  const pageRes = await safeFetch(pageUrl, {
     signal: ctrl.signal,
     headers: { "User-Agent": USER_AGENT },
   });
@@ -537,7 +540,7 @@ async function pageOgImage(
     return null;
   }
 
-  const imgRes = await fetch(imageUrl, {
+  const imgRes = await safeFetch(imageUrl, {
     signal: ctrl.signal,
     headers: { "User-Agent": USER_AGENT },
   });

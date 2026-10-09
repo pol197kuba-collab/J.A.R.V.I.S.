@@ -61,10 +61,16 @@ const CACHE_READ_MULTIPLIER = 0.1;
 /** Mnożnik stawki wejściowej dla tokenów zapisywanych do cache'u. */
 const CACHE_WRITE_MULTIPLIER = 1.25;
 
-/** Identyfikator bez prefiksu dostawcy. */
+/**
+ * Identyfikator bez prefiksu dostawcy i bez daty wydania — katalog
+ * Anthropic podaje wersje datowane (`claude-haiku-4-5-20251001`), a cennik
+ * trzyma rodzinę; bez tego taki przebieg miałby `cost_usd = NULL` i
+ * wypadałby z budżetu.
+ */
 export function bareModelId(model: string): string {
   const colon = model.indexOf(":");
-  return colon === -1 ? model : model.slice(colon + 1);
+  const bare = colon === -1 ? model : model.slice(colon + 1);
+  return bare.replace(/-\d{8}$/, "");
 }
 
 /** Czy znamy stawkę dla tego modelu. */

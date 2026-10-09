@@ -106,8 +106,15 @@ export function isSilenced(order: StandingOrder, now: Date = new Date()): boolea
   if (!order.lastTriggeredAt) return false;
   const since = now.getTime() - Date.parse(order.lastTriggeredAt);
   if (Number.isNaN(since)) return false;
-  return since < order.cooldownHours * 3600_000;
+  // Odrobina luzu: joby są dzienne, a GitHub potrafi odpalić je kilka minut
+  // wcześniej niż wczoraj — przy „24 h" jutrzejszy prawdziwy meldunek
+  // przepadałby wtedy przez 15 minut różnicy.
+  const slack = Math.min(COOLDOWN_SLACK_MS, (order.cooldownHours * 3600_000) / 12);
+  return since < order.cooldownHours * 3600_000 - slack;
 }
+
+/** Ile wcześniej może skończyć się wyciszenie (rozjazd godzin startu crona). */
+const COOLDOWN_SLACK_MS = 2 * 3600_000;
 
 /** Porządkuje serię rosnąco po dacie i odrzuca punkty bez sensownej wartości. */
 export function normalizePoints(points: SeriesPoint[]): SeriesPoint[] {
@@ -180,6 +187,11 @@ export function evaluateOrder(
 
   const changeAbs = latest.value - reference.value;
   const changePct = (changeAbs / reference.value) * 100;
+
+  // Zmiana liczona z TEGO SAMEGO punktu, który już raz zameldowano (weekend,
+  // święto: seria stoi na piątku), nie jest nowym ruchem — bez tego jeden
+  // spadek wracałby w sobotę i w niedzielę jako dwa kolejne meldunki.
+  if (order.lastTriggeredAt && latest.date <= order.lastTriggeredAt.slice(0, 10)) return null;
 
   const triggered =
     order.condition === "change_pct_up"
