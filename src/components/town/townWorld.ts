@@ -18,6 +18,7 @@ import {
   TS,
   WORLD_W,
   WORLD_H,
+  OBJECTS,
   type Tile,
   type TownMap,
   type TownSlug,
@@ -63,6 +64,25 @@ export type Camera = { x: number; y: number; z: number };
 type Rect = { x: number; y: number; w: number; h: number };
 type Speaker = { x: number; y: number; bubble: Bubble | null; tag: string };
 
+/** Light sources that glow after dark (world px, radius, warm/cool rgb, strength). */
+type Light = { x: number; y: number; r: number; rgb: string; a: number };
+const LIGHTS: readonly Light[] = OBJECTS.flatMap((o): Light[] => {
+  const cx = (o.tx + o.w / 2) * TS;
+  const cy = o.ty * TS + TS / 2;
+  const warm = "255,196,120";
+  const cool = "120,200,255";
+  if (o.kind === "desk" && o.opt.lamp) return [{ x: cx, y: cy - 6, r: 42, rgb: warm, a: 0.5 }];
+  if (o.kind === "desk" && o.opt.monitor) return [{ x: cx, y: cy - 4, r: 34, rgb: cool, a: 0.38 }];
+  if (o.kind === "furnace") return [{ x: cx, y: cy, r: 56, rgb: "255,140,60", a: 0.6 }];
+  if (o.kind === "wallscreens" || o.kind === "arcade" || o.kind === "rack")
+    return [{ x: cx, y: cy, r: 30, rgb: cool, a: 0.3 }];
+  if (o.kind === "vending" || o.kind === "coffee")
+    return [{ x: cx, y: cy, r: 26, rgb: warm, a: 0.32 }];
+  if (o.kind === "spot") return [{ x: cx, y: cy, r: 60, rgb: "255,230,170", a: 0.45 }];
+  if (o.kind === "board") return [{ x: cx, y: cy + 10, r: 70, rgb: warm, a: 0.3 }];
+  return [];
+});
+
 export const TAG: Record<TownSlug, string> = {
   jarvis: "JAR",
   insight: "INS",
@@ -96,6 +116,12 @@ export class TownWorld {
   talkingTo: TownSlug | null = null;
   /** Unread results pinned on the board — drawn as a "!" over it. */
   boardAlert = 0;
+  /** Agents whose last task failed and you haven't looked at it yet (smoke + "!"). */
+  faults = new Set<TownSlug>();
+  /** An AI provider is refusing requests — the Vault's alarm light. */
+  vaultAlarm = false;
+  /** 0 = day … 1 = night, from the local clock (set by the view). */
+  night = 0;
   /** Your companion. */
   readonly dog: TownDog;
 
@@ -301,7 +327,14 @@ export class TownWorld {
       return;
     }
     const posted = this.posts.get(c.slug);
-    const plan = idlePlan(Math.random(), this.onCall || !!posted, this.atHome(c));
+    // after dark the office is quiet: free agents doze at their desks
+    const asleep = this.night >= 0.6 && !posted && st !== "running";
+    const plan = idlePlan(Math.random(), this.onCall || !!posted || asleep, this.atHome(c));
+    if (asleep && plan === "stay") {
+      c.dir = "down";
+      if (Math.random() < 0.35) this.say(c.slug, "zzz", 2400, "zz");
+      return;
+    }
     if (posted && plan === "stay") {
       c.dir = posted.dir;
       return;
@@ -446,12 +479,15 @@ export class TownWorld {
   }
   /** What you could interact with from where you stand, if anything. */
   reachable():
+    | { kind: "letter" }
     | { kind: "agent"; slug: TownSlug }
     | { kind: "board" }
     | { kind: "prop"; id: string }
     | null {
     const u = this.chars.user;
     if (u.path.length) return null;
+    if (this.dog.letter && Math.hypot(this.dog.x - u.x, this.dog.y - u.y) < TS * 2.2)
+      return { kind: "letter" };
     let best: TownSlug | null = null;
     let bd = TS * 1.6;
     for (const c of Object.values(this.chars)) {
@@ -520,8 +556,28 @@ export class TownWorld {
     ctx.imageSmoothingEnabled = false;
     ctx.setTransform(cam.z, 0, 0, cam.z, -cam.x * cam.z, -cam.y * cam.z);
     ctx.drawImage(this.frame, 0, 0);
+    if (this.night > 0) this.drawNight(ctx);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.drawOverlay(ctx, cam, dpr, selected, order);
+  }
+
+  /** Dusk/night: dim the floor, then let lamps, screens and the furnace glow. */
+  private drawNight(ctx: CanvasRenderingContext2D) {
+    const n = this.night;
+    ctx.fillStyle = `rgba(12,8,36,${(0.55 * n).toFixed(3)})`;
+    ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const flicker = this.reduceMotion ? 1 : 0.92 + Math.sin(this.time / 380) * 0.08;
+    for (const l of LIGHTS) {
+      const g = ctx.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r);
+      const a = l.a * n * flicker;
+      g.addColorStop(0, `rgba(${l.rgb},${a.toFixed(3)})`);
+      g.addColorStop(1, `rgba(${l.rgb},0)`);
+      ctx.fillStyle = g;
+      ctx.fillRect(l.x - l.r, l.y - l.r, l.r * 2, l.r * 2);
+    }
+    ctx.restore();
   }
 
   private drawChar(c: Char, t: number) {
@@ -587,6 +643,39 @@ export class TownWorld {
       ctx.fillText(this.boardAlert > 1 ? String(this.boardAlert) : "!", s.x, s.y - bs / 2 + 1);
       ctx.textAlign = "left";
     }
+    // a failed task you haven't looked at: smoke and a red "!" over the agent
+    for (const slug of this.faults) {
+      const c = this.chars[slug];
+      const s0 = toS(c.x, c.y - 24);
+      for (let i = 0; i < 3; i++) {
+        const k = this.reduceMotion ? 0.3 : (this.time / 1400 + i / 3) % 1;
+        const p = toS(c.x + Math.sin(i * 2.3 + this.time / 500) * 4, c.y - 18 - k * 14);
+        ctx.globalAlpha = 0.55 * (1 - k);
+        ctx.fillStyle = "#6b6470";
+        const r = Math.max(2, cam.z * (1.5 + k * 2));
+        ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2);
+      }
+      ctx.globalAlpha = 1;
+      const bs = Math.round(fs * 1.2);
+      pixelBox(ctx, s0.x - bs / 2, s0.y - bs - 6 * cam.z, bs, bs, u, "#e5484d", INK);
+      ctx.font = font(700, Math.round(fs * 0.95));
+      ctx.fillStyle = "#fbf3df";
+      ctx.textAlign = "center";
+      ctx.fillText("!", s0.x, s0.y - bs / 2 - 6 * cam.z + 1);
+      ctx.textAlign = "left";
+    }
+    // the Vault's alarm: a provider refuses requests (no credits, bad key, limits)
+    if (this.vaultAlarm) {
+      const on = this.reduceMotion || Math.floor(this.time / 450) % 2 === 0;
+      const s0 = toS(6.4 * TS, 22.2 * TS);
+      const bs = Math.round(fs * 1.3);
+      pixelBox(ctx, s0.x - bs / 2, s0.y - bs, bs, bs, u, on ? "#e5484d" : "#7a1f24", INK);
+      ctx.font = font(700, Math.round(fs));
+      ctx.fillStyle = "#fbf3df";
+      ctx.textAlign = "center";
+      ctx.fillText("$", s0.x, s0.y - bs / 2 + 1);
+      ctx.textAlign = "left";
+    }
     // …and over your own character, so you notice wherever you are
     if (this.boardAlert > 0) {
       const me = this.chars.user;
@@ -605,13 +694,21 @@ export class TownWorld {
     if (reach) {
       const prop = reach.kind === "prop" ? propById(reach.id) : null;
       const label =
-        reach.kind === "board" ? "E · Tablica" : prop ? `E · ${prop.prompt}` : "E · Porozmawiaj";
+        reach.kind === "letter"
+          ? "E · Weź kartkę"
+          : reach.kind === "board"
+            ? "E · Tablica"
+            : prop
+              ? `E · ${prop.prompt}`
+              : "E · Porozmawiaj";
       const at =
-        reach.kind === "board"
-          ? { x: 22 * TS, y: 12 * TS }
-          : reach.kind === "prop"
-            ? { x: (prop?.anchor[0] ?? 0) * TS, y: (prop?.anchor[1] ?? 0) * TS }
-            : { x: this.chars[reach.slug].x, y: this.chars[reach.slug].y - 26 };
+        reach.kind === "letter"
+          ? { x: this.dog.x, y: this.dog.y - 16 }
+          : reach.kind === "board"
+            ? { x: 22 * TS, y: 12 * TS }
+            : reach.kind === "prop"
+              ? { x: (prop?.anchor[0] ?? 0) * TS, y: (prop?.anchor[1] ?? 0) * TS }
+              : { x: this.chars[reach.slug].x, y: this.chars[reach.slug].y - 26 };
       const ps = Math.round(fs * 0.85);
       ctx.font = font(700, ps);
       const w = ctx.measureText(label).width + ps;

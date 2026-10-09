@@ -15,7 +15,8 @@ export type PropKind =
   | "dogbed"
   | "pingpong"
   | "globe"
-  | "whiteboard";
+  | "whiteboard"
+  | "vault";
 
 export type TownProp = {
   id: string;
@@ -151,6 +152,14 @@ export const PROPS: readonly TownProp[] = [
     prompt: "Statystyki",
     stand: row(4, 16, 18),
     anchor: [17.5, 3],
+  },
+  {
+    id: "vault",
+    kind: "vault",
+    name: "Skarbiec: koszty i dostawcy AI",
+    prompt: "Skarbiec",
+    stand: row(23, 3, 5),
+    anchor: [4.5, 21.6],
   },
 ];
 
