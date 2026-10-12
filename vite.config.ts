@@ -12,11 +12,9 @@ import { mcpPlugin } from "@lovable.dev/mcp-js/stacks/tanstack/vite";
 // Deliberately NOT read from VITE_SUPABASE_* env: Lovable Cloud injects those
 // for its own built-in database, which this app no longer uses. Override per
 // build with JARVIS_SUPABASE_URL / JARVIS_SUPABASE_PUBLISHABLE_KEY if needed.
-// TODO(migracja): podmienić na wartości nowego projektu Supabase.
-const SUPABASE_URL = process.env.JARVIS_SUPABASE_URL ?? "https://myjynbqzlovanoarppyt.supabase.co";
+const SUPABASE_URL = process.env.JARVIS_SUPABASE_URL ?? "https://ybdyiebhtfoccbfupkjn.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY =
-  process.env.JARVIS_SUPABASE_PUBLISHABLE_KEY ??
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15anluYnF6bG92YW5vYXJwcHl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwNTkxMzUsImV4cCI6MjA5ODYzNTEzNX0.Gg7xhuBBoGFrUTXsdNFk-dGCoxJOmguO8Z-xYiMJ0KY";
+  process.env.JARVIS_SUPABASE_PUBLISHABLE_KEY ?? "sb_publishable_TvmC18iqqi4zY1XSdZRBXw_5SQ9IyRN";
 // Project ref = subdomain of the URL; derived so it can never drift from it.
 const SUPABASE_PROJECT_ID = new URL(SUPABASE_URL).hostname.split(".")[0];
 
