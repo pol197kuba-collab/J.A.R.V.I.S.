@@ -1,8 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
+import { supabasePublishableKey, supabaseUrl } from "@/integrations/supabase/env";
 import { defineTool, type ToolContext } from "@lovable.dev/mcp-js";
 
 function supabaseForUser(ctx: ToolContext) {
-  return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_PUBLISHABLE_KEY!, {
+  return createClient(supabaseUrl()!, supabasePublishableKey()!, {
     global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
