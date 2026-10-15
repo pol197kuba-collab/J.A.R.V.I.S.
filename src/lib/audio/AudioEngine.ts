@@ -145,6 +145,22 @@ class Engine {
     osc.stop(t + dur + 0.05);
   }
 
+  /** A quiet square-wave blip — Agent Town's speech sound (see townBlips.ts). */
+  playBlip(freq: number, dur = 0.045, peak = 0.035) {
+    if (!this.settings.ui || !this.unlocked) return;
+    const ctx = this.ensure();
+    if (!ctx || !this.master) return;
+    const osc = ctx.createOscillator();
+    osc.type = "square";
+    osc.frequency.value = freq;
+    const g = ctx.createGain();
+    osc.connect(g).connect(this.master);
+    const t = ctx.currentTime;
+    this.envelope(g, t, peak, 0.004, dur);
+    osc.start(t);
+    osc.stop(t + dur + 0.03);
+  }
+
   playAccessGranted() {
     this.playBeep(880, 0.1, 0.25);
     setTimeout(() => this.playBeep(1320, 0.14, 0.28), 110);

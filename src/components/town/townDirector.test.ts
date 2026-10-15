@@ -76,6 +76,37 @@ describe("diffFlow", () => {
   });
 });
 
+describe("diffFlow narrative order", () => {
+  it("tells a request that ended within one poll as a story, children before their parent", () => {
+    const prev = snapshotRuns([]);
+    const parent = run({
+      id: "p",
+      agentSlug: "jarvis",
+      status: "done",
+      createdAt: "2026-10-09T08:00:00.000Z",
+      finishedAt: "2026-10-09T08:00:06.000Z",
+      delegations: [{ toSlug: "shield", task: "Sprawdź co się zepsuło" }],
+    });
+    const child = run({
+      id: "c",
+      agentSlug: "shield",
+      parentRunId: "p",
+      status: "done",
+      createdAt: "2026-10-09T08:00:02.000Z",
+      finishedAt: "2026-10-09T08:00:05.000Z",
+      toolCalls: [{ name: "get_errors", args: {} }],
+    });
+    const ev = diffFlow(prev, [parent, child]);
+    expect(ev.map((e) => `${e.type}:${e.run.id}`)).toEqual([
+      "started:p",
+      "delegated:c",
+      "tool:c",
+      "finished:c",
+      "finished:p",
+    ]);
+  });
+});
+
 describe("characterStatus", () => {
   const now = Date.parse("2026-10-09T08:01:00.000Z");
   it("is off for a disabled agent and running while any run is active", () => {
