@@ -27,7 +27,10 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(title, {
       body: data.body || "",
       icon: "/icon-512.png",
-      badge: "/icon-512.png",
+      // Ikonka paska stanu Androida używa wyłącznie kanału alfa: pełnokolorowe,
+      // nieprzezroczyste logo wyświetla się tam jako biały kwadrat, dlatego
+      // badge to osobna, jednobarwna sylwetka na przezroczystym tle.
+      badge: "/badge-96.png",
       // Meldunki z tego samego rozkazu zastępują się nawzajem, zamiast
       // budować stos powiadomień o tej samej treści.
       tag: data.tag || "jarvis",
