@@ -28,6 +28,7 @@ import {
 import type { SignalDirection } from "./signals";
 import {
   buildScoreboard,
+  toPredictionSource,
   type PredictionDirection,
   type PredictionSource,
   type Scoreboard,
@@ -396,6 +397,8 @@ export const getMarketOutlook = createServerFn({ method: "GET" })
 export type PredictionScoreboard = Scoreboard & {
   /** Ile prognoz rozliczono podczas tego wywołania. */
   justResolved: number;
+  /** Wnioski z rozliczonych prognoz (lessons.ts), najmocniejsze pierwsze. */
+  lessons: Array<{ kind: "direction" | "base_rate"; textPl: string; cases: number }>;
   recent: Array<{
     symbol: string;
     madeAt: string;
@@ -416,7 +419,8 @@ export const getPredictionScoreboard = createServerFn({ method: "GET" })
     // Rozliczanie przy okazji odczytu tablicy wyników: prognoza sprzed
     // tygodnia ma się rozliczyć sama, gdy ktokolwiek wejdzie na stronę.
     // Nocny job robi to samo, gdy nie wejdzie nikt.
-    const { backfillPredictionContext, resolveDuePredictions } = await import("./ingest.server");
+    const { backfillPredictionContext, loadLessonInputs, resolveDuePredictions } =
+      await import("./ingest.server");
     await backfillPredictionContext(supabase, userId);
     const justResolved = await resolveDuePredictions(supabase, userId);
 
@@ -431,7 +435,7 @@ export const getPredictionScoreboard = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
 
     const scored = (rows ?? []).map((r) => ({
-      source: (r.source === "ai" ? "ai" : "signals") as PredictionSource,
+      source: toPredictionSource(r.source),
       direction: r.direction as PredictionDirection,
       symbol: r.symbol,
       outcome: (r.outcome as "hit" | "miss" | null) ?? null,
@@ -441,14 +445,24 @@ export const getPredictionScoreboard = createServerFn({ method: "GET" })
       stale: r.stale,
     }));
 
+    // Te same wnioski, które dostaje model w wariancie „z wnioskami" — panel
+    // pokazuje dokładnie to, czego typer się nauczył, nie osobną interpretację.
+    const { deriveLessons } = await import("./lessons");
+    const lessons = deriveLessons(await loadLessonInputs(supabase, userId)).map((l) => ({
+      kind: l.kind,
+      textPl: l.textPl,
+      cases: l.cases,
+    }));
+
     return {
       ...buildScoreboard(scored),
+      lessons,
       justResolved,
       recent: (rows ?? []).slice(0, 25).map((r) => ({
         symbol: r.symbol,
         madeAt: r.made_at,
         direction: r.direction as PredictionDirection,
-        source: (r.source === "ai" ? "ai" : "signals") as PredictionSource,
+        source: toPredictionSource(r.source),
         confidence: r.confidence,
         actualChangePct: r.actual_change_pct === null ? null : Number(r.actual_change_pct),
         outcome: (r.outcome as "hit" | "miss" | null) ?? null,

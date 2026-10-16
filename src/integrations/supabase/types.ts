@@ -828,6 +828,7 @@ export type Database = {
           flat_band_pct: number | null
           horizon_days: number
           id: string
+          lessons: Json | null
           made_at: string
           made_on: string | null
           model: string | null
@@ -854,6 +855,7 @@ export type Database = {
           flat_band_pct?: number | null
           horizon_days: number
           id?: string
+          lessons?: Json | null
           made_at?: string
           made_on?: string | null
           model?: string | null
@@ -880,6 +882,7 @@ export type Database = {
           flat_band_pct?: number | null
           horizon_days?: number
           id?: string
+          lessons?: Json | null
           made_at?: string
           made_on?: string | null
           model?: string | null

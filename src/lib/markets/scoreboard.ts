@@ -6,7 +6,10 @@
 // jej ani obronić, ani zmienić bez ryzyka.
 
 export type PredictionDirection = "up" | "down" | "flat";
-export type PredictionSource = "signals" | "ai";
+export type PredictionSource = "signals" | "ai" | "ai_learned";
+
+export const toPredictionSource = (value: string): PredictionSource =>
+  value === "ai" || value === "ai_learned" ? value : "signals";
 export type PredictionOutcome = "hit" | "miss";
 
 /**

@@ -16,6 +16,7 @@ import { callGeminiText } from "@/lib/agents/providers/geminiText";
 import type { GeminiContent } from "@/lib/agents/providers/types";
 import type { MarketAsset } from "./assets";
 import type { SignalDirection, TechnicalOutlook } from "./signals";
+import { REGIME_LABEL_PL, isMarketRegime } from "./regime";
 
 const MODEL_TIMEOUT_MS = 60_000;
 const ANTHROPIC_FORECAST_MODEL = "claude-opus-5";
@@ -34,6 +35,8 @@ export type ForecastInput = {
    * rozliczana, więc model musi je znać, żeby wiedzieć, co znaczy „flat".
    */
   flatBandPct?: number;
+  /** Reżim rynku (regime.ts) — pokazywany tylko wariantowi z wnioskami. */
+  regime?: string | null;
 };
 
 export type AiVerdict = {
@@ -60,7 +63,27 @@ const fmt = (value: number | null, digits = 1): string =>
   value === null || !Number.isFinite(value) ? "brak" : value.toFixed(digits);
 
 /** Opis jednego instrumentu dla modelu — same policzone fakty. */
-export function describeForModel(input: ForecastInput): string {
+/**
+ * Część systemowa wariantu „z wnioskami". Wnioski są ZDANIAMI ZBUDOWANYMI
+ * PRZEZ KOD z rozliczonych prognoz (lessons.ts) — model ich nie wymyśla,
+ * tylko bierze pod uwagę obok wskaźników.
+ */
+export function lessonsBlock(lessons: string[]): string {
+  return `
+
+WNIOSKI Z TWOICH ROZLICZONYCH PROGNOZ (policzone z historii, prawdziwe):
+${lessons.map((l) => `- ${l}`).join("\n")}
+
+Jak z nich korzystać:
+- Przy każdym instrumencie masz podaną „sytuację rynkową". Jeśli wniosek dotyczy tej sytuacji, potraktuj go jako ważną przesłankę obok wskaźników — także wtedy, gdy przeczy temu, co sugerują średnie i momentum.
+- Wnioski pochodzą z kilku tygodni rynku, nie są prawem natury. Gdy wskaźniki są wyjątkowo jednoznaczne, możesz od nich odstąpić, ale wtedy napisz to w uzasadnieniu.
+- Nie powołuj się na liczby, których tu nie ma.`;
+}
+
+export function describeForModel(
+  input: ForecastInput,
+  opts: { withRegime?: boolean } = {},
+): string {
   const { asset, technical, sentimentScore, sentimentItems, headlines, lastPrice } = input;
   const s = technical.signals;
 
@@ -82,6 +105,9 @@ export function describeForModel(input: ForecastInput): string {
     }`,
     `  pozycja w zakresie 60 sesji: ${fmt(s.rangePosition, 0)}%`,
     `  zmienność roczna: ${fmt(s.volatility, 0)}%`,
+    ...(opts.withRegime && input.regime && isMarketRegime(input.regime)
+      ? [`  sytuacja rynkowa: ${REGIME_LABEL_PL[input.regime]}`]
+      : []),
     ...(input.flatBandPct !== undefined
       ? [`  pasmo „bez zmian" (7 dni): ±${input.flatBandPct.toFixed(2)}%`]
       : []),
@@ -186,6 +212,14 @@ export type ForecastResult = {
 export async function forecastWithModel(
   inputs: ForecastInput[],
   keys: ForecastKeys,
+  opts: {
+    /**
+     * Wnioski z rozliczonych prognoz. Podane = wariant „z wnioskami" testu
+     * A/B (ten sam model, ten sam prompt + wnioski + sytuacja rynkowa);
+     * brak = wariant kontrolny, dokładnie taki jak przed testem.
+     */
+    lessons?: string[];
+  } = {},
 ): Promise<ForecastResult> {
   const fallback: ForecastResult = {
     verdicts: inputs.map((i) => ({
@@ -200,7 +234,9 @@ export async function forecastWithModel(
   if (inputs.length === 0) return { verdicts: [], model: null, failure: null };
   if (!keys.anthropicApiKey && !keys.geminiApiKey) return fallback;
 
-  const user = inputs.map(describeForModel).join("\n\n");
+  const learned = opts.lessons !== undefined;
+  const system = learned ? SYSTEM_PROMPT + lessonsBlock(opts.lessons ?? []) : SYSTEM_PROMPT;
+  const user = inputs.map((i) => describeForModel(i, { withRegime: learned })).join("\n\n");
   let text: string | null = null;
   let model: string | null = null;
   const failures: string[] = [];
@@ -211,7 +247,7 @@ export async function forecastWithModel(
       const result = await callAnthropic({
         apiKey: keys.anthropicApiKey,
         model: ANTHROPIC_FORECAST_MODEL,
-        systemPrompt: SYSTEM_PROMPT,
+        systemPrompt: system,
         contents,
         maxOutputTokens: 8192,
         timeoutMs: MODEL_TIMEOUT_MS,
@@ -228,7 +264,7 @@ export async function forecastWithModel(
     const gemini = await callGeminiText({
       apiKey: keys.geminiApiKey,
       model: DEFAULT_GEMINI_MODEL,
-      system: SYSTEM_PROMPT,
+      system,
       user,
       timeoutMs: MODEL_TIMEOUT_MS,
     });

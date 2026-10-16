@@ -12,6 +12,7 @@ import { REGIME_LABEL_PL } from "@/lib/markets/regime";
 const SOURCE_LABEL: Record<string, string> = {
   signals: "Sygnały (arytmetyka)",
   ai: "Model AI",
+  ai_learned: "Model AI + wnioski",
 };
 
 const DIRECTION_LABEL: Record<string, string> = {
@@ -98,6 +99,35 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
 
         <div>
           <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
+            Czego się nauczyłem
+          </p>
+          {board.lessons.length > 0 ? (
+            <ul className="mt-1.5 space-y-1.5">
+              {board.lessons.map((lesson) => (
+                <li
+                  key={lesson.textPl}
+                  className="min-w-0 break-words border-l-2 pl-2 text-[11px] leading-snug text-foreground/85"
+                  style={{
+                    borderColor:
+                      lesson.kind === "direction"
+                        ? "color-mix(in oklab, var(--warning) 70%, transparent)"
+                        : "color-mix(in oklab, var(--primary) 50%, transparent)",
+                  }}
+                >
+                  {lesson.textPl}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1.5 font-mono text-[10px] text-muted-foreground/70">
+              Jeszcze za mało rozliczonych prognoz — wniosek wymaga co najmniej 12 przypadków z
+              dwóch różnych tygodni.
+            </p>
+          )}
+        </div>
+
+        <div>
+          <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
             Wg źródła
           </p>
           <div className="mt-1.5">
@@ -154,7 +184,9 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
             „Bez zmian” to ruch mniejszy niż pół typowego tygodniowego ruchu danego instrumentu (np.
             ±0,3% dla EURPLN, ±4% dla BTC), a wzrost lub spadek musi być co najmniej taki. Wtedy
             losowe zgadywanie daje ok. 33% — wszystko powyżej to realna wartość prognozy. Porównanie
-            „Sygnały” vs „Model AI” odpowiada na pytanie, czy model bije prostą arytmetykę.
+            „Sygnały” vs „Model AI” odpowiada na pytanie, czy model bije prostą arytmetykę, a „Model
+            AI” vs „Model AI + wnioski” — czy nauka z historii realnie podnosi trafność (test A/B:
+            ten sam model i chwila, różnią się tylko wnioski).
           </>
         ) : (
           <>

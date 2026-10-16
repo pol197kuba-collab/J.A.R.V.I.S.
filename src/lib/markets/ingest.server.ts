@@ -33,6 +33,7 @@ import {
 } from "./scoreboard";
 import { fetchAllPages } from "@/lib/db/paginate";
 import { classifyRegime, type MarketRegime } from "./regime";
+import { deriveLessons, LESSON_WINDOW_DAYS, type LessonInput } from "./lessons";
 
 /** Klient Supabase — sesja użytkownika albo service_role, zależnie od tego, kto woła. */
 export type Db = SupabaseClient<Database>;
@@ -105,6 +106,11 @@ export type OutlookRow = {
   regime: MarketRegime | null;
   /** Werdykt modelu — null, gdy nie ma klucza albo model zawiódł. */
   ai: { direction: SignalDirection; confidence: number; rationalePl: string | null } | null;
+  /**
+   * Werdykt tego samego modelu z wnioskami z rozliczonych prognoz (test A/B,
+   * źródło 'ai_learned'). null, gdy wniosków jeszcze nie ma albo model zawiódł.
+   */
+  aiLearned: { direction: SignalDirection; confidence: number; rationalePl: string | null } | null;
 };
 
 // ---------------------------------------------------------- watchlista ----
@@ -379,6 +385,24 @@ export async function buildOutlook(
   });
 
   const forecast = await forecastWithModel(prepared, keys);
+
+  // Wariant „z wnioskami" testu A/B: ten sam model, ten sam prompt, plus
+  // wnioski z rozliczonych prognoz. Tylko gdy wnioski są — bez nich byłby
+  // kopią kontrolnego i rozmywał porównanie.
+  const lessons = forecast.model ? deriveLessons(await loadLessonInputs(supabase, userId)) : [];
+  const learned =
+    lessons.length > 0
+      ? await forecastWithModel(prepared, keys, { lessons: lessons.map((l) => l.textPl) })
+      : null;
+  if (learned?.failure) {
+    await logEvent(
+      supabase,
+      userId,
+      "warn",
+      `Typer: brak prognozy z wnioskami — ${learned.failure}`,
+      {} as Json,
+    );
+  }
   if (forecast.failure) {
     await logEvent(
       supabase,
@@ -417,10 +441,24 @@ export async function buildOutlook(
             rationalePl: verdict.rationalePl,
           }
         : null,
+      aiLearned:
+        learned?.model && learned.verdicts[idx]
+          ? {
+              direction: learned.verdicts[idx].direction,
+              confidence: learned.verdicts[idx].confidence,
+              rationalePl: learned.verdicts[idx].rationalePl,
+            }
+          : null,
     };
   });
 
-  await recordPredictions(supabase, userId, rows, forecast.model);
+  await recordPredictions(
+    supabase,
+    userId,
+    rows,
+    forecast.model,
+    learned?.model ? { model: learned.model, lessons: lessons.map((l) => l.textPl) } : null,
+  );
 
   // Pusty typer wygląda w UI tak samo, niezależnie od przyczyny: braku
   // notowań w cache'u, zbyt krótkich serii czy pustej watchlisty. Bez tego
@@ -460,6 +498,7 @@ async function recordPredictions(
   userId: string,
   rows: OutlookRow[],
   model: string | null,
+  learned: { model: string; lessons: string[] } | null = null,
 ): Promise<void> {
   if (rows.length === 0) return;
   const dueAt = new Date(Date.now() + HORIZON_DAYS * 86_400_000).toISOString();
@@ -527,7 +566,27 @@ async function recordPredictions(
       })
     : [];
 
-  const fresh = [...signalRows, ...aiRows].filter(
+  const learnedRows = learned
+    ? base.flatMap((b, i) => {
+        const v = rows[i].aiLearned;
+        if (!v) return [];
+        return [
+          {
+            ...b,
+            direction: v.direction,
+            confidence: v.confidence,
+            rationale_pl: v.rationalePl,
+            source: "ai_learned" as const,
+            model: learned.model,
+            // Które wnioski widział model — bez tego nie da się później
+            // ocenić, co faktycznie pomogło, a co zaszkodziło.
+            lessons: learned.lessons as unknown as Json,
+          },
+        ];
+      })
+    : [];
+
+  const fresh = [...signalRows, ...aiRows, ...learnedRows].filter(
     (r) => !isCopy(r.symbol, r.source, r.price_at_prediction),
   );
   if (fresh.length === 0) return;
@@ -728,4 +787,44 @@ export async function backfillPredictionContext(supabase: Db, userId: string): P
     );
   }
   return updated;
+}
+
+/** Rozliczone, nie-kopie, z okna wniosków — wejście dla lessons.deriveLessons. */
+export async function loadLessonInputs(supabase: Db, userId: string): Promise<LessonInput[]> {
+  const since = new Date(Date.now() - LESSON_WINDOW_DAYS * 86_400_000).toISOString();
+  const rows = await fetchAllPages<{
+    symbol: string;
+    direction: string;
+    regime: string | null;
+    outcome: string | null;
+    actual_change_pct: number | null;
+    flat_band_pct: number | null;
+    made_at: string;
+  }>((from, to) =>
+    supabase
+      .from("market_predictions")
+      .select("symbol, direction, regime, outcome, actual_change_pct, flat_band_pct, made_at")
+      .eq("owner_id", userId)
+      .eq("stale", false)
+      .not("outcome", "is", null)
+      .gte("made_at", since)
+      .order("made_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  return rows.flatMap((r) =>
+    r.actual_change_pct === null || (r.outcome !== "hit" && r.outcome !== "miss")
+      ? []
+      : [
+          {
+            symbol: r.symbol,
+            direction: r.direction as LessonInput["direction"],
+            regime: r.regime,
+            outcome: r.outcome,
+            actualChangePct: Number(r.actual_change_pct),
+            flatBandPct: r.flat_band_pct === null ? null : Number(r.flat_band_pct),
+            madeAt: r.made_at,
+          },
+        ],
+  );
 }
