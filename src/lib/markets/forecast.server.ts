@@ -29,6 +29,11 @@ export type ForecastInput = {
   /** Kilka najmocniejszych nagłówków dotyczących instrumentu. */
   headlines: string[];
   lastPrice: number;
+  /**
+   * Pasmo „bez zmian" w % (scoreboard.flatBandPct) — wg niego prognoza jest
+   * rozliczana, więc model musi je znać, żeby wiedzieć, co znaczy „flat".
+   */
+  flatBandPct?: number;
 };
 
 export type AiVerdict = {
@@ -42,10 +47,11 @@ const SYSTEM_PROMPT = `Jesteś analitykiem rynkowym. Dostajesz POLICZONE wskaźn
 
 ZASADY, od których nie wolno odstąpić:
 1. NIE wymyślaj ani nie przeliczaj żadnych liczb. Wszystkie wartości (RSI, momentum, średnie, wydźwięk newsów, cena) masz podane i są prawdziwe. Możesz się do nich odwoływać, ale nie podawaj wartości, których nie dostałeś.
-2. Kierunek ma wynikać z podanych danych. Jeśli wskaźniki są sprzeczne albo słabe, poprawną odpowiedzią jest "flat" z niską pewnością — nie zgaduj kierunku, żeby coś powiedzieć.
-3. Pewność odzwierciedla zgodność przesłanek, a nie Twoje przekonanie. Sprzeczne wskaźniki = niska pewność, nawet gdy kierunek wydaje się oczywisty.
-4. Uzasadnienie po polsku, JEDNO do DWÓCH zdań, konkretnie: która przesłanka zdecydowała i co jej przeczy. Bez ogólników w rodzaju "rynek jest zmienny".
-5. Nie obiecuj zysków, nie podawaj poziomów wejścia ani cen docelowych. To jest ocena prawdopodobnego kierunku, nie rekomendacja inwestycyjna.
+2. Prognoza dotyczy 7 dni i jest rozliczana wg podanego pasma „bez zmian" danego instrumentu: "up" = wzrost co najmniej o pasmo, "down" = spadek co najmniej o pasmo, "flat" = ruch mniejszy niż pasmo w obie strony. Pasmo jest dobrane do typowej zmienności instrumentu, więc każdy z trzech wyników jest z góry podobnie prawdopodobny.
+3. Kierunek ma wynikać z podanych danych. Jeśli wskaźniki są sprzeczne albo słabe, poprawną odpowiedzią jest "flat" z niską pewnością — nie zgaduj kierunku, żeby coś powiedzieć.
+4. Pewność odzwierciedla zgodność przesłanek, a nie Twoje przekonanie. Sprzeczne wskaźniki = niska pewność, nawet gdy kierunek wydaje się oczywisty.
+5. Uzasadnienie po polsku, JEDNO do DWÓCH zdań, konkretnie: która przesłanka zdecydowała i co jej przeczy. Bez ogólników w rodzaju "rynek jest zmienny".
+6. Nie obiecuj zysków, nie podawaj poziomów wejścia ani cen docelowych. To jest ocena prawdopodobnego kierunku, nie rekomendacja inwestycyjna.
 
 Dla każdego instrumentu zwróć obiekt: {"symbol": "...", "direction": "up"|"down"|"flat", "confidence": 0-100, "rationale_pl": "..."}.
 Odpowiedz WYŁĄCZNIE tablicą JSON, w tej samej kolejności co wejście, bez komentarza.`;
@@ -76,6 +82,9 @@ export function describeForModel(input: ForecastInput): string {
     }`,
     `  pozycja w zakresie 60 sesji: ${fmt(s.rangePosition, 0)}%`,
     `  zmienność roczna: ${fmt(s.volatility, 0)}%`,
+    ...(input.flatBandPct !== undefined
+      ? [`  pasmo „bez zmian" (7 dni): ±${input.flatBandPct.toFixed(2)}%`]
+      : []),
     `  wynik sygnałów: ${technical.score} (kierunek ${technical.direction}, pewność ${technical.confidence})`,
     `  wydźwięk newsów: ${
       sentimentScore === null || sentimentItems === 0

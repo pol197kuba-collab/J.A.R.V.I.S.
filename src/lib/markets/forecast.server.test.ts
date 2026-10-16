@@ -51,6 +51,13 @@ describe("describeForModel", () => {
     expect(text).not.toContain("81160.9500675369");
   });
 
+  it("tells the model the flat band it will be scored against", () => {
+    expect(describeForModel({ ...input("BTC"), flatBandPct: 4.2 })).toContain(
+      'pasmo „bez zmian" (7 dni): ±4.20%',
+    );
+    expect(describeForModel(input("BTC"))).not.toContain("pasmo");
+  });
+
   it("marks the absence of news explicitly", () => {
     const text = describeForModel({ ...input("BTC"), sentimentScore: null, sentimentItems: 0 });
     expect(text).toContain("wydźwięk newsów: brak newsów");

@@ -19,11 +19,13 @@ const DIRECTION_LABEL: Record<string, string> = {
   flat: "Prognozy „bez kierunku”",
 };
 
-// Trafność poniżej 50% dla prognoz kierunkowych jest gorsza niż rzut monetą
-// — i panel ma to pokazywać kolorem, a nie ukrywać.
+// Punkt odniesienia to ~33%: pasmo „bez zmian" jest dobrane tak, że wzrost,
+// spadek i brak ruchu są z góry mniej więcej równie prawdopodobne, więc tyle
+// daje losowe zgadywanie. Poniżej tego typer jest gorszy niż rzut kością — i
+// panel ma to pokazywać kolorem, a nie ukrywać.
 const rateColor = (rate: number | null): string => {
   if (rate === null) return "var(--muted-foreground)";
-  return rate >= 60 ? "var(--success)" : rate >= 45 ? "var(--warning)" : "var(--destructive)";
+  return rate >= 45 ? "var(--success)" : rate >= 35 ? "var(--warning)" : "var(--destructive)";
 };
 
 function RateRows({
@@ -106,6 +108,17 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
           </div>
         </div>
 
+        {board.bySourceFixedBand.length > 0 && (
+          <div>
+            <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
+              Dla porównania: stary próg ±1%
+            </p>
+            <div className="mt-1.5 opacity-70">
+              <RateRows rows={board.bySourceFixedBand} labels={SOURCE_LABEL} meaningful={false} />
+            </div>
+          </div>
+        )}
+
         {board.bySymbol.length > 0 && (
           <div>
             <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
@@ -121,9 +134,10 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
       <PanelHint>
         {meaningful ? (
           <>
-            Prognoza wzrostu liczy się jako trafiona dopiero przy realnym ruchu o co najmniej 1% —
-            sam brak spadku to za mało. Porównanie „Sygnały" vs „Model AI" odpowiada na jedyne
-            pytanie, które ma tu znaczenie: czy model bije prostą arytmetykę.
+            „Bez zmian” to ruch mniejszy niż pół typowego tygodniowego ruchu danego instrumentu (np.
+            ±0,3% dla EURPLN, ±4% dla BTC), a wzrost lub spadek musi być co najmniej taki. Wtedy
+            losowe zgadywanie daje ok. 33% — wszystko powyżej to realna wartość prognozy. Porównanie
+            „Sygnały” vs „Model AI” odpowiada na pytanie, czy model bije prostą arytmetykę.
           </>
         ) : (
           <>

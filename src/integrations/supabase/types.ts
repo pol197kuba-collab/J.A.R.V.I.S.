@@ -824,12 +824,14 @@ export type Database = {
           confidence: number
           direction: string
           due_at: string
+          flat_band_pct: number | null
           horizon_days: number
           id: string
           made_at: string
           made_on: string | null
           model: string | null
           outcome: string | null
+          outcome_fixed_band: string | null
           owner_id: string
           price_at_prediction: number
           price_at_resolution: number | null
@@ -845,12 +847,14 @@ export type Database = {
           confidence: number
           direction: string
           due_at: string
+          flat_band_pct?: number | null
           horizon_days: number
           id?: string
           made_at?: string
           made_on?: string | null
           model?: string | null
           outcome?: string | null
+          outcome_fixed_band?: string | null
           owner_id: string
           price_at_prediction: number
           price_at_resolution?: number | null
@@ -866,12 +870,14 @@ export type Database = {
           confidence?: number
           direction?: string
           due_at?: string
+          flat_band_pct?: number | null
           horizon_days?: number
           id?: string
           made_at?: string
           made_on?: string | null
           model?: string | null
           outcome?: string | null
+          outcome_fixed_band?: string | null
           owner_id?: string
           price_at_prediction?: number
           price_at_resolution?: number | null

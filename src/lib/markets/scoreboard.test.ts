@@ -4,6 +4,10 @@ import {
   FLAT_BAND_PCT,
   percentChange,
   resolveOutcome,
+  flatBandPct,
+  sessionsInHorizon,
+  FLAT_BAND_MIN_PCT,
+  FLAT_BAND_MAX_PCT,
   MINIMUM_MEANINGFUL_RESOLUTIONS,
 } from "./scoreboard";
 
@@ -106,5 +110,69 @@ describe("buildScoreboard", () => {
       row({ symbol: "BTC", outcome: "miss", actualChangePct: -2 }),
     ]);
     expect(board.bySymbol[0].key).toBe("BTC");
+  });
+});
+
+describe("flatBandPct", () => {
+  it("spokojny instrument dostaje wąskie pasmo, zmienny szerokie", () => {
+    // EURPLN ~5% rocznie, 5 sesji → σ ≈ 0,7% → pasmo ≈ 0,35%.
+    const fx = flatBandPct(5, 5);
+    // BTC ~50% rocznie, 7 sesji → σ ≈ 8,3% → pasmo ≈ 4,2%.
+    const btc = flatBandPct(50, 7);
+    expect(fx).toBeGreaterThan(0.3);
+    expect(fx).toBeLessThan(0.4);
+    expect(btc).toBeGreaterThan(4);
+    expect(btc).toBeLessThan(4.5);
+  });
+
+  it("bez zmienności wraca do stałego progu", () => {
+    expect(flatBandPct(null, 5)).toBe(FLAT_BAND_PCT);
+    expect(flatBandPct(0, 5)).toBe(FLAT_BAND_PCT);
+    expect(flatBandPct(Number.NaN, 5)).toBe(FLAT_BAND_PCT);
+  });
+
+  it("trzyma się granic przy skrajnych seriach", () => {
+    expect(flatBandPct(0.1, 5)).toBe(FLAT_BAND_MIN_PCT);
+    expect(flatBandPct(500, 7)).toBe(FLAT_BAND_MAX_PCT);
+  });
+});
+
+describe("sessionsInHorizon", () => {
+  it("krypto liczy każdy dzień, reszta dni robocze", () => {
+    expect(sessionsInHorizon(7, "crypto")).toBe(7);
+    expect(sessionsInHorizon(7, "equity")).toBe(5);
+  });
+});
+
+describe("resolveOutcome z pasmem instrumentu", () => {
+  it("ten sam ruch +2% to trafiony wzrost dla EURPLN, a trafione „bez zmian” dla BTC", () => {
+    expect(resolveOutcome("up", 2, 0.35)).toBe("hit");
+    expect(resolveOutcome("flat", 2, 4.2)).toBe("hit");
+    expect(resolveOutcome("up", 2, 4.2)).toBe("miss");
+  });
+});
+
+describe("buildScoreboard — porównanie ze starą regułą", () => {
+  it("liczy trafność wg ±1% obok bieżącej", () => {
+    const board = buildScoreboard([
+      {
+        source: "ai",
+        direction: "flat",
+        symbol: "BTC",
+        outcome: "hit",
+        actualChangePct: 2,
+        outcomeFixedBand: "miss",
+      },
+      {
+        source: "ai",
+        direction: "up",
+        symbol: "BTC",
+        outcome: "hit",
+        actualChangePct: 5,
+        outcomeFixedBand: "hit",
+      },
+    ]);
+    expect(board.bySource[0].hitRate).toBe(100);
+    expect(board.bySourceFixedBand[0].hitRate).toBe(50);
   });
 });

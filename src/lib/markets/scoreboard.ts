@@ -10,14 +10,56 @@ export type PredictionSource = "signals" | "ai";
 export type PredictionOutcome = "hit" | "miss";
 
 /**
- * Pasmo, w którym ruch uznajemy za brak ruchu.
+ * Pasmo, w którym ruch uznajemy za brak ruchu — wersja STAŁA, ±1%.
  *
- * Bez niego prognoza „bez kierunku" nigdy nie byłaby trafiona (cena prawie
+ * Bez pasma prognoza „bez kierunku" nigdy nie byłaby trafiona (cena prawie
  * nigdy nie kończy dokładnie tam, gdzie zaczęła), a prognoza „wzrost"
- * zaliczałaby ruch o 0,01% jako sukces. 1% to próg świadomie arbitralny —
- * dlatego jest stałą z nazwą, a nie liczbą wklejoną w trzech miejscach.
+ * zaliczałaby ruch o 0,01% jako sukces.
+ *
+ * Od 2026-10 to już tylko zapas (brak historii do policzenia zmienności) i
+ * punkt odniesienia: jeden próg dla wszystkich okazał się niesprawiedliwy.
+ * Mediana tygodniowego ruchu to ~2%, więc „flat" dla BTC prawie zawsze
+ * przegrywał, a dla EURPLN prawie zawsze wygrywał (93%). Właściwe pasmo
+ * liczy flatBandPct.
  */
 export const FLAT_BAND_PCT = 1;
+
+/**
+ * Jaka część typowego ruchu w horyzoncie to jeszcze „bez zmian".
+ *
+ * 0,5 odchylenia standardowego: przy rozkładzie normalnym |Z| < 0,5 ma
+ * prawdopodobieństwo ~38%, więc „wzrost", „spadek" i „bez zmian" są z góry
+ * mniej więcej równie prawdopodobne (~31/38/31%). Dzięki temu losowe
+ * zgadywanie daje ~33% na każdym instrumencie, a wszystko powyżej to
+ * realna wartość prognozy — niezależnie od tego, jak bardzo instrument się rusza.
+ */
+export const FLAT_BAND_SIGMA = 0.5;
+
+/** Granice pasma w %, żeby skrajna seria (dziura w danych, krach) nie zrobiła z niego absurdu. */
+export const FLAT_BAND_MIN_PCT = 0.2;
+export const FLAT_BAND_MAX_PCT = 5;
+
+/**
+ * Pasmo „bez zmian" dla instrumentu, w % — z jego zmienności.
+ *
+ * @param annualizedVolPct zmienność roczna w % (jak signals.volatility:
+ *   odchylenie dziennych zwrotów × √252 × 100).
+ * @param sessions ile sesji notowań mieści się w horyzoncie — krypto
+ *   handluje 7 dni w tygodniu, reszta ~5 na 7 dni kalendarzowych.
+ */
+export function flatBandPct(annualizedVolPct: number | null, sessions: number): number {
+  if (annualizedVolPct === null || !Number.isFinite(annualizedVolPct) || annualizedVolPct <= 0) {
+    return FLAT_BAND_PCT;
+  }
+  const horizonSigma = (annualizedVolPct / Math.sqrt(252)) * Math.sqrt(Math.max(1, sessions));
+  const band = FLAT_BAND_SIGMA * horizonSigma;
+  return Math.round(Math.min(FLAT_BAND_MAX_PCT, Math.max(FLAT_BAND_MIN_PCT, band)) * 100) / 100;
+}
+
+/** Sesje w horyzoncie kalendarzowym: krypto codziennie, reszta w dni robocze. */
+export function sessionsInHorizon(horizonDays: number, assetClass: string): number {
+  return assetClass === "crypto" ? horizonDays : Math.max(1, Math.round((horizonDays * 5) / 7));
+}
 
 export type ResolvedPrediction = {
   direction: PredictionDirection;
@@ -29,17 +71,18 @@ export type ResolvedPrediction = {
  * Czy prognoza się sprawdziła.
  *
  * Reguła jest celowo surowa dla kierunku i łagodna dla „bez kierunku":
- * zapowiedź wzrostu wymaga realnego wzrostu (>= 1%), a nie samego braku
+ * zapowiedź wzrostu wymaga realnego wzrostu (>= pasma), a nie samego braku
  * spadku. Inaczej „typer" chwaliłby się trafnością, której nie da się
  * zamienić na żadną decyzję.
  */
 export function resolveOutcome(
   direction: PredictionDirection,
   actualChangePct: number,
+  bandPct: number = FLAT_BAND_PCT,
 ): PredictionOutcome {
-  if (direction === "up") return actualChangePct >= FLAT_BAND_PCT ? "hit" : "miss";
-  if (direction === "down") return actualChangePct <= -FLAT_BAND_PCT ? "hit" : "miss";
-  return Math.abs(actualChangePct) < FLAT_BAND_PCT ? "hit" : "miss";
+  if (direction === "up") return actualChangePct >= bandPct ? "hit" : "miss";
+  if (direction === "down") return actualChangePct <= -bandPct ? "hit" : "miss";
+  return Math.abs(actualChangePct) < bandPct ? "hit" : "miss";
 }
 
 export const percentChange = (from: number, to: number): number | null =>
@@ -63,6 +106,8 @@ type Scored = {
   symbol: string;
   outcome: PredictionOutcome | null;
   actualChangePct: number | null;
+  /** Wynik wg starej reguły ±1% — tylko do porównania na panelu. */
+  outcomeFixedBand?: PredictionOutcome | null;
 };
 
 function tally(rows: Scored[], keyOf: (row: Scored) => string): ScoreRow[] {
@@ -106,6 +151,8 @@ export type Scoreboard = {
   bySource: ScoreRow[];
   byDirection: ScoreRow[];
   bySymbol: ScoreRow[];
+  /** Trafność wg źródła, gdyby nadal obowiązywał stały próg ±1%. */
+  bySourceFixedBand: ScoreRow[];
   resolved: number;
   pending: number;
   /**
@@ -123,6 +170,12 @@ export function buildScoreboard(rows: Scored[]): Scoreboard {
     bySource: tally(rows, (r) => r.source),
     byDirection: tally(rows, (r) => r.direction),
     bySymbol: tally(rows, (r) => r.symbol),
+    bySourceFixedBand: tally(
+      rows
+        .filter((r) => r.outcome && r.outcomeFixedBand)
+        .map((r) => ({ ...r, outcome: r.outcomeFixedBand ?? null })),
+      (r) => r.source,
+    ),
     resolved: rows.filter((r) => r.outcome).length,
     pending: rows.filter((r) => !r.outcome).length,
     minimumMeaningful: MINIMUM_MEANINGFUL_RESOLUTIONS,

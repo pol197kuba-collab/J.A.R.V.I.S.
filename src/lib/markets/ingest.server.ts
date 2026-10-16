@@ -16,13 +16,21 @@ import { normalizeSeries, type PricePoint } from "./series";
 import type { QuoteSource } from "./quotes.server";
 import { aggregateSentiment, type MarketImpact, type MarketNewsItem } from "./news";
 import {
+  annualizedVolatility,
   combineOutlook,
   computeSignals,
   scoreSignals,
   type SignalDirection,
   type SignalDriver,
 } from "./signals";
-import { percentChange, resolveOutcome, type PredictionDirection } from "./scoreboard";
+import {
+  FLAT_BAND_PCT,
+  flatBandPct,
+  percentChange,
+  resolveOutcome,
+  sessionsInHorizon,
+  type PredictionDirection,
+} from "./scoreboard";
 import { fetchAllPages } from "@/lib/db/paginate";
 
 /** Klient Supabase — sesja użytkownika albo service_role, zależnie od tego, kto woła. */
@@ -80,6 +88,8 @@ export type OutlookRow = {
   sentimentScore: number | null;
   sentimentItems: number;
   drivers: SignalDriver[];
+  /** Pasmo „bez zmian" w % dla tego instrumentu i horyzontu (scoreboard.flatBandPct). */
+  flatBandPct: number;
   /** Werdykt modelu — null, gdy nie ma klucza albo model zawiódł. */
   ai: { direction: SignalDirection; confidence: number; rationalePl: string | null } | null;
 };
@@ -330,7 +340,8 @@ export async function buildOutlook(
   const prepared = assets.flatMap((asset) => {
     const points = normalizeSeries(pointsBySymbol.get(asset.symbol) ?? []);
     if (points.length < 2) return [];
-    const technical = scoreSignals(computeSignals(points));
+    const signals = computeSignals(points);
+    const technical = scoreSignals(signals);
     const sentiment = sentimentBySymbol.get(asset.symbol) ?? null;
     const headlines = news
       .filter((n) => n.symbols.includes(asset.symbol))
@@ -345,6 +356,10 @@ export async function buildOutlook(
         sentimentItems: sentiment?.items ?? 0,
         headlines,
         lastPrice: points[points.length - 1].close,
+        flatBandPct: flatBandPct(
+          signals.volatility,
+          sessionsInHorizon(HORIZON_DAYS, asset.assetClass),
+        ),
       },
     ];
   });
@@ -377,6 +392,7 @@ export async function buildOutlook(
       sentimentScore: input.sentimentScore,
       sentimentItems: input.sentimentItems,
       drivers: input.technical.drivers,
+      flatBandPct: input.flatBandPct,
       // Werdykt „ai" istnieje tylko wtedy, gdy model faktycznie
       // odpowiedział — inaczej podpisalibyśmy arytmetykę nazwą modelu.
       ai: forecast.model
@@ -438,6 +454,7 @@ async function recordPredictions(
     symbol: row.symbol,
     horizon_days: HORIZON_DAYS,
     due_at: dueAt,
+    flat_band_pct: row.flatBandPct,
     price_at_prediction: row.lastPrice,
     technical_score: row.technicalScore,
     sentiment_score: row.sentimentScore,
@@ -495,7 +512,7 @@ export async function resolveDuePredictions(supabase: Db, userId: string): Promi
   const nowIso = new Date().toISOString();
   const { data: due, error } = await supabase
     .from("market_predictions")
-    .select("id, symbol, direction, due_at, price_at_prediction")
+    .select("id, symbol, direction, due_at, price_at_prediction, flat_band_pct")
     .eq("owner_id", userId)
     .is("outcome", null)
     .lte("due_at", nowIso)
@@ -527,11 +544,96 @@ export async function resolveDuePredictions(supabase: Db, userId: string): Promi
         resolved_at: new Date().toISOString(),
         price_at_resolution: Number(quote.close),
         actual_change_pct: change,
-        outcome: resolveOutcome(prediction.direction as PredictionDirection, change),
+        // Pasmo zapisane przy postawieniu prognozy; brak (wiersz sprzed
+        // 2026-10, jeszcze nieprzeliczony) = stały próg — backfill poprawi.
+        outcome: resolveOutcome(
+          prediction.direction as PredictionDirection,
+          change,
+          prediction.flat_band_pct === null ? FLAT_BAND_PCT : Number(prediction.flat_band_pct),
+        ),
+        outcome_fixed_band: resolveOutcome(prediction.direction as PredictionDirection, change),
       })
       .eq("id", prediction.id)
       .eq("owner_id", userId);
     if (!updErr) resolved += 1;
   }
   return resolved;
+}
+
+/**
+ * Jednorazowe przeliczenie prognoz sprzed pasma liczonego ze zmienności.
+ *
+ * Dla każdej prognozy bez `flat_band_pct` liczy pasmo z notowań SPRZED dnia
+ * jej postawienia (żeby rozliczenie nie korzystało z wiedzy, której prognoza
+ * nie miała), a rozliczone przelicza: dotychczasowy wynik (stały ±1%) trafia
+ * do `outcome_fixed_band`, `outcome` dostaje wynik wg pasma. Idempotentne —
+ * dotyka tylko wierszy, które pasma jeszcze nie mają.
+ */
+export async function backfillFlatBands(supabase: Db, userId: string): Promise<number> {
+  const { data: rows, error } = await supabase
+    .from("market_predictions")
+    .select("id, symbol, made_at, horizon_days, direction, outcome, actual_change_pct")
+    .eq("owner_id", userId)
+    .is("flat_band_pct", null)
+    .order("made_at", { ascending: true })
+    .limit(500);
+  if (error || !rows || rows.length === 0) return 0;
+
+  const symbols = [...new Set(rows.map((r) => r.symbol))];
+  const since = new Date(Date.parse(rows[0].made_at) - 120 * 86_400_000).toISOString().slice(0, 10);
+  const quotes = await fetchAllPages<{ symbol: string; quote_date: string; close: number }>(
+    (from, to) =>
+      supabase
+        .from("market_quotes")
+        .select("symbol, quote_date, close")
+        .in("symbol", symbols)
+        .gte("quote_date", since)
+        .order("quote_date", { ascending: true })
+        .order("symbol", { ascending: true })
+        .range(from, to),
+  );
+  const bySymbol = new Map<string, PricePoint[]>();
+  for (const q of quotes ?? []) {
+    const bucket = bySymbol.get(q.symbol) ?? [];
+    bucket.push({ date: q.quote_date, close: Number(q.close) });
+    bySymbol.set(q.symbol, bucket);
+  }
+
+  let updated = 0;
+  for (const row of rows) {
+    // Dzień postawienia w UTC — tak samo liczy kolumna made_on.
+    const madeOn = row.made_at.slice(0, 10);
+    const history = normalizeSeries(bySymbol.get(row.symbol) ?? []).filter((p) => p.date < madeOn);
+    const asset = assetBySymbol(row.symbol);
+    const band = flatBandPct(
+      annualizedVolatility(history.slice(-60)),
+      sessionsInHorizon(row.horizon_days, asset?.assetClass ?? "equity"),
+    );
+    const change = row.actual_change_pct === null ? null : Number(row.actual_change_pct);
+    const patch =
+      row.outcome && change !== null && Number.isFinite(change)
+        ? {
+            flat_band_pct: band,
+            outcome_fixed_band: row.outcome,
+            outcome: resolveOutcome(row.direction as PredictionDirection, change, band),
+          }
+        : { flat_band_pct: band };
+    const { error: updErr } = await supabase
+      .from("market_predictions")
+      .update(patch)
+      .eq("id", row.id)
+      .eq("owner_id", userId)
+      .is("flat_band_pct", null);
+    if (!updErr) updated += 1;
+  }
+  if (updated > 0) {
+    await logEvent(
+      supabase,
+      userId,
+      "info",
+      `Typer: przeliczono ${updated} prognoz wg pasma zmienności`,
+      {} as Json,
+    );
+  }
+  return updated;
 }
