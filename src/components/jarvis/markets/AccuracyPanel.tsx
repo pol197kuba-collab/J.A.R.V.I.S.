@@ -184,7 +184,9 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
             „Bez zmian” to ruch mniejszy niż pół typowego tygodniowego ruchu danego instrumentu (np.
             ±0,3% dla EURPLN, ±4% dla BTC), a wzrost lub spadek musi być co najmniej taki. Wtedy
             losowe zgadywanie daje ok. 33% — wszystko powyżej to realna wartość prognozy. Porównanie
-            „Sygnały” vs „Model AI” odpowiada na pytanie, czy model bije prostą arytmetykę.
+            „Sygnały” vs „Model AI” odpowiada na pytanie, czy model bije prostą arytmetykę, a „Model
+            AI” vs „Model AI + wnioski” — czy nauka z historii realnie podnosi trafność (test A/B:
+            ten sam model i chwila, różnią się tylko wnioski).
           </>
         ) : (
           <>
