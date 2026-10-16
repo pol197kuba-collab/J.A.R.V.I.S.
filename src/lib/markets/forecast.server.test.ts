@@ -58,6 +58,14 @@ describe("describeForModel", () => {
     expect(describeForModel(input("BTC"))).not.toContain("pasmo");
   });
 
+  it("shows the market situation only to the learning variant", () => {
+    const withRegime = { ...input("BTC"), regime: "uptrend" };
+    expect(describeForModel(withRegime)).not.toContain("sytuacja rynkowa");
+    expect(describeForModel(withRegime, { withRegime: true })).toContain(
+      "sytuacja rynkowa: trend wzrostowy",
+    );
+  });
+
   it("marks the absence of news explicitly", () => {
     const text = describeForModel({ ...input("BTC"), sentimentScore: null, sentimentItems: 0 });
     expect(text).toContain("wydźwięk newsów: brak newsów");
@@ -193,6 +201,34 @@ describe("forecastWithModel", () => {
     });
     expect(result.model).toBe("gemini-2.5-flash");
     expect(result.verdicts[0].direction).toBe("flat");
+  });
+
+  it("sends lessons only in the learning variant", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [
+          {
+            content: { parts: [{ text: '[{"symbol":"BTC","direction":"flat","confidence":30}]' }] },
+          },
+        ],
+      }),
+      text: async () => "",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const keys = { anthropicApiKey: null, geminiApiKey: "gem" };
+
+    await forecastWithModel([input("BTC")], keys);
+    await forecastWithModel([input("BTC")], keys, {
+      lessons: ["Prognozy wzrostu trafiły 5 z 69 razy."],
+    });
+
+    const control = JSON.parse(fetchMock.mock.calls[0][1].body).systemInstruction.parts[0].text;
+    const learned = JSON.parse(fetchMock.mock.calls[1][1].body).systemInstruction.parts[0].text;
+    expect(control).not.toContain("WNIOSKI");
+    expect(learned).toContain("WNIOSKI Z TWOICH ROZLICZONYCH PROGNOZ");
+    expect(learned).toContain("5 z 69");
   });
 
   it("says why there is no model verdict when keys were given", async () => {
