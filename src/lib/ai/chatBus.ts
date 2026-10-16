@@ -2,6 +2,8 @@
 // Voice commands, manual chat input, and Jarvis replies all publish here
 // so the ChatPanel can render a unified, persistent transcript.
 
+import { CHAT_HISTORY_LIMIT } from "./chatHistory";
+
 export type ChatBusMessage = {
   id: string;
   role: "user" | "jarvis";
@@ -13,7 +15,7 @@ export type ChatBusMessage = {
 };
 
 const EVENT = "jarvis:chat";
-const MAX_HISTORY = 60;
+const MAX_HISTORY = CHAT_HISTORY_LIMIT;
 
 function now() {
   return new Date().toTimeString().slice(0, 8);

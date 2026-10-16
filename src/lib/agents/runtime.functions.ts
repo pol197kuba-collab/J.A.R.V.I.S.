@@ -15,6 +15,12 @@ import type { Json } from "@/integrations/supabase/types";
 import { DEFAULT_GEMINI_MODEL, RECOMMENDED_AGENT_MODELS } from "./models";
 import { logServerError } from "@/lib/system/logServerError";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
+import {
+  CHAT_HISTORY_LIMIT,
+  planChatImport,
+  toConversationMessage,
+  type ConversationMessage,
+} from "@/lib/ai/chatHistory";
 
 // Accept any Gemini model id — the enum used to be a small whitelist which
 // made every new Gemini release require a code change. The Google API itself
@@ -851,12 +857,7 @@ export const runAgent = createServerFn({ method: "POST" })
 
 const GetConversationInput = z.object({ agentSlug: z.string().min(1).max(64) });
 
-export type ConversationMessage = {
-  id: string;
-  role: "user" | "jarvis";
-  text: string;
-  time: string;
-};
+export type { ConversationMessage };
 
 export const getActiveConversation = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -886,24 +887,98 @@ export const getActiveConversation = createServerFn({ method: "GET" })
         .maybeSingle();
       if (!conv) return { conversationId: null, messages: [] };
 
+      // Najnowsze N, potem odwrócone do kolejności czytania. (Wcześniej było
+      // rosnąco + limit, czyli N NAJSTARSZYCH — nowe wiadomości znikały.)
       const { data: msgs } = await supabase
         .from("messages")
-        .select("id, role, content, created_at")
+        .select("id, role, content, created_at, metadata")
         .eq("conversation_id", conv.id)
-        .order("created_at", { ascending: true })
-        .limit(60);
+        .order("created_at", { ascending: false })
+        .limit(CHAT_HISTORY_LIMIT);
 
       return {
         conversationId: conv.id,
-        messages: (msgs ?? []).map((m) => ({
-          id: m.id,
-          role: m.role as "user" | "jarvis",
-          text: m.content,
-          time: new Date(m.created_at).toTimeString().slice(0, 8),
-        })),
+        messages: (msgs ?? []).reverse().map(toConversationMessage),
       };
     },
   );
+
+// ---------------------------------------------------------------------------
+// importChatHistory — jednorazowe przeniesienie transkryptu z localStorage
+// przeglądarki do wątku aktywnego agenta. Idempotentne: powtórny import tych
+// samych wiadomości niczego nie dubluje (patrz planChatImport).
+// ---------------------------------------------------------------------------
+
+const ImportChatHistoryInput = z.object({
+  agentSlug: z.string().min(1).max(64),
+  messages: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(100),
+        role: z.enum(["user", "jarvis"]),
+        text: z.string().max(20000),
+        time: z.string().max(20),
+        agentName: z.string().max(100).optional(),
+      }),
+    )
+    .max(500),
+});
+
+export const importChatHistory = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => ImportChatHistoryInput.parse(input))
+  .handler(async ({ data, context }): Promise<{ imported: number }> => {
+    const { supabase, userId } = context;
+    if (data.messages.length === 0) return { imported: 0 };
+
+    const { data: agent } = await supabase
+      .from("agents")
+      .select("id")
+      .eq("owner_id", userId)
+      .eq("slug", data.agentSlug)
+      .maybeSingle();
+    if (!agent) return { imported: 0 };
+
+    // Ten sam wątek, który pokazuje getActiveConversation; brak → nowy.
+    const { data: conv } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("agent_id", agent.id)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    let conversationId = conv?.id ?? null;
+    if (!conversationId) {
+      const { data: created, error } = await supabase
+        .from("conversations")
+        .insert({ user_id: userId, agent_id: agent.id, title: "Historia z przeglądarki" })
+        .select("id")
+        .single();
+      if (error) throw new Error(error.message);
+      conversationId = created.id;
+    }
+
+    const { data: existing, error: readErr } = await supabase
+      .from("messages")
+      .select("id, role, content, created_at, metadata")
+      .eq("conversation_id", conversationId);
+    if (readErr) throw new Error(readErr.message);
+
+    const rows = planChatImport(data.messages, existing ?? [], Date.now());
+    if (rows.length === 0) return { imported: 0 };
+
+    const { error } = await supabase.from("messages").insert(
+      rows.map((r) => ({
+        ...r,
+        metadata: r.metadata as unknown as Json,
+        user_id: userId,
+        conversation_id: conversationId,
+      })),
+    );
+    if (error) throw new Error(error.message);
+    return { imported: rows.length };
+  });
 
 // ---------------------------------------------------------------------------
 // clearConversation — usuwa wiadomości aktywnego wątku PO STRONIE SERWERA.
