@@ -14,6 +14,7 @@ import { lookup } from "node:dns/promises";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
+import { embedText, noteEmbeddingText, toVectorLiteral } from "@/lib/ai/embed";
 
 export type ToolContext = {
   supabase: SupabaseClient<Database>;
@@ -314,6 +315,13 @@ const saveNote: Tool = {
       .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
       .map((t) => t.trim().slice(0, 40))
       .slice(0, 20);
+    // Best-effort, jak w `remember`: bez embeddingu notatka i tak się zapisze,
+    // a do Mózgu 3D trafi po nocnym przebiegu (scripts/brain-layout.ts).
+    const embedding = await embedText(
+      noteEmbeddingText(title, body),
+      ctx.apiKey,
+      "RETRIEVAL_DOCUMENT",
+    );
     const { data, error } = await ctx.supabase
       .from("notes")
       .insert({
@@ -322,6 +330,7 @@ const saveNote: Tool = {
         body,
         tags,
         source: AGENT_SLUGS.JARVIS,
+        ...(embedding ? { embedding: toVectorLiteral(embedding) } : {}),
       })
       .select("id")
       .single();
@@ -418,57 +427,9 @@ const clampInt = (v: unknown, min: number, max: number, fallback: number): numbe
   return Math.min(max, Math.max(min, Math.round(n)));
 };
 
-// Dimensionality of the vector(768) column in public.memories. Must match
-// the migration (20260715..._semantic_memory.sql) and the value requested
-// from Gemini below.
-const EMBED_DIMS = 768;
-const EMBED_MODEL = "gemini-embedding-001";
-
-// Turn text into a 768-dim embedding via the user's own Gemini key. Best
-// effort by design: any failure (no quota, network, HTTP error, malformed
-// response) returns null so the caller falls back to keyword search instead
-// of failing the whole tool. `taskType` steers Gemini to produce embeddings
-// tuned for either the stored document or the search query.
-export async function embedText(
-  text: string,
-  apiKey: string,
-  taskType: "RETRIEVAL_DOCUMENT" | "RETRIEVAL_QUERY",
-): Promise<number[] | null> {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 10_000);
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${EMBED_MODEL}:embedContent?key=${encodeURIComponent(
-        apiKey,
-      )}`,
-      {
-        method: "POST",
-        signal: ctrl.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: `models/${EMBED_MODEL}`,
-          content: { parts: [{ text: trimmed.slice(0, 8_000) }] },
-          taskType,
-          outputDimensionality: EMBED_DIMS,
-        }),
-      },
-    );
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    const data = (await res.json()) as { embedding?: { values?: number[] } };
-    const values = data.embedding?.values;
-    if (!Array.isArray(values) || values.length !== EMBED_DIMS) return null;
-    return values;
-  } catch {
-    return null;
-  }
-}
-
-// supabase-js serialises a vector column value as a JSON-array string, e.g.
-// "[0.12,-0.03,…]". Kept as a tiny helper so remember/recall agree on format.
-export const toVectorLiteral = (values: number[]): string => JSON.stringify(values);
+// Embeddingi żyją w src/lib/ai/embed.ts (współdzielone z nocnym skryptem
+// Mózgu 3D); re-eksport zostaje, bo documents.functions.ts importuje je stąd.
+export { embedText, toVectorLiteral } from "@/lib/ai/embed";
 
 const remember: Tool = {
   declaration: {

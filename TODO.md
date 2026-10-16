@@ -26,6 +26,9 @@
 > **Plan na najbliższe sesje (2026-10-16):** Mózg 3D → Darwin → Fundusz
 > J.A.R.V.I.S. → Vision AR — szczegóły, sesje i otwarte pytania w
 > [`PLAN.md`](PLAN.md). Po wdrożeniu każdej sesji dopisz tu wpis jak dotąd.
+>
+> **Po merge S1.1:** Actions → **Brain Layout** → Run workflow (raz), żeby
+> pierwszy układ Mózgu powstał od razu, a nie dopiero o 03:40.
 
 ## 0. Otwarte PO STRONIE WŁAŚCICIELA (nie do zrobienia z repo) — stan 2026-09-21
 
@@ -85,7 +88,8 @@ paneli zewnętrznych. Trzymane tutaj, żeby nie zginęły między sesjami.
       Bez niej panel BUDŻET nie ma skąd czytać, a degradacja przy limicie się
       nie włączy. Limit startowy to $5/miesiąc — do zmiany w Ustawieniach.
 
-- [ ] **Migracje same do bazy (Etap 0, `db-migrations.yml`)** — dwa kroki,
+- [x] **Migracje same do bazy (Etap 0, `db-migrations.yml`)** — zrobione
+      2026-10-16: sekret, baseline `20261016180000` i push zielone. — dwa kroki,
       jednorazowo:
       1. **Sekret `SUPABASE_DB_URL`** w GitHubie (Settings → Secrets and
          variables → Actions): panel Supabase → **Connect** → **Session
@@ -102,7 +106,8 @@ paneli zewnętrznych. Trzymane tutaj, żeby nie zginęły między sesjami.
          `main` robi to sam. Bez baseline `push` celowo odmawia — inaczej
          próbowałby zbudować bazę od zera na istniejących tabelach.
 
-- [ ] **Przepięcie na własną instancję Supabase (`ybdyiebhtfoccbfupkjn`)** —
+- [x] **Przepięcie na własną instancję Supabase (`ybdyiebhtfoccbfupkjn`)** —
+      zakończone, potwierdzone przez właściciela 2026-10-16. —
       w toku od 2026-10-12. Dane przeniesione (CSV), kod gotowy: adres i
       klucz publiczny w `vite.config.ts`, serwer czyta sekrety
       `JARVIS_SUPABASE_URL` / `JARVIS_SUPABASE_SERVICE_ROLE_KEY` (Lovable

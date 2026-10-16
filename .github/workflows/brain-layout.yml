@@ -1,0 +1,54 @@
+name: Brain Layout
+
+# Mózg 3D (/mozg): pełny układ gwiazd wiedzy — UMAP z embeddingów notatek,
+# wspomnień i dokumentów, gromady tematów i ich nazwy. Między przebiegami
+# nowe gwiazdy dokłada sama baza (pg_cron → brain_place_new), więc ten job
+# tylko porządkuje całość raz na dobę. Logika: scripts/brain-layout.ts.
+on:
+  schedule:
+    # W nocy, kiedy nikt nie patrzy na mapę — rano galaktyka jest świeża.
+    - cron: "40 1 * * *" # 03:40 CEST
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Tylko policz i pokaż gromady, nic nie zapisuj"
+        type: boolean
+        default: false
+
+# Dwa przebiegi naraz zapisywałyby ten sam układ — ostatni i tak wygrywa.
+concurrency:
+  group: brain-layout
+  cancel-in-progress: false
+
+jobs:
+  layout:
+    name: układ Mózgu 3D
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # npm (nie bun) — tak jak w pozostałych jobach: package-lock.json jest
+      # lockfile'em, który weryfikuje `npm ci`.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build layout
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          JARVIS_OWNER_ID: ${{ secrets.JARVIS_OWNER_ID }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          JARVIS_EMAIL: ${{ secrets.JARVIS_EMAIL }}
+          JARVIS_PASSWORD: ${{ secrets.JARVIS_PASSWORD }}
+          # Opcjonalny — bez niego skrypt bierze klucz Gemini zapisany w aplikacji.
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+        # tsx przypięty tutaj, nie w package.json — ten sam powód co w
+        # pozostałych jobach (bun.lock vs package-lock.json).
+        run: npx --yes tsx@4.21.0 scripts/brain-layout.ts $DRY_RUN

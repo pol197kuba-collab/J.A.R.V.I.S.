@@ -76,6 +76,7 @@
     "tailwindcss": "^4.2.1",
     "three": "^0.185.1",
     "tw-animate-css": "^1.3.4",
+    "umap-js": "1.4.0",
     "unpdf": "^1.6.2",
     "vaul": "^1.1.2",
     "vite-tsconfig-paths": "^6.0.2",
