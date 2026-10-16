@@ -1,0 +1,62 @@
+name: DB Migrations
+
+# Migracje z supabase/migrations trafiają do bazy same — koniec z wklejaniem
+# SQL w edytorze (Etap 0 w PLAN.md). Cała logika w scripts/db-migrations.sh,
+# żeby dało się ją odpalić też lokalnie.
+#
+# - PR zmieniający migracje → `check`: w logu widać, co wejdzie po merge.
+# - merge do main → `push`: brakujące migracje idą do bazy.
+# - ręcznie (Actions → DB Migrations → Run workflow) → dowolny tryb, w tym
+#   jednorazowy `baseline` (instrukcja w TODO.md, sekcja 0).
+#
+# Sekret: SUPABASE_DB_URL (connection string „Session pooler"). Bez niego job
+# kończy się ostrzeżeniem, a nie błędem — nic nie czerwienieje, zanim sekret
+# zostanie dodany.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      ["supabase/migrations/**", "scripts/db-migrations.sh", ".github/workflows/db-migrations.yml"]
+  push:
+    branches: [main]
+    paths:
+      ["supabase/migrations/**", "scripts/db-migrations.sh", ".github/workflows/db-migrations.yml"]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check = podgląd, push = wgraj, baseline = oznacz już wgrane"
+        type: choice
+        options: [check, push, baseline]
+        default: check
+      up_to:
+        description: "Tylko dla baseline: ostatnia wersja, która JUŻ jest w bazie (np. 20261016180000)"
+        required: false
+
+# Dwa przebiegi naraz pisałyby tę samą historię migracji.
+concurrency:
+  group: db-migrations
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: migracje (${{ github.event_name == 'workflow_dispatch' && inputs.mode || (github.event_name == 'push' && 'push' || 'check') }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Migracje
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || (github.event_name == 'push' && 'push' || 'check') }}
+          UP_TO: ${{ inputs.up_to }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::warning::Brak sekretu SUPABASE_DB_URL — migracje pominięte (TODO.md, sekcja 0)."
+            exit 0
+          fi
+          if [ "$MODE" = "baseline" ]; then
+            bash scripts/db-migrations.sh baseline "$UP_TO"
+          else
+            bash scripts/db-migrations.sh "$MODE"
+          fi

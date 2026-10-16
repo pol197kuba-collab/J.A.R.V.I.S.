@@ -23,6 +23,10 @@
 > unchanged (already referenced in pushed commit messages) — only the
 > build order is reprioritized here, not the file's physical layout.
 
+> **Plan na najbliższe sesje (2026-10-16):** Mózg 3D → Darwin → Fundusz
+> J.A.R.V.I.S. → Vision AR — szczegóły, sesje i otwarte pytania w
+> [`PLAN.md`](PLAN.md). Po wdrożeniu każdej sesji dopisz tu wpis jak dotąd.
+
 ## 0. Otwarte PO STRONIE WŁAŚCICIELA (nie do zrobienia z repo) — stan 2026-09-21
 
 Rzeczy, których żaden commit nie załatwi, bo wymagają dostępu do kont i
@@ -80,6 +84,23 @@ paneli zewnętrznych. Trzymane tutaj, żeby nie zginęły między sesjami.
 - [ ] **Wgrać migrację licznika kosztów** (`20260923130000_token_budget.sql`).
       Bez niej panel BUDŻET nie ma skąd czytać, a degradacja przy limicie się
       nie włączy. Limit startowy to $5/miesiąc — do zmiany w Ustawieniach.
+
+- [ ] **Migracje same do bazy (Etap 0, `db-migrations.yml`)** — dwa kroki,
+      jednorazowo:
+      1. **Sekret `SUPABASE_DB_URL`** w GitHubie (Settings → Secrets and
+         variables → Actions): panel Supabase → **Connect** → **Session
+         pooler** → skopiuj URI i wstaw hasło bazy (znaki specjalne w haśle
+         zakodowane procentowo, np. `@` → `%40`). Pooler, nie adres
+         `db.<ref>.supabase.co` — ten działa tylko po IPv6.
+      2. **Baseline**: Actions → **DB Migrations** → Run workflow →
+         `mode: baseline`, `up_to:` ostatnia migracja, która JUŻ jest w bazie.
+         Jeśli nowa baza ma komplet (w SQL editorze zwraca `true`:
+         `select exists(select 1 from information_schema.columns where
+         table_name='market_predictions' and column_name='lessons')`), to
+         `up_to = 20261016180000`. Potem Run workflow z `mode: push` wgrywa
+         `20261016200000_pg_cron_pg_net.sql`; od tej pory każdy merge do
+         `main` robi to sam. Bez baseline `push` celowo odmawia — inaczej
+         próbowałby zbudować bazę od zera na istniejących tabelach.
 
 - [ ] **Przepięcie na własną instancję Supabase (`ybdyiebhtfoccbfupkjn`)** —
       w toku od 2026-10-12. Dane przeniesione (CSV), kod gotowy: adres i
