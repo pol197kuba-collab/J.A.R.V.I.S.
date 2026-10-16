@@ -39,6 +39,8 @@ import {
 } from "./townInsights";
 import { lastResultLine, statusLine, taskOf } from "./townTalk";
 import { propById } from "./townProps";
+import { blipPlan } from "./townBlips";
+import { audio } from "@/lib/audio/AudioEngine";
 import { propContent } from "./townPropActions";
 
 const FALLBACK_NAMES: Record<TownSlug, string> = {
@@ -309,6 +311,11 @@ export function TownView() {
     const world = new TownWorld();
     world.reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     worldRef.current = world;
+    // speech bubbles "talk" in quiet pixel blips — Town has no synthetic voice
+    world.onSay = (slug, text, tone) => {
+      if (tone === "tool") return;
+      for (const b of blipPlan(text, slug)) window.setTimeout(() => audio.playBlip(b.freq), b.at);
+    };
     world.dog.name = dogNameRef.current;
     world.dog.onAction = (action, line) => {
       setMood((m) => {

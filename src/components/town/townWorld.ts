@@ -105,7 +105,8 @@ export const TAG: Record<TownSlug, string> = {
   user: "TY",
 };
 
-const WALK_PX_PER_MS = 0.08;
+// Slower than a hurry: hand-offs should be easy to follow with the eye.
+const WALK_PX_PER_MS = 0.065;
 
 export class TownWorld {
   readonly map: TownMap;
@@ -212,8 +213,11 @@ export class TownWorld {
   goHome(slug: TownSlug) {
     return this.walkTo(slug, this.post(slug));
   }
+  /** Fired for every new bubble — the view plays the speech blips from it. */
+  onSay: ((slug: TownSlug, text: string, tone: Tone) => void) | null = null;
   say(slug: TownSlug, text: string, ms = 2200, icon: string | null = null, tone: Tone = "plain") {
     this.chars[slug].bubble = { text, until: this.time + ms, icon, tone };
+    this.onSay?.(slug, text, tone);
   }
   face(slug: TownSlug, dir: Dir) {
     this.chars[slug].dir = dir;
@@ -238,6 +242,29 @@ export class TownWorld {
     const next = (this.chains.get(slug) ?? Promise.resolve()).then(run, run);
     this.chains.set(slug, next);
     return next;
+  }
+
+  /**
+   * A scene: `fn` runs once *every* participant is free (each one's previous
+   * errands are done) and holds all their bodies until it finishes. Scenes
+   * are claimed in call order on every character, so two scenes can never
+   * deadlock each other — the director also feeds them in one at a time.
+   */
+  scene(slugs: readonly TownSlug[], fn: () => Promise<void>): Promise<void> {
+    const who = [...new Set(slugs)];
+    if (!who.length) return fn();
+    let arrived = 0;
+    let go!: () => void;
+    const together = new Promise<void>((res) => (go = res));
+    let release!: () => void;
+    const finished = new Promise<void>((res) => (release = res));
+    for (const slug of who) {
+      void this.actor(slug, async () => {
+        if (++arrived === who.length) go();
+        await finished;
+      });
+    }
+    return together.then(fn).finally(release);
   }
 
   /** Any task running anywhere → idle agents wait at their desks. */

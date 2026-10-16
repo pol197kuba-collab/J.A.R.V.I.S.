@@ -6,6 +6,7 @@
 // on some systems).
 import { audio } from "./AudioEngine";
 import { logClientEvent } from "@/lib/system/logClientEvent";
+import { getUiMode } from "@/lib/theme/uiMode";
 
 const SPEAK_EVENT = "jarvis:speaking";
 let speakingCount = 0;
@@ -160,6 +161,9 @@ function stripMarkdownForSpeech(text: string): string {
 export function speak(text: string, opts?: { skipChirp?: boolean; lang?: SpeakLang }) {
   try {
     if (typeof window === "undefined") return;
+    // Agent Town (pixel RPG) speaks in bubbles and blips, never in a synthetic
+    // voice — it would talk over the scene that is still playing out.
+    if (getUiMode() === "town") return;
     if (!window.speechSynthesis) return;
     const clean = stripMarkdownForSpeech(text);
     if (!clean) return;
