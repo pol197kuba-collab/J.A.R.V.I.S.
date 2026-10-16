@@ -23,6 +23,10 @@
 > unchanged (already referenced in pushed commit messages) — only the
 > build order is reprioritized here, not the file's physical layout.
 
+> **Plan na najbliższe sesje (2026-10-16):** Mózg 3D → Darwin → Fundusz
+> J.A.R.V.I.S. → Vision AR — szczegóły, sesje i otwarte pytania w
+> [`PLAN.md`](PLAN.md). Po wdrożeniu każdej sesji dopisz tu wpis jak dotąd.
+
 ## 0. Otwarte PO STRONIE WŁAŚCICIELA (nie do zrobienia z repo) — stan 2026-09-21
 
 Rzeczy, których żaden commit nie załatwi, bo wymagają dostępu do kont i
