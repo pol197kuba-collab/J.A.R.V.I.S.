@@ -108,6 +108,14 @@ type Scored = {
   actualChangePct: number | null;
   /** Wynik wg starej reguły ±1% — tylko do porównania na panelu. */
   outcomeFixedBand?: PredictionOutcome | null;
+  /** Reżim rynku w chwili prognozy (regime.ts); null = nieznany. */
+  regime?: string | null;
+  /**
+   * Prognoza postawiona na tych samych, nieodświeżonych notowaniach co
+   * poprzednia — kopia, nie nowa obserwacja. Liczenie jej podwajałoby wagę
+   * jednego wyniku, więc nie wchodzi do żadnej trafności.
+   */
+  stale?: boolean;
 };
 
 function tally(rows: Scored[], keyOf: (row: Scored) => string): ScoreRow[] {
@@ -151,10 +159,14 @@ export type Scoreboard = {
   bySource: ScoreRow[];
   byDirection: ScoreRow[];
   bySymbol: ScoreRow[];
+  /** Trafność wg reżimu rynku w chwili prognozy. */
+  byRegime: ScoreRow[];
   /** Trafność wg źródła, gdyby nadal obowiązywał stały próg ±1%. */
   bySourceFixedBand: ScoreRow[];
   resolved: number;
   pending: number;
+  /** Ile prognoz pominięto jako kopie na nieodświeżonych notowaniach. */
+  stale: number;
   /**
    * Ile rozliczeń trzeba, żeby wynik cokolwiek znaczył. Poniżej tego progu
    * UI pokazuje liczby, ale wprost mówi, że są nieistotne statystycznie —
@@ -165,11 +177,16 @@ export type Scoreboard = {
 
 export const MINIMUM_MEANINGFUL_RESOLUTIONS = 20;
 
-export function buildScoreboard(rows: Scored[]): Scoreboard {
+export function buildScoreboard(allRows: Scored[]): Scoreboard {
+  const rows = allRows.filter((r) => !r.stale);
   return {
     bySource: tally(rows, (r) => r.source),
     byDirection: tally(rows, (r) => r.direction),
     bySymbol: tally(rows, (r) => r.symbol),
+    byRegime: tally(
+      rows.filter((r) => r.regime),
+      (r) => r.regime ?? "",
+    ),
     bySourceFixedBand: tally(
       rows
         .filter((r) => r.outcome && r.outcomeFixedBand)
@@ -178,6 +195,7 @@ export function buildScoreboard(rows: Scored[]): Scoreboard {
     ),
     resolved: rows.filter((r) => r.outcome).length,
     pending: rows.filter((r) => !r.outcome).length,
+    stale: allRows.length - rows.length,
     minimumMeaningful: MINIMUM_MEANINGFUL_RESOLUTIONS,
   };
 }

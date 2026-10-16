@@ -176,3 +176,33 @@ describe("buildScoreboard — porównanie ze starą regułą", () => {
     expect(board.bySourceFixedBand[0].hitRate).toBe(50);
   });
 });
+
+describe("buildScoreboard — reżim i kopie", () => {
+  const row = (over: Record<string, unknown>) => ({
+    source: "signals" as const,
+    direction: "up" as const,
+    symbol: "BTC",
+    outcome: "miss" as const,
+    actualChangePct: -1,
+    ...over,
+  });
+
+  it("kopie na nieodświeżonych notowaniach nie wchodzą do trafności", () => {
+    const board = buildScoreboard([row({ outcome: "hit" }), row({ stale: true })]);
+    expect(board.resolved).toBe(1);
+    expect(board.stale).toBe(1);
+    expect(board.bySource[0].hitRate).toBe(100);
+  });
+
+  it("liczy trafność wg reżimu, pomijając nieznany", () => {
+    const board = buildScoreboard([
+      row({ regime: "uptrend_pullback" }),
+      row({ regime: "uptrend_pullback" }),
+      row({ regime: "uptrend", outcome: "hit" }),
+      row({ regime: null }),
+    ]);
+    const pullback = board.byRegime.find((r) => r.key === "uptrend_pullback");
+    expect(pullback).toMatchObject({ resolved: 2, hitRate: 0 });
+    expect(board.byRegime.map((r) => r.key)).not.toContain("");
+  });
+});

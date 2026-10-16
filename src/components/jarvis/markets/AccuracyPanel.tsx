@@ -7,6 +7,7 @@ import { EmptyState, PanelHint } from "@/components/jarvis/fuel/chrome";
 import { assetBySymbol } from "@/lib/markets/assets";
 import type { PredictionScoreboard } from "@/lib/markets/markets.functions";
 import type { ScoreRow } from "@/lib/markets/scoreboard";
+import { REGIME_LABEL_PL } from "@/lib/markets/regime";
 
 const SOURCE_LABEL: Record<string, string> = {
   signals: "Sygnały (arytmetyka)",
@@ -83,6 +84,11 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
           <span className="font-mono text-[10px] text-muted-foreground">
             oczekujące: <span className="text-foreground">{board.pending}</span>
           </span>
+          {board.stale > 0 && (
+            <span className="font-mono text-[10px] text-muted-foreground/70">
+              pominięte kopie: {board.stale}
+            </span>
+          )}
           {board.justResolved > 0 && (
             <span className="font-mono text-[10px]" style={{ color: "var(--success)" }}>
               +{board.justResolved} rozliczono teraz
@@ -107,6 +113,17 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
             <RateRows rows={board.byDirection} labels={DIRECTION_LABEL} meaningful={meaningful} />
           </div>
         </div>
+
+        {board.byRegime.length > 0 && (
+          <div>
+            <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
+              Wg sytuacji rynkowej
+            </p>
+            <div className="mt-1.5">
+              <RateRows rows={board.byRegime} labels={REGIME_LABEL_PL} meaningful={meaningful} />
+            </div>
+          </div>
+        )}
 
         {board.bySourceFixedBand.length > 0 && (
           <div>

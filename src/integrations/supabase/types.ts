@@ -822,6 +822,7 @@ export type Database = {
         Row: {
           actual_change_pct: number | null
           confidence: number
+          context_version: number | null
           direction: string
           due_at: string
           flat_band_pct: number | null
@@ -836,14 +837,17 @@ export type Database = {
           price_at_prediction: number
           price_at_resolution: number | null
           rationale_pl: string | null
+          regime: string | null
           resolved_at: string | null
           sentiment_score: number | null
           source: string
+          stale: boolean
           symbol: string
           technical_score: number | null
         }
         Insert: {
           actual_change_pct?: number | null
+          context_version?: number | null
           confidence: number
           direction: string
           due_at: string
@@ -859,14 +863,17 @@ export type Database = {
           price_at_prediction: number
           price_at_resolution?: number | null
           rationale_pl?: string | null
+          regime?: string | null
           resolved_at?: string | null
           sentiment_score?: number | null
+          stale?: boolean
           source: string
           symbol: string
           technical_score?: number | null
         }
         Update: {
           actual_change_pct?: number | null
+          context_version?: number | null
           confidence?: number
           direction?: string
           due_at?: string
@@ -882,8 +889,10 @@ export type Database = {
           price_at_prediction?: number
           price_at_resolution?: number | null
           rationale_pl?: string | null
+          regime?: string | null
           resolved_at?: string | null
           sentiment_score?: number | null
+          stale?: boolean
           source?: string
           symbol?: string
           technical_score?: number | null

@@ -32,6 +32,7 @@ import {
   type PredictionDirection,
 } from "./scoreboard";
 import { fetchAllPages } from "@/lib/db/paginate";
+import { classifyRegime, type MarketRegime } from "./regime";
 
 /** Klient Supabase — sesja użytkownika albo service_role, zależnie od tego, kto woła. */
 export type Db = SupabaseClient<Database>;
@@ -50,6 +51,16 @@ const MIN_REFRESH_CRYPTO_MS = 10 * 60_000;
 
 /** Ile dni do przodu dotyczy prognoza. Krótki horyzont da się rozliczyć. */
 export const HORIZON_DAYS = 7;
+
+/**
+ * Wersja kontekstu zapisywanego przy prognozie (pasmo, reżim, kopia).
+ * Wiersze z niższą albo pustą wersją uzupełnia backfillPredictionContext.
+ */
+export const PREDICTION_CONTEXT_VERSION = 1;
+
+/** Ta sama cena wejściowa — z tolerancją na zaokrąglenie NUMERIC(20,8). */
+export const samePrice = (a: number, b: number): boolean =>
+  Math.abs(a - b) <= Math.max(1e-8, Math.abs(a) * 1e-9);
 
 // Świeżość per instrument, wspólna dla wszystkich czytelników w procesie.
 const lastRefreshAt = new Map<string, number>();
@@ -90,6 +101,8 @@ export type OutlookRow = {
   drivers: SignalDriver[];
   /** Pasmo „bez zmian" w % dla tego instrumentu i horyzontu (scoreboard.flatBandPct). */
   flatBandPct: number;
+  /** Reżim rynku w chwili prognozy (regime.ts); null przy zbyt krótkiej serii. */
+  regime: MarketRegime | null;
   /** Werdykt modelu — null, gdy nie ma klucza albo model zawiódł. */
   ai: { direction: SignalDirection; confidence: number; rationalePl: string | null } | null;
 };
@@ -360,6 +373,7 @@ export async function buildOutlook(
           signals.volatility,
           sessionsInHorizon(HORIZON_DAYS, asset.assetClass),
         ),
+        regime: classifyRegime(signals),
       },
     ];
   });
@@ -393,6 +407,7 @@ export async function buildOutlook(
       sentimentItems: input.sentimentItems,
       drivers: input.technical.drivers,
       flatBandPct: input.flatBandPct,
+      regime: input.regime,
       // Werdykt „ai" istnieje tylko wtedy, gdy model faktycznie
       // odpowiedział — inaczej podpisalibyśmy arytmetykę nazwą modelu.
       ai: forecast.model
@@ -449,12 +464,36 @@ async function recordPredictions(
   if (rows.length === 0) return;
   const dueAt = new Date(Date.now() + HORIZON_DAYS * 86_400_000).toISOString();
 
+  // Ostatnia cena wejściowa per instrument i źródło. Ta sama cena co w
+  // poprzedniej prognozie = notowania się nie odświeżyły (weekend, awaria
+  // źródła) i nowa prognoza byłaby kopią poprzedniej, liczoną drugi raz w
+  // trafności. Porównanie per ŹRÓDŁO, bo prognoza AI bywa dopisywana później
+  // tego samego dnia na tych samych notowaniach co sygnałowa — i to nie kopia.
+  const { data: recent } = await supabase
+    .from("market_predictions")
+    .select("symbol, source, price_at_prediction")
+    .eq("owner_id", userId)
+    .eq("horizon_days", HORIZON_DAYS)
+    .order("made_at", { ascending: false })
+    .limit(300);
+  const lastPrice = new Map<string, number>();
+  for (const r of recent ?? []) {
+    const key = `${r.symbol}|${r.source}`;
+    if (!lastPrice.has(key)) lastPrice.set(key, Number(r.price_at_prediction));
+  }
+  const isCopy = (symbol: string, source: string, price: number): boolean => {
+    const prev = lastPrice.get(`${symbol}|${source}`);
+    return prev !== undefined && samePrice(prev, price);
+  };
+
   const base = rows.map((row) => ({
     owner_id: userId,
     symbol: row.symbol,
     horizon_days: HORIZON_DAYS,
     due_at: dueAt,
     flat_band_pct: row.flatBandPct,
+    regime: row.regime,
+    context_version: PREDICTION_CONTEXT_VERSION,
     price_at_prediction: row.lastPrice,
     technical_score: row.technicalScore,
     sentiment_score: row.sentimentScore,
@@ -488,7 +527,12 @@ async function recordPredictions(
       })
     : [];
 
-  const { error } = await supabase.from("market_predictions").upsert([...signalRows, ...aiRows], {
+  const fresh = [...signalRows, ...aiRows].filter(
+    (r) => !isCopy(r.symbol, r.source, r.price_at_prediction),
+  );
+  if (fresh.length === 0) return;
+
+  const { error } = await supabase.from("market_predictions").upsert(fresh, {
     onConflict: "owner_id,symbol,source,horizon_days,made_on",
     ignoreDuplicates: true,
   });
@@ -561,26 +605,57 @@ export async function resolveDuePredictions(supabase: Db, userId: string): Promi
 }
 
 /**
- * Jednorazowe przeliczenie prognoz sprzed pasma liczonego ze zmienności.
+ * Uzupełnia kontekst prognoz zapisanych, zanim aplikacja go liczyła.
  *
- * Dla każdej prognozy bez `flat_band_pct` liczy pasmo z notowań SPRZED dnia
- * jej postawienia (żeby rozliczenie nie korzystało z wiedzy, której prognoza
- * nie miała), a rozliczone przelicza: dotychczasowy wynik (stały ±1%) trafia
- * do `outcome_fixed_band`, `outcome` dostaje wynik wg pasma. Idempotentne —
- * dotyka tylko wierszy, które pasma jeszcze nie mają.
+ * Dla każdej prognozy bez `context_version`:
+ * - pasmo „bez zmian" i reżim rynku — z notowań SPRZED dnia jej postawienia,
+ *   żeby nie korzystać z wiedzy, której prognoza nie miała;
+ * - kopia (`stale`) — gdy ma tę samą cenę wejściową co poprzednia prognoza
+ *   tego samego instrumentu i źródła (notowania się nie odświeżyły);
+ * - jeśli pasma jeszcze nie miała, a jest rozliczona: dotychczasowy wynik
+ *   (stały ±1%) trafia do `outcome_fixed_band`, `outcome` dostaje wynik wg
+ *   pasma.
+ * Idempotentne — dotyka tylko wierszy bez `context_version`.
  */
-export async function backfillFlatBands(supabase: Db, userId: string): Promise<number> {
-  const { data: rows, error } = await supabase
+export async function backfillPredictionContext(supabase: Db, userId: string): Promise<number> {
+  const { data: pending, error } = await supabase
     .from("market_predictions")
-    .select("id, symbol, made_at, horizon_days, direction, outcome, actual_change_pct")
+    .select("id")
     .eq("owner_id", userId)
-    .is("flat_band_pct", null)
-    .order("made_at", { ascending: true })
-    .limit(500);
-  if (error || !rows || rows.length === 0) return 0;
+    .is("context_version", null)
+    .limit(1);
+  if (error || !pending || pending.length === 0) return 0;
 
-  const symbols = [...new Set(rows.map((r) => r.symbol))];
-  const since = new Date(Date.parse(rows[0].made_at) - 120 * 86_400_000).toISOString().slice(0, 10);
+  // Całość historii — kopię rozpoznaje się po POPRZEDNIM wierszu, który może
+  // już mieć kontekst. Kilkaset wierszy na konto, więc jedno zapytanie.
+  const rows = await fetchAllPages<{
+    id: string;
+    symbol: string;
+    source: string;
+    made_at: string;
+    horizon_days: number;
+    direction: string;
+    outcome: string | null;
+    actual_change_pct: number | null;
+    price_at_prediction: number;
+    flat_band_pct: number | null;
+    context_version: number | null;
+  }>((from, to) =>
+    supabase
+      .from("market_predictions")
+      .select(
+        "id, symbol, source, made_at, horizon_days, direction, outcome, actual_change_pct, price_at_prediction, flat_band_pct, context_version",
+      )
+      .eq("owner_id", userId)
+      .order("made_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  const todo = rows.filter((r) => r.context_version === null);
+  if (todo.length === 0) return 0;
+
+  const symbols = [...new Set(todo.map((r) => r.symbol))];
+  const since = new Date(Date.parse(todo[0].made_at) - 120 * 86_400_000).toISOString().slice(0, 10);
   const quotes = await fetchAllPages<{ symbol: string; quote_date: string; close: number }>(
     (from, to) =>
       supabase
@@ -599,31 +674,48 @@ export async function backfillFlatBands(supabase: Db, userId: string): Promise<n
     bySymbol.set(q.symbol, bucket);
   }
 
+  // Poprzednia cena wejściowa per instrument|źródło|horyzont, w kolejności czasu.
+  const previousPrice = new Map<string, number>();
+  const prevOf = new Map<string, number | undefined>();
+  for (const r of rows) {
+    const key = `${r.symbol}|${r.source}|${r.horizon_days}`;
+    prevOf.set(r.id, previousPrice.get(key));
+    previousPrice.set(key, Number(r.price_at_prediction));
+  }
+
   let updated = 0;
-  for (const row of rows) {
+  for (const row of todo) {
     // Dzień postawienia w UTC — tak samo liczy kolumna made_on.
     const madeOn = row.made_at.slice(0, 10);
     const history = normalizeSeries(bySymbol.get(row.symbol) ?? []).filter((p) => p.date < madeOn);
+    const signals = computeSignals(history);
     const asset = assetBySymbol(row.symbol);
-    const band = flatBandPct(
-      annualizedVolatility(history.slice(-60)),
-      sessionsInHorizon(row.horizon_days, asset?.assetClass ?? "equity"),
-    );
-    const change = row.actual_change_pct === null ? null : Number(row.actual_change_pct);
-    const patch =
-      row.outcome && change !== null && Number.isFinite(change)
-        ? {
-            flat_band_pct: band,
-            outcome_fixed_band: row.outcome,
-            outcome: resolveOutcome(row.direction as PredictionDirection, change, band),
-          }
-        : { flat_band_pct: band };
+    const prev = prevOf.get(row.id);
+
+    const patch: Database["public"]["Tables"]["market_predictions"]["Update"] = {
+      regime: classifyRegime(signals),
+      stale: prev !== undefined && samePrice(prev, Number(row.price_at_prediction)),
+      context_version: PREDICTION_CONTEXT_VERSION,
+    };
+    if (row.flat_band_pct === null) {
+      const band = flatBandPct(
+        annualizedVolatility(history.slice(-60)),
+        sessionsInHorizon(row.horizon_days, asset?.assetClass ?? "equity"),
+      );
+      patch.flat_band_pct = band;
+      const change = row.actual_change_pct === null ? null : Number(row.actual_change_pct);
+      if (row.outcome && change !== null && Number.isFinite(change)) {
+        patch.outcome_fixed_band = row.outcome;
+        patch.outcome = resolveOutcome(row.direction as PredictionDirection, change, band);
+      }
+    }
+
     const { error: updErr } = await supabase
       .from("market_predictions")
       .update(patch)
       .eq("id", row.id)
       .eq("owner_id", userId)
-      .is("flat_band_pct", null);
+      .is("context_version", null);
     if (!updErr) updated += 1;
   }
   if (updated > 0) {
@@ -631,7 +723,7 @@ export async function backfillFlatBands(supabase: Db, userId: string): Promise<n
       supabase,
       userId,
       "info",
-      `Typer: przeliczono ${updated} prognoz wg pasma zmienności`,
+      `Typer: uzupełniono kontekst (reżim, kopie) ${updated} prognoz`,
       {} as Json,
     );
   }
