@@ -350,6 +350,15 @@ export async function buildOutlook(
   });
 
   const forecast = await forecastWithModel(prepared, keys);
+  if (forecast.failure) {
+    await logEvent(
+      supabase,
+      userId,
+      "warn",
+      `Typer: brak prognozy modelu, zapisano tylko sygnały — ${forecast.failure}`,
+      {} as Json,
+    );
+  }
 
   const rows: OutlookRow[] = prepared.map((input, idx) => {
     const combined = combineOutlook(input.technical, input.sentimentScore, input.sentimentItems);
