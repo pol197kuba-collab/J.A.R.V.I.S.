@@ -10,6 +10,7 @@
 // co rozmowy agentów, żeby nie powstała trzecia kopia wywołania modelu.
 import { DEFAULT_GEMINI_MODEL } from "@/lib/agents/models";
 import { callAnthropic } from "@/lib/agents/providers/anthropic";
+import { callGeminiText } from "@/lib/agents/providers/geminiText";
 import type { GeminiContent } from "@/lib/agents/providers/types";
 import { dedupeNews, parseRss, type RssItem } from "@/lib/rss/parse";
 import type { MarketAsset } from "./assets";
@@ -23,7 +24,6 @@ import {
 
 const FETCH_TIMEOUT_MS = 15_000;
 const MODEL_TIMEOUT_MS = 40_000;
-const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 /** Model Claude użyty do oceny newsów, gdy klucz Anthropic jest dostępny. */
 const ANTHROPIC_NEWS_MODEL = "claude-sonnet-5";
@@ -108,44 +108,6 @@ export function normalizeVerdict(
   return { symbols, impact, impactScore, summaryPl, classifiedBy: "ai" };
 }
 
-async function callGeminiForNews(
-  apiKey: string,
-  system: string,
-  user: string,
-): Promise<string | null> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), MODEL_TIMEOUT_MS);
-  try {
-    const res = await fetch(
-      `${GEMINI_ENDPOINT_BASE}/${DEFAULT_GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: "POST",
-        signal: ctrl.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: system }] },
-          contents: [{ role: "user", parts: [{ text: user }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
-        }),
-      },
-    );
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    return (
-      data.candidates?.[0]?.content?.parts
-        ?.map((p) => p.text ?? "")
-        .join("")
-        .trim() || null
-    );
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 export type NewsClassifierKeys = {
   anthropicApiKey: string | null;
   geminiApiKey: string | null;
@@ -191,7 +153,17 @@ export async function classifyMarketNews(
       }
     }
     if (!text && keys.geminiApiKey) {
-      text = await callGeminiForNews(keys.geminiApiKey, system, userPrompt(batch));
+      // Ten sam fetch co prognozy — z wyłączonym myśleniem, które ucinało
+      // odpowiedź (geminiText.ts). Powód porażki nie ma tu dokąd trafić:
+      // spadek na heurystykę jest widoczny w kolumnie classified_by.
+      const gemini = await callGeminiText({
+        apiKey: keys.geminiApiKey,
+        model: DEFAULT_GEMINI_MODEL,
+        system,
+        user: userPrompt(batch),
+        timeoutMs: MODEL_TIMEOUT_MS,
+      });
+      text = gemini.ok ? gemini.text : null;
     }
 
     const parsed = text ? extractJsonArray(text) : null;

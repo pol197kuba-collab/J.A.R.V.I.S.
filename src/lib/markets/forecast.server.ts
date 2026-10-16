@@ -12,12 +12,12 @@
 // znaczenie: czy model bije prostą arytmetykę, czy tylko ładniej ją opisuje.
 import { DEFAULT_GEMINI_MODEL } from "@/lib/agents/models";
 import { callAnthropic } from "@/lib/agents/providers/anthropic";
+import { callGeminiText } from "@/lib/agents/providers/geminiText";
 import type { GeminiContent } from "@/lib/agents/providers/types";
 import type { MarketAsset } from "./assets";
 import type { SignalDirection, TechnicalOutlook } from "./signals";
 
 const MODEL_TIMEOUT_MS = 60_000;
-const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const ANTHROPIC_FORECAST_MODEL = "claude-opus-5";
 
 export type ForecastInput = {
@@ -150,40 +150,6 @@ export function normalizeAiVerdict(raw: unknown, input: ForecastInput): AiVerdic
   return { symbol: input.asset.symbol, direction, confidence, rationalePl };
 }
 
-async function callGeminiForForecast(apiKey: string, user: string): Promise<string | null> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), MODEL_TIMEOUT_MS);
-  try {
-    const res = await fetch(
-      `${GEMINI_ENDPOINT_BASE}/${DEFAULT_GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: "POST",
-        signal: ctrl.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: [{ role: "user", parts: [{ text: user }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
-        }),
-      },
-    );
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    return (
-      data.candidates?.[0]?.content?.parts
-        ?.map((p) => p.text ?? "")
-        .join("")
-        .trim() || null
-    );
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 export type ForecastKeys = {
   anthropicApiKey: string | null;
   geminiApiKey: string | null;
@@ -193,6 +159,12 @@ export type ForecastResult = {
   verdicts: AiVerdict[];
   /** Który model faktycznie odpowiedział; null = żaden, użyto sygnałów. */
   model: string | null;
+  /**
+   * Dlaczego nie ma werdyktu modelu, gdy klucz był podany — każdy dostawca po
+   * kolei. null, gdy model odpowiedział albo nie było żadnego klucza. Bez
+   * tego prognozy „ai" znikały na trzy tygodnie i nikt nie wiedział czemu.
+   */
+  failure: string | null;
 };
 
 /**
@@ -214,13 +186,15 @@ export async function forecastWithModel(
       rationalePl: null,
     })),
     model: null,
+    failure: null,
   };
-  if (inputs.length === 0) return { verdicts: [], model: null };
+  if (inputs.length === 0) return { verdicts: [], model: null, failure: null };
   if (!keys.anthropicApiKey && !keys.geminiApiKey) return fallback;
 
   const user = inputs.map(describeForModel).join("\n\n");
   let text: string | null = null;
   let model: string | null = null;
+  const failures: string[] = [];
 
   if (keys.anthropicApiKey) {
     try {
@@ -235,17 +209,33 @@ export async function forecastWithModel(
       });
       text = result.text || null;
       if (text) model = ANTHROPIC_FORECAST_MODEL;
-    } catch {
+      else failures.push("Claude: pusta odpowiedź");
+    } catch (err) {
       text = null;
+      failures.push(`Claude: ${err instanceof Error ? err.message.slice(0, 200) : String(err)}`);
     }
   }
   if (!text && keys.geminiApiKey) {
-    text = await callGeminiForForecast(keys.geminiApiKey, user);
-    if (text) model = DEFAULT_GEMINI_MODEL;
+    const gemini = await callGeminiText({
+      apiKey: keys.geminiApiKey,
+      model: DEFAULT_GEMINI_MODEL,
+      system: SYSTEM_PROMPT,
+      user,
+      timeoutMs: MODEL_TIMEOUT_MS,
+    });
+    if (gemini.ok) {
+      text = gemini.text;
+      model = DEFAULT_GEMINI_MODEL;
+    } else {
+      failures.push(gemini.reason);
+    }
   }
 
   const parsed = text ? extractJsonArray(text) : null;
-  if (!Array.isArray(parsed)) return fallback;
+  if (!Array.isArray(parsed)) {
+    if (text) failures.push(`${model}: odpowiedź nie jest tablicą JSON`);
+    return { ...fallback, failure: failures.join(" · ") || null };
+  }
 
   // Dopasowanie po symbolu, nie po pozycji: model bywa kreatywny z
   // kolejnością, a przesunięcie werdyktów o jeden przypisałoby ocenę
@@ -266,5 +256,6 @@ export async function forecastWithModel(
       normalizeAiVerdict(bySymbol.get(input.asset.symbol) ?? parsed[idx], input),
     ),
     model,
+    failure: null,
   };
 }

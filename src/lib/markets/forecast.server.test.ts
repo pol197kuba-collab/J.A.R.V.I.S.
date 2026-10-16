@@ -188,6 +188,37 @@ describe("forecastWithModel", () => {
     expect(result.verdicts[0].direction).toBe("flat");
   });
 
+  it("says why there is no model verdict when keys were given", async () => {
+    // Bez powodu prognozy „ai" znikały na tygodnie po cichu.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          candidates: [
+            { finishReason: "MAX_TOKENS", content: { parts: [{ text: '[{"symbol":"BTC"' }] } },
+          ],
+        }),
+        text: async () => "",
+      }),
+    );
+    const result = await forecastWithModel([input("BTC")], {
+      anthropicApiKey: null,
+      geminiApiKey: "gem",
+    });
+    expect(result.model).toBeNull();
+    expect(result.failure).toContain("MAX_TOKENS");
+  });
+
+  it("has no failure when no key was configured — that is a choice, not an error", async () => {
+    const result = await forecastWithModel([input("BTC")], {
+      anthropicApiKey: null,
+      geminiApiKey: null,
+    });
+    expect(result.failure).toBeNull();
+  });
+
   it("degrades to signals with no model name when every provider fails", async () => {
     vi.stubGlobal(
       "fetch",
