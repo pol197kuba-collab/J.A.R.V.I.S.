@@ -416,14 +416,14 @@ export const getPredictionScoreboard = createServerFn({ method: "GET" })
     // Rozliczanie przy okazji odczytu tablicy wyników: prognoza sprzed
     // tygodnia ma się rozliczyć sama, gdy ktokolwiek wejdzie na stronę.
     // Nocny job robi to samo, gdy nie wejdzie nikt.
-    const { backfillFlatBands, resolveDuePredictions } = await import("./ingest.server");
-    await backfillFlatBands(supabase, userId);
+    const { backfillPredictionContext, resolveDuePredictions } = await import("./ingest.server");
+    await backfillPredictionContext(supabase, userId);
     const justResolved = await resolveDuePredictions(supabase, userId);
 
     const { data: rows, error } = await supabase
       .from("market_predictions")
       .select(
-        "symbol, made_at, direction, source, confidence, actual_change_pct, outcome, outcome_fixed_band, flat_band_pct, rationale_pl",
+        "symbol, made_at, direction, source, confidence, actual_change_pct, outcome, outcome_fixed_band, flat_band_pct, regime, stale, rationale_pl",
       )
       .eq("owner_id", userId)
       .order("made_at", { ascending: false })
@@ -437,6 +437,8 @@ export const getPredictionScoreboard = createServerFn({ method: "GET" })
       outcome: (r.outcome as "hit" | "miss" | null) ?? null,
       actualChangePct: r.actual_change_pct === null ? null : Number(r.actual_change_pct),
       outcomeFixedBand: (r.outcome_fixed_band as "hit" | "miss" | null) ?? null,
+      regime: r.regime,
+      stale: r.stale,
     }));
 
     return {

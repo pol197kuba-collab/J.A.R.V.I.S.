@@ -29,7 +29,7 @@ import {
   ingestNews,
   ingestQuotes,
   loadWatchlist,
-  backfillFlatBands,
+  backfillPredictionContext,
   resolveDuePredictions,
   type Db,
 } from "../src/lib/markets/ingest.server";
@@ -215,8 +215,8 @@ async function main(): Promise<void> {
   // Na końcu, żeby korzystało z notowań zaciągniętych w kroku 1 — inaczej
   // prognoza z terminem na dziś czekałaby dobę na własne rozliczenie.
   try {
-    const rebanded = await backfillFlatBands(db, ownerId);
-    if (rebanded > 0) notice(`pasmo zmienności: ${rebanded} starszych prognoz przeliczonych`);
+    const rebanded = await backfillPredictionContext(db, ownerId);
+    if (rebanded > 0) notice(`kontekst: ${rebanded} starszych prognoz uzupełnionych`);
     const resolved = await resolveDuePredictions(db, ownerId);
     notice(`rozliczenie: ${resolved} prognoz zamkniętych`);
   } catch (err) {
