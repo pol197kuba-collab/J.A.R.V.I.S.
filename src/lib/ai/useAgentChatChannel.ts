@@ -11,8 +11,13 @@ import {
   clearConversation,
   setActiveAgent as setActiveAgentFn,
   getActiveAgentSlug,
+  getGeminiKeyStatus,
+  getUserSettings,
+  importChatHistory,
   type AgentSummary,
 } from "@/lib/agents/runtime.functions";
+import { setServerRuntimePreference } from "./jarvisBrain";
+import { CHAT_HISTORY_LIMIT } from "./chatHistory";
 import { speak } from "@/lib/audio/speak";
 import { setAgentBusy, reportOutcome } from "./agentActivity";
 import { requestOpenDocument } from "@/lib/documents/openDocumentBus";
@@ -29,8 +34,11 @@ import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 // `messages`/`typing`/`activeAgent` — never in how a message actually gets
 // sent or a reply gets applied.
 
-const MAX_HISTORY = 60;
+const MAX_HISTORY = CHAT_HISTORY_LIMIT;
 const SERVER_KEY_LINKED_LS_KEY = "jarvis_server_gemini_linked";
+// Ustawiane po udanym przeniesieniu lokalnego transkryptu do bazy — żeby nie
+// wysyłać go przy każdym wejściu (serwer i tak nie dubluje, to tylko oszczędność).
+const HISTORY_IMPORTED_LS_KEY = "jarvis_chat_history_imported";
 
 const DEFAULT_AGENT: ActiveAgent = { slug: AGENT_SLUGS.JARVIS, name: "J.A.R.V.I.S." };
 
@@ -106,8 +114,43 @@ export function useAgentChatChannel(): AgentChatChannel {
   const clearConversationFn = useServerFn(clearConversation);
   const persistActiveAgent = useServerFn(setActiveAgentFn);
   const fetchActiveAgentSlug = useServerFn(getActiveAgentSlug);
+  const importHistory = useServerFn(importChatHistory);
+  const fetchKeyStatus = useServerFn(getGeminiKeyStatus);
+  const fetchSettings = useServerFn(getUserSettings);
   const enrichImages = useServerFn(enrichDocumentImagesFn);
   const runDocumentJob = useServerFn(runDocumentJobFn);
+
+  // Jednorazowo na przeglądarkę. Błąd importu nie blokuje wczytania wątku,
+  // ale wtedy NIE nadpisujemy lokalnej kopii (patrz efekt niżej) — następne
+  // wejście spróbuje jeszcze raz.
+  const migrateLocalHistory = useCallback(
+    async (agentSlug: string): Promise<boolean> => {
+      try {
+        if (window.localStorage.getItem(HISTORY_IMPORTED_LS_KEY) === "1") return true;
+        const local = loadHistory();
+        if (local.length > 0) {
+          await importHistory({
+            data: {
+              agentSlug,
+              messages: local.slice(-500).map((m) => ({
+                id: m.id,
+                role: m.role,
+                text: m.text,
+                time: m.time,
+                ...(m.agentName ? { agentName: m.agentName } : {}),
+              })),
+            },
+          });
+        }
+        window.localStorage.setItem(HISTORY_IMPORTED_LS_KEY, "1");
+        return true;
+      } catch (err) {
+        console.warn("[chat] import historii do bazy nieudany", err);
+        return false;
+      }
+    },
+    [importHistory],
+  );
 
   const { data: agents = [] } = useQuery({
     queryKey: ["agents", "list"],
@@ -172,26 +215,51 @@ export function useAgentChatChannel(): AgentChatChannel {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agents]);
 
-  // Za każdym razem, gdy zmienia się aktywny agent, wczytaj JEGO wątek z
-  // serwera — to jest właściwa synchronizacja historii między urządzeniami.
+  // Flagi "klucz Gemini jest na serwerze" / "routing przez serwer" żyją w
+  // localStorage i dotąd ustawiała je tylko strona Ustawień. Na nowym
+  // urządzeniu albo w incognito czat szedł więc ścieżką lokalną i nic nie
+  // trafiało do bazy. Odświeżamy je z konta przy każdym montowaniu.
   useEffect(() => {
     let cancelled = false;
-    fetchConversation({ data: { agentSlug: activeAgent.slug } })
-      .then((res) => {
+    Promise.all([fetchKeyStatus(), fetchSettings()])
+      .then(([status, settings]) => {
         if (cancelled) return;
-        setConversationId(res.conversationId);
-        if (res.messages.length > 0) {
-          setMessages(res.messages);
-          saveHistory(res.messages);
-        }
+        setServerRuntimePreference({ routing: settings.chatRouting, keyLinked: status.linked });
       })
       .catch(() => {
-        /* offline / błąd sieci — zostań przy lokalnym cache, nic nie psuj */
+        /* offline — zostają dotychczasowe flagi */
       });
     return () => {
       cancelled = true;
     };
-  }, [activeAgent.slug, fetchConversation]);
+  }, [fetchKeyStatus, fetchSettings]);
+
+  // Za każdym razem, gdy zmienia się aktywny agent, wczytaj JEGO wątek z
+  // serwera — to jest właściwa synchronizacja historii między urządzeniami.
+  // Pierwszy raz w tej przeglądarce najpierw przenosimy do bazy lokalny
+  // transkrypt, bo wczytanie wątku z serwera nadpisuje lokalną kopię.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const migrated = await migrateLocalHistory(activeAgent.slug);
+      try {
+        const res = await fetchConversation({ data: { agentSlug: activeAgent.slug } });
+        if (cancelled) return;
+        setConversationId(res.conversationId);
+        // Import się nie udał → lokalna kopia to jedyne miejsce, gdzie jest
+        // stara historia. Nie nadpisujemy jej wątkiem z serwera.
+        if (migrated && res.messages.length > 0) {
+          setMessages(res.messages);
+          saveHistory(res.messages);
+        }
+      } catch {
+        /* offline / błąd sieci — zostań przy lokalnym cache, nic nie psuj */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeAgent.slug, fetchConversation, migrateLocalHistory]);
 
   // Słuchaj na zmianę agenta z Agent Hub (przycisk LAUNCH)
   useEffect(() => {
