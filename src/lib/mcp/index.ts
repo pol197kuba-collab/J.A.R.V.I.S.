@@ -7,7 +7,8 @@ import listAgents from "./tools/list-agents";
 
 // The OAuth issuer MUST be the direct Supabase host. On publish, SUPABASE_URL is
 // rewritten to the .lovable.cloud proxy, which mcp-js rejects (RFC 8414 issuer
-// mismatch). Use the project ref, inlined by Vite at build time.
+// mismatch). Use the project ref, inlined by Vite at build time (vite.config.ts
+// derives it from the project URL, so it can't drift from the database).
 const projectRef = import.meta.env.VITE_SUPABASE_PROJECT_ID ?? "project-ref-unset";
 
 export default defineMcp({

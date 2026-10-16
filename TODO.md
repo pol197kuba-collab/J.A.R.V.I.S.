@@ -81,18 +81,15 @@ paneli zewnętrznych. Trzymane tutaj, żeby nie zginęły między sesjami.
       Bez niej panel BUDŻET nie ma skąd czytać, a degradacja przy limicie się
       nie włączy. Limit startowy to $5/miesiąc — do zmiany w Ustawieniach.
 
-- [ ] **Kierunek docelowy: własna, niezależna instancja Supabase.** Stan na
-      2026-09-21: buildy nie idą już przez Lovable — Lovable służy wyłącznie
-      jako edytor SQL do bazy oraz jako hosting aplikacji. Docelowo baza ma
-      przejść na własny projekt Supabase (pełny dostęp, w tym
-      `service_role`), a hosting zostaje na Lovable do czasu przejścia na
-      własną domenę. To nie jest zadanie na jedną sesję — wymaga osobnego
-      planu: odtworzenie migracji w nowym projekcie po kolei, przeniesienie
-      danych i kont użytkowników (auth), zmiana `project_id` w
-      `supabase/config.toml` (dziś `myjynbqzlovanoarppyt`), rotacja
-      `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` w sekretach GitHuba i w
-      hostingu, weryfikacja polityk RLS. Do zaplanowania, gdy będzie na to
-      okno czasowe.
+- [ ] **Przepięcie na własną instancję Supabase (`ybdyiebhtfoccbfupkjn`)** —
+      w toku od 2026-10-12. Dane przeniesione (CSV), kod gotowy: adres i
+      klucz publiczny w `vite.config.ts`, serwer czyta sekrety
+      `JARVIS_SUPABASE_URL` / `JARVIS_SUPABASE_SERVICE_ROLE_KEY` (Lovable
+      Cloud nadpisuje `SUPABASE_*` adresem starej bazy — patrz
+      `src/integrations/supabase/env.ts`), logowanie Google natywne przez
+      Supabase. Zostało: sekrety w Lovable i GitHubie, URL Configuration +
+      dostawca Google w Supabase Auth, publikacja i test. Stara baza
+      (`myjynbqzlovanoarppyt`) zostaje jako kopia do czasu potwierdzenia.
 
 ## 1. [UI] Dashboard redesign — holo-panels with depth — **shipped 2026-07-16, confirmed working**
 

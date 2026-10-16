@@ -4,7 +4,6 @@ import { ArcReactorTriangle } from "./ArcReactorTriangle";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speakJarvis } from "@/lib/ai/jarvisBrain";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 
 type Mode = "signin" | "forgot";
 
@@ -76,16 +75,16 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
   async function google() {
     setError(null);
     setLoading(true);
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+    // Native Supabase OAuth: full-page redirect to Google, back to this origin,
+    // where supabase-js picks the session up from the URL.
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin },
     });
-    if (result.error) {
+    if (error) {
       setLoading(false);
-      deny(result.error.message ?? "Google sign-in failed.");
-      return;
+      deny(error.message || "Google sign-in failed.");
     }
-    if (result.redirected) return; // full-page redirect
-    grant();
   }
 
   const title = mode === "forgot" ? "RECOVER CIPHER" : "SECURE LOGIN";
