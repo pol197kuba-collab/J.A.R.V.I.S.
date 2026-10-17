@@ -5,14 +5,15 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
+import { useMutation } from "@tanstack/react-query";
 import { Clock, Lightbulb, Loader2, Pause, Play, Send, Sparkles, X, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BrainStar, BrainTrace } from "@/lib/brain/brain.functions";
 import type { BrainInsights } from "@/lib/brain/insights";
 import type { BrainSourceType } from "@/lib/brain/layout";
-import { ASK_PREFIX, relativeAge, stripAskPrefix, TYPE_DOT } from "@/lib/brain/scene";
-import { onChat } from "@/lib/ai/chatBus";
-import { useVoiceCommands } from "@/components/jarvis/VoiceCommandContext";
+import { relativeAge, stripAskPrefix, TYPE_DOT } from "@/lib/brain/scene";
+import type { TraceItem } from "@/lib/brain/trace";
+import { askBrain, type BrainAnswer } from "@/lib/brain/ask.functions";
 
 export type BrainPanel = "trace" | "time" | "insights";
 
@@ -91,48 +92,31 @@ export function TracePanel({
   loading,
   activeId,
   onPick,
+  onAnswered,
   onClose,
 }: {
   traces: BrainTrace[];
   loading: boolean;
   activeId: string | null;
   onPick: (t: BrainTrace) => void;
+  /** Pytanie z panelu wróciło — gwiazdy-źródła do podświetlenia od razu. */
+  onAnswered: (question: string, items: TraceItem[]) => void;
   onClose: () => void;
 }) {
-  const { routeText } = useVoiceCommands();
   const [question, setQuestion] = useState("");
-  const [waiting, setWaiting] = useState(false);
-  const [reply, setReply] = useState<string | null>(null);
-  const asked = useRef(false);
-
-  // Odpowiedź przychodzi tą samą szyną co w czacie — łapiemy pierwszą
-  // wypowiedź J.A.R.V.I.S.a po zadanym tu pytaniu.
-  useEffect(
-    () =>
-      onChat((msg) => {
-        if (msg.role !== "jarvis" || !asked.current) return;
-        asked.current = false;
-        setWaiting(false);
-        setReply(msg.text);
-      }),
-    [],
-  );
-
-  const ask = async () => {
+  // Własna droga na serwer (askBrain), nie przez czat — tam brak klucza
+  // kończył się cichą kwestią zapasową bez żadnego wyszukiwania.
+  const ask = useMutation({
+    mutationFn: (q: string) => askBrain({ data: { question: q } }),
+    onSuccess: (res, q) => onAnswered(q, res.items),
+  });
+  const submit = () => {
     const q = question.trim();
-    if (!q || waiting) return;
-    asked.current = true;
-    setWaiting(true);
-    setReply(null);
+    if (!q || ask.isPending) return;
     setQuestion("");
-    try {
-      await routeText(`${ASK_PREFIX}${q}`);
-    } finally {
-      // routeText kończy się po odpowiedzi; gdyby jej nie było (błąd sieci),
-      // nie zostawiamy wiecznego „myślę…”.
-      setWaiting(false);
-    }
+    ask.mutate(q);
   };
+  const waiting = ask.isPending;
 
   return (
     <SheetFrame label="Skąd J.A.R.V.I.S. to wie" title="Skąd J.A.R.V.I.S. to wie" onClose={onClose}>
@@ -140,7 +124,7 @@ export function TracePanel({
         className="flex gap-2"
         onSubmit={(e) => {
           e.preventDefault();
-          void ask();
+          submit();
         }}
       >
         <input
@@ -163,14 +147,17 @@ export function TracePanel({
         Gwiazdy, po które sięgnie, rozbłysną na mapie.
       </p>
 
-      {(waiting || reply) && (
+      {(waiting || ask.data || ask.isError) && (
         <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
           <p className="flex items-center gap-1.5 font-display text-[9px] uppercase tracking-[0.25em] text-primary/80">
             <Sparkles className="h-3 w-3" /> J.A.R.V.I.S.
+            {ask.variables && !waiting && (
+              <span className="min-w-0 truncate normal-case tracking-normal text-muted-foreground">
+                · {ask.variables}
+              </span>
+            )}
           </p>
-          <p className="mt-1 min-w-0 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/90">
-            {waiting ? "Sięgam do pamięci…" : reply}
-          </p>
+          <AskReply waiting={waiting} error={ask.isError} result={ask.data} />
         </div>
       )}
 
@@ -212,6 +199,53 @@ export function TracePanel({
         </ul>
       )}
     </SheetFrame>
+  );
+}
+
+function AskReply({
+  waiting,
+  error,
+  result,
+}: {
+  waiting: boolean;
+  error: boolean;
+  result: BrainAnswer | undefined;
+}) {
+  const text = "mt-1 min-w-0 whitespace-pre-wrap break-words text-sm leading-relaxed";
+  if (waiting) return <p className={cn(text, "text-foreground/90")}>Sięgam do pamięci…</p>;
+  if (error || !result) {
+    return (
+      <p className={cn(text, "text-warning")}>
+        Nie udało się przeszukać wiedzy — spróbuj ponownie za chwilę.
+      </p>
+    );
+  }
+  const found = result.items.length;
+  const foundLine =
+    found > 0
+      ? `Znalazłem ${found} ${found === 1 ? "źródło" : found < 5 ? "źródła" : "źródeł"} — świecą na mapie.`
+      : "W zapisanej wiedzy nic do tego nie pasuje.";
+  if (result.status === "ok") {
+    return <p className={cn(text, "text-foreground/90")}>{result.answer}</p>;
+  }
+  return (
+    <>
+      <p className={cn(text, "text-foreground/90")}>{foundLine}</p>
+      <p className={cn(text, "text-warning")}>
+        {result.status === "no_key" ? (
+          <>
+            Bez odpowiedzi słownej: na serwerze nie ma klucza Gemini (i bez niego szukam tylko po
+            słowach, nie po znaczeniu).{" "}
+            <Link to="/settings" className="underline underline-offset-2">
+              Dodaj klucz w Ustawieniach
+            </Link>
+            .
+          </>
+        ) : (
+          "Model nie odpowiedział — źródła są wyżej na mapie, odpowiedź spróbuj za chwilę."
+        )}
+      </p>
+    </>
   );
 }
 

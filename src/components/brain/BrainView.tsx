@@ -417,6 +417,20 @@ export function BrainView({
             setActiveTrace(t);
             setPanel(null);
           }}
+          onAnswered={(question, items) => {
+            // Wszystkie źródła odpowiedzi naraz (pamięć, notatki, dokumenty);
+            // zapisane ślady i tak dojdą przez Realtime — lista się odświeży.
+            if (items.length > 0) {
+              setActiveTrace({
+                id: `ask-${Date.now()}`,
+                tool: "recall",
+                query: question,
+                items,
+                createdAt: new Date().toISOString(),
+              });
+            }
+            void qc.invalidateQueries({ queryKey: TRACES_KEY });
+          }}
           onClose={() => setPanel(null)}
         />
       )}

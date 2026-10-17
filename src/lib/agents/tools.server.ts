@@ -16,6 +16,7 @@ import type { Database, Json } from "@/integrations/supabase/types";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { embedText, noteEmbeddingText, toVectorLiteral } from "@/lib/ai/embed";
 import { buildTraceItems, type TraceItem } from "@/lib/brain/trace";
+import { keywordStems, stemsOrFilter } from "@/lib/ai/keywords";
 
 export type ToolContext = {
   supabase: SupabaseClient<Database>;
@@ -623,7 +624,7 @@ const recall: Tool = {
     type NoteHit = { id: string; title: string; body: string; similarity?: number };
     const notes: NoteHit[] = [];
     let semanticUsed = false;
-    if (rawQuery) {
+    if (rawQuery && ctx.apiKey) {
       const queryEmbedding = await embedText(rawQuery, ctx.apiKey, "RETRIEVAL_QUERY");
       if (queryEmbedding && tags.length === 0) {
         // Notatki tylko bez filtra tagów — tagi w `recall` dotyczą wspomnień.
@@ -672,8 +673,15 @@ const recall: Tool = {
       .select("id, key, value, tags, importance, updated_at")
       .eq("user_id", ctx.userId);
     const kwQuery = rawQuery ? sanitizeForOrFilter(rawQuery) : "";
+    // Bez semantyki całe zdanie w ILIKE prawie nigdy nie trafia („skąd wiesz
+    // o Marvelu” ≠ „Marvel”) — wtedy szukamy po rdzeniach słów.
+    const stems = kwQuery && !semanticUsed ? keywordStems(rawQuery) : [];
+    const kwFilter = (cols: [string, string]) =>
+      stems.length > 0
+        ? stemsOrFilter(stems, cols)
+        : `${cols[0]}.ilike.%${kwQuery}%,${cols[1]}.ilike.%${kwQuery}%`;
     if (kwQuery) {
-      q = q.or(`value.ilike.%${kwQuery}%,key.ilike.%${kwQuery}%`);
+      q = q.or(kwFilter(["value", "key"]));
     }
     if (tags.length > 0) {
       q = q.overlaps("tags", tags);
@@ -695,7 +703,7 @@ const recall: Tool = {
         .from("notes")
         .select("id, title, body")
         .eq("owner_id", ctx.userId)
-        .or(`title.ilike.%${kwQuery}%,body.ilike.%${kwQuery}%`)
+        .or(kwFilter(["title", "body"]))
         .order("updated_at", { ascending: false })
         .limit(limit - notes.length);
       const seenNotes = new Set(notes.map((n) => n.id));
