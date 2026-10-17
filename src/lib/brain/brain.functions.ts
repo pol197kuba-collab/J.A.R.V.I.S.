@@ -15,6 +15,8 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { logServerError } from "@/lib/system/logServerError";
 import type { Json } from "@/integrations/supabase/types";
 import type { BrainSourceType } from "./layout";
+import { parseInsights, type BrainInsights } from "./insights";
+import { parseTraceItems, type TraceItem } from "./trace";
 
 export type BrainStar = {
   type: BrainSourceType;
@@ -37,6 +39,8 @@ export type BrainSnapshot = {
   clusters: BrainCluster[];
   /** Ostatni pełny układ — null, gdy nocny job jeszcze nie przebiegł. */
   layout: { computedAt: string; method: string } | null;
+  /** Wnioski z ostatniego nocnego przeliczenia (puste przed pierwszym z S1.3). */
+  insights: BrainInsights;
 };
 
 const PAGE = 1000;
@@ -91,7 +95,7 @@ export const getBrain = createServerFn({ method: "GET" })
         .order("cluster_id"),
       supabase
         .from("brain_layout_runs")
-        .select("computed_at, method")
+        .select("computed_at, method, meta")
         .eq("owner_id", userId)
         .maybeSingle(),
     ]);
@@ -110,6 +114,7 @@ export const getBrain = createServerFn({ method: "GET" })
         z: c.z,
       })),
       layout: run ? { computedAt: run.computed_at, method: run.method } : null,
+      insights: parseInsights((run?.meta as { insights?: unknown } | null)?.insights),
     };
   });
 
@@ -191,4 +196,46 @@ export const getBrainItem = createServerFn({ method: "GET" })
       tags: [],
       meta: `${d.mime_type} · ${d.chunk_count ?? 0} fragmentów · ${d.status}`,
     };
+  });
+
+export type BrainTrace = {
+  id: string;
+  tool: string;
+  query: string;
+  items: TraceItem[];
+  createdAt: string;
+};
+
+export function toBrainTrace(row: {
+  id: string;
+  tool: string;
+  query: string;
+  items: unknown;
+  created_at: string;
+}): BrainTrace {
+  return {
+    id: row.id,
+    tool: row.tool,
+    query: row.query,
+    items: parseTraceItems(row.items),
+    createdAt: row.created_at,
+  };
+}
+
+/** Ostatnie ślady RAG — „skąd J.A.R.V.I.S. to wiedział”. */
+export const getBrainTraces = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<BrainTrace[]> => {
+    const { supabase, userId } = context;
+    const { data, error } = await supabase
+      .from("brain_traces")
+      .select("id, tool, query, items, created_at")
+      .eq("owner_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(15);
+    if (error) {
+      await logServerError(supabase, userId, "brain.traces", error);
+      throw new Error(error.message);
+    }
+    return (data ?? []).map(toBrainTrace);
   });

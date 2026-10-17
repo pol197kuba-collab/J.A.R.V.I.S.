@@ -15,6 +15,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { embedText, noteEmbeddingText, toVectorLiteral } from "@/lib/ai/embed";
+import { buildTraceItems, type TraceItem } from "@/lib/brain/trace";
 
 export type ToolContext = {
   supabase: SupabaseClient<Database>;
@@ -541,11 +542,38 @@ const remember: Tool = {
 // extra filter clauses.
 const sanitizeForOrFilter = (s: string): string => s.replace(/[,()*%\\]/g, " ").trim();
 
+// Ślad dla Mózgu 3D (/mozg): które gwiazdy trafiły do odpowiedzi.
+// Best-effort — brak śladu nigdy nie psuje samego wyszukiwania.
+async function recordBrainTrace(
+  ctx: ToolContext,
+  tool: string,
+  query: string,
+  hits: TraceItem[],
+): Promise<void> {
+  const items = buildTraceItems(hits);
+  if (items.length === 0) return;
+  try {
+    const { error } = await ctx.supabase.from("brain_traces").insert({
+      owner_id: ctx.userId,
+      run_id: ctx.runId || null,
+      tool,
+      query: query.slice(0, 500),
+      items: items as unknown as Json,
+    });
+    if (error) await ctx.logEvent("warn", `tool.${tool}`, `brain trace: ${error.message}`);
+  } catch {
+    /* ślad jest dodatkiem — nie przerywa narzędzia */
+  }
+}
+
+/** Ile znaków treści notatki wraca do modelu — reszta przez list_notes. */
+const RECALL_NOTE_BODY = 600;
+
 const recall: Tool = {
   declaration: {
     name: "recall",
     description:
-      "Search your long-term memory for facts/preferences you stored earlier (with the `remember` tool). Use at the START of answering when the user refers to themselves, past decisions, or 'as I told you'. Returns matching memories newest/most-important first.",
+      "Search your long-term memory for facts/preferences you stored earlier (with the `remember` tool) AND the user's notes. Use at the START of answering when the user refers to themselves, past decisions, 'as I told you', or anything they may have written down. Returns matching memories (newest/most-important first) and matching notes.",
     parameters: {
       type: "object",
       properties: {
@@ -592,9 +620,25 @@ const recall: Tool = {
     // 1. Semantic pass — embed the query and rank by cosine similarity.
     //    Best-effort: skipped entirely if there's no query text or embedding
     //    fails (no key/quota/network), leaving the keyword pass to cover it.
+    type NoteHit = { id: string; title: string; body: string; similarity?: number };
+    const notes: NoteHit[] = [];
     let semanticUsed = false;
     if (rawQuery) {
       const queryEmbedding = await embedText(rawQuery, ctx.apiKey, "RETRIEVAL_QUERY");
+      if (queryEmbedding && tags.length === 0) {
+        // Notatki tylko bez filtra tagów — tagi w `recall` dotyczą wspomnień.
+        const { data: semNotes, error: notesErr } = await ctx.supabase.rpc("match_notes", {
+          query_embedding: toVectorLiteral(queryEmbedding),
+          match_count: limit,
+        });
+        if (notesErr) {
+          await ctx.logEvent("warn", "tool.recall", `match_notes RPC failed: ${notesErr.message}`, {
+            query: rawQuery,
+          } as Json);
+        } else {
+          for (const n of semNotes ?? []) notes.push(n);
+        }
+      }
       if (queryEmbedding) {
         const { data: sem, error: semErr } = await ctx.supabase.rpc("match_memories", {
           query_embedding: toVectorLiteral(queryEmbedding),
@@ -644,19 +688,52 @@ const recall: Tool = {
     }
     push(kw as Hit[] | null);
 
+    // Notatki po słowach — gdy semantyka nic nie dała (brak klucza, nowe
+    // notatki bez wektora) albo dała mniej niż limit.
+    if (kwQuery && tags.length === 0 && notes.length < limit) {
+      const { data: kwNotes } = await ctx.supabase
+        .from("notes")
+        .select("id, title, body")
+        .eq("owner_id", ctx.userId)
+        .or(`title.ilike.%${kwQuery}%,body.ilike.%${kwQuery}%`)
+        .order("updated_at", { ascending: false })
+        .limit(limit - notes.length);
+      const seenNotes = new Set(notes.map((n) => n.id));
+      for (const n of kwNotes ?? []) if (!seenNotes.has(n.id)) notes.push(n);
+    }
+
     const results = merged.slice(0, limit);
+    const noteResults = notes.slice(0, limit).map((n) => ({
+      id: n.id,
+      title: n.title,
+      body: n.body.length > RECALL_NOTE_BODY ? `${n.body.slice(0, RECALL_NOTE_BODY)}…` : n.body,
+      ...(typeof n.similarity === "number" ? { similarity: n.similarity } : {}),
+    }));
     await ctx.logEvent(
       "info",
       "tool.recall",
-      `${rawQuery || "(recent)"} → ${results.length} hits${semanticUsed ? " (semantic)" : ""}`,
+      `${rawQuery || "(recent)"} → ${results.length} hits, ${noteResults.length} notes${semanticUsed ? " (semantic)" : ""}`,
       {
         query: rawQuery,
         tags,
         hits: results.length,
+        notes: noteResults.length,
         semantic: semanticUsed,
       } as Json,
     );
-    return { count: results.length, memories: results };
+    // Bez zapytania `recall` tylko listuje ostatnie wspomnienia — to nie
+    // jest „sięgnięcie po wiedzę”, więc bez śladu w Mózgu.
+    if (rawQuery) {
+      await recordBrainTrace(ctx, "recall", rawQuery, [
+        ...results.map((m) => ({ type: "memory" as const, id: m.id, score: m.similarity ?? null })),
+        ...noteResults.map((n) => ({
+          type: "note" as const,
+          id: n.id,
+          score: "similarity" in n ? (n.similarity as number) : null,
+        })),
+      ]);
+    }
+    return { count: results.length, memories: results, notes: noteResults };
   },
 };
 
@@ -1704,6 +1781,16 @@ const searchDocumentsTool: Tool = {
       "tool.search_documents",
       `${query} → ${results.length} hits${semanticUsed ? " (semantic)" : ""}`,
       { query, hits: results.length, semantic: semanticUsed } as Json,
+    );
+    await recordBrainTrace(
+      ctx,
+      "search_documents",
+      query,
+      results.map((r) => ({
+        type: "document" as const,
+        id: r.document_id,
+        score: r.similarity ?? null,
+      })),
     );
     return { count: results.length, chunks: results };
   },

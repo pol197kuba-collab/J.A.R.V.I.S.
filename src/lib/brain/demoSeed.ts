@@ -14,9 +14,26 @@
 // - wszystko z tagiem DEMO_TAG — `remove` usuwa dokładnie te wiersze.
 
 export const DEMO_TAG = "demo-mozg";
+/** Na ile dni wstecz rozłożyć daty demo — inaczej suwak czasu nie ma czego pokazać. */
+export const DEMO_SPREAD_DAYS = 90;
 export const DEMO_SOURCE = "demo";
 
 export type DemoNote = { title: string; body: string; tags: string[] };
+/**
+ * Data „powstania” i-tej pozycji demo: rozłożone równo na ostatnie
+ * DEMO_SPREAD_DAYS dni, od najstarszej, z godziną zależną od indeksu —
+ * deterministycznie, żeby powtórny seed dał tę samą oś czasu.
+ */
+export function demoCreatedAt(i: number, total: number, now: Date = new Date()): string {
+  const day = 86_400_000;
+  const fraction = total <= 1 ? 1 : i / (total - 1);
+  const daysAgo = Math.round((1 - fraction) * DEMO_SPREAD_DAYS);
+  const hour = 8 + ((i * 7) % 13);
+  const d = new Date(now.getTime() - daysAgo * day);
+  d.setUTCHours(hour, (i * 17) % 60, 0, 0);
+  return d.toISOString();
+}
+
 export type DemoMemory = { key: string; value: string; importance: number; tags: string[] };
 
 const note = (title: string, body: string, ...tags: string[]): DemoNote => ({

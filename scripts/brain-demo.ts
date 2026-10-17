@@ -11,7 +11,13 @@
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../src/integrations/supabase/types";
-import { DEMO_MEMORIES, DEMO_NOTES, DEMO_SOURCE, DEMO_TAG } from "../src/lib/brain/demoSeed";
+import {
+  DEMO_MEMORIES,
+  DEMO_NOTES,
+  DEMO_SOURCE,
+  DEMO_TAG,
+  demoCreatedAt,
+} from "../src/lib/brain/demoSeed";
 
 type Db = SupabaseClient<Database>;
 
@@ -66,6 +72,52 @@ async function connect(): Promise<{ db: Db; ownerId: string }> {
   process.exit(1);
 }
 
+/** Kolejność po temacie (drugi tag) na przemian: A1, B1, C1, A2, B2, … */
+function interleave<T extends { tags: string[] }>(items: T[]): T[] {
+  const groups = new Map<string, T[]>();
+  for (const it of items) {
+    const key = it.tags[1] ?? "";
+    groups.set(key, [...(groups.get(key) ?? []), it]);
+  }
+  const lists = [...groups.values()];
+  const out: T[] = [];
+  for (let round = 0; out.length < items.length; round++) {
+    for (const list of lists) if (list[round]) out.push(list[round]);
+  }
+  return out;
+}
+
+/** Daty istniejących wierszy demo ustawione tak, jak ustawiłby je świeży seed. */
+async function respreadDates(db: Db, ownerId: string): Promise<number> {
+  const order = interleave(DEMO_NOTES);
+  const noteDate = new Map(order.map((n, i) => [n.title, demoCreatedAt(i, order.length)]));
+  const memoryDate = new Map(
+    DEMO_MEMORIES.map((m, i) => [m.key, demoCreatedAt(i, DEMO_MEMORIES.length)]),
+  );
+  let updated = 0;
+  for (const [title, at] of noteDate) {
+    const { error } = await db
+      .from("notes")
+      .update({ created_at: at, updated_at: at })
+      .eq("owner_id", ownerId)
+      .eq("title", title)
+      .contains("tags", [DEMO_TAG]);
+    if (error) throw new Error(`notatki: ${error.message}`);
+    updated++;
+  }
+  for (const [key, at] of memoryDate) {
+    const { error } = await db
+      .from("memories")
+      .update({ created_at: at, updated_at: at })
+      .eq("user_id", ownerId)
+      .eq("key", key)
+      .contains("tags", [DEMO_TAG]);
+    if (error) throw new Error(`wspomnienia: ${error.message}`);
+    updated++;
+  }
+  return updated;
+}
+
 async function seed(db: Db, ownerId: string) {
   const { count, error: countError } = await db
     .from("notes")
@@ -74,23 +126,38 @@ async function seed(db: Db, ownerId: string) {
     .contains("tags", [DEMO_TAG]);
   if (countError) throw new Error(`notatki: ${countError.message}`);
   if ((count ?? 0) > 0) {
-    notice(`Demo już jest (${count} notatek z tagiem ${DEMO_TAG}) — nic nie dodaję.`);
+    // Demo z pierwszej wersji miało jedną datę dla wszystkiego — rozkładamy
+    // daty istniejących wierszy zamiast dublować dane.
+    const spread = await respreadDates(db, ownerId);
+    notice(
+      `Demo już jest (${count} notatek z tagiem ${DEMO_TAG}) — nic nie dodaję, ` +
+        `daty rozłożone na nowo (${spread} wierszy).`,
+    );
     return;
   }
 
   const { error: notesError } = await db.from("notes").insert(
-    DEMO_NOTES.map((n) => ({
-      owner_id: ownerId,
-      title: n.title,
-      body: n.body,
-      tags: n.tags,
-      source: DEMO_SOURCE,
-    })),
+    // Notatki przeplatane tematami po osi czasu (i % liczba tematów), żeby
+    // suwak pokazywał, jak rośnie kilka gromad naraz, a nie jedną po drugiej.
+    interleave(DEMO_NOTES).map((n, i, all) => {
+      const at = demoCreatedAt(i, all.length);
+      return {
+        owner_id: ownerId,
+        title: n.title,
+        body: n.body,
+        tags: n.tags,
+        source: DEMO_SOURCE,
+        created_at: at,
+        updated_at: at,
+      };
+    }),
   );
   if (notesError) throw new Error(`notatki: ${notesError.message}`);
 
   const { error: memoriesError } = await db.from("memories").insert(
-    DEMO_MEMORIES.map((m) => ({
+    DEMO_MEMORIES.map((m, i) => ({
+      created_at: demoCreatedAt(i, DEMO_MEMORIES.length),
+      updated_at: demoCreatedAt(i, DEMO_MEMORIES.length),
       user_id: ownerId,
       kind: "fact",
       key: m.key,

@@ -13,7 +13,7 @@
 
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
   Boxes,
@@ -25,14 +25,20 @@ import {
   Loader2,
   Search,
   X,
+  Zap,
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import {
   getBrain,
   getBrainItem,
+  getBrainTraces,
+  toBrainTrace,
   type BrainCluster,
   type BrainStar,
+  type BrainTrace,
 } from "@/lib/brain/brain.functions";
+import { ActionDock, InsightsPanel, TimePanel, TracePanel, type BrainPanel } from "./BrainPanels";
 import type { BrainSourceType } from "@/lib/brain/layout";
 import {
   nearestNeighbors,
@@ -40,17 +46,15 @@ import {
   searchStars,
   TYPE_LABEL,
   TYPE_LABEL_PLURAL,
+  TYPE_DOT,
+  stripAskPrefix,
 } from "@/lib/brain/scene";
 
 // three.js ładowany dopiero na tej stronie — reszta aplikacji go nie płaci.
 const BrainScene = lazy(() => import("./BrainScene").then((m) => ({ default: m.BrainScene })));
 
 const ALL_TYPES: BrainSourceType[] = ["memory", "note", "document"];
-const TYPE_DOT: Record<BrainSourceType, string> = {
-  memory: "bg-reactor",
-  note: "bg-success",
-  document: "bg-accent",
-};
+const TRACES_KEY = ["brain", "traces"] as const;
 const MODE_KEY = "jarvis_brain_mode";
 const NEIGHBORS = 5;
 /** Poniżej tej szerokości karta wysuwa się od dołu; powyżej pływa w rogu. */
@@ -132,6 +136,16 @@ export function BrainView() {
   // zmienić kolejność gwiazd.
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ index: number; nonce: number } | null>(null);
+  const [panel, setPanel] = useState<BrainPanel | null>(null);
+  const [activeTrace, setActiveTrace] = useState<BrainTrace | null>(null);
+  const [until, setUntil] = useState<number | null>(null);
+  const qc = useQueryClient();
+  const fetchTraces = useServerFn(getBrainTraces);
+  const traces = useQuery({
+    queryKey: TRACES_KEY,
+    queryFn: () => fetchTraces(),
+    enabled: panel === "trace",
+  });
   const [rootRef, rootSize] = useElementSize<HTMLDivElement>();
   const [toolbarRef, toolbarSize] = useElementSize<HTMLDivElement>();
 
@@ -143,7 +157,18 @@ export function BrainView() {
       searchStars(stars, clusterNames, query, 30).filter((i) => visibleTypes.has(stars[i].type)),
     [stars, clusterNames, query, visibleTypes],
   );
-  const highlighted = useMemo(() => new Set(query.trim() ? results : []), [results, query]);
+  const traceIndices = useMemo(
+    () =>
+      (activeTrace?.items ?? [])
+        .map((it) => indexByKey.get(`${it.type}:${it.id}`))
+        .filter((i): i is number => i !== undefined),
+    [activeTrace, indexByKey],
+  );
+  // Wyszukiwanie wygrywa ze śladem — to, czego użytkownik szuka teraz.
+  const highlighted = useMemo(
+    () => new Set(query.trim() ? results : panel === "time" ? [] : traceIndices),
+    [results, query, traceIndices, panel],
+  );
   const neighbors = useMemo(
     () =>
       selected === null
@@ -161,6 +186,7 @@ export function BrainView() {
   }, [stars]);
 
   const select = (index: number | null, fly = false) => {
+    if (index !== null) setPanel(null);
     setSelectedKey(index === null ? null : starKey(stars[index]));
     if (fly && index !== null) setFocus({ index, nonce: Date.now() });
   };
@@ -173,6 +199,35 @@ export function BrainView() {
       // Pusta legenda to pusta scena — ostatniego typu nie da się schować.
       return next.size === 0 ? prev : next;
     });
+
+  const openPanel = (p: BrainPanel | null) => {
+    setSelectedKey(null);
+    if (p !== "time") setUntil(null);
+    setPanel(p);
+  };
+
+  // Nowe ślady na żywo: J.A.R.V.I.S. sięga do wiedzy (także z czatu na
+  // innym urządzeniu) → gwiazdy rozbłyskują od razu. RLS obowiązuje też
+  // w Realtime, więc przychodzą wyłącznie własne ślady.
+  useEffect(() => {
+    const channel = supabase
+      .channel("brain-traces")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "brain_traces" },
+        (payload) => {
+          const trace = toBrainTrace(payload.new as Parameters<typeof toBrainTrace>[0]);
+          setActiveTrace(trace);
+          qc.setQueryData<BrainTrace[]>(TRACES_KEY, (prev) => [trace, ...(prev ?? [])]);
+          // Ślad może wskazywać gwiazdę dodaną przed chwilą — odśwież mapę.
+          void qc.invalidateQueries({ queryKey: ["brain", "snapshot"] });
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [qc]);
 
   // Zaznaczona gwiazda schowana filtrem — karta się zamyka.
   useEffect(() => {
@@ -218,12 +273,21 @@ export function BrainView() {
             focus={focus}
             onSelect={(i) => select(i)}
             onFocus={(i) => setFocus({ index: i, nonce: Date.now() })}
-            showClusterLabels={!query.trim()}
+            showClusterLabels={!query.trim() && !activeTrace}
             viewShift={
-              selected !== null && rootSize.width > 0 && rootSize.width < SHEET_SIDE_MIN
+              (selected !== null || panel !== null) &&
+              rootSize.width > 0 &&
+              rootSize.width < SHEET_SIDE_MIN
                 ? SHEET_VIEW_SHIFT
                 : 0
             }
+            trace={
+              // Na osi czasu ślad by celował w gwiazdy, których „jeszcze nie ma”.
+              activeTrace && traceIndices.length > 0 && panel !== "time"
+                ? { key: activeTrace.id, indices: traceIndices }
+                : null
+            }
+            until={until}
           />
         </Suspense>
       ) : (
@@ -327,6 +391,30 @@ export function BrainView() {
               {data?.layout ? ` · układ ${relativeAge(data.layout.computedAt)}` : ""}
             </span>
           </div>
+
+          {activeTrace && panel !== "trace" && (
+            <div className="pointer-events-auto flex min-h-10 max-w-md items-center gap-2 self-start rounded-lg border border-primary/40 bg-black/70 pl-3 backdrop-blur-md">
+              <Zap className="h-4 w-4 shrink-0 text-primary" />
+              <button
+                type="button"
+                onClick={() => openPanel("trace")}
+                className="min-w-0 flex-1 truncate py-2 text-left text-sm text-foreground/90"
+              >
+                {stripAskPrefix(activeTrace.query)}
+                <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">
+                  · {traceIndices.length} gwiazd
+                </span>
+              </button>
+              <button
+                type="button"
+                aria-label="Zgaś ślad"
+                onClick={() => setActiveTrace(null)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center text-primary/70"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -341,6 +429,40 @@ export function BrainView() {
           onClose={() => setSelectedKey(null)}
           onFly={() => setFocus({ index: selected, nonce: Date.now() })}
           onPick={(i) => select(i, effectiveMode === "3d")}
+        />
+      )}
+
+      {selected === null && panel === null && stars.length > 0 && <ActionDock onOpen={openPanel} />}
+      {panel === "trace" && (
+        <TracePanel
+          traces={traces.data ?? []}
+          loading={traces.isLoading}
+          activeId={activeTrace?.id ?? null}
+          onPick={(t) => {
+            setActiveTrace(t);
+            setPanel(null);
+          }}
+          onClose={() => setPanel(null)}
+        />
+      )}
+      {panel === "time" && (
+        <TimePanel
+          stars={stars}
+          until={until}
+          onChange={setUntil}
+          onClose={() => openPanel(null)}
+        />
+      )}
+      {panel === "insights" && data && (
+        <InsightsPanel
+          insights={data.insights}
+          computedAt={data.layout?.computedAt ?? null}
+          clusterNames={clusterNames}
+          onPick={(type, id) => {
+            const i = indexByKey.get(`${type}:${id}`);
+            if (i !== undefined) select(i, effectiveMode === "3d");
+          }}
+          onClose={() => setPanel(null)}
         />
       )}
     </div>
