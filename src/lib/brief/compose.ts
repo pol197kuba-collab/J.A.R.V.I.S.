@@ -84,6 +84,23 @@ function outlookSection(facts: BriefFacts): BriefSection | null {
   return { kind: "outlook", heading: "Typer", lines };
 }
 
+/** Fundusz: kto zarobił wczoraj i kto prowadzi od startu. Bez porad — to papier. */
+function fundSection(facts: BriefFacts): BriefSection | null {
+  const { fund } = facts;
+  if (!fund || fund.yesterday.length === 0) return null;
+  const moves = [...fund.yesterday]
+    .sort((a, b) => b.changePct - a.changePct)
+    .map((p) => `${p.label} ${signedPct(p.changePct)}`);
+  return {
+    kind: "fund",
+    heading: "Fundusz",
+    lines: [
+      `Wczoraj: ${moves.join(", ")}.`,
+      `Od startu prowadzi ${fund.leader.label} (${signedPct(fund.leader.returnPct)}).`,
+    ],
+  };
+}
+
 function fuelSection(facts: BriefFacts): BriefSection | null {
   const { fuel } = facts;
   if (!fuel) return null;
@@ -220,6 +237,7 @@ export function composeBrief(facts: BriefFacts): ComposedBrief {
     tasksSection(facts),
     marketsSection(facts),
     outlookSection(facts),
+    fundSection(facts),
     fuelSection(facts),
   ].filter((s): s is BriefSection => s !== null);
 
