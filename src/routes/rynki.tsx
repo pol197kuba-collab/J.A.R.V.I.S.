@@ -27,9 +27,11 @@ import { MarketNewsPanel } from "@/components/jarvis/markets/MarketNewsPanel";
 import { SentimentPanel } from "@/components/jarvis/markets/SentimentPanel";
 import { OutlookPanel } from "@/components/jarvis/markets/OutlookPanel";
 import { AccuracyPanel } from "@/components/jarvis/markets/AccuracyPanel";
+import { FundPanel } from "@/components/jarvis/markets/FundPanel";
 import { AssetPicker } from "@/components/jarvis/markets/AssetPicker";
 import { StandingOrdersPanel } from "@/components/jarvis/orders/StandingOrdersPanel";
 import { listStandingOrders } from "@/lib/orders/orders.functions";
+import { getFund, recomputeFundNow } from "@/lib/fund/fund.functions";
 import { formatPercent, formatPrice } from "@/lib/markets/series";
 import { projectForecast, type ForecastPoint } from "@/lib/markets/projection";
 import {
@@ -227,6 +229,22 @@ function MarketsPage() {
     return out;
   }, [series, outlook.data]);
 
+  // Fundusz: przeliczany nocą (krok w market-grid) albo przyciskiem —
+  // samo wejście na stronę tylko czyta, bo przeliczenie to cała historia.
+  const fetchFund = useServerFn(getFund);
+  const recomputeFund = useServerFn(recomputeFundNow);
+  const fund = useQuery({
+    queryKey: ["fund"],
+    queryFn: () => fetchFund(),
+    staleTime: 5 * 60_000,
+  });
+  const fundMutation = useMutation({
+    mutationFn: () => recomputeFund(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["fund"] }),
+    onError: (err) =>
+      toast.error(`Nie udało się przeliczyć funduszu: ${err instanceof Error ? err.message : err}`),
+  });
+
   const watched = series.map((s) => s.symbol);
   const primary = series.find((s) => s.symbol === visibleSymbols[0]) ?? null;
   const missing = grid.data?.missing ?? [];
@@ -384,6 +402,20 @@ function MarketsPage() {
           )}
         </HudPanel>
       </div>
+
+      <HudPanel index={3} title="MARKET GRID // FUNDUSZ" tone="elevated" className="min-w-0 p-5">
+        {fund.isLoading ? (
+          <EmptyState>Ładowanie funduszu…</EmptyState>
+        ) : fund.data ? (
+          <FundPanel
+            view={fund.data}
+            onRecompute={() => fundMutation.mutate()}
+            recomputing={fundMutation.isPending}
+          />
+        ) : (
+          <EmptyState>Nie udało się wczytać funduszu</EmptyState>
+        )}
+      </HudPanel>
 
       <div className="grid gap-6 @[900px]:grid-cols-[1fr_360px]">
         <HudPanel index={3} title="MARKET GRID // NEWSY" className="min-w-0 p-5">
