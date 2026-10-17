@@ -11,6 +11,9 @@ import type { TownWorld } from "./townWorld";
 import { isTownAgent, type TownSlug } from "./townMap";
 import { propById } from "./townProps";
 import { explainError, type ProviderTrouble } from "./townInsights";
+import type { FundView } from "@/lib/fund/fund.functions";
+import { fundVerdict } from "@/lib/fund/verdict";
+import { rankingText, statueText, terminalText, type TownFund } from "./townFund";
 
 // ── pure helpers (tested) ──────────────────────────────────────────────────
 
@@ -102,6 +105,10 @@ export type PropDeps = {
   budget?: BudgetReport;
   budgetLoading?: boolean;
   trouble?: ProviderTrouble | null;
+  /** The paper fund: the floor's view of it and the raw data (trades, verdict). */
+  fund?: TownFund | null;
+  fundView?: FundView;
+  fundLoading?: boolean;
   log: (slug: TownSlug, text: string) => void;
 };
 
@@ -314,6 +321,89 @@ export function propContent(id: string, d: PropDeps): PropContent {
         ],
       };
     }
+    case "ranking": {
+      const fund = d.fund ?? null;
+      const verdict = d.fundView
+        ? fundVerdict(
+            d.fundView.players.map((p) => ({
+              key: p.key,
+              label: p.label,
+              kind: p.kind,
+              returnPct: p.metrics?.returnPct ?? 0,
+            })),
+            d.fundView.nav.length,
+          )
+        : [];
+      const text = () => (d.fundLoading ? "Tablica się przewija…" : rankingText(fund, verdict));
+      return {
+        ...base,
+        line: text(),
+        options: [
+          { label: "Odśwież", run: (ui) => ui.say(text()) },
+          { label: "Otwórz Fundusz w /rynki", run: () => d.navigate("/rynki") },
+        ],
+      };
+    }
+    case "statue":
+      return {
+        ...base,
+        line: statueText(d.fund ?? null),
+        options: [
+          {
+            label: "Pogłaszcz na szczęście",
+            run: (ui) => {
+              w.say("user", "na szczęście!", 1800, null);
+              ui.say(
+                "Brąz jest chłodny i wypolerowany przez setki rąk. Szczęście nie gwarantuje zysku.",
+              );
+            },
+          },
+        ],
+      };
+    case "bell": {
+      const when = d.fund?.computedAt
+        ? new Date(d.fund.computedAt).toLocaleString("pl-PL", {
+            day: "2-digit",
+            month: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : null;
+      return {
+        ...base,
+        line: "Mosiężny dzwon parkietu. Lina aż prosi, żeby za nią pociągnąć.",
+        options: [
+          {
+            label: "Zadzwoń",
+            run: (ui) => {
+              w.bellAt = w.time;
+              w.say("user", "DING! DING!", 2200, null);
+              w.dog.say("Hau!", 1400);
+              d.log("user", "Dzwonisz dzwonem parkietu.");
+              ui.say(
+                when
+                  ? `Dzwon niesie się po hali. Ostatnie przeliczenie funduszu: ${when}.`
+                  : "Dzwon niesie się po pustej hali — fundusz jeszcze nie był przeliczony.",
+              );
+            },
+          },
+        ],
+      };
+    }
+    case "terminal": {
+      const orders = d.fundView?.orders.ai ?? [];
+      return {
+        ...base,
+        line: d.fundLoading ? "Terminal się uruchamia…" : terminalText("AI", orders),
+        options: [{ label: "Otwórz Fundusz w /rynki", run: () => d.navigate("/rynki") }],
+      };
+    }
+    case "plan":
+      return {
+        ...base,
+        line: "Plan budynku: pięć pomieszczeń w remoncie czeka na kolejne moduły J.A.R.V.I.S.-a. Na razie pusto — robotnicy zostawili rusztowania i pachołki.",
+        options: [],
+      };
     default:
       return { ...base, line: "Nic tu nie ma.", options: [] };
   }

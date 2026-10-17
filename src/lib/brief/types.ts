@@ -52,6 +52,17 @@ export type BriefFacts = {
   budget: { spentUsd: number; limitUsd: number; message: string } | null;
 
   /**
+   * Fundusz na papierze (PLAN.md, S3.3): zmiana wyceny graczy z ostatniego
+   * dnia i lider od startu; null, gdy fundusz nie był jeszcze przeliczony.
+   */
+  fund: {
+    /** Dzień, którego dotyczy „wczoraj” (ostatnia wycena), YYYY-MM-DD. */
+    day: string;
+    yesterday: Array<{ label: string; changePct: number }>;
+    leader: { label: string; returnPct: number };
+  } | null;
+
+  /**
    * Prognoza na dziś dla zapisanego punktu domowego; null, gdy użytkownik
    * nie podał współrzędnych albo dostawca nie odpowiedział. Nie trafia do
    * żadnej sekcji — wchodzi do POWITANIA, bo tam jest po coś: rubryka ma
@@ -63,6 +74,7 @@ export type BriefFacts = {
 export type BriefSectionKind =
   | "markets"
   | "outlook"
+  | "fund"
   | "fuel"
   | "orders"
   | "tasks"

@@ -129,6 +129,19 @@ Walk mode never changes the zoom: the floor stays fully in view and zooming
 is the user's choice only. New agents need a room, a look and a
 home/visit spot there to appear on the map.
 
+The building has two wings around the original core (east corridor x 42–43,
+south corridor y 30). Spare rooms live in `SPARE_ROOMS` (`townMap.ts`):
+`exchange` — the trading floor, drawn by `townExchangeArt.ts` from the paper
+fund via `townFund.ts` (pure, tested; M.E.T.R.I.C.'s mood comes from there)
+— and five `build_*` rooms "w remoncie". A new module takes over a
+`build_*` room: give it a label, floor and face, furnish it, and drop the
+construction props; don't squeeze new rooms into the core.
+Extras (`townNpcs.ts` + `townNpcWorld.ts`): builders in the `build_*` rooms
+and traders on the floor, tagged BUD / TRD. They are scenery — never in the
+roster, never talkable, and they state nothing about agent work; traders
+only shout real ticker lines from the fund. A room that stops being "w
+remoncie" takes its builders out of `NPCS`.
+
 ## Design skills: project rules win
 
 `.claude/skills/` holds third-party design skills (`design-taste-frontend`,

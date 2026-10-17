@@ -122,6 +122,50 @@ async function loadAccuracy(db: Db, ownerId: string): Promise<BriefFacts["accura
   return { settled, hitRatePct: Math.round((hits / settled) * 100) };
 }
 
+/**
+ * Fundusz: dwie ostatnie wyceny każdego gracza → zmiana „wczoraj” i lider
+ * od startu (metryki zapisuje przeliczenie). Nic nie liczy od nowa.
+ */
+async function loadFund(db: Db, ownerId: string): Promise<BriefFacts["fund"]> {
+  const { data: portfolios } = await db
+    .from("fund_portfolios")
+    .select("id, label, metrics")
+    .eq("owner_id", ownerId);
+  if (!portfolios || portfolios.length === 0) return null;
+  const since = isoDate(new Date(Date.now() - 7 * DAY_MS));
+  const { data: nav } = await db
+    .from("fund_nav_daily")
+    .select("portfolio_id, nav_date, nav_pln")
+    .in(
+      "portfolio_id",
+      portfolios.map((p) => p.id),
+    )
+    .gte("nav_date", since)
+    .order("nav_date", { ascending: false });
+  const byPortfolio = new Map<string, { date: string; nav: number }[]>();
+  for (const r of nav ?? []) {
+    const list = byPortfolio.get(r.portfolio_id) ?? [];
+    if (list.length < 2) list.push({ date: r.nav_date, nav: Number(r.nav_pln) });
+    byPortfolio.set(r.portfolio_id, list);
+  }
+  let day = "";
+  const yesterday: Array<{ label: string; changePct: number }> = [];
+  let leader: { label: string; returnPct: number } | null = null;
+  for (const p of portfolios) {
+    const pts = byPortfolio.get(p.id) ?? [];
+    if (pts.length === 2 && pts[1].nav > 0) {
+      yesterday.push({ label: p.label, changePct: (pts[0].nav / pts[1].nav - 1) * 100 });
+      if (pts[0].date > day) day = pts[0].date;
+    }
+    const m = p.metrics as { returnPct?: unknown } | null;
+    const ret = typeof m?.returnPct === "number" ? m.returnPct : null;
+    if (ret !== null && (!leader || ret > leader.returnPct))
+      leader = { label: p.label, returnPct: ret };
+  }
+  if (!leader || yesterday.length === 0) return null;
+  return { day, yesterday, leader };
+}
+
 /** Paliwo referencyjne: to samo, które moduł pokazuje domyślnie. */
 async function loadFuel(db: Db): Promise<BriefFacts["fuel"]> {
   const product = productById(DEFAULT_PRODUCT_ID);
@@ -306,7 +350,7 @@ export async function gatherFacts(db: Db, ownerId: string): Promise<BriefFacts> 
     }
   };
 
-  const [movers, calls, accuracy, fuel, firedOrders, tasks, failures, budget, weather] =
+  const [movers, calls, accuracy, fuel, firedOrders, tasks, failures, budget, weather, fund] =
     await Promise.all([
       safe(() => loadMovers(db, ownerId), []),
       safe(() => loadCalls(db, ownerId), []),
@@ -317,6 +361,7 @@ export async function gatherFacts(db: Db, ownerId: string): Promise<BriefFacts> 
       safe(() => loadFailures(db, ownerId), { count: 0, sample: null }),
       safe(() => loadBudget(db, ownerId), null),
       safe(() => loadWeather(db, ownerId), null),
+      safe(() => loadFund(db, ownerId), null),
     ]);
 
   return {
@@ -334,5 +379,6 @@ export async function gatherFacts(db: Db, ownerId: string): Promise<BriefFacts> 
     failures,
     budget,
     weather,
+    fund,
   };
 }

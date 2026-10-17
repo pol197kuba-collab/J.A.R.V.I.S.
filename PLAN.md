@@ -295,8 +295,26 @@ własnych prognoz. Ranking pokazuje, komu ufać, w złotówkach, nie w procentac
       prognozy). Kolory graczy ze stałych slotów `--market-1..5`, odniesienia
       linią przerywaną. Przycisk „Przelicz” (bez modelu, zero tokenów).
       Sprawdzone zrzutami: 390 px i 1280 px, HUD i TOWN, pusty stan.
-- [ ] Town: parkiet; nastrój agenta z realnej zmiany NAV (spadek → zgarbiony).
-- [ ] Brief poranny: linijka „wczoraj w funduszu”.
+- [x] **Town przebudowane pod rozbudowę** (mapa 56×44): korytarz wschodni
+      i południowy, nowe skrzydła, wejście od zachodu; dotychczasowe pokoje
+      bez zmian. **Parkiet giełdowy** (27×11 kratek): tablica rankingu,
+      wielki ekran z krzywymi kapitału, ściana pozycji lidera, wiszący
+      ticker LED, biurka traderów (monitory w kierunku dnia gracza), ring
+      z posągiem — złoty byk / brązowy niedźwiedź wg wczorajszego wyniku,
+      dzwon otwarcia (konfetti), wszystko z prawdziwych danych funduszu.
+      Pięć pokoi **„w remoncie”** (rusztowania, pachołki, taśma, REMONT)
+      czeka na kolejne moduły.
+- [x] **M.E.T.R.I.C. jako trader**: zgarbiony i spocony po stracie, podskakuje
+      po zysku; część spacerów kończy na parkiecie z prawdziwym wynikiem dnia.
+      Rekwizyty w trybie spaceru: tablica (ranking + werdykt), posąg, dzwon,
+      terminal tradera AI (ostatnie transakcje z powodem), plan rozbudowy.
+- [x] **Postacie poboczne** (`townNpcs.ts` czyste + testy, `townNpcWorld.ts`):
+      6 robotników w kaskach i kamizelkach (młotek, wiertarka z iskrami,
+      wałek, noszenie cegieł, miarka, przerwa na kawę; fajrant po zmroku)
+      i 6 traderów w kolorowych marynarkach (biurka, krzyk w ringu z
+      PRAWDZIWĄ linią tickera, ekran, radość po dzwonku, garbienie w zły
+      dzień). Podpisani BUD / TRD — to statyści, nie agenci.
+- [x] Brief poranny: sekcja „Fundusz” — wczorajsze zmiany graczy i lider od startu.
 
 **Gotowe, gdy:** po 2 tygodniach widzę ranking z benchmarkiem i małpą,
 a każda transakcja ma zapisany powód.

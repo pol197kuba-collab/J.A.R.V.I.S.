@@ -14,6 +14,7 @@ const quiet: BriefFacts = {
   failures: { count: 0, sample: null },
   budget: null,
   weather: null,
+  fund: null,
 };
 
 const facts = (patch: Partial<BriefFacts>): BriefFacts => ({ ...quiet, ...patch });
@@ -206,5 +207,29 @@ describe("composeBrief — powitanie", () => {
       "Witam, Panie Sławiński. Zapowiada się deszczowy dzień — 11 stopni, deszcz. " +
         "Parasol się dziś przyda.",
     );
+  });
+});
+
+describe("composeBrief — fundusz", () => {
+  it("melduje wczorajsze zmiany od najlepszego i lidera od startu", () => {
+    const brief = composeBrief(
+      facts({
+        fund: {
+          day: "2026-09-22",
+          yesterday: [
+            { label: "Sygnały", changePct: -0.21 },
+            { label: "AI", changePct: 0.42 },
+          ],
+          leader: { label: "Koszyk", returnPct: 4.85 },
+        },
+      }),
+    );
+    const fund = brief.sections.find((s) => s.kind === "fund")!;
+    expect(fund.lines[0]).toMatch(/^Wczoraj: AI .*, Sygnały /);
+    expect(fund.lines[1]).toMatch(/^Od startu prowadzi Koszyk/);
+  });
+
+  it("bez przeliczonego funduszu nie ma sekcji", () => {
+    expect(kinds(quiet)).not.toContain("fund");
   });
 });

@@ -21,8 +21,10 @@ import {
   type TownMap,
   type TownObject,
   type TownSlug,
+  type RoomId,
   type FloorKind,
 } from "./townMap";
+import { exchangePainters } from "./townExchangeArt";
 
 export const INK = "#2a2034";
 
@@ -265,11 +267,21 @@ const LEGS = {
     B: ["......oppo......", "......obbo......"],
   },
 } as const;
-type Look = {
+export type Look = {
   h: string;
   c: string;
   p: string;
-  acc: "butler" | "glasses" | "coat" | "bandana" | "helmet" | "scarf" | null;
+  acc:
+    | "butler"
+    | "glasses"
+    | "coat"
+    | "bandana"
+    | "helmet"
+    | "scarf"
+    // extras on the floor: builders' hard hat + hi-vis vest, traders' badge
+    | "hardhat"
+    | "badge"
+    | null;
 };
 const LOOKS: Record<TownSlug, Look> = {
   jarvis: { h: "#d4d7e0", c: "#2f3142", p: "#2f3142", acc: "butler" },
@@ -341,6 +353,16 @@ function accessorize(g: string[], view: "front" | "back" | "side", acc: Look["ac
   }
   if (acc === "scarf" && view !== "back")
     for (let x = 4; x <= 11; x++) if (g[10][x] === "c") setPx(g, x, 10, "y");
+  if (acc === "hardhat") {
+    // the hair becomes a yellow hard hat, a reflective stripe on the vest
+    for (let y = 0; y <= 3; y++)
+      for (let x = 0; x < 16; x++) if ("hH".includes(g[y][x])) setPx(g, x, y, "y");
+    for (let x = 0; x < 16; x++) if ("cC".includes(g[12][x])) setPx(g, x, 12, "w");
+  }
+  if (acc === "badge" && view === "front") {
+    setPx(g, 9, 10, "w");
+    setPx(g, 9, 11, "k");
+  }
 }
 function autoShade(g: string[]) {
   for (let y = 0; y < 16; y++)
@@ -353,7 +375,15 @@ function autoShade(g: string[]) {
 export type SpriteSet = Record<string, HTMLCanvasElement>;
 export function buildSprites(): Record<TownSlug, SpriteSet> {
   const out = {} as Record<TownSlug, SpriteSet>;
-  for (const [id, look] of Object.entries(LOOKS) as [TownSlug, Look][]) {
+  for (const [id, look] of Object.entries(LOOKS) as [TownSlug, Look][])
+    out[id] = buildLookSprites(look, id === "herald" ? "#ffd36b" : "#f2c94c");
+  return out;
+}
+
+/** Front/back/side × stand/walk sprites for any look (agents and extras). */
+export function buildLookSprites(look: Look, yellow = "#f2c94c"): SpriteSet {
+  const set: SpriteSet = {};
+  {
     const pal: Record<string, string> = {
       o: INK,
       e: INK,
@@ -364,7 +394,7 @@ export function buildSprites(): Record<TownSlug, SpriteSet> {
       k: "#4fd8f0",
       i: "#57b86a",
       r: "#d63b3b",
-      y: id === "herald" ? "#ffd36b" : "#f2c94c",
+      y: yellow,
       b: "#3b2b2b",
       h: look.h,
       H: shade(look.h, 0.75),
@@ -373,7 +403,6 @@ export function buildSprites(): Record<TownSlug, SpriteSet> {
       p: look.p,
       P: shade(look.p, 0.75),
     };
-    out[id] = {};
     for (const view of ["front", "back", "side"] as const) {
       for (const fr of ["S", "A", "B"] as const) {
         const g = (view === "front" ? FRONT : view === "back" ? BACK : SIDE).slice();
@@ -394,11 +423,11 @@ export function buildSprites(): Record<TownSlug, SpriteSet> {
             c2.fillRect(x, y, 1, 1);
           }),
         );
-        out[id][view + fr] = cv;
+        set[view + fr] = cv;
       }
     }
   }
-  return out;
+  return set;
 }
 
 // ── static layer ────────────────────────────────────────────────────────────
@@ -410,6 +439,8 @@ const FLOORS: Record<FloorKind, [string, string, string]> = {
   metal: ["#66728a", "#5c677e", "#8b97ad"],
   carpet: ["#7d4f8a", "#73477f", "#8e5f9b"],
   hall: ["#dcd2c2", "#d1c6b4", "#b6a993"],
+  exchange: ["#1f2538", "#232a3f", "#171c2c"],
+  concrete: ["#a9a59c", "#a19d93", "#86827a"],
 };
 
 export function buildStaticLayer(map: TownMap): HTMLCanvasElement {
@@ -481,6 +512,34 @@ export function buildStaticLayer(map: TownMap): HTMLCanvasElement {
       R(px + ((tx * 5) % 12) + 2, py, 1, 7, s);
       R(px + ((tx * 3 + 6) % 12) + 2, py + 8, 1, 7, s);
       if (rnd() < 0.4) R(px + Math.floor(rnd() * 14), py + Math.floor(rnd() * 14), 2, 1, b);
+    } else if (kind === "exchange") {
+      // polished dark marble: hairline seams, a gold inlay every 4 tiles
+      R(px, py, 16, 16, (tx + ty) % 2 ? a : b);
+      R(px, py + 15, 16, 1, s);
+      R(px + 15, py, 1, 16, s);
+      if (tx % 4 === 0) R(px, py, 1, 16, "#6e5a2e");
+      if (ty % 4 === 1) R(px, py, 16, 1, "#6e5a2e");
+      if (tx % 4 === 0 && ty % 4 === 1) R(px - 1, py - 1, 3, 3, "#c9a24a");
+      if ((tx * 7 + ty * 3) % 5 === 0) R(px + 3, py + 3, 3, 1, "rgba(255,255,255,0.18)");
+      if (rnd() < 0.35)
+        R(px + Math.floor(rnd() * 12), py + Math.floor(rnd() * 12), 3, 1, "#2e3653");
+    } else if (kind === "concrete") {
+      // raw screed: dust, hairline cracks, the odd paint splat
+      R(px, py, 16, 16, (tx + ty) % 3 ? a : b);
+      if (rnd() < 0.5) R(px + Math.floor(rnd() * 14), py + Math.floor(rnd() * 14), 2, 1, s);
+      if (rnd() < 0.25) {
+        const cx = px + Math.floor(rnd() * 10),
+          cy = py + Math.floor(rnd() * 10);
+        for (let i = 0; i < 5; i++) R(cx + i, cy + Math.floor(i / 2), 1, 1, s);
+      }
+      if (rnd() < 0.07)
+        R(
+          px + Math.floor(rnd() * 12),
+          py + Math.floor(rnd() * 12),
+          3,
+          2,
+          ["#3d7bd6", "#e05f5f", "#f2c94c"][Math.floor(rnd() * 3)],
+        );
     } else if (kind === "metal") {
       R(px, py, 16, 16, (tx + ty) % 2 ? a : b);
       g.globalAlpha = 0.35;
@@ -517,9 +576,23 @@ export function buildStaticLayer(map: TownMap): HTMLCanvasElement {
   const face = (tx: number, ty: number) => {
     const px = tx * TS;
     const py = ty * TS;
-    const room = ROOMS[roomOf[ty][tx] as TownSlug];
+    const room = ROOMS[roomOf[ty][tx] as RoomId];
     const f = room ? room.face : "#c9b48c";
-    if (f === "brick") {
+    if (f === "exchange") {
+      // dark panelling with a gold rail
+      R(px, py, 16, 16, "#1b2033");
+      R(px, py + 4, 16, 1, "#262d46");
+      R(px + 7, py, 1, 13, "#141829");
+      R(px, py + 11, 16, 1, "#c9a24a");
+    } else if (f === "plaster") {
+      // bare plaster, patched, with the bricks showing through
+      R(px, py, 16, 16, tx % 3 ? "#cfc7b8" : "#c6bdac");
+      if ((tx * 5 + ty) % 4 === 0) {
+        R(px + 2, py + 3, 9, 6, "#9a5a42");
+        for (let r = 0; r < 2; r++) R(px + 2, py + 5 + r * 3, 9, 1, "#6e3c2c");
+      }
+      if ((tx * 3) % 5 === 1) R(px + 9, py + 2, 4, 4, "#e2dccf");
+    } else if (f === "brick") {
       R(px, py, 16, 16, "#9a5a42");
       for (let r = 0; r < 4; r++) {
         R(px, py + r * 4 + 3, 16, 1, "#6e3c2c");
@@ -541,6 +614,7 @@ export function buildStaticLayer(map: TownMap): HTMLCanvasElement {
   };
 
   const PAINT: Partial<Record<TownObject["kind"], (o: TownObject) => void>> = {
+    ...exchangePainters({ g, R, outline, box, shadowBelow, rnd }),
     rug(o) {
       const x = o.tx * TS + 2,
         y = o.ty * TS + 2,
@@ -1640,16 +1714,16 @@ export function buildStaticLayer(map: TownMap): HTMLCanvasElement {
       const v = grid[ty][tx];
       if (v === GRASS) grass(tx * TS, ty * TS);
       else if (v === FLOOR) {
-        const room = ROOMS[roomOf[ty][tx] as TownSlug];
+        const room = ROOMS[roomOf[ty][tx] as RoomId];
         floor(tx * TS, ty * TS, room ? room.floor : "hall", tx, ty);
       }
     }
-  for (let y = 30; y < 32; y++)
-    for (let x = 21; x <= 22; x++) {
-      R(x * TS, y * TS, 16, 16, "#c9a46a");
-      R(x * TS + 3, y * TS + 5, 2, 1, "#b38a52");
-      R(x * TS + 10, y * TS + 11, 2, 1, "#b38a52");
-    }
+  // dirt path from the garden edge to the main entrance (west, y 30)
+  for (let x = 0; x <= 1; x++) {
+    R(x * TS, 30 * TS, 16, 16, "#c9a46a");
+    R(x * TS + 3, 30 * TS + 5, 2, 1, "#b38a52");
+    R(x * TS + 10, 30 * TS + 11, 2, 1, "#b38a52");
+  }
   for (let ty = 0; ty < TH; ty++)
     for (let tx = 0; tx < TW; tx++) {
       if (grid[ty][tx] !== FLOOR) continue;

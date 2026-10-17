@@ -14,7 +14,9 @@ import {
   HOME,
   BOARD_SPOTS,
   COFFEE_SPOT,
+  EXCHANGE_SPOT,
   ROOMS,
+  isSpareRoom,
   TS,
   WORLD_W,
   WORLD_H,
@@ -38,6 +40,9 @@ import {
 import { TownDog } from "./townDog";
 import { propAt, propById } from "./townProps";
 import { idleDelay, idlePlan } from "./townIdle";
+import { drawExchange, drawExchangeTicker } from "./townExchangeArt";
+import { NpcCrowd, type NpcEnv } from "./townNpcWorld";
+import { EXCHANGE_TRIP_CHANCE, metricFloorLine, type TownFund } from "./townFund";
 
 export type CharStatus = "idle" | "running" | "done" | "error" | "off";
 type Dir = "up" | "down" | "left" | "right";
@@ -92,6 +97,13 @@ const LIGHTS: readonly Light[] = OBJECTS.flatMap((o): Light[] => {
   if (o.kind === "softbox") return [{ x: cx, y: cy - 8, r: 34, rgb: "255,243,196", a: 0.4 }];
   if (o.kind === "fridge" || o.kind === "watercooler")
     return [{ x: cx, y: cy, r: 20, rgb: cool, a: 0.2 }];
+  // trading floor: the screens light the room after hours, the bull glints
+  if (o.kind === "bigscreen") return [{ x: cx, y: cy - 6, r: 110, rgb: "90,200,255", a: 0.42 }];
+  if (o.kind === "flipboard" || o.kind === "heatwall")
+    return [{ x: cx, y: cy - 6, r: 56, rgb: "255,210,120", a: 0.32 }];
+  if (o.kind === "tradedesk") return [{ x: cx, y: cy - 4, r: 30, rgb: "120,255,170", a: 0.3 }];
+  if (o.kind === "statue") return [{ x: cx, y: cy - 6, r: 40, rgb: "255,200,90", a: 0.4 }];
+  if (o.kind === "worklamp") return [{ x: cx, y: cy - 8, r: 58, rgb: "255,236,160", a: 0.6 }];
   return [];
 });
 
@@ -137,11 +149,18 @@ export class TownWorld {
   night = 0;
   /** Your companion. */
   readonly dog: TownDog;
+  /** The paper fund, as the trading floor shows it (null = not computed yet). */
+  fund: TownFund | null = null;
+  /** World time the opening bell was last rung (walk-mode prop). */
+  bellAt = -1e9;
+  /** Extras: builders in the rooms under construction, traders on the floor. */
+  private crowd: NpcCrowd;
 
   constructor() {
     // eslint-disable-next-line @typescript-eslint/no-this-alias -- the dog host reads live time
     const world = this;
     this.map = buildTownMap();
+    this.crowd = new NpcCrowd(this.map);
     this.sprites = buildSprites();
     this.staticLayer = buildStaticLayer(this.map);
     this.frame = document.createElement("canvas");
@@ -389,6 +408,26 @@ export class TownWorld {
       return;
     }
     if (this.reduceMotion) return;
+    // M.E.T.R.I.C. trades the paper fund: some of its strolls end on the
+    // floor, in front of the big screen, with the real result of the day
+    const fund = this.fund;
+    if (c.slug === "metric" && fund && plan === "stroll" && Math.random() < EXCHANGE_TRIP_CHANCE) {
+      this.idleTrip(c, async () => {
+        await this.walkTo(c.slug, EXCHANGE_SPOT);
+        if (this.onCall || c.recalled) return void (await this.goHome(c.slug));
+        this.face(c.slug, "up");
+        this.say(
+          c.slug,
+          metricFloorLine(fund),
+          2600,
+          "chart",
+          fund.mood === "down" ? "bad" : fund.mood === "up" ? "ok" : "plain",
+        );
+        await this.wait(3200 + Math.random() * 2500);
+        await this.goHome(c.slug);
+      });
+      return;
+    }
     if (plan === "coffee") {
       this.idleTrip(c, async () => {
         await this.walkTo(c.slug, COFFEE_SPOT);
@@ -452,6 +491,16 @@ export class TownWorld {
       }
     }
     this.dog.update(dt);
+    this.crowd.update(dt, this.time, this.npcEnv());
+  }
+
+  private npcEnv(): NpcEnv {
+    return {
+      fund: this.fund,
+      night: this.night,
+      bellAt: this.bellAt,
+      reduceMotion: this.reduceMotion,
+    };
   }
 
   /** Paint a character's front-facing sprite, scaled up, for the inspector. */
@@ -569,7 +618,7 @@ export class TownWorld {
     const tx = Math.floor(wx / TS);
     const ty = Math.floor(wy / TS);
     const rid = this.map.roomOf[ty]?.[tx];
-    return rid && rid !== "hall" && rid !== "user" ? (rid as TownSlug) : null;
+    return rid && rid !== "hall" && rid !== "user" && !isSpareRoom(rid) ? (rid as TownSlug) : null;
   }
 
   // ── render ────────────────────────────────────────────────────────────────
@@ -578,16 +627,16 @@ export class TownWorld {
     const t = this.time;
     f.drawImage(this.staticLayer, 0, 0);
     drawDynamic(f, t, (s) => this.status[s], this.cards);
+    drawExchange(f, t, this.fund, this.bellAt, this.reduceMotion);
     const order = Object.values(this.chars).sort((a, b) => a.y - b.y);
-    let dogDrawn = false;
-    for (const c of order) {
-      if (!dogDrawn && this.dog.y < c.y) {
-        this.dog.drawSprite(f, t);
-        dogDrawn = true;
-      }
-      this.drawChar(c, t);
-    }
-    if (!dogDrawn) this.dog.drawSprite(f, t);
+    // agents, the dog and the extras share one depth order (feet y)
+    const scene = [
+      ...order.map((c) => ({ y: c.y, draw: () => this.drawChar(c, t) })),
+      { y: this.dog.y, draw: () => this.dog.drawSprite(f, t) },
+      ...this.crowd.drawables(f, t, this.npcEnv()),
+    ].sort((a, b) => a.y - b.y);
+    for (const s of scene) s.draw();
+    drawExchangeTicker(f, t, this.fund, this.reduceMotion);
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = "#120d18";
@@ -631,13 +680,29 @@ export class TownWorld {
     f.fillStyle = "rgba(30,16,30,0.3)";
     f.fillRect(x - 5, y + 1, 10, 2);
     f.fillRect(x - 4, y, 8, 1);
+    // M.E.T.R.I.C. wears the fund's day: hunched after a loss (head and
+    // shoulders sink, a sweat drop), a little hop after a gain
+    const mood = c.slug === "metric" && !moving ? (this.fund?.mood ?? "flat") : "flat";
+    const hop = mood === "up" && !this.reduceMotion && Math.floor(t / 900) % 4 === 0 ? -1 : 0;
+    const sink = mood === "down" ? 3 : 0;
+    const blit = (dx: number) => {
+      if (sink) {
+        // legs as they are, upper body drawn 2px lower over them
+        f.drawImage(spr, 0, 10, 16, 6, dx, y - 4, 16, 6);
+        f.drawImage(spr, 0, 0, 16, 10, dx, y - 14 + sink, 16, 10);
+      } else f.drawImage(spr, dx, y - 14 + hop);
+    };
     if (c.dir === "left") {
       f.save();
-      f.translate(x + 8, y - 14);
+      f.translate(x + 8, 0);
       f.scale(-1, 1);
-      f.drawImage(spr, 0, 0);
+      blit(0);
       f.restore();
-    } else f.drawImage(spr, x - 8, y - 14);
+    } else blit(x - 8);
+    if (mood === "down" && Math.floor(t / 1400) % 3 !== 0) {
+      f.fillStyle = "#8fd3ff";
+      f.fillRect(x + 4, y - 12 + sink + (Math.floor(t / 200) % 3), 1, 2);
+    }
     f.globalAlpha = 1;
   }
 
@@ -663,7 +728,8 @@ export class TownWorld {
         const label = r.label.toUpperCase();
         const w = ctx.measureText(label).width + ls;
         const h = Math.round(ls * 1.5);
-        const s = toS((r.x0 + 1) * TS + 2, r.y0 * TS + 3);
+        const [sx, sy] = r.sign ?? [r.x0 + 1, r.y0];
+        const s = toS(sx * TS + 2, sy * TS + 3);
         pixelBox(ctx, s.x, s.y, w, h, Math.max(1, u - 1), "#5d3a29", INK);
         ctx.fillStyle = "#fbe9c9";
         ctx.fillText(label, s.x + ls / 2, s.y + h / 2 + 1);
@@ -833,6 +899,7 @@ export class TownWorld {
     const dogTag = this.dog.name.toUpperCase().slice(0, 10);
     const speakers: Speaker[] = [
       ...order.map((c) => ({ x: c.x, y: c.y, bubble: c.bubble, tag: TAG[c.slug] })),
+      ...this.crowd.speakers(),
       {
         x: this.dog.x,
         y: this.dog.y + 6,

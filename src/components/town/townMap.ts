@@ -1,16 +1,20 @@
 // Agent Town — the floor plan. Pure data + pathfinding, no DOM, so it is
 // unit-testable and shared by the renderer and the simulation.
 //
-// One building on a 44×32 grid of 16px tiles (¾ top-down, Pokémon-style):
-// three rooms on top, J.A.R.V.I.S.'s "Rdzeń" in the middle with lounges on
-// both sides, three rooms at the bottom, a strip of garden around it all.
+// One building on a 56×44 grid of 16px tiles (¾ top-down, Pokémon-style).
+// The original core (x 2–41, y 2–29): three rooms on top, J.A.R.V.I.S.'s
+// "Rdzeń" in the middle with lounges on both sides, three rooms at the
+// bottom. Around it two wings reached by corridors — an east corridor
+// (x 42–43) and a south one (y 30): the trading floor (Parkiet) and empty
+// rooms "w remoncie", ready for future modules. A strip of garden around
+// it all; the main entrance is the west end of the south corridor.
 // Each agent owns the room keyed by its slug; "user" is the human's terminal.
 
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
 export const TS = 16;
-export const TW = 44;
-export const TH = 32;
+export const TW = 56;
+export const TH = 44;
 export const WORLD_W = TW * TS;
 export const WORLD_H = TH * TS;
 
@@ -31,7 +35,16 @@ export const TOWN_AGENTS: readonly TownSlug[] = [
 export const isTownAgent = (slug: string): slug is TownSlug =>
   (TOWN_AGENTS as readonly string[]).includes(slug);
 
-export type FloorKind = "wood" | "wood2" | "lab" | "stone" | "metal" | "carpet" | "hall";
+export type FloorKind =
+  | "wood"
+  | "wood2"
+  | "lab"
+  | "stone"
+  | "metal"
+  | "carpet"
+  | "hall"
+  | "exchange"
+  | "concrete";
 export type Room = {
   x0: number;
   x1: number;
@@ -41,9 +54,40 @@ export type Room = {
   floor: FloorKind;
   /** wallpaper colour, or a named pattern */
   face: string;
+  /** Where the room's name sign hangs (tile coords), if not its top-left corner. */
+  sign?: readonly [number, number];
 };
 
-export const ROOMS: Record<TownSlug, Room> = {
+/** Rooms nobody lives in: the trading floor and the ones under construction. */
+export type SpareRoom = "exchange" | "build_e1" | "build_e2" | "build_e3" | "build_sw" | "build_se";
+export type RoomId = TownSlug | SpareRoom;
+export const isSpareRoom = (id: string): id is SpareRoom => id in SPARE_ROOMS;
+
+const UNDER_CONSTRUCTION = {
+  label: "W remoncie",
+  floor: "concrete",
+  face: "plaster",
+} as const;
+const SPARE_ROOMS: Record<SpareRoom, Room> = {
+  exchange: {
+    x0: 15,
+    x1: 41,
+    y0: 31,
+    y1: 41,
+    label: "Parkiet giełdowy",
+    floor: "exchange",
+    face: "exchange",
+    // the wall is all screens — the sign hangs in the corridor over the door
+    sign: [23.4, 29.9],
+  },
+  build_e1: { x0: 44, x1: 53, y0: 2, y1: 10, ...UNDER_CONSTRUCTION },
+  build_e2: { x0: 44, x1: 53, y0: 10, y1: 20, ...UNDER_CONSTRUCTION },
+  build_e3: { x0: 44, x1: 53, y0: 20, y1: 29, ...UNDER_CONSTRUCTION },
+  build_sw: { x0: 2, x1: 15, y0: 31, y1: 41, ...UNDER_CONSTRUCTION },
+  build_se: { x0: 41, x1: 53, y0: 31, y1: 41, ...UNDER_CONSTRUCTION },
+};
+
+export const ROOMS: Record<RoomId, Room> = {
   insight: { x0: 2, x1: 15, y0: 2, y1: 10, label: "Archiwum", floor: "wood", face: "#b9a27e" },
   metric: { x0: 15, x1: 28, y0: 2, y1: 10, label: "Laboratorium", floor: "lab", face: "#cfdfe4" },
   forge: { x0: 28, x1: 41, y0: 2, y1: 10, label: "Kuźnia", floor: "stone", face: "brick" },
@@ -51,6 +95,7 @@ export const ROOMS: Record<TownSlug, Room> = {
   shield: { x0: 2, x1: 15, y0: 21, y1: 29, label: "Skarbiec", floor: "metal", face: "steel" },
   user: { x0: 15, x1: 28, y0: 21, y1: 29, label: "Twój terminal", floor: "wood", face: "#d8c7a6" },
   herald: { x0: 28, x1: 41, y0: 21, y1: 29, label: "Studio", floor: "carpet", face: "#a8789c" },
+  ...SPARE_ROOMS,
 };
 
 export const DOORS: readonly [number, number][] = [
@@ -78,6 +123,37 @@ export const DOORS: readonly [number, number][] = [
   [28, 17],
   [21, 29],
   [22, 29],
+  // core → east corridor: both hall rows and the games room
+  [41, 11],
+  [41, 15],
+  [41, 16],
+  [41, 20],
+  // east wing (doors in the west walls)
+  [44, 6],
+  [44, 7],
+  [44, 15],
+  [44, 16],
+  [44, 25],
+  [44, 26],
+  // south wing (doors cut through the cap and the face row)
+  [8, 31],
+  [9, 31],
+  [8, 32],
+  [9, 32],
+  [21, 31],
+  [22, 31],
+  [21, 32],
+  [22, 32],
+  [34, 31],
+  [35, 31],
+  [34, 32],
+  [35, 32],
+  [47, 31],
+  [48, 31],
+  [47, 32],
+  [48, 32],
+  // main entrance: west end of the south corridor
+  [2, 30],
 ];
 
 export type ObjKind =
@@ -156,7 +232,28 @@ export type ObjKind =
   | "tvconsole"
   | "bush"
   | "flowerbed"
-  | "lamppost";
+  | "lamppost"
+  // trading floor (Parkiet) — screens and statue animated from real fund data
+  | "flipboard"
+  | "bigscreen"
+  | "heatwall"
+  | "pit"
+  | "statue"
+  | "tradedesk"
+  | "bell"
+  | "velvet"
+  // rooms under construction
+  | "scaffold"
+  | "cone"
+  | "paint"
+  | "bricks"
+  | "drywall"
+  | "mixer"
+  | "worklamp"
+  | "tarp"
+  | "ucsign"
+  | "tape"
+  | "planboard";
 export type TownObject = {
   kind: ObjKind;
   tx: number;
@@ -172,6 +269,8 @@ export type TownObject = {
     monitor?: boolean;
     pc?: boolean;
     cams?: boolean;
+    /** Fund player whose result the object shows (trading desks). */
+    player?: string;
   };
 };
 
@@ -323,16 +422,109 @@ O("rug", 31, 14, 7, 4, false, { c: "#4a6a8a", b: "#34506c" });
 O("jukebox", 31, 12);
 O("tvconsole", 34, 12, 2, 1);
 O("foosball", 38, 17, 2, 1);
-// Garden
+// Corridors to the new wings — runners like the old halls
+O("rug", 42, 3, 2, 27, false, { c: "#9a7a5a", b: "#7a5a3e" });
+O("rug", 3, 30, 50, 1, false, { c: "#9a7a5a", b: "#7a5a3e" });
+O("mat", 3, 30, 1, 1, false);
+O("plant", 42, 29);
+O("plant", 52, 30);
+O("plant", 43, 3);
+
+// Parkiet — the trading floor (interior x 16–40, y 33–40). Wall: ranking
+// flip-board, the big NAV screen, the instrument heat wall; an LED ticker
+// runs along the wall's foot. Floor: the pit with the bull/bear statue,
+// trading desks (one per fund player), the opening bell.
+O("flipboard", 16, 32, 5, 1, false);
+O("bigscreen", 23, 32, 11, 1, false);
+O("heatwall", 36, 32, 5, 1, false);
+O("pit", 24, 35, 9, 5, false);
+O("statue", 28, 37);
+O("tradedesk", 17, 35, 2, 1, true, { player: "ai_learned" });
+O("tradedesk", 20, 35, 2, 1, true, { player: "ai" });
+O("tradedesk", 17, 38, 2, 1, true, { player: "signals" });
+O("tradedesk", 34, 35, 2, 1, true, { player: "basket" });
+O("tradedesk", 37, 35, 2, 1, true, { player: "monkey" });
+O("tradedesk", 34, 38, 2, 1, true);
+O("tradedesk", 37, 38, 2, 1, true);
+O("tradedesk", 20, 38, 2, 1, true);
+for (const [x, y] of [
+  [17, 36],
+  [20, 36],
+  [17, 39],
+  [20, 39],
+  [34, 36],
+  [37, 36],
+  [34, 39],
+  [37, 39],
+] as const)
+  O("chair", x, y, 1, 1, false);
+O("bell", 39, 34);
+O("velvet", 24, 34, 3, 1, false);
+O("velvet", 30, 34, 3, 1, false);
+O("plant", 16, 40);
+O("plant", 40, 40);
+
+// Rooms under construction — empty shells waiting for the next modules
+// east wing, north
+O("tarp", 46, 4, 3, 2, false);
+O("scaffold", 50, 5, 2, 2);
+O("paint", 52, 4);
+O("bricks", 46, 8, 2, 1);
+O("cone", 51, 8);
+O("worklamp", 45, 9);
+O("ucsign", 48, 3, 2, 1, false);
+O("tape", 44, 6, 1, 2, false);
+// east wing, middle
+O("mixer", 50, 13, 2, 2);
+O("drywall", 46, 12, 2, 1);
+O("ladder", 52, 16);
+O("cone", 47, 18);
+O("cone", 48, 18);
+O("paint", 45, 19);
+O("ucsign", 48, 11, 2, 1, false);
+O("tape", 44, 15, 1, 2, false);
+// east wing, south
+O("scaffold", 49, 23, 2, 2);
+O("crate", 46, 27);
+O("bricks", 50, 27, 2, 1);
+O("cone", 46, 23);
+O("worklamp", 52, 27);
+O("ucsign", 47, 21, 2, 1, false);
+O("tape", 44, 25, 1, 2, false);
+// south-west
+O("scaffold", 3, 33, 2, 2);
+O("planboard", 7, 35);
+O("tarp", 9, 36, 3, 2, false);
+O("mixer", 12, 37, 2, 2);
+O("cone", 5, 39);
+O("cone", 6, 39);
+O("bricks", 11, 34, 2, 1);
+O("worklamp", 3, 40);
+O("ucsign", 11, 32, 2, 1, false);
+O("tape", 8, 31, 2, 1, false);
+// south-east
+O("scaffold", 50, 33, 2, 2);
+O("drywall", 43, 34, 2, 1);
+O("paint", 45, 34);
+O("paint", 46, 34);
+O("tarp", 44, 37, 3, 2, false);
+O("cone", 49, 39);
+O("worklamp", 52, 40);
+O("ucsign", 43, 32, 2, 1, false);
+O("tape", 47, 31, 2, 1, false);
+
+// Garden (ring x 0–1 / 54–55, y 0–1 / 42–43; entrance path at y 30 west)
 for (const [x, y] of [
   [0, 0],
-  [42, 0],
-  [0, 30],
-  [42, 30],
+  [54, 0],
+  [0, 42],
+  [54, 42],
   [0, 13],
-  [42, 13],
-  [11, 30],
-  [31, 30],
+  [54, 13],
+  [54, 28],
+  [11, 42],
+  [31, 42],
+  [44, 42],
 ] as const)
   O("tree", x, y, 2, 2, false);
 for (const [x, y] of [
@@ -342,22 +534,28 @@ for (const [x, y] of [
   [25, 1],
   [33, 0],
   [38, 1],
+  [45, 0],
+  [50, 1],
   [0, 5],
   [1, 9],
   [0, 20],
   [1, 25],
-  [42, 6],
-  [43, 10],
-  [42, 22],
-  [43, 26],
+  [0, 35],
+  [1, 39],
+  [54, 6],
+  [55, 10],
+  [54, 22],
+  [55, 35],
+  [54, 38],
 ] as const)
   O("bush", x, y, 1, 1, false);
-O("flowerbed", 5, 30, 3, 1, false);
-O("flowerbed", 15, 30, 4, 1, false);
-O("flowerbed", 25, 30, 4, 1, false);
-O("flowerbed", 35, 30, 3, 1, false);
-O("lamppost", 20, 30, 1, 1, false);
-O("lamppost", 23, 30, 1, 1, false);
+O("flowerbed", 5, 42, 3, 1, false);
+O("flowerbed", 16, 42, 4, 1, false);
+O("flowerbed", 25, 42, 4, 1, false);
+O("flowerbed", 36, 42, 3, 1, false);
+O("flowerbed", 48, 42, 3, 1, false);
+O("lamppost", 0, 28, 1, 1, false);
+O("lamppost", 1, 32, 1, 1, false);
 
 export const OBJECTS: readonly TownObject[] = OBJ;
 
@@ -375,15 +573,19 @@ export function buildTownMap(): TownMap {
     grid[y][x] = v;
     if (room) roomOf[y][x] = room;
   };
-  for (let y = 2; y <= 29; y++) for (let x = 2; x <= 41; x++) set(x, y, FLOOR, "hall");
-  for (let x = 2; x <= 41; x++) {
+  for (let y = 2; y <= 41; y++) for (let x = 2; x <= 53; x++) set(x, y, FLOOR, "hall");
+  // outer walls
+  for (let x = 2; x <= 53; x++) {
     set(x, 2, CAP);
-    set(x, 29, CAP);
+    set(x, 41, CAP);
   }
-  for (let y = 2; y <= 29; y++) {
+  for (let y = 2; y <= 41; y++) {
     set(2, y, CAP);
-    set(41, y, CAP);
+    set(53, y, CAP);
   }
+  // the original building's shell, now inner walls along the corridors
+  for (let x = 2; x <= 41; x++) set(x, 29, CAP);
+  for (let y = 2; y <= 29; y++) set(41, y, CAP);
   for (const [id, r] of Object.entries(ROOMS)) {
     for (let y = r.y0; y <= r.y1; y++)
       for (let x = r.x0; x <= r.x1; x++) {
@@ -395,7 +597,9 @@ export function buildTownMap(): TownMap {
   }
   for (const [x, y] of DOORS) set(x, y, FLOOR);
   // doorways cut through a north wall's face row belong to the room below
-  for (const [x, y] of DOORS) if (y === 22) roomOf[y][x] = roomOf[y + 1][x];
+  for (const [x, y] of DOORS)
+    for (const [id, r] of Object.entries(ROOMS))
+      if (y === r.y0 + 1 && x > r.x0 && x < r.x1) roomOf[y][x] = id;
 
   const blocked = grid.map((row) => row.map((v) => v !== FLOOR));
   for (const o of OBJECTS)
@@ -437,6 +641,8 @@ export const BOARD_SPOTS: readonly Tile[] = [
   [26, 16],
 ];
 export const COFFEE_SPOT: Tile = [3, 13];
+/** Where M.E.T.R.I.C. stands on the trading floor, watching the big screen. */
+export const EXCHANGE_SPOT: Tile = [28, 34];
 /** A meeting at the Core table: J.A.R.V.I.S. at its head, agents along its south side. */
 export const MEETING_HEAD: Tile = [18, 16];
 export const MEETING_SEATS: readonly Tile[] = [
@@ -448,7 +654,7 @@ export const MEETING_SEATS: readonly Tile[] = [
   [21, 17],
 ];
 
-export function roomArea(slug: TownSlug) {
+export function roomArea(slug: RoomId) {
   const r = ROOMS[slug];
   return { x0: r.x0 + 1, x1: r.x1 - 1, y0: r.y0 + 2, y1: r.y1 - 1 };
 }
