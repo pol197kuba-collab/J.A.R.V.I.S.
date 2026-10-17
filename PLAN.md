@@ -171,16 +171,33 @@ prognozami = gotowa, obiektywna ocena.
 **arenę na historii**, a dla pozostałych agentów potrzebna jest ocena od
 człowieka i sędziego-modelu.
 
-### S2.1 — warianty w runtime
+### S2.1 — warianty w runtime — **zrobione 2026-10-17**
 
-- [ ] Tabele `agent_variants` (owner_id, agent_slug, generation, parent_ids[],
+- [x] Tabele `agent_variants` (owner_id, agent_slug, generation, parent_ids[],
       prompt, mutation_note, status `candidate|active|champion|retired`) i
-      `variant_scores` (variant_id, run_id/prediction_id, score, scorer, created_at).
-- [ ] `agent_runs.variant_id`, `market_predictions.variant_id`.
-- [ ] Runtime losuje wariant: champion większość ruchu, pretendenci resztę
-      (Thompson sampling — czysta funkcja, testy).
-- [ ] **Sekcje zablokowane:** persona, kontrakty narzędzi i zasady
-      bezpieczeństwa są poza mutacją (znaczniki w prompcie), limit długości.
+      `variant_scores` (variant_id, run_id/prediction_id, score 0..1, scorer
+      `outcome|arena|human|judge|cost`). Najwyżej jeden champion na agenta
+      (indeks unikalny), oceny tej samej prognozy/biegu nie dublują się.
+      Statystyki do losowania: RPC `agent_variant_stats`.
+- [x] `agent_runs.variant_id`, `market_predictions.variant_id`.
+- [x] Losowanie (`src/lib/darwin/bandit.ts`, testy): champion 80% ruchu,
+      pretendenci (`active`) resztę wg Thompsona na Beta(ocen). `candidate`
+      nie gra na żywo — tylko arena (S2.2).
+- [x] **Sekcje zablokowane** `[[LOCK nazwa]]…[[/LOCK]]` (`prompt.ts`, testy):
+      potomek nie może zmienić/usunąć/dodać blokady ani zmienić ich
+      kolejności; limit 8000 znaków i najwyżej ×1,5 (+400) względem rodzica.
+- [x] **Typer** jako pseudo-agent `typer`: przy pierwszej prognozie obecny
+      prompt zapisuje się jako champion pokolenia 0 (po zdjęciu znaczników
+      identyczny jak dotąd). Zablokowane: rola, zasady 1–2 (nie wymyślaj
+      liczb, jak liczy się wynik), zasada 6 i format JSON; mutować wolno
+      zasady 3–5. Ten sam wariant pisze prognozy `ai` i `ai_learned`.
+- [x] **Agenci-członkowie zespołu**: runtime bierze wariant, jeśli istnieje
+      (inaczej `config.system_prompt` jak dotąd). J.A.R.V.I.S. poza
+      Darwinem — jego prompt to persona + kontrakty narzędzi.
+- [x] Każdy błąd bazy przy losowaniu = zwykły prompt; prognozy i agenci
+      działają także przed wejściem migracji.
+- Na później (S2.4): gdy agent ma warianty, pole „System prompt override”
+  w Agent Hub nie działa — panel laboratorium musi to pokazać.
 
 ### S2.2 — ocena (fitness)
 
