@@ -11,6 +11,11 @@ import {
   roomArea,
   type Tile,
   type TownSlug,
+  EXCHANGE_SPOT,
+  OBJECTS,
+  DOORS,
+  TW,
+  TH,
 } from "./townMap";
 
 const map = buildTownMap();
@@ -75,5 +80,51 @@ describe("meeting at the Core table", () => {
         expect(same || findPath(map.blocked, HOME[from], t).length > 0).toBe(true);
       }
     }
+  });
+});
+
+describe("the new wings", () => {
+  const map = buildTownMap();
+  const spare = ["exchange", "build_e1", "build_e2", "build_e3", "build_sw", "build_se"] as const;
+
+  it("every spare room is reachable from your terminal and owns its interior", () => {
+    for (const id of spare) {
+      const a = roomArea(id);
+      // a walkable tile inside the room, nearest its middle
+      const cx = Math.floor((a.x0 + a.x1) / 2);
+      let goal: [number, number] | null = null;
+      for (let y = a.y0; y <= a.y1 && !goal; y++)
+        for (let x = a.x0; x <= a.x1 && !goal; x++)
+          if (!map.blocked[y][x] && Math.abs(x - cx) < 6) goal = [x, y];
+      expect(goal, id).not.toBeNull();
+      expect(findPath(map.blocked, HOME.user, goal!).length, id).toBeGreaterThan(0);
+      expect(map.roomOf[a.y0][a.x0]).toBe(id);
+      expect(map.roomOf[a.y1][a.x1]).toBe(id);
+    }
+  });
+
+  it("M.E.T.R.I.C. can walk to the trading floor and back", () => {
+    expect(map.blocked[EXCHANGE_SPOT[1]][EXCHANGE_SPOT[0]]).toBe(false);
+    expect(map.roomOf[EXCHANGE_SPOT[1]][EXCHANGE_SPOT[0]]).toBe("exchange");
+    expect(findPath(map.blocked, HOME.metric, EXCHANGE_SPOT).length).toBeGreaterThan(0);
+    expect(findPath(map.blocked, EXCHANGE_SPOT, HOME.metric).length).toBeGreaterThan(0);
+  });
+
+  it("no blocking furniture sits on a doorway, everything is on the map", () => {
+    for (const o of OBJECTS) {
+      expect(o.tx + o.w, o.kind).toBeLessThanOrEqual(TW);
+      expect(o.ty + o.h, o.kind).toBeLessThanOrEqual(TH);
+      if (!o.block) continue;
+      for (const [dx, dy] of DOORS)
+        expect(
+          dx >= o.tx && dx < o.tx + o.w && dy >= o.ty && dy < o.ty + o.h,
+          `${o.kind}@${dx},${dy}`,
+        ).toBe(false);
+    }
+  });
+
+  it("the main entrance (west) leads into the building", () => {
+    expect(map.blocked[30][2]).toBe(false);
+    expect(findPath(map.blocked, [2, 30], HOME.user).length).toBeGreaterThan(0);
   });
 });

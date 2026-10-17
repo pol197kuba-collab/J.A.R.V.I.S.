@@ -23,6 +23,8 @@ import { useAgentChatChannel } from "@/lib/ai/useAgentChatChannel";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { cn } from "@/lib/utils";
 import { TOWN_AGENTS, TS, VISIT, WORLD_H, WORLD_W, type TownSlug } from "./townMap";
+import { townFund } from "./townFund";
+import { getFund } from "@/lib/fund/fund.functions";
 import { AGENT_COLOR } from "./townArt";
 import { TAG, TownWorld, type Camera, type CharStatus } from "./townWorld";
 import { TownDirector, characterStatus, isActive, type TownCommand } from "./townDirector";
@@ -136,6 +138,15 @@ export function TownView() {
     refetchInterval: 5 * 60_000,
   });
   const trouble = useMemo(() => providerTrouble(runs, Date.now()), [runs]);
+  // the paper fund for the trading floor — same cache key as /rynki
+  const fetchFund = useServerFn(getFund);
+  const { data: fundView, isLoading: fundLoading } = useQuery({
+    queryKey: ["fund"],
+    queryFn: () => fetchFund(),
+    staleTime: 5 * 60_000,
+    refetchInterval: 10 * 60_000,
+  });
+  const fund = useMemo(() => townFund(fundView), [fundView]);
   const fetchNotifications = useServerFn(listNotifications);
   const { data: notifications, isFetched: notificationsFetched } = useQuery({
     queryKey: ["notifications", "list"],
@@ -454,6 +465,7 @@ export function TownView() {
         }),
       );
       w.vaultAlarm = !!trouble || budget?.level === "over";
+      w.fund = fund;
       const forced = import.meta.env.DEV
         ? (window as unknown as { __townNight?: number }).__townNight
         : undefined;
@@ -464,7 +476,7 @@ export function TownView() {
     sync();
     const id = window.setInterval(sync, 1000);
     return () => window.clearInterval(id);
-  }, [runs, summaries, commands, notes, seenFaults, trouble, budget]);
+  }, [runs, summaries, commands, notes, seenFaults, trouble, budget, fund]);
 
   // ── canvas: size, camera, render loop ────────────────────────────────────
   const clampCam = useCallback(() => {
@@ -1072,6 +1084,9 @@ export function TownView() {
                     documentsError,
                     budget,
                     budgetLoading,
+                    fund,
+                    fundView,
+                    fundLoading,
                     trouble,
                     navigate: (to) => void navigate({ to }),
                     log: pushLog,

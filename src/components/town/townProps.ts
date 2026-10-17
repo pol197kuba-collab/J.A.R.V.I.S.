@@ -16,7 +16,13 @@ export type PropKind =
   | "pingpong"
   | "globe"
   | "whiteboard"
-  | "vault";
+  | "vault"
+  // trading floor (Parkiet) and the rooms under construction
+  | "ranking"
+  | "statue"
+  | "bell"
+  | "terminal"
+  | "plan";
 
 export type TownProp = {
   id: string;
@@ -160,6 +166,57 @@ export const PROPS: readonly TownProp[] = [
     prompt: "Skarbiec",
     stand: row(23, 3, 5),
     anchor: [4.5, 21.6],
+  },
+  {
+    id: "fund-ranking",
+    kind: "ranking",
+    name: "Parkiet: tablica rankingu",
+    prompt: "Ranking",
+    stand: row(33, 16, 19),
+    anchor: [18, 31.2],
+  },
+  {
+    id: "fund-statue",
+    kind: "statue",
+    name: "Posąg parkietu",
+    prompt: "Byk czy niedźwiedź?",
+    stand: [
+      [28, 36],
+      [27, 37],
+      [29, 37],
+    ],
+    anchor: [28.5, 35.4],
+  },
+  {
+    id: "fund-bell",
+    kind: "bell",
+    name: "Dzwon otwarcia sesji",
+    prompt: "Zadzwoń",
+    stand: [
+      [38, 34],
+      [40, 34],
+      [39, 35],
+    ],
+    anchor: [39.5, 32.6],
+  },
+  {
+    id: "fund-terminal",
+    kind: "terminal",
+    name: "Terminal tradera AI",
+    prompt: "Transakcje",
+    stand: row(36, 20, 21),
+    anchor: [21, 34.2],
+  },
+  {
+    id: "rebuild-plan",
+    kind: "plan",
+    name: "Plan rozbudowy",
+    prompt: "Plan",
+    stand: [
+      [7, 36],
+      [8, 35],
+    ],
+    anchor: [7.5, 33.4],
   },
 ];
 
