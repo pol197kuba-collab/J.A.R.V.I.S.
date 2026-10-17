@@ -194,8 +194,9 @@ describe("kMeans", () => {
   it("liczba gromad rośnie z liczbą gwiazd, w granicach 1–12", () => {
     expect(chooseClusterCount(0)).toBe(0);
     expect(chooseClusterCount(3)).toBe(1);
-    expect(chooseClusterCount(20)).toBe(2);
-    expect(chooseClusterCount(400)).toBe(10);
+    expect(chooseClusterCount(20)).toBe(3);
+    expect(chooseClusterCount(75)).toBe(6);
+    expect(chooseClusterCount(200)).toBe(10);
     expect(chooseClusterCount(50_000)).toBe(12);
   });
 

@@ -16,6 +16,7 @@ import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as FeedRouteImport } from './routes/feed'
 import { Route as JarvisRouteImport } from './routes/jarvis'
 import { Route as McpRouteImport } from './routes/mcp'
+import { Route as MozgRouteImport } from './routes/mozg'
 import { Route as NotesRouteImport } from './routes/notes'
 import { Route as PaliwaRouteImport } from './routes/paliwa'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
@@ -67,6 +68,11 @@ const JarvisRoute = JarvisRouteImport.update({
 const McpRoute = McpRouteImport.update({
   id: '/mcp',
   path: '/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MozgRoute = MozgRouteImport.update({
+  id: '/mozg',
+  path: '/mozg',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NotesRoute = NotesRouteImport.update({
@@ -166,6 +172,7 @@ export interface FileRoutesByFullPath {
   '/feed': typeof FeedRoute
   '/jarvis': typeof JarvisRoute
   '/mcp': typeof McpRoute
+  '/mozg': typeof MozgRoute
   '/notes': typeof NotesRoute
   '/paliwa': typeof PaliwaRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -192,6 +199,7 @@ export interface FileRoutesByTo {
   '/feed': typeof FeedRoute
   '/jarvis': typeof JarvisRoute
   '/mcp': typeof McpRoute
+  '/mozg': typeof MozgRoute
   '/notes': typeof NotesRoute
   '/paliwa': typeof PaliwaRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -219,6 +227,7 @@ export interface FileRoutesById {
   '/feed': typeof FeedRoute
   '/jarvis': typeof JarvisRoute
   '/mcp': typeof McpRoute
+  '/mozg': typeof MozgRoute
   '/notes': typeof NotesRoute
   '/paliwa': typeof PaliwaRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -247,6 +256,7 @@ export interface FileRouteTypes {
     | '/feed'
     | '/jarvis'
     | '/mcp'
+    | '/mozg'
     | '/notes'
     | '/paliwa'
     | '/reset-password'
@@ -273,6 +283,7 @@ export interface FileRouteTypes {
     | '/feed'
     | '/jarvis'
     | '/mcp'
+    | '/mozg'
     | '/notes'
     | '/paliwa'
     | '/reset-password'
@@ -299,6 +310,7 @@ export interface FileRouteTypes {
     | '/feed'
     | '/jarvis'
     | '/mcp'
+    | '/mozg'
     | '/notes'
     | '/paliwa'
     | '/reset-password'
@@ -326,6 +338,7 @@ export interface RootRouteChildren {
   FeedRoute: typeof FeedRoute
   JarvisRoute: typeof JarvisRoute
   McpRoute: typeof McpRoute
+  MozgRoute: typeof MozgRoute
   NotesRoute: typeof NotesRoute
   PaliwaRoute: typeof PaliwaRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
@@ -394,6 +407,13 @@ declare module '@tanstack/react-router' {
       path: '/mcp'
       fullPath: '/mcp'
       preLoaderRoute: typeof McpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mozg': {
+      id: '/mozg'
+      path: '/mozg'
+      fullPath: '/mozg'
+      preLoaderRoute: typeof MozgRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/notes': {
@@ -526,6 +546,7 @@ const rootRouteChildren: RootRouteChildren = {
   FeedRoute: FeedRoute,
   JarvisRoute: JarvisRoute,
   McpRoute: McpRoute,
+  MozgRoute: MozgRoute,
   NotesRoute: NotesRoute,
   PaliwaRoute: PaliwaRoute,
   ResetPasswordRoute: ResetPasswordRoute,

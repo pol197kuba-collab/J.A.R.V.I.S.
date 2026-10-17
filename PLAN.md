@@ -68,7 +68,7 @@ etapu sprawdzana na wąskim ekranie (portret) i w PWA na iPhonie.
       odbicie, skala) i **ciepły start UMAP od wczorajszych pozycji** —
       bez niego jedna nowa notatka przestawiała galaktykę (dryf ~0,75 przy
       promieniu 1), z nim ~0,07–0,10 przy 20 nowych gwiazdach,
-      k-średnich na 3D, nazwy gromad ze słów (TF-IDF) — 25 testów.
+      k-średnich na 3D (√(n/2) gromad, max 12), nazwy gromad ze słów (TF-IDF).
 - [x] Pełny układ nocą: `scripts/brain-layout.ts` + `brain-layout.yml`
       (03:40) — poza aplikacją, bo UMAP to sekundy CPU, a serwer to
       Cloudflare Worker. 2000 gwiazd ≈ 7,5 s.
@@ -83,28 +83,33 @@ etapu sprawdzana na wąskim ekranie (portret) i w PWA na iPhonie.
 - Zadania (`tasks`) świadomie poza Mózgiem: nie mają embeddingów i są
   krótkotrwałe; wrócić do tego, jeśli galaktyka będzie za uboga.
 
-### S1.2 — scena WIEDZA (mobile-first)
+### S1.2 — scena WIEDZA (mobile-first) — **zrobione 2026-10-17**
 
-- [ ] Trasa `/mozg` z R3F: instanced points (jedno wywołanie rysowania na
-      wszystkie gwiazdy), bloom, sterowanie orbitalne.
-- [ ] Kolor = typ źródła (tokeny `--primary`, `--accent`, `--reactor`, `--success`),
-      jasność = świeżość, rozmiar = waga (`importance`).
-- [ ] Wyszukiwarka → kamera przelatuje do gwiazdy. Etykiety gromad w przestrzeni.
-- [ ] Klik/tap → karta szczegółów; „otwórz” → notatka/dokument (`openDocumentBus`).
-- [ ] **Telefon:**
-  - jeden palec = obrót, dwa palce = zoom (pinch) i przesuwanie,
-    podwójny tap = przybliż do gwiazdy; `touch-action: none` na canvasie,
-    żeby gest nie przewijał strony;
-  - **brak hovera** — podpis i szczegóły po tapnięciu, w wysuwanej od dołu
-    karcie (bottom sheet) zamiast dymka; cele dotyku ≥ 44 px;
-    tapnięcie w gwiazdę z tolerancją (promień trafienia większy niż kropka);
-  - wydajność: DPR ≤ 1,5, adaptacyjnie wyłączany bloom przy spadku FPS,
-    limit etykiet w kadrze, scena pauzuje, gdy karta jest w tle;
-  - układ: panel wyszukiwania i przełącznik trybów u góry, karta u dołu,
-    z `safe-area-inset`; container queries, nie warianty viewportu;
-  - widok **LISTA** jako alternatywa dla słabszych telefonów i dostępności
-    (gromady → elementy), ten sam stan wyszukiwania.
-- [ ] Wygląd w trybie HUD i TOWN.
+- [x] Trasa `/mozg` (menu: Core → Mózg). Wszystkie gwiazdy to jedno
+      wywołanie rysowania (THREE.Points z własnym shaderem), bloom,
+      sterowanie orbitalne; three.js ładowany dopiero na tej stronie.
+- [x] Kolor = typ (wspomnienia `--reactor`, notatki `--success`,
+      dokumenty `--accent` — rozróżnialne w HUD i w TOWN, gdzie `--primary`
+      = `--reactor`), jasność = świeżość, rozmiar = waga.
+- [x] Wyszukiwarka bez polskich znaków (gromady też), Enter / wynik →
+      przelot kamery; wyniki rozświetlone, reszta przygaszona. Etykiety gromad.
+- [x] Karta szczegółów (treść, tagi, „Najbliżej w Mózgu” — 5 sąsiadów do
+      tapnięcia), „Przybliż”, przejście do Notatek / Dokumentów.
+      (`openDocumentBus` dotyczy wygenerowanych plików, nie wgranych
+      dokumentów RAG — stąd link do `/documents`.)
+- [x] **Telefon:** jeden palec = obrót, dwa = zoom i przesuwanie, podwójny
+      tap = przybliż; `touch-none` na scenie; tapnięcie z tolerancją 28 px
+      (mysz 14 px); karta od dołu z `safe-area-inset`, cele dotyku ≥ 44 px;
+      **obraz kamery przesuwa się w górę, gdy karta jest otwarta** — inaczej
+      wybrana gwiazda lądowała pod kartą; DPR ≤ 1,5, bloom wyłączany przy
+      spadku FPS; pole wyszukiwania 16 px (iOS nie przybliża strony).
+- [x] Widok **LISTA** (gromady → elementy, ten sam stan wyszukiwania i ta
+      sama karta); jedyny tryb na urządzeniach bez WebGL.
+- [x] Pusty Mózg i błąd ładowania — z wyjaśnieniem i przejściem do
+      Notatek / Dokumentów.
+- [x] Sprawdzone na zrzutach (Playwright, makieta z 600 gwiazdami):
+      telefon 390 px w HUD i TOWN, lista, pusty stan, desktop 1440 px; bez
+      poziomego przewijania; tap w pustkę zamyka, tap w gwiazdę otwiera kartę.
 
 ### S1.3 — Mózg żyje
 
