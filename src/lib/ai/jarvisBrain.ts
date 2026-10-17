@@ -146,6 +146,13 @@ Allowed values for "action": ${JARVIS_ACTIONS.join(", ")}.
   room"). System otworzy moduł Vision i wykona analizę obrazu — w "speech"
   krótko potwierdź rozpoczęcie skanowania.
 
+- Użyj "scan_receipt" / "scan_odometer" / "scan_document" / "scan_fridge",
+  gdy użytkownik prosi o skan KONKRETNEJ rzeczy: paragonu ("zeskanuj
+  paragon", "dodaj paragon do wydatków"), licznika auta / przebiegu /
+  tankowania, dokumentu / pisma / faktury / umowy, lodówki ("co ugotować
+  z tego, co mam w lodówce"). Vision otworzy się w tym trybie i zrobi skan;
+  zapis nastąpi dopiero po potwierdzeniu — w "speech" krótko potwierdź.
+
 - Użyj "open_vision", gdy użytkownik chce tylko OTWORZYĆ moduł Vision bez
   skanowania (np. "otwórz moduł wizji", "pokaż vision"). Nie uruchamia skanu —
   do tego służy "vision_scan".

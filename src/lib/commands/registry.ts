@@ -340,6 +340,53 @@ export const COMMAND_REGISTRY = [
     description:
       "Runs a scripted, narrated cinematic tour through every major JARVIS module — skippable any time with Esc.",
   },
+  // Scan straight into a mode (S4.3): "zeskanuj paragon" opens Vision in
+  // that mode and fires the scan; the confirm screen still gates the save.
+  // Stems end in ASCII so \b holds after Polish endings (paragon-u, lodówk-ę).
+  {
+    id: "scan_receipt",
+    category: "System",
+    kind: { type: "special" },
+    pattern:
+      /\b((?:ze|prze)?skanuj\s+(?:ten\s+|m[oó]j\s+)?paragon[a-z]*|scan\s+(?:the\s+|a\s+|my\s+)?receipt)\b/i,
+    confirmation: "Skanuję paragon. Proszę trzymać go płasko w kadrze.",
+    label: "Scan Receipt",
+    phrases: ["Scan the receipt", "Jarvis, zeskanuj paragon"],
+    description: "Opens Vision in receipt mode and scans; the expense is saved after confirming.",
+  },
+  {
+    id: "scan_odometer",
+    category: "System",
+    kind: { type: "special" },
+    pattern:
+      /\b((?:ze|prze)?skanuj\s+(?:licznik|przebieg)[a-z]*|scan\s+(?:the\s+)?(?:odometer|mileage))\b/i,
+    confirmation: "Odczytuję licznik.",
+    label: "Scan Odometer",
+    phrases: ["Scan the odometer", "Jarvis, zeskanuj licznik"],
+    description: "Opens Vision in odometer mode and scans the mileage (and pump litres/amount).",
+  },
+  {
+    id: "scan_document",
+    category: "System",
+    kind: { type: "special" },
+    pattern:
+      /\b((?:ze|prze)?skanuj\s+(?:ten\s+)?(?:dokument|pismo|kartk|faktur|umow)[a-z]*|scan\s+(?:the\s+|a\s+|this\s+)?(?:document|letter|page))\b/i,
+    confirmation: "Skanuję dokument do archiwum.",
+    label: "Scan Document",
+    phrases: ["Scan the document", "Jarvis, zeskanuj dokument"],
+    description: "Opens Vision in document mode; the confirmed text goes to Mózg.",
+  },
+  {
+    id: "scan_fridge",
+    category: "System",
+    kind: { type: "special" },
+    pattern:
+      /\b((?:ze|prze)?skanuj\s+lod[oó]wk[a-z]*|co\s+(?:mog[eę]\s+)?ugotowa[cć]\s+z\s+lod[oó]wk[a-z]*|scan\s+(?:the\s+|my\s+)?fridge)\b/i,
+    confirmation: "Sprawdzam lodówkę i szukam przepisu.",
+    label: "Scan Fridge",
+    phrases: ["Scan the fridge", "Jarvis, zeskanuj lodówkę"],
+    description: "Opens Vision in fridge mode: products and a recipe, saved as a note.",
+  },
   {
     id: "vision_scan",
     category: "System",

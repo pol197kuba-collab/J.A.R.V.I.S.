@@ -60,4 +60,21 @@ describe("COMMAND_REGISTRY", () => {
       expect(firstMatch("launch monitor")).toBe("open_fuel");
     });
   });
+
+  describe("skan w trybie (S4.3)", () => {
+    it("głosem prosto do trybu, także z polskimi końcówkami", () => {
+      expect(firstMatch("jarvis zeskanuj paragon")).toBe("scan_receipt");
+      expect(firstMatch("jarvis zeskanuj ten paragon proszę")).toBe("scan_receipt");
+      expect(firstMatch("scan the receipt")).toBe("scan_receipt");
+      expect(firstMatch("jarvis zeskanuj licznik")).toBe("scan_odometer");
+      expect(firstMatch("jarvis zeskanuj dokument")).toBe("scan_document");
+      expect(firstMatch("jarvis zeskanuj fakturę")).toBe("scan_document");
+      expect(firstMatch("jarvis zeskanuj lodówkę")).toBe("scan_fridge");
+      expect(firstMatch("co mogę ugotować z lodówki")).toBe("scan_fridge");
+    });
+    it("ogólny skan zostaje ogólny", () => {
+      expect(firstMatch("jarvis co widzisz")).toBe("vision_scan");
+      expect(firstMatch("jarvis zeskanuj otoczenie")).toBe("vision_scan");
+    });
+  });
 });
