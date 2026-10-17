@@ -333,11 +333,20 @@ a każda transakcja ma zapisany powód.
 
 ### S4.1 — tryby i strukturalny odczyt
 
-- [ ] Przełącznik trybu: **paragon / licznik auta / dokument / lodówka / dowolne**.
-- [ ] Każdy tryb = schemat JSON, który model wypełnia (zod waliduje).
-- [ ] **Ekran potwierdzenia** przed zapisem: pola do poprawienia, nic nie
-      zapisuje się „w ciemno".
-- [ ] Zdjęcia w prywatnym buckecie Storage, z okresem przechowywania.
+- [x] Przełącznik trybu: **paragon / licznik auta / dokument / lodówka / dowolne**
+      (`src/lib/vision/modes.ts`; ostatni wybór pamiętany na urządzeniu).
+- [x] Każdy tryb = schemat JSON, który model wypełnia (Gemini w trybie JSON,
+      `responseSchema`), luźna odpowiedź → szkic (`normalize*`), zapis tylko po
+      ścisłym zodzie (`SCAN_SCHEMAS`). Paragon: sklep, data, suma, waluta,
+      pozycje z ilością (3 miejsca — towar na wagę), kwotą i kategorią.
+- [x] **Ekran potwierdzenia** przed zapisem (`ScanConfirm.tsx`): pola do
+      poprawienia, pozycje paragonu zwinięte, ostrzeżenia (suma ≠ pozycje,
+      brak daty, data z przyszłości). Nic nie zapisuje się „w ciemno".
+- [x] Zdjęcia w prywatnym buckecie `scans` przez **30 dni** (`vision_scans.
+    photo_expires_at`); po terminie serwer kasuje plik przy kolejnym zapisie,
+      dane zostają. Zdjęcie można też nie zachowywać (checkbox).
+- [x] Dodatkowo: **FOTO** — skan zdjęcia z galerii (paragon zrobiony
+      wcześniej), `edited_fields` — ile pól trzeba było poprawić (jakość OCR).
 
 ### S4.2 — gdzie trafiają dane
 

@@ -1975,6 +1975,42 @@ export type Database = {
         }
         Relationships: []
       }
+      vision_scans: {
+        Row: {
+          created_at: string
+          data: Json
+          edited_fields: number
+          id: string
+          mode: string
+          model: string | null
+          owner_id: string
+          photo_expires_at: string | null
+          photo_path: string | null
+        }
+        Insert: {
+          created_at?: string
+          data: Json
+          edited_fields?: number
+          id?: string
+          mode: string
+          model?: string | null
+          owner_id: string
+          photo_expires_at?: string | null
+          photo_path?: string | null
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          edited_fields?: number
+          id?: string
+          mode?: string
+          model?: string | null
+          owner_id?: string
+          photo_expires_at?: string | null
+          photo_path?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

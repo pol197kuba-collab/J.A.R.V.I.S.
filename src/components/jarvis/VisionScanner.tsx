@@ -6,9 +6,14 @@ import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 import { emitChat } from "@/lib/ai/chatBus";
 import { analyzeScan } from "@/lib/vision/vision.functions";
+import { extractScan, saveScan, type ScanExtraction } from "@/lib/vision/scan.functions";
+import { FRAME_MAX_SIDE, SCAN_MODES, isScanMode, type ScanMode } from "@/lib/vision/modes";
+import { ScanConfirm, type ConfirmedScan } from "./vision/ScanConfirm";
+import { toast as notify } from "sonner";
 import {
   Aperture,
   Camera,
+  ImageUp,
   MessageSquare,
   ShieldAlert,
   VideoOff,
@@ -22,6 +27,30 @@ import {
 // Set by VoiceCommandContext before it navigates here ("Jarvis, co widzisz?"),
 // consumed once on mount so the scan fires as soon as the camera is ready.
 const PENDING_SCAN_KEY = "jarvis_pending_scan";
+// Last chosen scan mode — a per-device convenience.
+const MODE_KEY = "jarvis_vision_mode";
+
+type Frame = { base64: string; dataUrl: string };
+
+/** Draws a source into a JPEG no longer than maxSide on its longest side. */
+function encodeFrame(src: CanvasImageSource, w: number, h: number, maxSide: number): Frame | null {
+  const scale = Math.min(1, maxSide / Math.max(w, h));
+  const c = document.createElement("canvas");
+  c.width = Math.round(w * scale);
+  c.height = Math.round(h * scale);
+  const ctx = c.getContext("2d");
+  if (!ctx) return null;
+  ctx.drawImage(src, 0, 0, c.width, c.height);
+  try {
+    const dataUrl = c.toDataURL("image/jpeg", 0.85);
+    const base64 = dataUrl.split(",")[1];
+    return base64 ? { base64, dataUrl } : null;
+  } catch {
+    return null;
+  }
+}
+
+type Pending = { extraction: ScanExtraction; frame: Frame };
 
 type CamState = "loading" | "ready" | "denied" | "unavailable";
 
@@ -74,6 +103,29 @@ export function VisionScanner() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const runScanAnalysis = useServerFn(analyzeScan);
+  const runExtract = useServerFn(extractScan);
+  const runSave = useServerFn(saveScan);
+  const [mode, setModeState] = useState<ScanMode>(() => {
+    try {
+      const v = typeof window !== "undefined" ? window.localStorage.getItem(MODE_KEY) : null;
+      return isScanMode(v) ? v : "receipt";
+    } catch {
+      return "receipt";
+    }
+  });
+  const setMode = (m: ScanMode) => {
+    audio.playClick();
+    setModeState(m);
+    setAnalysis(null);
+    try {
+      window.localStorage.setItem(MODE_KEY, m);
+    } catch {
+      /* ignore */
+    }
+  };
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [saving, setSaving] = useState(false);
+  const galleryRef = useRef<HTMLInputElement | null>(null);
   const { go } = useHudNavigate();
   // Voice-command bridge: scan queued before the camera finished booting.
   const wantScanRef = useRef(false);
@@ -412,12 +464,41 @@ export function VisionScanner() {
     void tryTapFocus(nx, ny);
   };
 
+  /** One frame → the current mode: a description ("free") or a draft to confirm. */
+  const analyzeFrame = async (frame: Frame) => {
+    setAnalyzing(true);
+    setAnalysis(null);
+    try {
+      if (mode === "free") {
+        const result = await runScanAnalysis({
+          data: {
+            imageBase64: frame.base64,
+            mimeType: "image/jpeg",
+            language: typeof navigator !== "undefined" ? navigator.language : "pl-PL",
+          },
+        });
+        setAnalysis({ kind: "ok", text: result.description });
+        speak(result.description);
+      } else {
+        const extraction = await runExtract({
+          data: { mode, imageBase64: frame.base64, mimeType: "image/jpeg" },
+        });
+        setPending({ extraction, frame });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setAnalysis({ kind: "error", text: msg });
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   const handleScan = async () => {
     if (state !== "ready" || analyzing) return;
     audio.playClick();
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    let frameBase64: string | null = null;
+    let frame: Frame | null = null;
     if (video && canvas && video.videoWidth > 0) {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
@@ -426,47 +507,71 @@ export function VisionScanner() {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         try {
           setLastCapture(canvas.toDataURL("image/jpeg", 0.85));
-          // Downscaled copy for analysis — Gemini doesn't need full res, and
-          // a ~1024px frame keeps the POST payload small and fast on mobile.
-          const MAX_SIDE = 1024;
-          const scale = Math.min(1, MAX_SIDE / Math.max(video.videoWidth, video.videoHeight));
-          const small = document.createElement("canvas");
-          small.width = Math.round(video.videoWidth * scale);
-          small.height = Math.round(video.videoHeight * scale);
-          const smallCtx = small.getContext("2d");
-          if (smallCtx) {
-            smallCtx.drawImage(video, 0, 0, small.width, small.height);
-            frameBase64 = small.toDataURL("image/jpeg", 0.8).split(",")[1] ?? null;
-          }
         } catch {
-          // taint / decoder errors — fall through with no frame
+          // taint / decoder errors — the frame below fails the same way
         }
+        // Downscaled copy for analysis — text modes keep more pixels so a
+        // receipt's small print survives; a scene needs ~1024px.
+        frame = encodeFrame(video, video.videoWidth, video.videoHeight, FRAME_MAX_SIDE[mode]);
       }
     }
     setFlashing(true);
     window.setTimeout(() => setFlashing(false), 450);
 
-    if (!frameBase64) {
+    if (!frame) {
       setAnalysis({ kind: "error", text: "NIE UDAŁO SIĘ PRZECHWYCIĆ KLATKI — SPRÓBUJ PONOWNIE." });
       return;
     }
-    setAnalyzing(true);
-    setAnalysis(null);
+    await analyzeFrame(frame);
+  };
+
+  // A photo already in the gallery (a receipt shot earlier) goes the same way.
+  const handleGalleryFile = async (file: File | undefined) => {
+    if (!file || analyzing) return;
+    audio.playClick();
+    const url = URL.createObjectURL(file);
     try {
-      const result = await runScanAnalysis({
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("decode"));
+        img.src = url;
+      });
+      const frame = encodeFrame(img, img.naturalWidth, img.naturalHeight, FRAME_MAX_SIDE[mode]);
+      if (!frame) throw new Error("encode");
+      setLastCapture(frame.dataUrl);
+      await analyzeFrame(frame);
+    } catch {
+      setAnalysis({ kind: "error", text: "NIE UDAŁO SIĘ WCZYTAĆ ZDJĘCIA — WYBIERZ JPG LUB PNG." });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const confirmScan = async (scan: ConfirmedScan) => {
+    if (!pending) return;
+    setSaving(true);
+    try {
+      const res = await runSave({
         data: {
-          imageBase64: frameBase64,
-          mimeType: "image/jpeg",
-          language: typeof navigator !== "undefined" ? navigator.language : "pl-PL",
+          scan: { mode: scan.mode, data: scan.data } as never,
+          editedFields: scan.editedFields,
+          model: pending.extraction.model,
+          photo: scan.keepPhoto
+            ? { imageBase64: pending.frame.base64, mimeType: "image/jpeg" }
+            : null,
         },
       });
-      setAnalysis({ kind: "ok", text: result.description });
-      speak(result.description);
+      audio.playClick();
+      const until = res.photoKeptUntil
+        ? ` · zdjęcie do ${new Date(res.photoKeptUntil).toLocaleDateString("pl-PL")}`
+        : "";
+      notify.success(`Skan zapisany${until}`);
+      setPending(null);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setAnalysis({ kind: "error", text: msg });
+      notify.error(err instanceof Error ? err.message : String(err));
     } finally {
-      setAnalyzing(false);
+      setSaving(false);
     }
   };
 
@@ -550,10 +655,22 @@ export function VisionScanner() {
 
   return (
     <div className="flex h-full min-h-0 w-full max-w-full flex-col gap-3 overflow-hidden p-3 landscape:max-md:gap-2 landscape:max-md:p-2">
+      {pending && (
+        <ScanConfirm
+          key={pending.frame.base64.length + pending.extraction.latencyMs}
+          draft={pending.extraction}
+          photoUrl={pending.frame.dataUrl}
+          truncated={pending.extraction.truncated}
+          saving={saving}
+          onSave={(s) => void confirmScan(s)}
+          onRetake={() => setPending(null)}
+          onCancel={() => setPending(null)}
+        />
+      )}
       <HudPanel
         index={0}
         title="OPTICAL FEED // LIVE"
-        wrapperClassName="flex min-h-0 flex-1 flex-col"
+        wrapperClassName={pending ? "hidden" : "flex min-h-0 flex-1 flex-col"}
         className="flex min-h-0 flex-1 flex-col overflow-hidden"
       >
         <div className="relative mx-auto w-full min-w-0 portrait:flex portrait:min-h-0 portrait:flex-1">
@@ -653,7 +770,9 @@ export function VisionScanner() {
               {lensLabel}
             </div>
             <div className="pointer-events-none absolute left-2 bottom-2 font-display text-[9px] uppercase tracking-[0.3em] text-primary/60">
-              {afLocked ? "AF: LOCK" : "MODE: SCAN"}
+              {afLocked
+                ? "AF: LOCK"
+                : `MODE: ${SCAN_MODES.find((m) => m.id === mode)?.label ?? "SCAN"}`}
             </div>
             <div className="pointer-events-none absolute right-2 bottom-2 font-display text-[9px] uppercase tracking-[0.3em] text-primary/60">
               ZOOM {zoomDisplay}
@@ -807,8 +926,45 @@ export function VisionScanner() {
           <canvas ref={canvasRef} className="hidden" />
         </div>
 
+        {/* Scan mode — what the frame is read into */}
+        <div className="shrink-0 border-t border-primary/25 px-3 pt-2 @max-[380px]:px-2">
+          <div role="radiogroup" aria-label="Tryb skanu" className="flex flex-wrap gap-1">
+            {SCAN_MODES.map((m) => {
+              const active = m.id === mode;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setMode(m.id)}
+                  disabled={analyzing}
+                  className="font-display flex-auto whitespace-nowrap border px-2 py-1.5 text-[9px] uppercase tracking-[0.18em] transition disabled:opacity-50 @max-[380px]:text-[8px] @max-[380px]:tracking-[0.08em]"
+                  style={{
+                    color: active
+                      ? "var(--primary)"
+                      : "color-mix(in oklab, var(--primary) 60%, transparent)",
+                    borderColor: active
+                      ? "var(--primary)"
+                      : "color-mix(in oklab, var(--primary) 25%, transparent)",
+                    backgroundColor: active
+                      ? "color-mix(in oklab, var(--primary) 14%, transparent)"
+                      : "transparent",
+                    boxShadow: active ? "var(--glow-primary)" : undefined,
+                  }}
+                >
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1 line-clamp-2 font-mono text-[10px] text-muted-foreground">
+            {SCAN_MODES.find((m) => m.id === mode)?.hint}
+          </p>
+        </div>
+
         {/* Control bar */}
-        <div className="mt-auto flex w-full min-w-0 shrink-0 items-center justify-center gap-3 border-t border-primary/25 p-3 portrait:gap-2 portrait:p-2 landscape:max-md:p-2">
+        <div className="flex w-full min-w-0 shrink-0 items-center justify-center gap-3 p-3 portrait:gap-2 portrait:p-2 landscape:max-md:p-2">
           <button
             type="button"
             onClick={flipFacing}
@@ -885,6 +1041,30 @@ export function VisionScanner() {
               )}
             </div>
           )}
+          <button
+            type="button"
+            onClick={() => galleryRef.current?.click()}
+            disabled={analyzing}
+            aria-label="Zdjęcie z galerii"
+            className="font-display flex min-w-0 items-center justify-center gap-2 border px-3 py-2 text-[10px] uppercase tracking-[0.3em] text-primary transition disabled:cursor-not-allowed disabled:opacity-40 portrait:flex-1 portrait:px-2 portrait:tracking-[0.24em]"
+            style={{
+              borderColor: "color-mix(in oklab, var(--primary) 55%, transparent)",
+              backgroundColor: "color-mix(in oklab, var(--primary) 6%, transparent)",
+            }}
+          >
+            <ImageUp className="h-4 w-4" strokeWidth={1.5} />
+            FOTO
+          </button>
+          <input
+            ref={galleryRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              void handleGalleryFile(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
           <button
             type="button"
             onClick={() => void handleScan()}
