@@ -284,11 +284,19 @@ własnych prognoz. Ranking pokazuje, komu ufać, w złotówkach, nie w procentac
       zrealizowane w dniu prognozy.
 - (Po powrocie Darwina: NAV gracza = drugi fitness dla wariantów.)
 
-### S3.3 — sala notowań
+### S3.3 — sala notowań — **panel zrobiony 2026-10-17**
 
-- [ ] Zakładka FUNDUSZ w `/rynki`: ranking, krzywe kapitału, historia transakcji z uzasadnieniem.
+- [x] Panel **MARKET GRID // FUNDUSZ** w `/rynki` (strona nie ma zakładek —
+      panel w tym samym stylu co pozostałe): werdykt w zdaniach („AI bije
+      koszyk o +1,5 pp, przegrywa z małpą…”, ostrzeżenie przy < 14 dniach),
+      ranking (zwrot, wartość, obsunięcie, Sharpe, transakcje, prowizje),
+      krzywe kapitału na jednej osi w PLN z linią kapitału startowego,
+      pozycje i historia transakcji wybranego gracza z powodem (uzasadnienie
+      prognozy). Kolory graczy ze stałych slotów `--market-1..5`, odniesienia
+      linią przerywaną. Przycisk „Przelicz” (bez modelu, zero tokenów).
+      Sprawdzone zrzutami: 390 px i 1280 px, HUD i TOWN, pusty stan.
 - [ ] Town: parkiet; nastrój agenta z realnej zmiany NAV (spadek → zgarbiony).
-- [ ] Brief poranny: linijka „wczoraj w funduszu".
+- [ ] Brief poranny: linijka „wczoraj w funduszu”.
 
 **Gotowe, gdy:** po 2 tygodniach widzę ranking z benchmarkiem i małpą,
 a każda transakcja ma zapisany powód.

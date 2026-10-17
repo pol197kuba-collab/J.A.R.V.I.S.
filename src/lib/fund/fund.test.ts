@@ -335,3 +335,28 @@ describe("pasmo tolerancji", () => {
     expect(r.trades.map((t) => t.executedOn)).toEqual([addDays(start, 1), addDays(start, 3)]);
   });
 });
+
+describe("fundVerdict", () => {
+  it("ostrzega przy krótkiej historii i porównuje z koszykiem i małpą", async () => {
+    const { fundVerdict } = await import("./verdict");
+    const lines = fundVerdict(
+      [
+        { key: "ai", label: "AI", kind: "source", returnPct: 2.5 },
+        { key: "signals", label: "Sygnały", kind: "source", returnPct: -1 },
+        { key: "basket", label: "Koszyk", kind: "benchmark", returnPct: 1 },
+        { key: "monkey", label: "Małpa", kind: "monkey", returnPct: -0.5 },
+      ],
+      5,
+    );
+    expect(lines[0]).toMatch(/Za wcześnie na wnioski: 5 dni/);
+    expect(lines[1]).toBe("Prowadzi: AI (+2,50%).");
+    expect(lines).toContain("AI: bije koszyk (+1,5 pp), bije małpę (+3,0 pp).");
+    expect(lines).toContain(
+      "Sygnały: przegrywa z koszykiem (−2,0 pp), przegrywa z małpą (−0,5 pp).",
+    );
+    expect(fundVerdict([], 30)).toEqual([]);
+    expect(fundVerdict([{ key: "ai", label: "AI", kind: "source", returnPct: 1 }], 30)[0]).toMatch(
+      /^Prowadzi/,
+    );
+  });
+});
