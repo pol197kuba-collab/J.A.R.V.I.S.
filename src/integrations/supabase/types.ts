@@ -944,6 +944,88 @@ export type Database = {
         }
         Relationships: []
       }
+      expense_items: {
+        Row: {
+          category: string
+          expense_id: string
+          id: string
+          name: string
+          owner_id: string
+          position: number
+          price: number
+          qty: number
+        }
+        Insert: {
+          category: string
+          expense_id: string
+          id?: string
+          name: string
+          owner_id: string
+          position: number
+          price: number
+          qty: number
+        }
+        Update: {
+          category?: string
+          expense_id?: string
+          id?: string
+          name?: string
+          owner_id?: string
+          position?: number
+          price?: number
+          qty?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_items_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expenses: {
+        Row: {
+          created_at: string
+          currency: string
+          id: string
+          merchant: string
+          owner_id: string
+          scan_id: string | null
+          spent_on: string
+          total: number
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          id?: string
+          merchant: string
+          owner_id: string
+          scan_id?: string | null
+          spent_on: string
+          total: number
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          id?: string
+          merchant?: string
+          owner_id?: string
+          scan_id?: string | null
+          spent_on?: string
+          total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_scan_id_fkey"
+            columns: ["scan_id"]
+            isOneToOne: false
+            referencedRelation: "vision_scans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fund_portfolios: {
         Row: {
           cash_pln: number

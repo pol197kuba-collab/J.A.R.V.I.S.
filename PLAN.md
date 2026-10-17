@@ -343,15 +343,20 @@ a każda transakcja ma zapisany powód.
       poprawienia, pozycje paragonu zwinięte, ostrzeżenia (suma ≠ pozycje,
       brak daty, data z przyszłości). Nic nie zapisuje się „w ciemno".
 - [x] Zdjęcia w prywatnym buckecie `scans` przez **30 dni** (`vision_scans.
-    photo_expires_at`); po terminie serwer kasuje plik przy kolejnym zapisie,
+  photo_expires_at`); po terminie serwer kasuje plik przy kolejnym zapisie,
       dane zostają. Zdjęcie można też nie zachowywać (checkbox).
 - [x] Dodatkowo: **FOTO** — skan zdjęcia z galerii (paragon zrobiony
       wcześniej), `edited_fields` — ile pól trzeba było poprawić (jakość OCR).
 
 ### S4.2 — gdzie trafiają dane
 
-- [ ] Paragon → nowy mini-moduł **Wydatki** (`expenses`, `expense_items`,
-      prosta strona z listą i sumami miesięcznymi).
+- [x] Paragon → nowy mini-moduł **Wydatki** (`expenses`, `expense_items`,
+      strona `/wydatki`): „Zapisz” na paragonie od razu dodaje wydatek (jeden
+      skan = jedno kliknięcie). Suma miesiąca vs poprzedni, podział na
+      kategorie (reszta, której pozycje nie tłumaczą, idzie do „Inne”, więc
+      części sumują się do całości), trend 6 miesięcy, lista paragonów z
+      pozycjami, zdjęciem (30 dni) i usuwaniem. Sumy tylko w PLN, inne waluty
+      osobno.
 - [ ] Licznik → `vehicle_log` (przebieg, litry) + ceny z `/paliwa` =
       **realny koszt kilometra**.
 - [ ] Dokument → istniejący pipeline RAG (→ gwiazda w Mózgu).
