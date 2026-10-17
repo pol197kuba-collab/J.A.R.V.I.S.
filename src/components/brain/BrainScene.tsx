@@ -22,6 +22,7 @@ import type { BrainSourceType } from "@/lib/brain/layout";
 import { freshness, SCENE_SCALE } from "@/lib/brain/scene";
 import { CameraRig, PointsPicker, TapLayer, ViewShift, type Picker } from "./sceneKit";
 import { useThemeColors } from "@/lib/theme/themeColor";
+import { SpaceBackdrop } from "./space";
 
 const SCENE_COLORS = {
   memory: "var(--reactor)",
@@ -94,6 +95,8 @@ export function BrainScene(props: BrainSceneProps) {
         <PerformanceMonitor onDecline={() => setBloom(false)} />
         <color attach="background" args={[colors.void]} />
         <fog attach="fog" args={[colors.void, 14, 34]} />
+        {/* Tło przygaszone: gwiazdy-dane muszą być wyraźnie jaśniejsze. */}
+        <SpaceBackdrop strength={0.4} />
 
         <Stars
           stars={props.stars}

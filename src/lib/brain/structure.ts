@@ -118,6 +118,8 @@ export function planetRadius(rows: number): number {
 
 /** Promień mapy tabel w jednostkach sceny (gwiazdy wiedzy mają 1). */
 export const MAP_RADIUS = 0.65;
+/** W środku mapy świeci słońce — żadna planeta bliżej niż tyle od środka. */
+export const MIN_ORBIT = 0.24;
 
 /**
  * Układ siłowy (Fruchterman–Reingold) w 3D, deterministyczny. Tabele
@@ -195,7 +197,16 @@ export function layoutSchema(
 
   // Ta sama skala co galaktyka wiedzy (90% w promieniu 1), tylko ciaśniej —
   // planety są większe od gwiazd i na telefonie mają się mieścić w kadrze.
-  const fitted = normalize(pos).map((p) => p.map((x) => x * MAP_RADIUS) as Vec3);
+  const fitted = normalize(pos).map((p, i) => {
+    const q = p.map((x) => x * MAP_RADIUS) as Vec3;
+    const len = Math.hypot(q[0], q[1], q[2]);
+    if (len >= MIN_ORBIT) return q;
+    // Za blisko słońca — wypchnij na minimalną orbitę (kierunek: własny
+    // albo, dla punktu w samym środku, gniazdo modułu).
+    const dir = len > 1e-6 ? q : anchor.get(tables[i].module)!;
+    const dl = Math.max(1e-6, Math.hypot(dir[0], dir[1], dir[2]));
+    return dir.map((x) => (x / dl) * MIN_ORBIT) as Vec3;
+  });
   tables.forEach((t, i) => out.set(t.name, fitted[i]));
   return out;
 }

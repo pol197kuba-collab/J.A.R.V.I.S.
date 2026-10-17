@@ -32,6 +32,7 @@ import {
   type SchemaTable,
 } from "@/lib/brain/structure";
 import { getSchemaMap, previewTable } from "@/lib/brain/structure.functions";
+import { nodeDegrees, PLANET_KIND_LABEL, planetLooks, type PlanetLook } from "@/lib/brain/planets";
 import { SheetFrame } from "./BrainPanels";
 import { CenterNote, KindSwitch, ModeToggle } from "./brainUi";
 import {
@@ -99,6 +100,8 @@ export function StructureView({
         .map(([a, b]) => [a, b] as [number, number]),
     [data, indexByName],
   );
+
+  const looks = useMemo(() => planetLooks(nodes, nodeDegrees(nodes.length, edges)), [nodes, edges]);
 
   const [visibleModules, setVisibleModules] = useState<ReadonlySet<ModuleId>>(
     () => new Set(MODULES.map((m) => m.id)),
@@ -176,6 +179,7 @@ export function StructureView({
         >
           <StructureScene
             nodes={nodes}
+            looks={looks}
             edges={edges}
             visibleModules={visibleModules}
             selected={selected}
@@ -265,6 +269,7 @@ export function StructureView({
       {selected !== null && tables[selected] && (
         <TableSheet
           table={tables[selected]}
+          look={looks[selected]}
           foreignKeys={data?.foreign_keys ?? []}
           canFly={effectiveMode === "3d"}
           onClose={() => setSelectedName(null)}
@@ -282,6 +287,7 @@ export function StructureView({
 
 function TableSheet({
   table,
+  look,
   foreignKeys,
   canFly,
   onClose,
@@ -290,6 +296,7 @@ function TableSheet({
   onShowKnowledge,
 }: {
   table: SchemaTable;
+  look: PlanetLook | undefined;
   foreignKeys: { table: string; column: string; ref_table: string; ref_column: string }[];
   canFly: boolean;
   onClose: () => void;
@@ -332,6 +339,13 @@ function TableSheet({
         {MODULE_LABEL[module]} ·{" "}
         {table.rows_estimate < 0 ? "liczba wierszy nieznana" : `~${table.rows_estimate} wierszy`} ·{" "}
         {table.columns.length} kolumn
+        {look && (
+          <>
+            {" "}
+            · planeta {PLANET_KIND_LABEL[look.kind]}
+            {look.ringTilt !== null && " z pierścieniami"}
+          </>
+        )}
       </p>
       <p
         className={cn(

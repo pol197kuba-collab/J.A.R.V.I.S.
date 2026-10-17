@@ -91,6 +91,11 @@ is one CSS block, not a hunt through components:
 - Allowed exceptions: neutral black/white shading (shadows, vignettes,
   masks) and the fixed categorical palettes whose color _means_ a
   series/agent (`--fuel-*`, `--market-*`, per-agent sigil hues).
+  Also artwork, like `townArt.ts`: the Mózg 3D space scene — planet
+  surfaces (`src/lib/brain/planets.ts`), sun, star field and nebula
+  (`src/components/brain/space.tsx`). Planets are real-planet colors; the
+  module a table belongs to still comes from tokens via the atmosphere
+  glow, so don't recolor planets per module.
 - Don't reintroduce a `.dark { ... }` palette block: `<html>` has
   `class="dark"` for shadcn's `dark:` variants, and such a block silently
   overrides the whole JARVIS palette (that bug shipped once).
