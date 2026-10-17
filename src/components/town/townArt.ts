@@ -267,11 +267,21 @@ const LEGS = {
     B: ["......oppo......", "......obbo......"],
   },
 } as const;
-type Look = {
+export type Look = {
   h: string;
   c: string;
   p: string;
-  acc: "butler" | "glasses" | "coat" | "bandana" | "helmet" | "scarf" | null;
+  acc:
+    | "butler"
+    | "glasses"
+    | "coat"
+    | "bandana"
+    | "helmet"
+    | "scarf"
+    // extras on the floor: builders' hard hat + hi-vis vest, traders' badge
+    | "hardhat"
+    | "badge"
+    | null;
 };
 const LOOKS: Record<TownSlug, Look> = {
   jarvis: { h: "#d4d7e0", c: "#2f3142", p: "#2f3142", acc: "butler" },
@@ -343,6 +353,16 @@ function accessorize(g: string[], view: "front" | "back" | "side", acc: Look["ac
   }
   if (acc === "scarf" && view !== "back")
     for (let x = 4; x <= 11; x++) if (g[10][x] === "c") setPx(g, x, 10, "y");
+  if (acc === "hardhat") {
+    // the hair becomes a yellow hard hat, a reflective stripe on the vest
+    for (let y = 0; y <= 3; y++)
+      for (let x = 0; x < 16; x++) if ("hH".includes(g[y][x])) setPx(g, x, y, "y");
+    for (let x = 0; x < 16; x++) if ("cC".includes(g[12][x])) setPx(g, x, 12, "w");
+  }
+  if (acc === "badge" && view === "front") {
+    setPx(g, 9, 10, "w");
+    setPx(g, 9, 11, "k");
+  }
 }
 function autoShade(g: string[]) {
   for (let y = 0; y < 16; y++)
@@ -355,7 +375,15 @@ function autoShade(g: string[]) {
 export type SpriteSet = Record<string, HTMLCanvasElement>;
 export function buildSprites(): Record<TownSlug, SpriteSet> {
   const out = {} as Record<TownSlug, SpriteSet>;
-  for (const [id, look] of Object.entries(LOOKS) as [TownSlug, Look][]) {
+  for (const [id, look] of Object.entries(LOOKS) as [TownSlug, Look][])
+    out[id] = buildLookSprites(look, id === "herald" ? "#ffd36b" : "#f2c94c");
+  return out;
+}
+
+/** Front/back/side × stand/walk sprites for any look (agents and extras). */
+export function buildLookSprites(look: Look, yellow = "#f2c94c"): SpriteSet {
+  const set: SpriteSet = {};
+  {
     const pal: Record<string, string> = {
       o: INK,
       e: INK,
@@ -366,7 +394,7 @@ export function buildSprites(): Record<TownSlug, SpriteSet> {
       k: "#4fd8f0",
       i: "#57b86a",
       r: "#d63b3b",
-      y: id === "herald" ? "#ffd36b" : "#f2c94c",
+      y: yellow,
       b: "#3b2b2b",
       h: look.h,
       H: shade(look.h, 0.75),
@@ -375,7 +403,6 @@ export function buildSprites(): Record<TownSlug, SpriteSet> {
       p: look.p,
       P: shade(look.p, 0.75),
     };
-    out[id] = {};
     for (const view of ["front", "back", "side"] as const) {
       for (const fr of ["S", "A", "B"] as const) {
         const g = (view === "front" ? FRONT : view === "back" ? BACK : SIDE).slice();
@@ -396,11 +423,11 @@ export function buildSprites(): Record<TownSlug, SpriteSet> {
             c2.fillRect(x, y, 1, 1);
           }),
         );
-        out[id][view + fr] = cv;
+        set[view + fr] = cv;
       }
     }
   }
-  return out;
+  return set;
 }
 
 // ── static layer ────────────────────────────────────────────────────────────

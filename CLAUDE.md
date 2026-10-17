@@ -136,6 +136,11 @@ fund via `townFund.ts` (pure, tested; M.E.T.R.I.C.'s mood comes from there)
 — and five `build_*` rooms "w remoncie". A new module takes over a
 `build_*` room: give it a label, floor and face, furnish it, and drop the
 construction props; don't squeeze new rooms into the core.
+Extras (`townNpcs.ts` + `townNpcWorld.ts`): builders in the `build_*` rooms
+and traders on the floor, tagged BUD / TRD. They are scenery — never in the
+roster, never talkable, and they state nothing about agent work; traders
+only shout real ticker lines from the fund. A room that stops being "w
+remoncie" takes its builders out of `NPCS`.
 
 ## Design skills: project rules win
 

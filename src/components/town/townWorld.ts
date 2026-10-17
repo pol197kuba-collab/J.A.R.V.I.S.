@@ -41,6 +41,7 @@ import { TownDog } from "./townDog";
 import { propAt, propById } from "./townProps";
 import { idleDelay, idlePlan } from "./townIdle";
 import { drawExchange, drawExchangeTicker } from "./townExchangeArt";
+import { NpcCrowd, type NpcEnv } from "./townNpcWorld";
 import { EXCHANGE_TRIP_CHANCE, metricFloorLine, type TownFund } from "./townFund";
 
 export type CharStatus = "idle" | "running" | "done" | "error" | "off";
@@ -152,11 +153,14 @@ export class TownWorld {
   fund: TownFund | null = null;
   /** World time the opening bell was last rung (walk-mode prop). */
   bellAt = -1e9;
+  /** Extras: builders in the rooms under construction, traders on the floor. */
+  private crowd: NpcCrowd;
 
   constructor() {
     // eslint-disable-next-line @typescript-eslint/no-this-alias -- the dog host reads live time
     const world = this;
     this.map = buildTownMap();
+    this.crowd = new NpcCrowd(this.map);
     this.sprites = buildSprites();
     this.staticLayer = buildStaticLayer(this.map);
     this.frame = document.createElement("canvas");
@@ -487,6 +491,16 @@ export class TownWorld {
       }
     }
     this.dog.update(dt);
+    this.crowd.update(dt, this.time, this.npcEnv());
+  }
+
+  private npcEnv(): NpcEnv {
+    return {
+      fund: this.fund,
+      night: this.night,
+      bellAt: this.bellAt,
+      reduceMotion: this.reduceMotion,
+    };
   }
 
   /** Paint a character's front-facing sprite, scaled up, for the inspector. */
@@ -615,15 +629,13 @@ export class TownWorld {
     drawDynamic(f, t, (s) => this.status[s], this.cards);
     drawExchange(f, t, this.fund, this.bellAt, this.reduceMotion);
     const order = Object.values(this.chars).sort((a, b) => a.y - b.y);
-    let dogDrawn = false;
-    for (const c of order) {
-      if (!dogDrawn && this.dog.y < c.y) {
-        this.dog.drawSprite(f, t);
-        dogDrawn = true;
-      }
-      this.drawChar(c, t);
-    }
-    if (!dogDrawn) this.dog.drawSprite(f, t);
+    // agents, the dog and the extras share one depth order (feet y)
+    const scene = [
+      ...order.map((c) => ({ y: c.y, draw: () => this.drawChar(c, t) })),
+      { y: this.dog.y, draw: () => this.dog.drawSprite(f, t) },
+      ...this.crowd.drawables(f, t, this.npcEnv()),
+    ].sort((a, b) => a.y - b.y);
+    for (const s of scene) s.draw();
     drawExchangeTicker(f, t, this.fund, this.reduceMotion);
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -887,6 +899,7 @@ export class TownWorld {
     const dogTag = this.dog.name.toUpperCase().slice(0, 10);
     const speakers: Speaker[] = [
       ...order.map((c) => ({ x: c.x, y: c.y, bubble: c.bubble, tag: TAG[c.slug] })),
+      ...this.crowd.speakers(),
       {
         x: this.dog.x,
         y: this.dog.y + 6,
