@@ -94,6 +94,22 @@ export function searchStars(
     .map((s) => s.i);
 }
 
+/** Kropka typu w UI — te same tokeny co gwiazdy w scenie. */
+export const TYPE_DOT: Record<BrainSourceType, string> = {
+  memory: "bg-reactor",
+  note: "bg-success",
+  document: "bg-accent",
+};
+
+/**
+ * Dopisek do pytania zadanego na /mozg — kieruje J.A.R.V.I.S.a do pamięci
+ * i notatek zamiast odpowiadania z głowy. Ślad z takim zapytaniem pokazuje
+ * się bez dopisku (stripAskPrefix).
+ */
+export const ASK_PREFIX = "Sprawdź w mojej pamięci i notatkach: ";
+export const stripAskPrefix = (q: string): string =>
+  q.startsWith(ASK_PREFIX) ? q.slice(ASK_PREFIX.length) : q;
+
 export const TYPE_LABEL: Record<BrainSourceType, string> = {
   memory: "Wspomnienie",
   note: "Notatka",

@@ -36,6 +36,7 @@ const SCENE_COLORS = {
   document: "var(--accent)",
   selection: "var(--foreground)",
   link: "color-mix(in oklab, var(--foreground) 55%, transparent)",
+  beam: "var(--primary)",
   void: "color-mix(in oklab, var(--base-chrome) 25%, black)",
 } as const;
 const SCENE_FALLBACKS = {
@@ -44,6 +45,7 @@ const SCENE_FALLBACKS = {
   document: "#7aa7ff",
   selection: "#e6f6ff",
   link: "#7f8a99",
+  beam: "#4dd8ff",
   void: "#020409",
 };
 
@@ -77,6 +79,10 @@ export type BrainSceneProps = {
    * ma wypaść nad nią, a nie pod nią.
    */
   viewShift: number;
+  /** Ślad RAG: indeksy gwiazd, po które sięgnął J.A.R.V.I.S.; `key` restartuje animację. */
+  trace: { key: string; indices: number[] } | null;
+  /** Oś czasu: gwiazdy powstałe później niż ten moment są ukryte; null = wszystkie. */
+  until: number | null;
 };
 
 export function BrainScene(props: BrainSceneProps) {
@@ -135,8 +141,17 @@ export function BrainScene(props: BrainSceneProps) {
           stars={props.stars}
           visibleTypes={props.visibleTypes}
           highlighted={props.highlighted}
+          until={props.until}
           colors={colors}
         />
+        {props.trace && (
+          <TraceBeams
+            key={props.trace.key}
+            stars={props.stars}
+            indices={props.trace.indices}
+            color={colors.beam}
+          />
+        )}
         <Selection
           stars={props.stars}
           selected={props.selected}
@@ -160,7 +175,12 @@ export function BrainScene(props: BrainSceneProps) {
           ))}
 
         <ViewShift shift={props.viewShift} />
-        <PickerBridge stars={props.stars} visibleTypes={props.visibleTypes} pickerRef={pickerRef} />
+        <PickerBridge
+          stars={props.stars}
+          visibleTypes={props.visibleTypes}
+          until={props.until}
+          pickerRef={pickerRef}
+        />
         <CameraRig stars={props.stars} focus={props.focus} autoRotate={props.selected === null} />
 
         {bloom && (
@@ -174,6 +194,16 @@ export function BrainScene(props: BrainSceneProps) {
 }
 
 // ---------- gwiazdy ----------
+
+/** Widoczna = typ włączony w legendzie i (przy osi czasu) już istniała. */
+function isVisible(
+  s: BrainStar,
+  visibleTypes: ReadonlySet<BrainSourceType>,
+  until: number | null,
+): boolean {
+  if (!visibleTypes.has(s.type)) return false;
+  return until === null || Date.parse(s.createdAt) <= until;
+}
 
 const VERTEX = /* glsl */ `
   attribute float aSize;
@@ -211,11 +241,13 @@ function Stars({
   stars,
   visibleTypes,
   highlighted,
+  until,
   colors,
 }: {
   stars: BrainStar[];
   visibleTypes: ReadonlySet<BrainSourceType>;
   highlighted: ReadonlySet<number>;
+  until: number | null;
   colors: Record<keyof typeof SCENE_COLORS, string>;
 }) {
   const { gl } = useThree();
@@ -252,19 +284,19 @@ function Stars({
     const now = new Date();
     const searching = highlighted.size > 0;
     stars.forEach((s, i) => {
-      const visible = visibleTypes.has(s.type);
+      const visible = isVisible(s, visibleTypes, until);
       const lit = !searching || highlighted.has(i);
       const f = freshness(s.createdAt, now);
       const c = byType[s.type];
       col.setXYZ(i, c.r * (0.55 + 0.45 * f), c.g * (0.55 + 0.45 * f), c.b * (0.55 + 0.45 * f));
       const base = s.type === "document" ? 1.35 : 0.8 + s.weight * 0.12;
-      size.setX(i, visible ? base * (searching && lit ? 1.6 : 1) : 0);
+      size.setX(i, visible ? base * (searching && lit ? 2 : 1) : 0);
       alpha.setX(i, visible ? (lit ? 0.95 : 0.12) : 0);
     });
     col.needsUpdate = true;
     size.needsUpdate = true;
     alpha.needsUpdate = true;
-  }, [geometry, stars, visibleTypes, highlighted, colors]);
+  }, [geometry, stars, visibleTypes, highlighted, until, colors]);
 
   const material = useMemo(
     () =>
@@ -334,6 +366,63 @@ function Selection({
   );
 }
 
+// ---------- ślad RAG ----------
+
+/** Czas, w którym promienie „wyrastają” z rdzenia do gwiazd. */
+const BEAM_GROW_S = 0.9;
+
+/**
+ * Rdzeń w środku galaktyki i promienie do gwiazd, po które sięgnął
+ * J.A.R.V.I.S. Promienie startują w rdzeniu (0,0,0), więc skalowanie całej
+ * grupy od 0 do 1 „wypuszcza” je na zewnątrz bez przeliczania geometrii.
+ */
+function TraceBeams({
+  stars,
+  indices,
+  color,
+}: {
+  stars: BrainStar[];
+  indices: number[];
+  color: string;
+}) {
+  const group = useRef<THREE.Group>(null);
+  const core = useRef<THREE.Mesh>(null);
+  const born = useRef<number | null>(null);
+  useFrame(({ clock }) => {
+    if (born.current === null) born.current = clock.elapsedTime;
+    const k = Math.min(1, (clock.elapsedTime - born.current) / BEAM_GROW_S);
+    const eased = 1 - (1 - k) ** 3;
+    group.current?.scale.setScalar(Math.max(0.001, eased));
+    core.current?.scale.setScalar(1 + Math.sin(clock.elapsedTime * 4) * 0.15);
+  });
+  const targets = indices
+    .map((i) => stars[i])
+    .filter(Boolean)
+    .map(
+      (s) => [s.x * SCENE_SCALE, s.y * SCENE_SCALE, s.z * SCENE_SCALE] as [number, number, number],
+    );
+  return (
+    <group>
+      <mesh ref={core}>
+        <sphereGeometry args={[0.12, 20, 20]} />
+        <meshBasicMaterial color={color} transparent opacity={0.9} />
+      </mesh>
+      <group ref={group}>
+        {targets.map((t, i) => (
+          <Line
+            key={i}
+            points={[[0, 0, 0], t]}
+            color={color}
+            lineWidth={1.5}
+            transparent
+            opacity={0.7}
+          />
+        ))}
+      </group>
+    </group>
+  );
+}
+
 // ---------- przesunięcie obrazu ----------
 
 /** Płynnie przesuwa obraz kamery w górę o `shift` wysokości (setViewOffset). */
@@ -369,10 +458,12 @@ type Picker = (x: number, y: number, tolerance: number) => number | null;
 function PickerBridge({
   stars,
   visibleTypes,
+  until,
   pickerRef,
 }: {
   stars: BrainStar[];
   visibleTypes: ReadonlySet<BrainSourceType>;
+  until: number | null;
   pickerRef: MutableRefObject<Picker | null>;
 }) {
   const { camera, size } = useThree();
@@ -387,7 +478,7 @@ function PickerBridge({
         screen[i] = {
           x: ((v.x + 1) / 2) * size.width,
           y: ((1 - v.y) / 2) * size.height,
-          visible: visibleTypes.has(s.type) && v.z > -1 && v.z < 1,
+          visible: isVisible(s, visibleTypes, until) && v.z > -1 && v.z < 1,
         };
         depth[i] = v.z;
       }
@@ -396,7 +487,7 @@ function PickerBridge({
     return () => {
       pickerRef.current = null;
     };
-  }, [camera, size, stars, visibleTypes, pickerRef]);
+  }, [camera, size, stars, visibleTypes, until, pickerRef]);
   return null;
 }
 

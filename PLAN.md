@@ -111,14 +111,23 @@ etapu sprawdzana na wąskim ekranie (portret) i w PWA na iPhonie.
       telefon 390 px w HUD i TOWN, lista, pusty stan, desktop 1440 px; bez
       poziomego przewijania; tap w pustkę zamyka, tap w gwiazdę otwiera kartę.
 
-### S1.3 — Mózg żyje
+### S1.3 — Mózg żyje — **zrobione 2026-10-17**
 
-- [ ] **Ślad RAG:** runtime publikuje id trafień z `recall`/wyszukiwania
-      dokumentów (Realtime Broadcast) → gwiazdy rozbłyskują i łączą się
-      liniami z rdzeniem, gdy J.A.R.V.I.S. odpowiada.
-- [ ] Suwak czasu: jak mózg rósł (po `source_created_at`).
-- [ ] Panel „Wnioski": sieroty (gwiazdy bez sąsiadów), gęste klastry bez
-      notatki-podsumowania, duplikaty (podobieństwo > 0.95) do scalenia.
+- [x] **Ślad RAG:** `recall` i `search_documents` zapisują, po które gwiazdy
+      sięgnęły (`brain_traces`); `/mozg` słucha przez Realtime — z rdzenia
+      w środku galaktyki wyrastają promienie do tych gwiazd, reszta gaśnie.
+      Lista ostatnich śladów do odtworzenia; pytanie można zadać prosto
+      z panelu (idzie tą samą drogą co czat). Ślady > 30 dni sprząta pg_cron.
+- [x] **`recall` przeszukuje też notatki** (`match_notes` + po słowach) —
+      wcześniej J.A.R.V.I.S. w ogóle nie widział treści notatek.
+- [x] **Oś czasu:** suwak i „Odtwórz” — galaktyka rośnie od pierwszej
+      gwiazdy do dziś (7 s). Dane demo mają daty rozłożone na 90 dni;
+      ponowny `seed` rozkłada daty istniejących wierszy.
+- [x] **Wnioski** (liczone nocą z prawdziwych embeddingów): pary do
+      scalenia (≥ 95% podobieństwa), samotne gwiazdy, gromady bez notatki
+      z przejściem do Notatek.
+- [x] Trzy przyciski w prawym dolnym rogu (44 px), panele w tej samej
+      karcie co szczegóły gwiazdy; sprawdzone zrzutami na 390 px i 1440 px.
 
 ### S1.4 — tryb STRUKTURA: mapa bazy danych
 

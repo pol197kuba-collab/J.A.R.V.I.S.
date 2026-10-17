@@ -6,6 +6,8 @@ import {
   pickNearest,
   relativeAge,
   searchStars,
+  stripAskPrefix,
+  ASK_PREFIX,
   type ScreenPoint,
 } from "./scene";
 
@@ -101,5 +103,12 @@ describe("czas", () => {
     expect(freshness("2026-10-17T12:00:00Z", now)).toBeCloseTo(1, 5);
     expect(freshness("2020-01-01T00:00:00Z", now)).toBeCloseTo(0.35, 5);
     expect(freshness("x", now)).toBe(0.35);
+  });
+});
+
+describe("stripAskPrefix", () => {
+  it("ślad z pytania z /mozg pokazuje się bez dopisku", () => {
+    expect(stripAskPrefix(`${ASK_PREFIX}co wiem o VBA`)).toBe("co wiem o VBA");
+    expect(stripAskPrefix("raport sprzedaży")).toBe("raport sprzedaży");
   });
 });

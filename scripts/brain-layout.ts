@@ -41,6 +41,7 @@ import {
   parseClusterNames,
 } from "../src/lib/brain/labels";
 import type { Vec3 } from "../src/lib/brain/projection";
+import { computeInsights } from "../src/lib/brain/insights";
 
 const args = new Set(process.argv.slice(2));
 const DRY_RUN = args.has("--dry-run");
@@ -173,6 +174,12 @@ async function main(): Promise<void> {
   // ---------- 3. Układ ----------
   const started = Date.now();
   const layout = computeBrainLayout(sources, previous);
+  // Wnioski (duplikaty, samotne gwiazdy, gromady bez notatki) — tu, bo tylko
+  // ten job ma embeddingi w pamięci; strona dostaje gotowe listy.
+  const insights = computeInsights(
+    sources,
+    layout.points.map((p) => p.cluster_id),
+  );
   let clusters = layout.clusters;
   let modelNamed = 0;
   if (geminiKey && !DRY_RUN && clusters.length > 0) {
@@ -201,6 +208,11 @@ async function main(): Promise<void> {
         ? `wyrównany do wczoraj (rms ${layout.meta.alignRms}${layout.meta.mirrored ? ", odbity" : ""})`
         : "bez wyrównania (pierwszy układ albo za mało wspólnych gwiazd)"),
   );
+  notice(
+    `wnioski: ${insights.duplicates.length} par do scalenia, ` +
+      `${insights.orphans.length} samotnych gwiazd, ` +
+      `${insights.clustersWithoutNote.length} gromad bez notatki`,
+  );
   for (const c of clusters) {
     const size = layout.points.filter((p) => p.cluster_id === c.cluster_id).length;
     console.log(`  • ${c.name} — ${size}`);
@@ -217,7 +229,12 @@ async function main(): Promise<void> {
     p_points: layout.points as unknown as Json,
     p_clusters: clusters as unknown as Json,
     p_method: sources.length >= 8 ? "umap-cosine" : "pca",
-    p_meta: { ...layout.meta, modelNamed, seconds: Number(seconds) } as unknown as Json,
+    p_meta: {
+      ...layout.meta,
+      modelNamed,
+      seconds: Number(seconds),
+      insights,
+    } as unknown as Json,
   });
   if (error) {
     await report("zapis", error.message);

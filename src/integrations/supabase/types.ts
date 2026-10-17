@@ -303,6 +303,36 @@ export type Database = {
         }
         Relationships: []
       }
+      brain_traces: {
+        Row: {
+          created_at: string
+          id: string
+          items: Json
+          owner_id: string
+          query: string
+          run_id: string | null
+          tool: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          items?: Json
+          owner_id: string
+          query?: string
+          run_id?: string | null
+          tool: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          items?: Json
+          owner_id?: string
+          query?: string
+          run_id?: string | null
+          tool?: string
+        }
+        Relationships: []
+      }
       conversations: {
         Row: {
           agent_id: string | null
@@ -1761,6 +1791,21 @@ export type Database = {
           document_id: string
           filename: string
           similarity: number
+        }[]
+      }
+      match_notes: {
+        Args: {
+          match_count?: number
+          min_similarity?: number
+          query_embedding: string
+        }
+        Returns: {
+          body: string
+          id: string
+          similarity: number
+          tags: string[]
+          title: string
+          updated_at: string
         }[]
       }
       match_memories: {
