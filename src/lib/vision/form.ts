@@ -29,7 +29,7 @@ export type ScanForm =
       currency: string;
       items: ReceiptItemForm[];
     }
-  | { mode: "odometer"; km: string; liters: string; note: string }
+  | { mode: "odometer"; km: string; liters: string; amount: string; note: string }
   | { mode: "document"; title: string; docType: string; summary: string; text: string }
   | { mode: "fridge"; products: string; recipeTitle: string; recipeSteps: string };
 
@@ -62,6 +62,7 @@ export function formOf(d: ScanDraft): ScanForm {
         mode: "odometer",
         km: d.draft.odometerKm === null ? "" : String(d.draft.odometerKm),
         liters: numText(d.draft.fuelLiters),
+        amount: moneyText(d.draft.amountPln),
         note: d.draft.note,
       };
     case "document":
@@ -104,6 +105,7 @@ export function candidateOf(f: ScanForm): unknown {
       return {
         odometerKm: f.km.trim() === "" ? Number.NaN : Math.round(reqNum(f.km)),
         fuelLiters: optNum(f.liters),
+        amountPln: optNum(f.amount),
         note: f.note.trim() || null,
       };
     case "document":
@@ -130,6 +132,7 @@ const FIELD: Record<string, string> = {
   category: "kategoria",
   odometerKm: "Przebieg",
   fuelLiters: "Litry",
+  amountPln: "Kwota",
   note: "Uwaga",
   title: "Tytuł",
   docType: "Rodzaj",

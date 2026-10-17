@@ -2057,6 +2057,50 @@ export type Database = {
         }
         Relationships: []
       }
+      vehicle_log: {
+        Row: {
+          amount_pln: number | null
+          created_at: string
+          fuel_liters: number | null
+          id: string
+          logged_on: string
+          note: string | null
+          odometer_km: number
+          owner_id: string
+          scan_id: string | null
+        }
+        Insert: {
+          amount_pln?: number | null
+          created_at?: string
+          fuel_liters?: number | null
+          id?: string
+          logged_on: string
+          note?: string | null
+          odometer_km: number
+          owner_id: string
+          scan_id?: string | null
+        }
+        Update: {
+          amount_pln?: number | null
+          created_at?: string
+          fuel_liters?: number | null
+          id?: string
+          logged_on?: string
+          note?: string | null
+          odometer_km?: number
+          owner_id?: string
+          scan_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_log_scan_id_fkey"
+            columns: ["scan_id"]
+            isOneToOne: false
+            referencedRelation: "vision_scans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vision_scans: {
         Row: {
           created_at: string

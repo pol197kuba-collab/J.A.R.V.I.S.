@@ -100,14 +100,18 @@ describe("normalizeReceipt", () => {
 
 describe("other modes", () => {
   it("odometer keeps whole km and drops nonsense", () => {
-    expect(normalizeOdometer({ odometerKm: "123 456,7", fuelLiters: "41,2", note: null })).toEqual({
+    expect(
+      normalizeOdometer({ odometerKm: "123 456,7", fuelLiters: "41,2", amountPln: "263,27 zł" }),
+    ).toEqual({
       odometerKm: 123457,
       fuelLiters: 41.2,
+      amountPln: 263.27,
       note: "",
     });
     expect(normalizeOdometer({ odometerKm: -5, fuelLiters: 0 })).toEqual({
       odometerKm: null,
       fuelLiters: null,
+      amountPln: null,
       note: "",
     });
   });

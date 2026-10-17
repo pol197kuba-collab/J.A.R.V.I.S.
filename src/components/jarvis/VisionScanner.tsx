@@ -7,6 +7,7 @@ import { speak } from "@/lib/audio/speak";
 import { emitChat } from "@/lib/ai/chatBus";
 import { analyzeScan } from "@/lib/vision/vision.functions";
 import { extractScan, saveScan, type ScanExtraction } from "@/lib/vision/scan.functions";
+import { processDocumentFn } from "@/lib/documents/documents.functions";
 import { FRAME_MAX_SIDE, SCAN_MODES, isScanMode, type ScanMode } from "@/lib/vision/modes";
 import { ScanConfirm, type ConfirmedScan } from "./vision/ScanConfirm";
 import { toast as notify } from "sonner";
@@ -105,6 +106,7 @@ export function VisionScanner() {
   const runScanAnalysis = useServerFn(analyzeScan);
   const runExtract = useServerFn(extractScan);
   const runSave = useServerFn(saveScan);
+  const runProcess = useServerFn(processDocumentFn);
   const [mode, setModeState] = useState<ScanMode>(() => {
     try {
       const v = typeof window !== "undefined" ? window.localStorage.getItem(MODE_KEY) : null;
@@ -560,25 +562,54 @@ export function VisionScanner() {
           photo: scan.keepPhoto
             ? { imageBase64: pending.frame.base64, mimeType: "image/jpeg" }
             : null,
+          localDate: (() => {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          })(),
         },
       });
       audio.playClick();
       const until = res.photoKeptUntil
         ? ` · zdjęcie do ${new Date(res.photoKeptUntil).toLocaleDateString("pl-PL")}`
         : "";
-      if (res.expense) {
-        const amount = res.expense.total.toLocaleString("pl-PL", {
+      const description = until.replace(/^ · /, "") || undefined;
+      const r = res.routed;
+      if (r.kind === "expense") {
+        const amount = r.total.toLocaleString("pl-PL", {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         });
         notify.success(
-          `Dodano wydatek ${amount} ${res.expense.currency === "PLN" ? "zł" : res.expense.currency} · ${res.expense.merchant}`,
-          {
-            description: until.replace(/^ · /, "") || undefined,
-            action: { label: "Wydatki", onClick: () => go("/wydatki") },
-          },
+          `Dodano wydatek ${amount} ${r.currency === "PLN" ? "zł" : r.currency} · ${r.merchant}`,
+          { description, action: { label: "Wydatki", onClick: () => go("/wydatki") } },
         );
-      } else notify.success(`Skan zapisany${until}`);
+      } else if (r.kind === "vehicle") {
+        notify.success(`Przebieg ${r.odometerKm.toLocaleString("pl-PL")} km w dzienniku auta`, {
+          description,
+          action: { label: "Koszt km", onClick: () => go("/paliwa") },
+        });
+      } else if (r.kind === "note") {
+        notify.success(`Notatka „${r.title}” zapisana`, {
+          description,
+          action: { label: "Notatki", onClick: () => go("/notes") },
+        });
+      } else {
+        // Chunking + embeddings take a moment — the toast follows them.
+        const id = notify.loading(`Dokument „${r.title}” trafia do Mózgu…`, { description });
+        void runProcess({ data: { documentId: r.id } })
+          .then((p) =>
+            p.ok
+              ? notify.success(`Dokument „${r.title}” w Mózgu (${p.chunkCount} fragm.)`, {
+                  id,
+                  description,
+                  action: { label: "Dokumenty", onClick: () => go("/documents") },
+                })
+              : notify.error(`Dokument zapisany, ale nie przetworzony: ${p.reason}`, { id }),
+          )
+          .catch((e) =>
+            notify.error(`Dokument zapisany, ale nie przetworzony: ${String(e)}`, { id }),
+          );
+      }
       setPending(null);
     } catch (err) {
       notify.error(err instanceof Error ? err.message : String(err));
