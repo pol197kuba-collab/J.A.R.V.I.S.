@@ -14,6 +14,7 @@ import { DEFAULT_GEMINI_MODEL } from "@/lib/agents/models";
 import { callAnthropic } from "@/lib/agents/providers/anthropic";
 import { callGeminiText } from "@/lib/agents/providers/geminiText";
 import type { GeminiContent } from "@/lib/agents/providers/types";
+import { stripMarkers } from "@/lib/darwin/prompt";
 import type { MarketAsset } from "./assets";
 import type { SignalDirection, TechnicalOutlook } from "./signals";
 import { REGIME_LABEL_PL, isMarketRegime } from "./regime";
@@ -46,7 +47,7 @@ export type AiVerdict = {
   rationalePl: string | null;
 };
 
-const SYSTEM_PROMPT = `Jesteś analitykiem rynkowym. Dostajesz POLICZONE wskaźniki dla kilku instrumentów i Twoim zadaniem jest je zinterpretować.
+export const SYSTEM_PROMPT = `Jesteś analitykiem rynkowym. Dostajesz POLICZONE wskaźniki dla kilku instrumentów i Twoim zadaniem jest je zinterpretować.
 
 ZASADY, od których nie wolno odstąpić:
 1. NIE wymyślaj ani nie przeliczaj żadnych liczb. Wszystkie wartości (RSI, momentum, średnie, wydźwięk newsów, cena) masz podane i są prawdziwe. Możesz się do nich odwoływać, ale nie podawaj wartości, których nie dostałeś.
@@ -58,6 +59,27 @@ ZASADY, od których nie wolno odstąpić:
 
 Dla każdego instrumentu zwróć obiekt: {"symbol": "...", "direction": "up"|"down"|"flat", "confidence": 0-100, "rationale_pl": "..."}.
 Odpowiedz WYŁĄCZNIE tablicą JSON, w tej samej kolejności co wejście, bez komentarza.`;
+
+/** Slug typera w Darwinie (agent_variants) — pseudo-agent spoza tabeli `agents`. */
+export const TYPER_SLUG = "typer";
+
+/**
+ * SYSTEM_PROMPT jako wariant pokolenia 0 dla Darwina, ze znacznikami sekcji
+ * zablokowanych (src/lib/darwin/prompt.ts). Poza mutacją: rola i zasady
+ * 1–2 (nie wymyślaj liczb, jak liczy się wynik) oraz zasada 6 i format
+ * JSON (bez rekomendacji inwestycyjnych, kontrakt dla parsera). Mutować
+ * wolno zasady 3–5 — jak ważyć przesłanki i pewność. Po zdjęciu znaczników
+ * daje DOKŁADNIE SYSTEM_PROMPT, więc champion gen 0 = typer sprzed Darwina.
+ */
+export const TYPER_BASELINE = (() => {
+  const free = SYSTEM_PROMPT.indexOf("\n3. ");
+  const locked = SYSTEM_PROMPT.indexOf("\n6. ") + 1;
+  return (
+    `[[LOCK rola_i_dane]]${SYSTEM_PROMPT.slice(0, free)}[[/LOCK]]` +
+    SYSTEM_PROMPT.slice(free, locked) +
+    `[[LOCK zasady_i_format]]${SYSTEM_PROMPT.slice(locked)}[[/LOCK]]`
+  );
+})();
 
 const fmt = (value: number | null, digits = 1): string =>
   value === null || !Number.isFinite(value) ? "brak" : value.toFixed(digits);
@@ -219,6 +241,12 @@ export async function forecastWithModel(
      * brak = wariant kontrolny, dokładnie taki jak przed testem.
      */
     lessons?: string[];
+    /**
+     * Prompt wariantu Darwina (ze znacznikami blokad). Brak = SYSTEM_PROMPT.
+     * Ten sam wariant idzie do prognozy kontrolnej i „z wnioskami”, więc
+     * porównanie A/B wniosków zostaje uczciwe.
+     */
+    strategy?: string;
   } = {},
 ): Promise<ForecastResult> {
   const fallback: ForecastResult = {
@@ -235,7 +263,8 @@ export async function forecastWithModel(
   if (!keys.anthropicApiKey && !keys.geminiApiKey) return fallback;
 
   const learned = opts.lessons !== undefined;
-  const system = learned ? SYSTEM_PROMPT + lessonsBlock(opts.lessons ?? []) : SYSTEM_PROMPT;
+  const base = opts.strategy ? stripMarkers(opts.strategy) : SYSTEM_PROMPT;
+  const system = learned ? base + lessonsBlock(opts.lessons ?? []) : base;
   const user = inputs.map((i) => describeForModel(i, { withRegime: learned })).join("\n\n");
   let text: string | null = null;
   let model: string | null = null;

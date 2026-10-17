@@ -35,6 +35,7 @@ export type Database = {
           tokens_input: number | null
           tokens_output: number | null
           user_id: string
+          variant_id: string | null
         }
         Insert: {
           agent_id: string
@@ -56,6 +57,7 @@ export type Database = {
           tokens_input?: number | null
           tokens_output?: number | null
           user_id: string
+          variant_id?: string | null
         }
         Update: {
           agent_id?: string
@@ -77,6 +79,7 @@ export type Database = {
           tokens_input?: number | null
           tokens_output?: number | null
           user_id?: string
+          variant_id?: string | null
         }
         Relationships: [
           {
@@ -140,6 +143,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      agent_variants: {
+        Row: {
+          agent_slug: string
+          created_at: string
+          generation: number
+          id: string
+          mutation_note: string | null
+          owner_id: string
+          parent_ids: string[]
+          promoted_at: string | null
+          prompt: string
+          retired_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          agent_slug: string
+          created_at?: string
+          generation?: number
+          id?: string
+          mutation_note?: string | null
+          owner_id: string
+          parent_ids?: string[]
+          promoted_at?: string | null
+          prompt: string
+          retired_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          agent_slug?: string
+          created_at?: string
+          generation?: number
+          id?: string
+          mutation_note?: string | null
+          owner_id?: string
+          parent_ids?: string[]
+          promoted_at?: string | null
+          prompt?: string
+          retired_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       agents: {
         Row: {
@@ -977,11 +1025,12 @@ export type Database = {
           stale: boolean
           symbol: string
           technical_score: number | null
+          variant_id: string | null
         }
         Insert: {
           actual_change_pct?: number | null
-          context_version?: number | null
           confidence: number
+          context_version?: number | null
           direction: string
           due_at: string
           flat_band_pct?: number | null
@@ -1000,15 +1049,16 @@ export type Database = {
           regime?: string | null
           resolved_at?: string | null
           sentiment_score?: number | null
-          stale?: boolean
           source: string
+          stale?: boolean
           symbol: string
           technical_score?: number | null
+          variant_id?: string | null
         }
         Update: {
           actual_change_pct?: number | null
-          context_version?: number | null
           confidence?: number
+          context_version?: number | null
           direction?: string
           due_at?: string
           flat_band_pct?: number | null
@@ -1027,10 +1077,11 @@ export type Database = {
           regime?: string | null
           resolved_at?: string | null
           sentiment_score?: number | null
-          stale?: boolean
           source?: string
+          stale?: boolean
           symbol?: string
           technical_score?: number | null
+          variant_id?: string | null
         }
         Relationships: []
       }
@@ -1732,11 +1783,52 @@ export type Database = {
         }
         Relationships: []
       }
+      variant_scores: {
+        Row: {
+          created_at: string
+          id: string
+          owner_id: string
+          prediction_id: string | null
+          run_id: string | null
+          score: number
+          scorer: string
+          variant_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          owner_id: string
+          prediction_id?: string | null
+          run_id?: string | null
+          score: number
+          scorer: string
+          variant_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          owner_id?: string
+          prediction_id?: string | null
+          run_id?: string | null
+          score?: number
+          scorer?: string
+          variant_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      agent_variant_stats: {
+        Args: { p_owner: string; p_slug: string }
+        Returns: {
+          n: number
+          total: number
+          variant_id: string
+        }[]
+      }
       brain_apply_layout: {
         Args: {
           p_clusters: Json

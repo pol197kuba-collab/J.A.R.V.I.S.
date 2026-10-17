@@ -32,6 +32,7 @@ import {
   type PredictionDirection,
 } from "./scoreboard";
 import { fetchAllPages } from "@/lib/db/paginate";
+import { chooseVariant } from "@/lib/darwin/variants.server";
 import { classifyRegime, type MarketRegime } from "./regime";
 import { deriveLessons, LESSON_WINDOW_DAYS, type LessonInput } from "./lessons";
 
@@ -354,7 +355,7 @@ export async function buildOutlook(
 
   // Import dynamiczny, jak przy quotes.server/news.server: trzyma klucze
   // i wywołania modelu poza bundlem klienta.
-  const { forecastWithModel } = await import("./forecast.server");
+  const { forecastWithModel, TYPER_BASELINE, TYPER_SLUG } = await import("./forecast.server");
 
   const prepared = assets.flatMap((asset) => {
     const points = normalizeSeries(pointsBySymbol.get(asset.symbol) ?? []);
@@ -384,7 +385,16 @@ export async function buildOutlook(
     ];
   });
 
-  const forecast = await forecastWithModel(prepared, keys);
+  // Darwin: który wariant promptu typera prognozuje dziś (champion albo
+  // pretendent). Bez kluczy model i tak nie ruszy — wtedy bez losowania.
+  // Błąd bazy = null = zwykły prompt (prognoza nie może przez to paść).
+  const variant =
+    keys.anthropicApiKey || keys.geminiApiKey
+      ? await chooseVariant(supabase, userId, TYPER_SLUG, { baseline: TYPER_BASELINE })
+      : null;
+  const strategy = variant?.prompt;
+
+  const forecast = await forecastWithModel(prepared, keys, { strategy });
 
   // Wariant „z wnioskami" testu A/B: ten sam model, ten sam prompt, plus
   // wnioski z rozliczonych prognoz. Tylko gdy wnioski są — bez nich byłby
@@ -392,7 +402,10 @@ export async function buildOutlook(
   const lessons = forecast.model ? deriveLessons(await loadLessonInputs(supabase, userId)) : [];
   const learned =
     lessons.length > 0
-      ? await forecastWithModel(prepared, keys, { lessons: lessons.map((l) => l.textPl) })
+      ? await forecastWithModel(prepared, keys, {
+          lessons: lessons.map((l) => l.textPl),
+          strategy,
+        })
       : null;
   if (learned?.failure) {
     await logEvent(
@@ -458,6 +471,7 @@ export async function buildOutlook(
     rows,
     forecast.model,
     learned?.model ? { model: learned.model, lessons: lessons.map((l) => l.textPl) } : null,
+    variant?.id ?? null,
   );
 
   // Pusty typer wygląda w UI tak samo, niezależnie od przyczyny: braku
@@ -499,6 +513,8 @@ async function recordPredictions(
   rows: OutlookRow[],
   model: string | null,
   learned: { model: string; lessons: string[] } | null = null,
+  /** Wariant Darwina, który napisał prognozy modelu (ai i ai_learned). */
+  variantId: string | null = null,
 ): Promise<void> {
   if (rows.length === 0) return;
   const dueAt = new Date(Date.now() + HORIZON_DAYS * 86_400_000).toISOString();
@@ -561,6 +577,7 @@ async function recordPredictions(
             rationale_pl: ai.rationalePl,
             source: "ai" as const,
             model,
+            variant_id: variantId,
           },
         ];
       })
@@ -581,6 +598,7 @@ async function recordPredictions(
             // Które wnioski widział model — bez tego nie da się później
             // ocenić, co faktycznie pomogło, a co zaszkodziło.
             lessons: learned.lessons as unknown as Json,
+            variant_id: variantId,
           },
         ];
       })

@@ -10,6 +10,8 @@ import type { Database, Json } from "@/integrations/supabase/types";
 import type { AgentRunResult } from "./runtime.functions";
 import { getEnabledToolsForAgent, getToolByName } from "./tools.server";
 import { JARVIS_PERSONA } from "@/lib/ai/persona";
+import { stripMarkers } from "@/lib/darwin/prompt";
+import { chooseVariant } from "@/lib/darwin/variants.server";
 import {
   DEFAULT_GEMINI_MODEL,
   DEFAULT_GROQ_CLASSIFIER_MODEL,
@@ -632,10 +634,20 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
   // nothing to do with JARVIS. Teammates only need to know they're PART OF
   // the J.A.R.V.I.S. system (their own prompts already say so), not that
   // they ARE J.A.R.V.I.S.
+  //
+  // Darwin (S2.1): teammate with live prompt variants gets one picked per
+  // run (champion most of the time, challengers via Thompson sampling) in
+  // place of config.system_prompt. J.A.R.V.I.S. stays out — its prompt is
+  // the persona plus tool contracts, both locked by design. No variants or
+  // any DB error → null → the prompt exactly as before.
+  const variant =
+    agent.slug === AGENT_SLUGS.JARVIS ? null : await chooseVariant(supabase, userId, agent.slug);
   const basePrompt =
     agent.slug === AGENT_SLUGS.JARVIS
       ? DEFAULT_SYSTEM_PROMPT
-      : (agentSpecific ?? DEFAULT_SYSTEM_PROMPT);
+      : variant
+        ? stripMarkers(variant.prompt)
+        : (agentSpecific ?? DEFAULT_SYSTEM_PROMPT);
 
   // Appended for every user-facing run, regardless of whether the agent has
   // a custom system_prompt override — otherwise agents like Herald never
@@ -748,6 +760,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       user_id: userId,
       agent_id: agent.id,
       parent_run_id: parentRunId,
+      variant_id: variant?.id ?? null,
       status: "running",
       input: { text: input, history_len: history.length },
       started_at: new Date(startedAt).toISOString(),
