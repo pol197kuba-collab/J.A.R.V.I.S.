@@ -201,6 +201,108 @@ export type Database = {
         }
         Relationships: []
       }
+      brain_clusters: {
+        Row: {
+          cluster_id: number
+          name: string
+          named_by: string
+          owner_id: string
+          x: number
+          y: number
+          z: number
+        }
+        Insert: {
+          cluster_id: number
+          name: string
+          named_by?: string
+          owner_id: string
+          x: number
+          y: number
+          z: number
+        }
+        Update: {
+          cluster_id?: number
+          name?: string
+          named_by?: string
+          owner_id?: string
+          x?: number
+          y?: number
+          z?: number
+        }
+        Relationships: []
+      }
+      brain_layout_runs: {
+        Row: {
+          cluster_count: number
+          computed_at: string
+          meta: Json
+          method: string
+          owner_id: string
+          point_count: number
+        }
+        Insert: {
+          cluster_count: number
+          computed_at?: string
+          meta?: Json
+          method: string
+          owner_id: string
+          point_count: number
+        }
+        Update: {
+          cluster_count?: number
+          computed_at?: string
+          meta?: Json
+          method?: string
+          owner_id?: string
+          point_count?: number
+        }
+        Relationships: []
+      }
+      brain_points: {
+        Row: {
+          cluster_id: number | null
+          label: string
+          owner_id: string
+          placed_by: string
+          source_created_at: string
+          source_id: string
+          source_type: string
+          updated_at: string
+          weight: number
+          x: number
+          y: number
+          z: number
+        }
+        Insert: {
+          cluster_id?: number | null
+          label: string
+          owner_id: string
+          placed_by?: string
+          source_created_at: string
+          source_id: string
+          source_type: string
+          updated_at?: string
+          weight?: number
+          x: number
+          y: number
+          z: number
+        }
+        Update: {
+          cluster_id?: number | null
+          label?: string
+          owner_id?: string
+          placed_by?: string
+          source_created_at?: string
+          source_id?: string
+          source_type?: string
+          updated_at?: string
+          weight?: number
+          x?: number
+          y?: number
+          z?: number
+        }
+        Relationships: []
+      }
       conversations: {
         Row: {
           agent_id: string | null
@@ -1067,6 +1169,7 @@ export type Database = {
         Row: {
           body: string
           created_at: string
+          embedding: string | null
           id: string
           owner_id: string
           source: string
@@ -1077,6 +1180,7 @@ export type Database = {
         Insert: {
           body?: string
           created_at?: string
+          embedding?: string | null
           id?: string
           owner_id: string
           source?: string
@@ -1087,6 +1191,7 @@ export type Database = {
         Update: {
           body?: string
           created_at?: string
+          embedding?: string | null
           id?: string
           owner_id?: string
           source?: string
@@ -1602,6 +1707,39 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      brain_apply_layout: {
+        Args: {
+          p_clusters: Json
+          p_meta?: Json
+          p_method: string
+          p_owner: string
+          p_points: Json
+        }
+        Returns: number
+      }
+      brain_source_rows: {
+        Args: { p_owner: string }
+        Returns: {
+          embedding: string
+          label: string
+          source_created_at: string
+          source_id: string
+          source_type: string
+          weight: number
+        }[]
+      }
+      brain_sources: {
+        Args: never
+        Returns: {
+          embedding: string
+          label: string
+          source_created_at: string
+          source_id: string
+          source_type: string
+          weight: number
+        }[]
+      }
+      brain_sync: { Args: never; Returns: number }
       get_public_schema_snapshot: { Args: never; Returns: Json }
       has_role: {
         Args: {

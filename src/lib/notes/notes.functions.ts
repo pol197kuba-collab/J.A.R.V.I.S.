@@ -7,6 +7,9 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import type { Json } from "@/integrations/supabase/types";
 import { logServerError } from "@/lib/system/logServerError";
+import { embedText, noteEmbeddingText, toVectorLiteral } from "@/lib/ai/embed";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 
 export type Note = {
   id: string;
@@ -17,6 +20,31 @@ export type Note = {
   createdAt: string;
   updatedAt: string;
 };
+
+// Embedding notatki dla Mózgu 3D — best-effort i z krótkim limitem, bo
+// użytkownik czeka na zapis. Bez klucza Gemini albo przy błędzie notatka
+// zapisuje się bez niego, a nocny job (scripts/brain-layout.ts) ją dogoni.
+async function noteEmbeddingPatch(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  title: string,
+  body: string,
+): Promise<{ embedding?: string }> {
+  const { data } = await supabase
+    .from("user_secrets")
+    .select("gemini_api_key")
+    .eq("owner_id", userId)
+    .maybeSingle();
+  const apiKey = data?.gemini_api_key?.trim();
+  if (!apiKey) return {};
+  const embedding = await embedText(
+    noteEmbeddingText(title, body),
+    apiKey,
+    "RETRIEVAL_DOCUMENT",
+    5_000,
+  );
+  return embedding ? { embedding: toVectorLiteral(embedding) } : {};
+}
 
 export const listNotes = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -54,14 +82,16 @@ export const createNote = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => CreateInput.parse(input))
   .handler(async ({ data, context }): Promise<Note> => {
     const { supabase, userId } = context;
+    const title = data.title.trim();
     const { data: row, error } = await supabase
       .from("notes")
       .insert({
         owner_id: userId,
-        title: data.title.trim(),
+        title,
         body: data.body,
         tags: data.tags,
         source: "manual",
+        ...(await noteEmbeddingPatch(supabase, userId, title, data.body)),
       })
       .select("id, title, body, tags, source, created_at, updated_at")
       .single();
@@ -111,11 +141,15 @@ export const updateNote = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => UpdateInput.parse(input))
   .handler(async ({ data, context }): Promise<Note> => {
     const { supabase, userId } = context;
+    const title = data.title.trim();
     const patch = {
-      title: data.title.trim(),
+      title,
       body: data.body,
       updated_at: new Date().toISOString(),
       ...(data.tags ? { tags: data.tags } : {}),
+      // Bez nowego embeddingu trigger w bazie wyzeruje stary, gdy zmienił się
+      // tytuł albo treść — nieaktualny wektor jest gorszy niż żaden.
+      ...(await noteEmbeddingPatch(supabase, userId, title, data.body)),
     };
     const { data: row, error } = await supabase
       .from("notes")

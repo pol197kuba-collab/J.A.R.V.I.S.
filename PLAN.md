@@ -39,60 +39,102 @@ Wspólne zasady (z `CLAUDE.md` i dotychczasowej praktyki):
 
 Bez tego każda z kolejnych sesji kończy się „wgraj migrację ręcznie".
 
-- [ ] **S0.1** Domknąć przepięcie na `ybdyiebhtfoccbfupkjn` (sekcja 0 w `TODO.md`).
+- [x] **S0.1** Przepięcie na `ybdyiebhtfoccbfupkjn` — potwierdzone przez właściciela 2026-10-16.
 - [x] **S0.2** Workflow `db-migrations.yml` + `scripts/db-migrations.sh`
       (`check` na PR, `push` po merge, jednorazowy `baseline`), migracja
-      włączająca `pg_cron` + `pg_net`. Sekret `SUPABASE_DB_URL`.
-      Kryterium: migracja z PR-a ląduje w bazie bez SQL editora —
-      **po kroku właściciela** (TODO.md, sekcja 0).
+      włączająca `pg_cron` + `pg_net`. Sekret `SUPABASE_DB_URL`, baseline
+      `20261016180000` i pierwszy push zrobione 2026-10-16 (oba przebiegi zielone).
 
 ---
 
-## Etap 1 — Mózg 3D: konstelacja wiedzy (3 sesje)
+## Etap 1 — Mózg 3D: konstelacja wiedzy + mapa bazy (4 sesje)
 
 **Cel:** wszystko, co J.A.R.V.I.S. wie, jako galaktyka 3D: bliskie tematy =
 gromady gwiazd. Pytanie w czacie rozświetla gwiazdy, z których wziął odpowiedź.
+Drugi tryb tej samej sceny (pomysł właściciela, 2026-10-16): **STRUKTURA** —
+tabele bazy jako planety połączone kluczami obcymi.
 
-**Co już mamy:** `memories.embedding` i `document_chunks.embedding`
-(vector(768), Gemini), three.js + `@react-three/fiber/drei/postprocessing`,
-`useThemeColors` dla kolorów w canvasie.
-**Czego brakuje:** embeddingów notatek (`notes` nie ma kolumny), rzutu 768→3D,
-klastrów i śladu RAG z runtime'u.
+**Obsługa na telefonie jest wymaganiem, nie dodatkiem** — każda sesja
+etapu sprawdzana na wąskim ekranie (portret) i w PWA na iPhonie.
 
-### S1.1 — dane i rzut
+### S1.1 — dane i rzut — **zrobione 2026-10-16**
 
-- [ ] Migracja: `notes.embedding vector(768)` + backfill (best-effort, jak `remember`).
-- [ ] Tabela `brain_points` (owner_id, source_type `memory|document|note|task`,
-      source_id, x, y, z, cluster_id, label, created_at) + `brain_clusters`
-      (id, nazwa, liczność, centroid).
-- [ ] Dokumenty reprezentowane centroidem chunków (1 gwiazda = 1 dokument),
-      żeby liczba punktów została w tysiącach, nie dziesiątkach tysięcy.
-- [ ] `src/lib/brain/projection.ts` — UMAP (`umap-js`, zaakceptowana) + k-means na embeddingach; czysta logika, testy.
-- [ ] Pełne przeliczenie nocą (pg_cron), nowe elementy w ciągu dnia
-      wstawiane jako średnia pozycji k najbliższych sąsiadów (bez przeliczania całości).
-- [ ] Nazwy klastrów: jedno tanie wywołanie modelu na klaster, cache do zmiany składu.
+- [x] Migracja `20261017090000_brain_points.sql`: `notes.embedding` (+ trigger
+      zerujący nieaktualny wektor po zmianie treści), `brain_points`,
+      `brain_clusters`, `brain_layout_runs`, RLS właściciela.
+- [x] Dokument = 1 gwiazda (średnia embeddingów chunków, liczona w SQL).
+- [x] `src/lib/brain/`: UMAP z odległością kosinusową (jak `<=>` w pgvector),
+      PCA dla < 8 gwiazd, **wyrównanie do wczorajszego układu** (obrót,
+      odbicie, skala) i **ciepły start UMAP od wczorajszych pozycji** —
+      bez niego jedna nowa notatka przestawiała galaktykę (dryf ~0,75 przy
+      promieniu 1), z nim ~0,07–0,10 przy 20 nowych gwiazdach,
+      k-średnich na 3D, nazwy gromad ze słów (TF-IDF) — 25 testów.
+- [x] Pełny układ nocą: `scripts/brain-layout.ts` + `brain-layout.yml`
+      (03:40) — poza aplikacją, bo UMAP to sekundy CPU, a serwer to
+      Cloudflare Worker. 2000 gwiazd ≈ 7,5 s.
+- [x] Nowe gwiazdy w ciągu dnia: `brain_place_new` (średnia 5 najbliższych
+      sąsiadów, czysty SQL) co 10 min przez **pg_cron** + `brain_sync()` przy
+      wejściu na stronę.
+- [x] Nazwy gromad od Gemini jednym wywołaniem na cały układ; bez klucza
+      albo przy błędzie — nazwy ze słów kluczowych.
+- [x] Embedding notatki przy zapisie (widżet notatek i narzędzie
+      `save_note`); reszta (MCP, stare wiersze, wspomnienia bez wektora) —
+      nocny backfill.
+- Zadania (`tasks`) świadomie poza Mózgiem: nie mają embeddingów i są
+  krótkotrwałe; wrócić do tego, jeśli galaktyka będzie za uboga.
 
-### S1.2 — scena
+### S1.2 — scena WIEDZA (mobile-first)
 
-- [ ] Trasa `/mozg` z R3F: instanced points, bloom, orbit/fly controls.
+- [ ] Trasa `/mozg` z R3F: instanced points (jedno wywołanie rysowania na
+      wszystkie gwiazdy), bloom, sterowanie orbitalne.
 - [ ] Kolor = typ źródła (tokeny `--primary`, `--accent`, `--reactor`, `--success`),
-      jasność = świeżość/ważność (`importance`), rozmiar = liczba odwołań.
-- [ ] Hover → podpis; klik → otwiera notatkę/dokument (istniejący `openDocumentBus`).
-- [ ] Wyszukiwarka → kamera przelatuje do gwiazdy. Etykiety klastrów w przestrzeni.
-- [ ] Mobile: limit punktów, niższy DPR, dotykowe sterowanie.
+      jasność = świeżość, rozmiar = waga (`importance`).
+- [ ] Wyszukiwarka → kamera przelatuje do gwiazdy. Etykiety gromad w przestrzeni.
+- [ ] Klik/tap → karta szczegółów; „otwórz” → notatka/dokument (`openDocumentBus`).
+- [ ] **Telefon:**
+  - jeden palec = obrót, dwa palce = zoom (pinch) i przesuwanie,
+    podwójny tap = przybliż do gwiazdy; `touch-action: none` na canvasie,
+    żeby gest nie przewijał strony;
+  - **brak hovera** — podpis i szczegóły po tapnięciu, w wysuwanej od dołu
+    karcie (bottom sheet) zamiast dymka; cele dotyku ≥ 44 px;
+    tapnięcie w gwiazdę z tolerancją (promień trafienia większy niż kropka);
+  - wydajność: DPR ≤ 1,5, adaptacyjnie wyłączany bloom przy spadku FPS,
+    limit etykiet w kadrze, scena pauzuje, gdy karta jest w tle;
+  - układ: panel wyszukiwania i przełącznik trybów u góry, karta u dołu,
+    z `safe-area-inset`; container queries, nie warianty viewportu;
+  - widok **LISTA** jako alternatywa dla słabszych telefonów i dostępności
+    (gromady → elementy), ten sam stan wyszukiwania.
+- [ ] Wygląd w trybie HUD i TOWN.
 
 ### S1.3 — Mózg żyje
 
 - [ ] **Ślad RAG:** runtime publikuje id trafień z `recall`/wyszukiwania
       dokumentów (Realtime Broadcast) → gwiazdy rozbłyskują i łączą się
       liniami z rdzeniem, gdy J.A.R.V.I.S. odpowiada.
-- [ ] Suwak czasu: jak mózg rósł (po `created_at`).
+- [ ] Suwak czasu: jak mózg rósł (po `source_created_at`).
 - [ ] Panel „Wnioski": sieroty (gwiazdy bez sąsiadów), gęste klastry bez
       notatki-podsumowania, duplikaty (podobieństwo > 0.95) do scalenia.
-- [ ] Wygląd w trybie TOWN.
+
+### S1.4 — tryb STRUKTURA: mapa bazy danych
+
+- [ ] Przełącznik **WIEDZA / STRUKTURA** na `/mozg` — ta sama scena, kamera
+      i obsługa dotyku, inny zestaw obiektów.
+- [ ] Tabele jako planety: rozmiar = liczba wierszy (`pg_class.reltuples`),
+      kolor = obszar modułu (rynki, paliwa, agenci, wiedza…), obwódka = RLS
+      włączone/wyłączone. Klucze obce jako linie; układ siłowy (force-directed),
+      powiązane tabele lądują obok siebie.
+- [ ] Tap w tabelę → karta: kolumny, typy, klucze, polityki RLS (źródło:
+      istniejące RPC `get_public_schema_snapshot` z `/schema`).
+- [ ] Podgląd danych: pierwsze wiersze **tylko przez RLS** (czyli wyłącznie
+      dane właściciela), tylko do odczytu; tabele z sekretami
+      (`user_secrets`, `push_subscriptions`) bez podglądu, wyłącznie struktura.
+- [ ] Przejście między trybami: gwiazda wiedzy „wie”, z której tabeli
+      pochodzi (np. notatka → planeta `notes`).
+- [ ] `/schema` zostaje jako widok tabelaryczny; STRUKTURA go nie zastępuje.
 
 **Gotowe, gdy:** widzę swoje notatki/dokumenty/wspomnienia jako gromady
-z sensownymi nazwami, a pytanie w czacie zapala właściwe gwiazdy.
+z sensownymi nazwami, pytanie w czacie zapala właściwe gwiazdy, a na
+telefonie jednym przełącznikiem przechodzę do mapy tabel i ich danych.
 
 ---
 
@@ -228,12 +270,12 @@ po jednym potwierdzeniu, a dokument w Mózgu jako nowa gwiazda.
 | Sesja    | Co        | Efekt do obejrzenia                 |
 | -------- | --------- | ----------------------------------- |
 | S0       | fundament | migracje same w bazie               |
-| S1.1–1.3 | Mózg 3D   | galaktyka + ślad RAG                |
+| S1.1–1.4 | Mózg 3D   | galaktyka, ślad RAG, mapa bazy      |
 | S2.1–2.4 | Darwin    | warianty, arena, laboratorium       |
 | S3.1–3.3 | Fundusz   | ranking z benchmarkiem i małpą      |
 | S4.1–4.3 | Vision AR | paragon/licznik/dokument z telefonu |
 
-Razem ~14 sesji. Fundusz (S3.1) może ruszyć równolegle z Darwinem, bo
+Razem ~15 sesji. Fundusz (S3.1) może ruszyć równolegle z Darwinem, bo
 silnik nie zależy od wariantów; łączą się dopiero w S3.2.
 
 ## Decyzje (2026-10-16)
