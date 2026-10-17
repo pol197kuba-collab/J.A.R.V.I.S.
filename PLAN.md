@@ -68,7 +68,7 @@ etapu sprawdzana na wąskim ekranie (portret) i w PWA na iPhonie.
       odbicie, skala) i **ciepły start UMAP od wczorajszych pozycji** —
       bez niego jedna nowa notatka przestawiała galaktykę (dryf ~0,75 przy
       promieniu 1), z nim ~0,07–0,10 przy 20 nowych gwiazdach,
-      k-średnich na 3D, nazwy gromad ze słów (TF-IDF) — 25 testów.
+      k-średnich na 3D (√(n/2) gromad, max 12), nazwy gromad ze słów (TF-IDF).
 - [x] Pełny układ nocą: `scripts/brain-layout.ts` + `brain-layout.yml`
       (03:40) — poza aplikacją, bo UMAP to sekundy CPU, a serwer to
       Cloudflare Worker. 2000 gwiazd ≈ 7,5 s.

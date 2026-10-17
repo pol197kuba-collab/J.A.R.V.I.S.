@@ -1,0 +1,51 @@
+name: Brain Demo
+
+# Dane demonstracyjne dla Mózgu 3D (/mozg): notatki wiedzy na tematy
+# właściciela i kilka wspomnień z faktów, które sam podał — wszystko z tagiem
+# „demo-mozg”. `seed` wgrywa je raz, `remove` usuwa dokładnie te wiersze.
+# Po każdym z nich ten sam job przelicza układ (scripts/brain-layout.ts),
+# więc galaktyka jest gotowa od razu. Treść: src/lib/brain/demoSeed.ts.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "seed = wgraj dane demo, remove = usuń je"
+        type: choice
+        options: [seed, remove]
+        default: seed
+
+concurrency:
+  group: brain-layout
+  cancel-in-progress: false
+
+jobs:
+  demo:
+    name: dane demo Mózgu (${{ inputs.action }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      JARVIS_OWNER_ID: ${{ secrets.JARVIS_OWNER_ID }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+      JARVIS_EMAIL: ${{ secrets.JARVIS_EMAIL }}
+      JARVIS_PASSWORD: ${{ secrets.JARVIS_PASSWORD }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Demo data
+        run: npx --yes tsx@4.21.0 scripts/brain-demo.ts ${{ inputs.action }}
+
+      # Ten sam skrypt co nocny układ: dogania embeddingi nowych notatek
+      # i wspomnień, liczy galaktykę i nazywa gromady.
+      - name: Build layout
+        run: npx --yes tsx@4.21.0 scripts/brain-layout.ts

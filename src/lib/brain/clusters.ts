@@ -9,10 +9,14 @@ import { centroid, dist2, seededRandom, type Vec3 } from "./projection";
 
 export const MAX_CLUSTERS = 12;
 
-/** Ile gromad dla n gwiazd: ~√(n/4), od 2 do MAX_CLUSTERS; poniżej 6 gwiazd jedna. */
+/**
+ * Ile gromad dla n gwiazd: ~√(n/2), od 2 do MAX_CLUSTERS; poniżej 6 gwiazd
+ * jedna. (Było √(n/4) — przy ~75 gwiazdach dawało 4 gromady na 7 tematów,
+ * więc mały Mózg sklejał różne tematy w jedną nazwę.)
+ */
 export function chooseClusterCount(n: number): number {
   if (n < 6) return n === 0 ? 0 : 1;
-  return Math.max(2, Math.min(MAX_CLUSTERS, Math.round(Math.sqrt(n / 4))));
+  return Math.max(2, Math.min(MAX_CLUSTERS, Math.round(Math.sqrt(n / 2))));
 }
 
 export type Clustering = { assignments: number[]; centroids: Vec3[] };
