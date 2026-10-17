@@ -13,8 +13,9 @@
 //   bez krótkiej sprzedaży, bez dźwigni (kupno tylko za posiadaną gotówkę).
 // - Wielkość pozycji: „wzrost” → cel = 20% × pewność; „spadek” → sprzedaj
 //   całość; „bez zmian” → trzymaj, nie dokupuj (i anuluj czekające zlecenie).
-// - Drobne korekty (< MIN_TRADE_PLN) są pomijane — inaczej codzienne
-//   wahania pewności mieliłyby prowizję.
+// - Drobne korekty (< 500 zł albo < 2% portfela) są pomijane — inaczej
+//   codzienne wahania pewności (65% → 68%) dokupowałyby po tysiąc złotych
+//   i mieliły prowizję. Pełna sprzedaż („spadek”) zawsze przechodzi.
 //
 // Całą historię liczymy od nowa przy każdym przebiegu (to kilkanaście
 // instrumentów × kilkadziesiąt dni): zmiana zasad działa wstecz spójnie,
@@ -43,6 +44,8 @@ export type FundRules = {
   startCashPln: number;
   maxWeight: number;
   minTradePln: number;
+  /** Korekta mniejsza niż ten ułamek portfela jest pomijana (pasmo tolerancji). */
+  minTradeNavShare: number;
   commissionRate: number;
   /** Pełny spread (kupno–sprzedaż) jako ułamek ceny, per klasa aktywów. */
   spreadByClass: Record<AssetClass, number>;
@@ -52,6 +55,7 @@ export const DEFAULT_RULES: FundRules = {
   startCashPln: 100_000,
   maxWeight: 0.2,
   minTradePln: 500,
+  minTradeNavShare: 0.02,
   // Typowa prowizja polskiego brokera na rynkach zagranicznych / krypto-giełdy.
   commissionRate: 0.001,
   spreadByClass: {
@@ -202,7 +206,9 @@ export function simulate(
     const half = rules.spreadByClass[inst.assetClass] / 2;
     const held = holdings.get(signal.symbol) ?? { units: 0, costPln: 0 };
     const current = held.units * px * fx;
-    const delta = target * navAt(date) - current;
+    const nav = navAt(date);
+    const delta = target * nav - current;
+    const minTrade = Math.max(rules.minTradePln, rules.minTradeNavShare * nav);
     const base = {
       symbol: signal.symbol,
       fxRate: fx,
@@ -216,6 +222,7 @@ export function simulate(
 
     if (delta > 0) {
       // Kupno tylko za gotówkę, z miejscem na prowizję.
+      if (delta < minTrade) return;
       const budget = Math.min(delta, cash / (1 + rules.commissionRate));
       if (budget < rules.minTradePln) return;
       const price = px * (1 + half);
@@ -237,7 +244,7 @@ export function simulate(
       });
     } else if (delta < 0 && held.units > 0) {
       const sellAll = target === 0;
-      if (!sellAll && -delta < rules.minTradePln) return;
+      if (!sellAll && -delta < minTrade) return;
       const units = sellAll ? held.units : Math.min(held.units, -delta / (px * fx));
       const price = px * (1 - half);
       const proceeds = units * price * fx;

@@ -274,3 +274,64 @@ describe("buildFund", () => {
     expect(buildFund([], new Map(), "2026-10-05")).toBeNull();
   });
 });
+
+describe("fundRows", () => {
+  it("mapuje wynik na wiersze tabel, PLN zaokrąglone do groszy", async () => {
+    const { buildFund } = await import("./fund");
+    const { fundRows } = await import("./fund.server");
+    const start = "2026-10-01";
+    const run = buildFund(
+      [
+        {
+          id: "p1",
+          source: "ai",
+          symbol: "CDR.PL",
+          made_on: start,
+          direction: "up",
+          confidence: 73,
+          rationale_pl: "powód",
+        },
+      ],
+      new Map([["CDR.PL", series(start, [10, 10.37, 11])]]),
+      addDays(start, 2),
+    )!;
+    const ids = new Map(run.players.map((p) => [p.key, `id-${p.key}`]));
+    const rows = fundRows(run, "u1", ids);
+    const aiOrders = rows.orders.filter((o) => o.portfolio_id === "id-ai");
+    expect(aiOrders).toHaveLength(1);
+    expect(aiOrders[0]).toMatchObject({
+      owner_id: "u1",
+      side: "buy",
+      prediction_id: "p1",
+      reason: "powód",
+      signal_on: start,
+      executed_on: addDays(start, 1),
+      confidence: 73,
+    });
+    expect(Number.isInteger(aiOrders[0].notional_pln * 100)).toBe(true);
+    // Wycena: dzień po dniu dla każdego z 5 graczy.
+    expect(rows.nav.filter((n) => n.portfolio_id === "id-ai")).toHaveLength(3);
+    expect(rows.positions.filter((p) => p.portfolio_id === "id-ai")[0].as_of).toBe(
+      addDays(start, 2),
+    );
+    // Gracz bez id portfela (np. błąd upsertu) — pominięty, nie wywraca reszty.
+    expect(fundRows(run, "u1", new Map()).orders).toHaveLength(0);
+  });
+});
+
+describe("pasmo tolerancji", () => {
+  it("drobna zmiana pewności nie dokupuje (mniej niż 2% portfela)", () => {
+    const start = "2026-10-01";
+    const r = simulate(
+      [
+        sig({ symbol: "A", madeOn: start, confidence: 65 }),
+        sig({ symbol: "A", madeOn: addDays(start, 1), confidence: 70 }),
+        sig({ symbol: "A", madeOn: addDays(start, 2), confidence: 100 }),
+      ],
+      book({ A: series(start, [10, 10, 10, 10]) }, { A: PLN_EQ }),
+      { start, end: addDays(start, 3) },
+    );
+    // 13% → 14% pominięte (1 pp), 14% → 20% wykonane (6 pp).
+    expect(r.trades.map((t) => t.executedOn)).toEqual([addDays(start, 1), addDays(start, 3)]);
+  });
+});

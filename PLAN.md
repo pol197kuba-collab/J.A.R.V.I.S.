@@ -267,13 +267,22 @@ własnych prognoz. Ranking pokazuje, komu ufać, w złotówkach, nie w procentac
       w dniu startu) i **małpa z rzutkami** (deterministyczna). Start = dzień
       pierwszej prognozy w bazie (decyzja 2026-10-17).
 
-### S3.2 — gracze i job
+### S3.2 — gracze i job — **zrobione 2026-10-17**
 
-- [ ] Gracze: `signals`, `ai`, `ai_learned`,
-      **benchmark kup-i-trzymaj** (WIG20 ETF / SPX) oraz **małpa z rzutkami**
-      (losowe zlecenia), czyli uczciwa linia odniesienia.
-- [ ] Krok w `market-grid` po zapisaniu prognoz; wynik dzienny → `fund_nav_daily`.
-- [ ] (Po powrocie Darwina: NAV gracza = drugi fitness dla wariantów.)
+- [x] Gracze: `ai_learned`, `ai`, `signals`, **koszyk „kup i trzymaj
+      wszystko”** i **małpa z rzutkami** (uczciwe linie odniesienia).
+- [x] Krok 5 „Fundusz” w `market-grid` (`scripts/markets-daily.ts`) po
+      rozliczeniu prognoz: `recomputeFund` (`src/lib/fund/fund.server.ts`)
+      przelicza całą historię od pierwszej prognozy (bez kopii `stale`),
+      upsertuje portfele (stałe id) i podmienia zlecenia, pozycje i dzienną
+      wycenę. Ranking w logu Actions. Zero tokenów.
+- [x] Pasmo tolerancji: korekta < 500 zł albo < 2% portfela pomijana
+      (wahania pewności 65% → 68% nie mielą prowizji); pełna sprzedaż
+      zawsze przechodzi.
+- [x] Sprawdzone na Postgres + PostgREST jako zalogowany użytkownik (RLS):
+      dwa przebiegi z rzędu dają identyczny wynik, żadne zlecenie nie jest
+      zrealizowane w dniu prognozy.
+- (Po powrocie Darwina: NAV gracza = drugi fitness dla wariantów.)
 
 ### S3.3 — sala notowań
 

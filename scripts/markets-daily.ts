@@ -34,6 +34,7 @@ import {
   type Db,
 } from "../src/lib/markets/ingest.server";
 import { evaluateStandingOrders } from "../src/lib/orders/evaluate.server";
+import { recomputeFund } from "../src/lib/fund/fund.server";
 
 const args = new Set(process.argv.slice(2));
 const DRY_RUN = args.has("--dry-run");
@@ -223,7 +224,24 @@ async function main(): Promise<void> {
     await report("rozliczenie", err instanceof Error ? err.message : String(err));
   }
 
-  // ---------- 5. Stałe rozkazy ----------
+  // ---------- 5. Fundusz ----------
+  // Po rozliczeniu, na świeżych notowaniach. Przelicza całą historię
+  // portfeli na papierze od pierwszej prognozy (bez modelu, zero tokenów).
+  try {
+    const fund = await recomputeFund(db, ownerId);
+    if (fund.start === null) notice("fundusz: brak prognoz — nic do przeliczenia");
+    else {
+      const ranking = [...fund.players]
+        .sort((a, b) => b.returnPct - a.returnPct)
+        .map((p) => `${p.label} ${p.returnPct >= 0 ? "+" : ""}${p.returnPct.toFixed(2)}%`)
+        .join(", ");
+      notice(`fundusz (od ${fund.start}): ${ranking}`);
+    }
+  } catch (err) {
+    await report("fundusz", err instanceof Error ? err.message : String(err));
+  }
+
+  // ---------- 6. Stałe rozkazy ----------
   // Na samym końcu, bo rozkaz ma być oceniany przeciwko notowaniom
   // zaciągniętym przed chwilą, a nie przeciwko wczorajszemu stanowi bazy.
   // Ten sam ewaluator obsługuje progi paliwowe w scripts/orlen-daily.ts.
