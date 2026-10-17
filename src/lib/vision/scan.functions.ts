@@ -171,7 +171,13 @@ const SaveScanInput = z.object({
   photo: ImageSchema.nullable().default(null),
 });
 
-export type SavedScan = { id: string; photoKeptUntil: string | null; purgedPhotos: number };
+export type SavedScan = {
+  id: string;
+  photoKeptUntil: string | null;
+  purgedPhotos: number;
+  /** A receipt becomes an expense on save (S4.2). */
+  expense: { id: string; total: number; currency: string; merchant: string } | null;
+};
 
 function base64ToBytes(b64: string): Uint8Array {
   const bin = atob(b64);
@@ -231,6 +237,52 @@ export const saveScan = createServerFn({ method: "POST" })
       throw new Error(`Nie udało się zapisać skanu: ${error?.message ?? "brak odpowiedzi"}`);
     }
 
+    // A confirmed receipt is an expense right away — one scan, one tap.
+    // If the expense can't be written, the scan is rolled back too, so a
+    // retry doesn't leave a scan without its expense.
+    let expense: SavedScan["expense"] = null;
+    if (data.scan.mode === "receipt") {
+      const r = data.scan.data;
+      const rollback = async (why: string): Promise<never> => {
+        await supabase.from("vision_scans").delete().eq("id", row.id);
+        if (photoPath) await supabase.storage.from(BUCKET).remove([photoPath]);
+        throw new Error(`Nie udało się dodać wydatku: ${why}`);
+      };
+      const { data: exp, error: expErr } = await supabase
+        .from("expenses")
+        .insert({
+          owner_id: userId,
+          scan_id: row.id,
+          merchant: r.merchant,
+          spent_on: r.date,
+          total: r.total,
+          currency: r.currency,
+        })
+        .select("id")
+        .single();
+      if (expErr || !exp) await rollback(expErr?.message ?? "brak odpowiedzi");
+      else {
+        if (r.items.length) {
+          const { error: itErr } = await supabase.from("expense_items").insert(
+            r.items.map((it, position) => ({
+              owner_id: userId,
+              expense_id: exp.id,
+              position,
+              name: it.name,
+              qty: it.qty,
+              price: it.price,
+              category: it.category,
+            })),
+          );
+          if (itErr) {
+            await supabase.from("expenses").delete().eq("id", exp.id);
+            await rollback(itErr.message);
+          }
+        }
+        expense = { id: exp.id, total: r.total, currency: r.currency, merchant: r.merchant };
+      }
+    }
+
     // Retention: photos past their 30 days go; the scan's fields stay.
     let purgedPhotos = 0;
     const { data: expired } = await supabase
@@ -255,5 +307,5 @@ export const saveScan = createServerFn({ method: "POST" })
       }
     }
 
-    return { id: row.id, photoKeptUntil: expiresAt, purgedPhotos };
+    return { id: row.id, photoKeptUntil: expiresAt, purgedPhotos, expense };
   });

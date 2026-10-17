@@ -17,6 +17,7 @@ import {
   Fuel,
   Castle,
   Brain,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -90,6 +91,13 @@ export const MODULE_GROUPS: readonly ModuleGroup[] = [
         keywords: "markets giełda kursy",
       },
       { title: "Vision", shortTitle: "Vision", url: "/vision", icon: Eye, keywords: "skan obraz" },
+      {
+        title: "Wydatki",
+        shortTitle: "Wydatki",
+        url: "/wydatki",
+        icon: Wallet,
+        keywords: "paragony expenses budżet zakupy koszty",
+      },
     ],
   },
   {

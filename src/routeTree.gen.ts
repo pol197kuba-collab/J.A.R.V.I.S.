@@ -29,6 +29,7 @@ import { Route as SystemLogsRouteImport } from './routes/system-logs'
 import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as TownRouteImport } from './routes/town'
 import { Route as VisionRouteImport } from './routes/vision'
+import { Route as WydatkiRouteImport } from './routes/wydatki'
 import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
 import { Route as AgentHubSlugRouteImport } from './routes/agent-hub_.$slug'
@@ -135,6 +136,11 @@ const VisionRoute = VisionRouteImport.update({
   path: '/vision',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WydatkiRoute = WydatkiRouteImport.update({
+  id: '/wydatki',
+  path: '/wydatki',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const Char91DotmcpChar93ListToolsRoute =
   Char91DotmcpChar93ListToolsRouteImport.update({
     id: '/.mcp/list-tools',
@@ -185,6 +191,7 @@ export interface FileRoutesByFullPath {
   '/tasks': typeof TasksRoute
   '/town': typeof TownRoute
   '/vision': typeof VisionRoute
+  '/wydatki': typeof WydatkiRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/agent-hub/$slug': typeof AgentHubSlugRoute
@@ -212,6 +219,7 @@ export interface FileRoutesByTo {
   '/tasks': typeof TasksRoute
   '/town': typeof TownRoute
   '/vision': typeof VisionRoute
+  '/wydatki': typeof WydatkiRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/agent-hub/$slug': typeof AgentHubSlugRoute
@@ -240,6 +248,7 @@ export interface FileRoutesById {
   '/tasks': typeof TasksRoute
   '/town': typeof TownRoute
   '/vision': typeof VisionRoute
+  '/wydatki': typeof WydatkiRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/agent-hub_/$slug': typeof AgentHubSlugRoute
@@ -269,6 +278,7 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/town'
     | '/vision'
+    | '/wydatki'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
     | '/agent-hub/$slug'
@@ -296,6 +306,7 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/town'
     | '/vision'
+    | '/wydatki'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
     | '/agent-hub/$slug'
@@ -323,6 +334,7 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/town'
     | '/vision'
+    | '/wydatki'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
     | '/agent-hub_/$slug'
@@ -351,6 +363,7 @@ export interface RootRouteChildren {
   TasksRoute: typeof TasksRoute
   TownRoute: typeof TownRoute
   VisionRoute: typeof VisionRoute
+  WydatkiRoute: typeof WydatkiRoute
   Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
   Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   AgentHubSlugRoute: typeof AgentHubSlugRoute
@@ -500,6 +513,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VisionRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/wydatki': {
+      id: '/wydatki'
+      path: '/wydatki'
+      fullPath: '/wydatki'
+      preLoaderRoute: typeof WydatkiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/.mcp/list-tools': {
       id: '/.mcp/list-tools'
       path: '/.mcp/list-tools'
@@ -559,6 +579,7 @@ const rootRouteChildren: RootRouteChildren = {
   TasksRoute: TasksRoute,
   TownRoute: TownRoute,
   VisionRoute: VisionRoute,
+  WydatkiRoute: WydatkiRoute,
   Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
   Char91DotwellKnownChar93OauthProtectedResourceRoute:
     Char91DotwellKnownChar93OauthProtectedResourceRoute,
@@ -569,13 +590,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

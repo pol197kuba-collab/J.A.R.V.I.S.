@@ -566,7 +566,19 @@ export function VisionScanner() {
       const until = res.photoKeptUntil
         ? ` · zdjęcie do ${new Date(res.photoKeptUntil).toLocaleDateString("pl-PL")}`
         : "";
-      notify.success(`Skan zapisany${until}`);
+      if (res.expense) {
+        const amount = res.expense.total.toLocaleString("pl-PL", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+        notify.success(
+          `Dodano wydatek ${amount} ${res.expense.currency === "PLN" ? "zł" : res.expense.currency} · ${res.expense.merchant}`,
+          {
+            description: until.replace(/^ · /, "") || undefined,
+            action: { label: "Wydatki", onClick: () => go("/wydatki") },
+          },
+        );
+      } else notify.success(`Skan zapisany${until}`);
       setPending(null);
     } catch (err) {
       notify.error(err instanceof Error ? err.message : String(err));
