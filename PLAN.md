@@ -158,7 +158,16 @@ telefonie jednym przełącznikiem przechodzę do mapy tabel i ich danych.
 
 ---
 
-## Etap 2 — Darwin: agenci, którzy ewoluują (4 sesje)
+## Etap 2 — Darwin: agenci, którzy ewoluują (4 sesje) — **ZAPARKOWANE 2026-10-17**
+
+> **Zaparkowane** (decyzja 2026-10-17): na razie za duży koszt tokenów
+> (arena = dziesiątki wywołań modelu na wariant). Zostaje fundament S2.1,
+> który nic nie kosztuje: tabele wariantów i ocen, losowanie, blokady;
+> typer ma championa pokolenia 0 = dotychczasowy prompt, więc działa jak
+> przed Darwinem. Przy powrocie zaczynamy od S2.2 z ustaleniami: arena na
+> Gemini Flash + finał 2–3 najlepszych na modelu z produkcji, 30 dni
+> historii na wariant (newsy są w bazie bez retencji, więc arena może
+> odtworzyć też wydźwięk z danego dnia).
 
 **Cel:** prompt agenta przestaje być stałym tekstem. Warianty rywalizują na
 prawdziwych zadaniach, słabsze odpadają, lepsze się krzyżują i mutują.
@@ -234,23 +243,37 @@ własnych prognoz. Ranking pokazuje, komu ufać, w złotówkach, nie w procentac
 **Co już mamy:** `market_quotes`, `market_predictions` (źródła `signals`,
 `ai`, `ai_learned`), kursy `USDPLN`/`EURPLN` na watchliście, nocny job `market-grid`.
 
-### S3.1 — silnik (czysta logika)
+### S3.1 — silnik (czysta logika) — **zrobione 2026-10-17**
 
-- [ ] Tabele `fund_portfolios` (gracz: źródło prognozy / wariant Darwina /
-      benchmark), `fund_orders`, `fund_positions`, `fund_nav_daily`.
-- [ ] Zasady: jeden wspólny portfel na gracza, start 100 000 PLN, wycena w PLN po kursie z watchlisty,
-      **realizacja po kolejnym zamknięciu** (nigdy po cenie, którą prognoza już znała),
-      prowizja + spread, max 20% portfela w jednym instrumencie, na start bez krótkiej sprzedaży.
-- [ ] Prognoza → zlecenie: kierunek + pewność → wielkość pozycji.
-- [ ] Metryki: stopa zwrotu, max drawdown, Sharpe, obrót (wszystko testowane).
+- [x] Tabele `fund_portfolios` (gracz + ostatnie metryki), `fund_orders`
+      (zrealizowane transakcje z powodem = uzasadnieniem prognozy),
+      `fund_positions`, `fund_nav_daily`. Silnik liczy CAŁĄ historię od nowa
+      przy każdym przebiegu i podmienia wiersze — zmiana zasad działa wstecz
+      spójnie, stan nie może się rozjechać. Baza sama odrzuca realizację
+      w dniu prognozy (`executed_on > signal_on`).
+- [x] Zasady (`src/lib/fund/engine.ts`, testy): start 100 000 PLN, wycena
+      w PLN po USDPLN/EURPLN z bazy, **realizacja po kolejnym zamknięciu**
+      (czeka na najbliższą sesję), prowizja 0,1% + połowa spreadu per klasa
+      aktywów przy każdej stronie, max 20% w instrumencie, bez krótkiej
+      sprzedaży i bez dźwigni, sprzedaże przed kupnami, korekty < 500 zł
+      pomijane.
+- [x] Prognoza → zlecenie: „wzrost” → cel 20% × pewność, „spadek” → sprzedaj
+      całość, „bez zmian” → trzymaj (i anuluj czekające); nowsza prognoza
+      zastępuje czekającą.
+- [x] Metryki (`metrics.ts`): stopa zwrotu, max obsunięcie, Sharpe (dzienny,
+      ×√365; null przy < 10 dniach), obrót, liczba transakcji, prowizje.
+- [x] Gracze (`players.ts`, `fund.ts`): `ai_learned`, `ai`, `signals`,
+      **koszyk „kup i trzymaj wszystko”** (po równo we wszystkie instrumenty,
+      w dniu startu) i **małpa z rzutkami** (deterministyczna). Start = dzień
+      pierwszej prognozy w bazie (decyzja 2026-10-17).
 
 ### S3.2 — gracze i job
 
-- [ ] Gracze: `signals`, `ai`, `ai_learned`, champion Darwina,
+- [ ] Gracze: `signals`, `ai`, `ai_learned`,
       **benchmark kup-i-trzymaj** (WIG20 ETF / SPX) oraz **małpa z rzutkami**
       (losowe zlecenia), czyli uczciwa linia odniesienia.
 - [ ] Krok w `market-grid` po zapisaniu prognoz; wynik dzienny → `fund_nav_daily`.
-- [ ] NAV gracza = drugi fitness dla Darwina (zamyka obieg).
+- [ ] (Po powrocie Darwina: NAV gracza = drugi fitness dla wariantów.)
 
 ### S3.3 — sala notowań
 
