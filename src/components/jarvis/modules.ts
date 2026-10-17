@@ -16,6 +16,7 @@ import {
   CandlestickChart,
   Fuel,
   Castle,
+  Brain,
   type LucideIcon,
 } from "lucide-react";
 
@@ -58,6 +59,13 @@ export const MODULE_GROUPS: readonly ModuleGroup[] = [
         url: "/town",
         icon: Castle,
         keywords: "miasto świat agenci pixel rpg",
+      },
+      {
+        title: "Mózg",
+        shortTitle: "Mózg",
+        url: "/mozg",
+        icon: Brain,
+        keywords: "brain wiedza mapa 3d galaktyka notatki wspomnienia mozg",
       },
       { title: "Dashboard", shortTitle: "Dashboard", url: "/", icon: LayoutDashboard },
       { title: "Feed", shortTitle: "Feed", url: "/feed", icon: Rss, keywords: "aktualności news" },
