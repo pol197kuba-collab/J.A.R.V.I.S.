@@ -129,22 +129,28 @@ etapu sprawdzana na wąskim ekranie (portret) i w PWA na iPhonie.
 - [x] Trzy przyciski w prawym dolnym rogu (44 px), panele w tej samej
       karcie co szczegóły gwiazdy; sprawdzone zrzutami na 390 px i 1440 px.
 
-### S1.4 — tryb STRUKTURA: mapa bazy danych
+### S1.4 — tryb STRUKTURA: mapa bazy danych — **zrobione 2026-10-17**
 
-- [ ] Przełącznik **WIEDZA / STRUKTURA** na `/mozg` — ta sama scena, kamera
-      i obsługa dotyku, inny zestaw obiektów.
-- [ ] Tabele jako planety: rozmiar = liczba wierszy (`pg_class.reltuples`),
-      kolor = obszar modułu (rynki, paliwa, agenci, wiedza…), obwódka = RLS
-      włączone/wyłączone. Klucze obce jako linie; układ siłowy (force-directed),
-      powiązane tabele lądują obok siebie.
-- [ ] Tap w tabelę → karta: kolumny, typy, klucze, polityki RLS (źródło:
-      istniejące RPC `get_public_schema_snapshot` z `/schema`).
-- [ ] Podgląd danych: pierwsze wiersze **tylko przez RLS** (czyli wyłącznie
-      dane właściciela), tylko do odczytu; tabele z sekretami
-      (`user_secrets`, `push_subscriptions`) bez podglądu, wyłącznie struktura.
-- [ ] Przejście między trybami: gwiazda wiedzy „wie”, z której tabeli
-      pochodzi (np. notatka → planeta `notes`).
-- [ ] `/schema` zostaje jako widok tabelaryczny; STRUKTURA go nie zastępuje.
+- [x] Przełącznik **WIEDZA / STRUKTURA** na `/mozg` — ta sama kamera,
+      dotyk i karta (wspólne `sceneKit.tsx`), wybór zapamiętany.
+- [x] Tabele jako planety: rozmiar = log(liczby wierszy z `pg_class.reltuples`),
+      kolor = moduł (wiedza, agenci, rynki, paliwa, zadania, system), klucze
+      obce jako linie, układ siłowy z kotwicami modułów — powiązane tabele
+      lądują obok siebie. RLS widać w karcie i na liście (kłódka przy
+      tabelach bez RLS) zamiast obwódki — na telefonie obwódka była nieczytelna.
+- [x] Tap w tabelę → karta: moduł, liczba wierszy, kolumny z typami i PK,
+      powiązania (tap przelatuje do sąsiedniej tabeli), polityki RLS. Źródło:
+      nowe RPC `brain_schema_map()` — bez wymogu roli admin (w odróżnieniu od
+      `get_public_schema_snapshot`) i bez treści polityk.
+- [x] Podgląd „Pokaż moje wiersze”: 15 najnowszych **tylko przez RLS**,
+      do odczytu; `user_secrets` i `push_subscriptions` wyłącznie struktura;
+      kolumny wyglądające na sekret (klucze, tokeny, hasła) maskowane;
+      wektory i binaria pominięte.
+- [x] Przejścia: karta gwiazdy → „Pokaż w STRUKTURZE” (notatka → `notes`
+      itd.), karta `notes`/`memories`/`documents` → „Gwiazdy”.
+- [x] Wyszukiwarka tabel (po nazwie lub kolumnie), filtr modułów, lista
+      zamiast 3D; sprawdzone zrzutami 390 px i 1440 px, HUD i TOWN.
+- [x] `/schema` zostaje jako widok tabelaryczny; STRUKTURA go nie zastępuje.
 
 **Gotowe, gdy:** widzę swoje notatki/dokumenty/wspomnienia jako gromady
 z sensownymi nazwami, pytanie w czacie zapala właściwe gwiazdy, a na

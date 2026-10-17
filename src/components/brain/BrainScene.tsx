@@ -4,30 +4,23 @@
 // shaderem: kolor, rozmiar i przezroczystość per gwiazda), więc tysiące
 // punktów chodzą płynnie także na telefonie.
 //
-// Dotyk: OrbitControls daje obrót jednym palcem, zoom i przesuwanie dwoma.
-// Tapnięcie (krótkie, bez przesunięcia) wybiera gwiazdę z tolerancją w
-// pikselach ekranu (scene.ts → pickNearest) — palec jest szerszy niż kropka.
-// Podwójne tapnięcie przybliża kamerę do gwiazdy. Hovera nie ma: na
+// Dotyk (sceneKit.tsx, wspólny z trybem STRUKTURA): obrót jednym palcem,
+// zoom i przesuwanie dwoma, tapnięcie wybiera gwiazdę z tolerancją w
+// pikselach ekranu, podwójne tapnięcie przybliża. Hovera nie ma — na
 // telefonie nie istnieje, więc wszystko dzieje się po tapnięciu.
 //
 // Wydajność: DPR ≤ 1,5; bloom wyłączany sam, gdy PerformanceMonitor widzi
 // spadek klatek (i nie wraca w tej sesji, żeby nie migał).
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentRef,
-  type MutableRefObject,
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Billboard, Html, Line, OrbitControls, PerformanceMonitor } from "@react-three/drei";
+import { Billboard, Html, Line, PerformanceMonitor } from "@react-three/drei";
 import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import * as THREE from "three";
 import type { BrainCluster, BrainStar } from "@/lib/brain/brain.functions";
 import type { BrainSourceType } from "@/lib/brain/layout";
-import { freshness, pickNearest, SCENE_SCALE, type ScreenPoint } from "@/lib/brain/scene";
+import { freshness, SCENE_SCALE } from "@/lib/brain/scene";
+import { CameraRig, PointsPicker, TapLayer, ViewShift, type Picker } from "./sceneKit";
 import { useThemeColors } from "@/lib/theme/themeColor";
 
 const SCENE_COLORS = {
@@ -48,16 +41,6 @@ const SCENE_FALLBACKS = {
   beam: "#4dd8ff",
   void: "#020409",
 };
-
-/** Tolerancja trafienia palcem / myszą w pikselach CSS. */
-const TAP_TOLERANCE_TOUCH = 28;
-const TAP_TOLERANCE_MOUSE = 14;
-/** Tapnięcie = krótsze niż tyle ms i przesunięte mniej niż tyle px. */
-const TAP_MAX_MS = 350;
-const TAP_MAX_MOVE = 8;
-const DOUBLE_TAP_MS = 320;
-/** Odległość kamery od gwiazdy po przybliżeniu. */
-const FOCUS_DISTANCE = 3.2;
 
 export type BrainSceneProps = {
   stars: BrainStar[];
@@ -89,45 +72,20 @@ export function BrainScene(props: BrainSceneProps) {
   const colors = useThemeColors(SCENE_COLORS, SCENE_FALLBACKS);
   const [bloom, setBloom] = useState(true);
   const pickerRef = useRef<Picker | null>(null);
-  const gesture = useRef<{ x: number; y: number; t: number; touch: boolean } | null>(null);
-  const lastTap = useRef<{ t: number; index: number | null }>({ t: 0, index: null });
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    gesture.current = {
-      x: e.clientX,
-      y: e.clientY,
-      t: performance.now(),
-      touch: e.pointerType !== "mouse",
-    };
-  };
-
-  const onPointerUp = (e: React.PointerEvent) => {
-    const g = gesture.current;
-    gesture.current = null;
-    if (!g || !pickerRef.current) return;
-    const moved = Math.hypot(e.clientX - g.x, e.clientY - g.y);
-    if (moved > TAP_MAX_MOVE || performance.now() - g.t > TAP_MAX_MS) return;
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const index = pickerRef.current(
-      e.clientX - rect.left,
-      e.clientY - rect.top,
-      g.touch ? TAP_TOLERANCE_TOUCH : TAP_TOLERANCE_MOUSE,
-    );
-    const now = performance.now();
-    const isDouble =
-      now - lastTap.current.t < DOUBLE_TAP_MS && index !== null && index === lastTap.current.index;
-    lastTap.current = { t: now, index };
-    props.onSelect(index);
-    if (isDouble && index !== null) props.onFocus(index);
-  };
+  // Punkty do trafiania i przelotu kamery — widoczność jak w Stars.
+  const points = useMemo(
+    () =>
+      props.stars.map((s) => ({
+        x: s.x,
+        y: s.y,
+        z: s.z,
+        visible: isVisible(s, props.visibleTypes, props.until),
+      })),
+    [props.stars, props.visibleTypes, props.until],
+  );
 
   return (
-    <div
-      // touch-none: gest na scenie obraca galaktykę, a nie przewija stronę.
-      className="absolute inset-0 touch-none select-none"
-      onPointerDown={onPointerDown}
-      onPointerUp={onPointerUp}
-    >
+    <TapLayer pickerRef={pickerRef} onSelect={props.onSelect} onFocus={props.onFocus}>
       <Canvas
         camera={{ position: [0, 2.5, 13], fov: 50, near: 0.05, far: 200 }}
         dpr={[1, 1.5]}
@@ -175,13 +133,8 @@ export function BrainScene(props: BrainSceneProps) {
           ))}
 
         <ViewShift shift={props.viewShift} />
-        <PickerBridge
-          stars={props.stars}
-          visibleTypes={props.visibleTypes}
-          until={props.until}
-          pickerRef={pickerRef}
-        />
-        <CameraRig stars={props.stars} focus={props.focus} autoRotate={props.selected === null} />
+        <PointsPicker points={points} pickerRef={pickerRef} />
+        <CameraRig points={points} focus={props.focus} autoRotate={props.selected === null} />
 
         {bloom && (
           <EffectComposer multisampling={0}>
@@ -189,7 +142,7 @@ export function BrainScene(props: BrainSceneProps) {
           </EffectComposer>
         )}
       </Canvas>
-    </div>
+    </TapLayer>
   );
 }
 
@@ -420,134 +373,5 @@ function TraceBeams({
         ))}
       </group>
     </group>
-  );
-}
-
-// ---------- przesunięcie obrazu ----------
-
-/** Płynnie przesuwa obraz kamery w górę o `shift` wysokości (setViewOffset). */
-function ViewShift({ shift }: { shift: number }) {
-  const { camera, size } = useThree();
-  const current = useRef(0);
-  useFrame((_, delta) => {
-    const next = current.current + (shift - current.current) * (1 - Math.exp(-delta * 6));
-    if (Math.abs(next - current.current) < 1e-4 && Math.abs(shift - next) < 1e-4) return;
-    current.current = Math.abs(shift - next) < 1e-3 ? shift : next;
-    const cam = camera as THREE.PerspectiveCamera;
-    if (current.current === 0) cam.clearViewOffset();
-    else {
-      cam.setViewOffset(
-        size.width,
-        size.height,
-        0,
-        size.height * current.current,
-        size.width,
-        size.height,
-      );
-    }
-    cam.updateProjectionMatrix();
-  });
-  return null;
-}
-
-// ---------- trafianie ----------
-
-type Picker = (x: number, y: number, tolerance: number) => number | null;
-
-/** Wystawia rodzicowi funkcję „która gwiazda jest pod palcem” z bieżącą kamerą. */
-function PickerBridge({
-  stars,
-  visibleTypes,
-  until,
-  pickerRef,
-}: {
-  stars: BrainStar[];
-  visibleTypes: ReadonlySet<BrainSourceType>;
-  until: number | null;
-  pickerRef: MutableRefObject<Picker | null>;
-}) {
-  const { camera, size } = useThree();
-  useEffect(() => {
-    const v = new THREE.Vector3();
-    pickerRef.current = (x, y, tolerance) => {
-      const screen: ScreenPoint[] = new Array(stars.length);
-      const depth: number[] = new Array(stars.length);
-      for (let i = 0; i < stars.length; i++) {
-        const s = stars[i];
-        v.set(s.x * SCENE_SCALE, s.y * SCENE_SCALE, s.z * SCENE_SCALE).project(camera);
-        screen[i] = {
-          x: ((v.x + 1) / 2) * size.width,
-          y: ((1 - v.y) / 2) * size.height,
-          visible: isVisible(s, visibleTypes, until) && v.z > -1 && v.z < 1,
-        };
-        depth[i] = v.z;
-      }
-      return pickNearest(screen, x, y, tolerance, depth);
-    };
-    return () => {
-      pickerRef.current = null;
-    };
-  }, [camera, size, stars, visibleTypes, until, pickerRef]);
-  return null;
-}
-
-// ---------- kamera ----------
-
-function CameraRig({
-  stars,
-  focus,
-  autoRotate,
-}: {
-  stars: BrainStar[];
-  focus: { index: number; nonce: number } | null;
-  autoRotate: boolean;
-}) {
-  const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
-  const { camera } = useThree();
-  const goal = useRef<{ target: THREE.Vector3; position: THREE.Vector3 } | null>(null);
-
-  useEffect(() => {
-    if (!focus) return;
-    const s = stars[focus.index];
-    const c = controls.current;
-    if (!s || !c) return;
-    const target = new THREE.Vector3(s.x * SCENE_SCALE, s.y * SCENE_SCALE, s.z * SCENE_SCALE);
-    // Kamera zostaje po tej samej stronie, tylko podjeżdża bliżej.
-    const dir = camera.position.clone().sub(c.target).normalize();
-    goal.current = { target, position: target.clone().add(dir.multiplyScalar(FOCUS_DISTANCE)) };
-    // focus.nonce wymusza ponowny przelot nawet do tej samej gwiazdy.
-  }, [focus, stars, camera]);
-
-  useFrame((_, delta) => {
-    const g = goal.current;
-    const c = controls.current;
-    if (!g || !c) return;
-    const k = 1 - Math.exp(-delta * 4);
-    c.target.lerp(g.target, k);
-    camera.position.lerp(g.position, k);
-    c.update();
-    if (c.target.distanceTo(g.target) < 0.01 && camera.position.distanceTo(g.position) < 0.01) {
-      goal.current = null;
-    }
-  });
-
-  return (
-    <OrbitControls
-      ref={controls}
-      makeDefault
-      enableDamping
-      dampingFactor={0.08}
-      enablePan
-      screenSpacePanning
-      minDistance={1.2}
-      maxDistance={30}
-      rotateSpeed={0.7}
-      autoRotate={autoRotate}
-      autoRotateSpeed={0.25}
-      // Własny gest użytkownika przerywa przelot kamery.
-      onStart={() => {
-        goal.current = null;
-      }}
-    />
   );
 }

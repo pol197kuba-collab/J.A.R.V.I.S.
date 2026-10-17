@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { BrainView } from "@/components/brain/BrainView";
+import { BrainPage } from "@/components/brain/BrainPage";
 
 export const Route = createFileRoute("/mozg")({
   head: () => ({
@@ -7,9 +7,9 @@ export const Route = createFileRoute("/mozg")({
       { title: "JARVIS // Mózg" },
       {
         name: "description",
-        content: "Mapa wiedzy 3D — notatki, wspomnienia i dokumenty jako gromady tematów.",
+        content: "Mapa wiedzy 3D i mapa bazy danych — notatki, wspomnienia, dokumenty i tabele.",
       },
     ],
   }),
-  component: BrainView,
+  component: BrainPage,
 });

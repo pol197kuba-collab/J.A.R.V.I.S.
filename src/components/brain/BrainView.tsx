@@ -16,12 +16,11 @@ import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
-  Boxes,
   Brain,
   ChevronDown,
+  Database,
   Crosshair,
   ExternalLink,
-  List,
   Loader2,
   Search,
   X,
@@ -39,6 +38,14 @@ import {
   type BrainTrace,
 } from "@/lib/brain/brain.functions";
 import { ActionDock, InsightsPanel, TimePanel, TracePanel, type BrainPanel } from "./BrainPanels";
+import { CenterNote, KindSwitch, ModeToggle } from "./brainUi";
+import {
+  SHEET_SIDE_MIN,
+  SHEET_VIEW_SHIFT,
+  useBrainMode,
+  useElementSize,
+  type BrainKind,
+} from "./hooks";
 import type { BrainSourceType } from "@/lib/brain/layout";
 import {
   nearestNeighbors,
@@ -55,47 +62,26 @@ const BrainScene = lazy(() => import("./BrainScene").then((m) => ({ default: m.B
 
 const ALL_TYPES: BrainSourceType[] = ["memory", "note", "document"];
 const TRACES_KEY = ["brain", "traces"] as const;
-const MODE_KEY = "jarvis_brain_mode";
 const NEIGHBORS = 5;
-/** Poniżej tej szerokości karta wysuwa się od dołu; powyżej pływa w rogu. */
-const SHEET_SIDE_MIN = 900;
-/** O ile przesunąć obraz w górę, gdy karta zasłania dół ekranu. */
-const SHEET_VIEW_SHIFT = 0.22;
-
-type Mode = "3d" | "list";
 
 const starKey = (s: Pick<BrainStar, "type" | "id">) => `${s.type}:${s.id}`;
 
-/** Rozmiar elementu na żywo (ResizeObserver); 0 przed pierwszym pomiarem. */
-function useElementSize<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect;
-      setSize((prev) =>
-        prev.width === width && prev.height === height ? prev : { width, height },
-      );
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  return [ref, size] as const;
-}
+/** Tabela, z której pochodzi gwiazda danego typu — dla przejścia do STRUKTURY. */
+const SOURCE_TABLE: Record<BrainSourceType, string> = {
+  memory: "memories",
+  note: "notes",
+  document: "documents",
+};
 
-function hasWebGL(): boolean {
-  if (typeof document === "undefined") return true;
-  try {
-    const c = document.createElement("canvas");
-    return Boolean(c.getContext("webgl2") || c.getContext("webgl"));
-  } catch {
-    return false;
-  }
-}
-
-export function BrainView() {
+export function BrainView({
+  kind,
+  onKindChange,
+  onShowInStructure,
+}: {
+  kind: BrainKind;
+  onKindChange: (k: BrainKind) => void;
+  onShowInStructure: (table: string) => void;
+}) {
   const fetchBrain = useServerFn(getBrain);
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["brain", "snapshot"],
@@ -108,24 +94,7 @@ export function BrainView() {
   const clusters = useMemo(() => data?.clusters ?? [], [data]);
   const clusterNames = useMemo(() => new Map(clusters.map((c) => [c.id, c.name])), [clusters]);
 
-  const [webgl] = useState(hasWebGL);
-  const [mode, setModeState] = useState<Mode>(() => {
-    if (typeof window === "undefined") return "3d";
-    try {
-      return window.localStorage.getItem(MODE_KEY) === "list" ? "list" : "3d";
-    } catch {
-      return "3d";
-    }
-  });
-  const effectiveMode: Mode = webgl ? mode : "list";
-  const setMode = (m: Mode) => {
-    setModeState(m);
-    try {
-      window.localStorage.setItem(MODE_KEY, m);
-    } catch {
-      /* tryb prywatny — wybór działa do końca wizyty */
-    }
-  };
+  const { webgl, mode, setMode, effectiveMode } = useBrainMode();
 
   const [visibleTypes, setVisibleTypes] = useState<ReadonlySet<BrainSourceType>>(
     () => new Set(ALL_TYPES),
@@ -304,119 +273,124 @@ export function BrainView() {
 
       {/* Górna nakładka: wyszukiwarka, tryb, legenda. Klikalne są tylko
           same kontrolki — reszta przepuszcza gesty do sceny. */}
-      {stars.length > 0 && (
-        <div
-          ref={toolbarRef}
-          className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col gap-2 p-3 @min-[640px]:p-4"
-        >
-          <div className="flex items-center gap-2">
-            <div className="pointer-events-auto relative min-w-0 flex-1 @min-[640px]:max-w-md">
-              <Search className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-primary/60" />
-              <input
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setSearchOpen(true);
-                }}
-                onFocus={() => setSearchOpen(true)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    setQuery("");
-                    setSearchOpen(false);
-                    (e.target as HTMLInputElement).blur();
-                  }
-                  if (e.key === "Enter" && results[0] !== undefined) {
-                    select(results[0], true);
-                    setSearchOpen(false);
-                    (e.target as HTMLInputElement).blur();
-                  }
-                }}
-                placeholder="Szukaj w Mózgu…"
-                aria-label="Szukaj w Mózgu"
-                // text-base na telefonie: iOS przybliża stronę przy polach < 16 px.
-                className="h-11 w-full rounded-lg border border-primary/25 bg-black/60 pl-9 pr-10 font-mono text-base text-foreground placeholder:text-muted-foreground/70 backdrop-blur-md outline-none focus:border-primary/60 @min-[640px]:h-10 @min-[640px]:text-sm"
-              />
-              {query && (
+      <div
+        ref={toolbarRef}
+        className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col gap-2 p-3 @min-[640px]:p-4"
+      >
+        <KindSwitch kind={kind} onChange={onKindChange} />
+        {stars.length > 0 && (
+          <>
+            <div className="flex items-center gap-2">
+              <div className="pointer-events-auto relative min-w-0 flex-1 @min-[640px]:max-w-md">
+                <Search className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-primary/60" />
+                <input
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setSearchOpen(true);
+                  }}
+                  onFocus={() => setSearchOpen(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setQuery("");
+                      setSearchOpen(false);
+                      (e.target as HTMLInputElement).blur();
+                    }
+                    if (e.key === "Enter" && results[0] !== undefined) {
+                      select(results[0], true);
+                      setSearchOpen(false);
+                      (e.target as HTMLInputElement).blur();
+                    }
+                  }}
+                  placeholder="Szukaj w Mózgu…"
+                  aria-label="Szukaj w Mózgu"
+                  // text-base na telefonie: iOS przybliża stronę przy polach < 16 px.
+                  className="h-11 w-full rounded-lg border border-primary/25 bg-black/60 pl-9 pr-10 font-mono text-base text-foreground placeholder:text-muted-foreground/70 backdrop-blur-md outline-none focus:border-primary/60 @min-[640px]:h-10 @min-[640px]:text-sm"
+                />
+                {query && (
+                  <button
+                    type="button"
+                    aria-label="Wyczyść wyszukiwanie"
+                    onClick={() => {
+                      setQuery("");
+                      setSearchOpen(false);
+                    }}
+                    className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center text-primary/70"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+                {searchOpen && query.trim() && (
+                  <SearchResults
+                    stars={stars}
+                    clusterNames={clusterNames}
+                    results={results}
+                    onPick={(i) => {
+                      select(i, true);
+                      setSearchOpen(false);
+                    }}
+                  />
+                )}
+              </div>
+              {webgl && <ModeToggle mode={mode} onChange={setMode} />}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1">
+              {ALL_TYPES.filter((t) => counts[t] > 0).map((t) => {
+                const on = visibleTypes.has(t);
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => toggleType(t)}
+                    className={cn(
+                      "pointer-events-auto flex h-8 items-center gap-1.5 rounded-full border px-2.5 font-display text-[10px] uppercase tracking-wider backdrop-blur-md transition-opacity",
+                      on
+                        ? "border-primary/30 bg-black/60 text-foreground"
+                        : "border-primary/10 bg-black/40 text-muted-foreground opacity-60",
+                    )}
+                  >
+                    <span
+                      className={cn("h-2 w-2 rounded-full", TYPE_DOT[t], !on && "opacity-40")}
+                    />
+                    {TYPE_LABEL_PLURAL[t]}
+                    <span className="font-mono text-muted-foreground">{counts[t]}</span>
+                  </button>
+                );
+              })}
+              <span className="ml-auto hidden font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground @min-[640px]:inline">
+                {stars.length} gwiazd · {clusters.length} gromad
+                {data?.layout ? ` · układ ${relativeAge(data.layout.computedAt)}` : ""}
+              </span>
+            </div>
+
+            {activeTrace && panel !== "trace" && (
+              <div className="pointer-events-auto flex min-h-10 max-w-md items-center gap-2 self-start rounded-lg border border-primary/40 bg-black/70 pl-3 backdrop-blur-md">
+                <Zap className="h-4 w-4 shrink-0 text-primary" />
                 <button
                   type="button"
-                  aria-label="Wyczyść wyszukiwanie"
-                  onClick={() => {
-                    setQuery("");
-                    setSearchOpen(false);
-                  }}
-                  className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center text-primary/70"
+                  onClick={() => openPanel("trace")}
+                  className="min-w-0 flex-1 truncate py-2 text-left text-sm text-foreground/90"
+                >
+                  {stripAskPrefix(activeTrace.query)}
+                  <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">
+                    · {traceIndices.length} gwiazd
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Zgaś ślad"
+                  onClick={() => setActiveTrace(null)}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center text-primary/70"
                 >
                   <X className="h-4 w-4" />
                 </button>
-              )}
-              {searchOpen && query.trim() && (
-                <SearchResults
-                  stars={stars}
-                  clusterNames={clusterNames}
-                  results={results}
-                  onPick={(i) => {
-                    select(i, true);
-                    setSearchOpen(false);
-                  }}
-                />
-              )}
-            </div>
-            {webgl && <ModeToggle mode={mode} onChange={setMode} />}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1">
-            {ALL_TYPES.filter((t) => counts[t] > 0).map((t) => {
-              const on = visibleTypes.has(t);
-              return (
-                <button
-                  key={t}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => toggleType(t)}
-                  className={cn(
-                    "pointer-events-auto flex h-8 items-center gap-1.5 rounded-full border px-2.5 font-display text-[10px] uppercase tracking-wider backdrop-blur-md transition-opacity",
-                    on
-                      ? "border-primary/30 bg-black/60 text-foreground"
-                      : "border-primary/10 bg-black/40 text-muted-foreground opacity-60",
-                  )}
-                >
-                  <span className={cn("h-2 w-2 rounded-full", TYPE_DOT[t], !on && "opacity-40")} />
-                  {TYPE_LABEL_PLURAL[t]}
-                  <span className="font-mono text-muted-foreground">{counts[t]}</span>
-                </button>
-              );
-            })}
-            <span className="ml-auto hidden font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground @min-[640px]:inline">
-              {stars.length} gwiazd · {clusters.length} gromad
-              {data?.layout ? ` · układ ${relativeAge(data.layout.computedAt)}` : ""}
-            </span>
-          </div>
-
-          {activeTrace && panel !== "trace" && (
-            <div className="pointer-events-auto flex min-h-10 max-w-md items-center gap-2 self-start rounded-lg border border-primary/40 bg-black/70 pl-3 backdrop-blur-md">
-              <Zap className="h-4 w-4 shrink-0 text-primary" />
-              <button
-                type="button"
-                onClick={() => openPanel("trace")}
-                className="min-w-0 flex-1 truncate py-2 text-left text-sm text-foreground/90"
-              >
-                {stripAskPrefix(activeTrace.query)}
-                <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">
-                  · {traceIndices.length} gwiazd
-                </span>
-              </button>
-              <button
-                type="button"
-                aria-label="Zgaś ślad"
-                onClick={() => setActiveTrace(null)}
-                className="flex h-10 w-10 shrink-0 items-center justify-center text-primary/70"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       {selected !== null && (
         <StarSheet
@@ -429,6 +403,7 @@ export function BrainView() {
           onClose={() => setSelectedKey(null)}
           onFly={() => setFocus({ index: selected, nonce: Date.now() })}
           onPick={(i) => select(i, effectiveMode === "3d")}
+          onShowInStructure={() => onShowInStructure(SOURCE_TABLE[stars[selected].type])}
         />
       )}
 
@@ -465,33 +440,6 @@ export function BrainView() {
           onClose={() => setPanel(null)}
         />
       )}
-    </div>
-  );
-}
-
-function ModeToggle({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => void }) {
-  const item = (m: Mode, label: string, icon: React.ReactNode) => (
-    <button
-      type="button"
-      aria-pressed={mode === m}
-      onClick={() => onChange(m)}
-      className={cn(
-        "flex h-full items-center gap-1.5 px-3 font-display text-[10px] uppercase tracking-widest transition-colors",
-        mode === m ? "bg-primary/20 text-primary" : "text-muted-foreground",
-      )}
-    >
-      {icon}
-      <span className="@max-[380px]:sr-only">{label}</span>
-    </button>
-  );
-  return (
-    <div
-      role="group"
-      aria-label="Widok"
-      className="pointer-events-auto flex h-11 shrink-0 overflow-hidden rounded-lg border border-primary/25 bg-black/60 backdrop-blur-md @min-[640px]:h-10"
-    >
-      {item("3d", "3D", <Boxes className="h-4 w-4" />)}
-      {item("list", "Lista", <List className="h-4 w-4" />)}
     </div>
   );
 }
@@ -547,6 +495,7 @@ function StarSheet({
   onClose,
   onFly,
   onPick,
+  onShowInStructure,
 }: {
   star: BrainStar;
   clusterName: string | null | undefined;
@@ -555,6 +504,8 @@ function StarSheet({
   onClose: () => void;
   onFly: () => void;
   onPick: (index: number) => void;
+  /** Przejście do trybu STRUKTURA — do tabeli, z której pochodzi gwiazda. */
+  onShowInStructure: () => void;
 }) {
   const fetchItem = useServerFn(getBrainItem);
   const [expanded, setExpanded] = useState(false);
@@ -694,6 +645,14 @@ function StarSheet({
             {star.type === "note" ? "Notatki" : "Dokumenty"}
           </Link>
         )}
+        <button
+          type="button"
+          onClick={onShowInStructure}
+          aria-label="Pokaż tabelę w trybie Struktura"
+          className="flex h-10 w-12 shrink-0 items-center justify-center rounded-md border border-primary/30 text-primary hover:bg-primary/10"
+        >
+          <Database className="h-4 w-4" />
+        </button>
       </div>
     </div>
   );
@@ -812,17 +771,6 @@ function BrainList({
           );
         })}
       </div>
-    </div>
-  );
-}
-
-function CenterNote({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div className="absolute inset-0 flex items-center justify-center p-6">
-      <p className="flex max-w-sm items-center gap-2 text-center font-mono text-xs text-muted-foreground">
-        <span className="text-primary">{icon}</span>
-        <span>{children}</span>
-      </p>
     </div>
   );
 }

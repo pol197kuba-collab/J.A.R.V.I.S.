@@ -1747,6 +1747,7 @@ export type Database = {
         }
         Returns: number
       }
+      brain_schema_map: { Args: never; Returns: Json }
       brain_source_rows: {
         Args: { p_owner: string }
         Returns: {
