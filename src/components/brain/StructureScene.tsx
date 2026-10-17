@@ -1,9 +1,11 @@
 // Mózg 3D — tryb STRUKTURA: tabele bazy jako planety, klucze obce jako
 // linie. Ta sama kamera, dotyk i karta co w trybie WIEDZA (sceneKit.tsx).
 //
-// Planety: jeden InstancedMesh (jedno wywołanie rysowania), kolor = moduł
-// aplikacji, rozmiar = log(liczby wierszy). Linie: jedna geometria
-// LineSegments; połączenia zaznaczonej tabeli rysowane jaśniej osobno.
+// Planety: proceduralne (PlanetField.tsx) — typ i barwy z nazwy tabeli,
+// rozmiar = log(liczby wierszy), poświata atmosfery = kolor modułu.
+// W środku słońce (źródło światła), dookoła pole gwiazd (space.tsx).
+// Linie: jedna geometria LineSegments; połączenia zaznaczonej tabeli
+// rysowane jaśniej osobno.
 // Etykiety: wszystkie przy szerokim ekranie, na telefonie tylko zaznaczona
 // tabela i jej sąsiedzi + nazwy modułów — inaczej 40 napisów zasłania mapę.
 
@@ -13,9 +15,12 @@ import { Billboard, Html, Line, PerformanceMonitor } from "@react-three/drei";
 import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import * as THREE from "three";
 import { SCENE_SCALE } from "@/lib/brain/scene";
-import { MODULES, planetRadius, type ModuleId } from "@/lib/brain/structure";
+import { MIN_ORBIT, MODULES, planetRadius, type ModuleId } from "@/lib/brain/structure";
+import type { PlanetLook } from "@/lib/brain/planets";
 import { useThemeColors } from "@/lib/theme/themeColor";
 import { CameraRig, PointsPicker, TapLayer, ViewShift, type Picker } from "./sceneKit";
+import { PlanetField } from "./PlanetField";
+import { SpaceBackdrop, Sun } from "./space";
 
 export type StructureNode = {
   name: string;
@@ -54,6 +59,7 @@ const scaled = (n: { x: number; y: number; z: number }): [number, number, number
 
 export function StructureScene({
   nodes,
+  looks,
   edges,
   visibleModules,
   selected,
@@ -65,6 +71,8 @@ export function StructureScene({
   allLabels,
 }: {
   nodes: StructureNode[];
+  /** Wygląd planet (planetLooks), w kolejności `nodes`. */
+  looks: PlanetLook[];
   /** Pary indeksów [tabela z kluczem, tabela wskazywana]. */
   edges: [number, number][];
   visibleModules: ReadonlySet<ModuleId>;
@@ -124,14 +132,15 @@ export function StructureScene({
         <PerformanceMonitor onDecline={() => setBloom(false)} />
         <color attach="background" args={[colors.void]} />
         <fog attach="fog" args={[colors.void, 14, 34]} />
-        <ambientLight intensity={1.1} />
-        <directionalLight position={[6, 10, 8]} intensity={1.6} />
+        <SpaceBackdrop />
+        <Sun radius={MIN_ORBIT * SCENE_SCALE * 0.38} />
 
-        <Planets
+        <PlanetField
           nodes={nodes}
+          looks={looks}
           visibleModules={visibleModules}
           highlighted={highlighted}
-          colors={colors}
+          rimColors={colors}
         />
         <Links nodes={nodes} edges={edges} visibleModules={visibleModules} color={colors.link} />
 
@@ -141,8 +150,9 @@ export function StructureScene({
               <mesh>
                 <ringGeometry
                   args={[
-                    planetRadius(nodes[selected].rows) + 0.08,
-                    planetRadius(nodes[selected].rows) + 0.12,
+                    // Poza poświatą atmosfery (1,12 × promień).
+                    planetRadius(nodes[selected].rows) * 1.18 + 0.04,
+                    planetRadius(nodes[selected].rows) * 1.18 + 0.07,
                     48,
                   ]}
                 />
@@ -208,59 +218,11 @@ export function StructureScene({
 
         {bloom && (
           <EffectComposer multisampling={0}>
-            <Bloom intensity={0.7} luminanceThreshold={0.35} luminanceSmoothing={0.9} mipmapBlur />
+            <Bloom intensity={1.0} luminanceThreshold={0.6} luminanceSmoothing={0.35} mipmapBlur />
           </EffectComposer>
         )}
       </Canvas>
     </TapLayer>
-  );
-}
-
-function Planets({
-  nodes,
-  visibleModules,
-  highlighted,
-  colors,
-}: {
-  nodes: StructureNode[];
-  visibleModules: ReadonlySet<ModuleId>;
-  highlighted: ReadonlySet<number>;
-  colors: Record<string, string>;
-}) {
-  const mesh = useRef<THREE.InstancedMesh>(null);
-  useEffect(() => {
-    const m = mesh.current;
-    if (!m) return;
-    const searching = highlighted.size > 0;
-    const matrix = new THREE.Matrix4();
-    const color = new THREE.Color();
-    nodes.forEach((n, i) => {
-      const visible = visibleModules.has(n.module);
-      const r = visible ? planetRadius(n.rows) : 0.0001;
-      const [x, y, z] = scaled(n);
-      matrix.makeScale(r, r, r).setPosition(x, y, z);
-      m.setMatrixAt(i, matrix);
-      color.set(colors[n.module]);
-      // Wyszukiwanie przygasza resztę, jak w trybie WIEDZA.
-      if (searching && !highlighted.has(i)) color.multiplyScalar(0.25);
-      m.setColorAt(i, color);
-    });
-    m.instanceMatrix.needsUpdate = true;
-    if (m.instanceColor) m.instanceColor.needsUpdate = true;
-    m.computeBoundingSphere();
-  }, [nodes, visibleModules, highlighted, colors]);
-
-  return (
-    <instancedMesh
-      // Liczba instancji jest częścią geometrii — nowa lista tabel = nowy mesh.
-      key={nodes.length}
-      ref={mesh}
-      args={[undefined, undefined, nodes.length]}
-      frustumCulled={false}
-    >
-      <sphereGeometry args={[1, 24, 24]} />
-      <meshLambertMaterial />
-    </instancedMesh>
   );
 }
 

@@ -4,6 +4,7 @@ import {
   isPreviewableType,
   isSecretColumn,
   layoutSchema,
+  MIN_ORBIT,
   planetRadius,
   SENSITIVE_TABLES,
   tableModule,
@@ -103,6 +104,18 @@ describe("planety", () => {
     expect(dist(a.get("notes")!, a.get("memories")!)).toBeLessThan(
       dist(a.get("notes")!, a.get("market_quotes")!),
     );
+  });
+
+  it("żadna planeta nie siedzi w słońcu (minimalna orbita)", () => {
+    // Jeden moduł, gęsto powiązany — siły ściągają tabele do środka.
+    const tables = ["a", "b", "c", "d", "e", "f"].map((name) => ({
+      name,
+      module: "system" as const,
+    }));
+    const edges = tables.slice(1).map((t) => ({ from: t.name, to: "a" }));
+    for (const [, p] of layoutSchema(tables, edges)) {
+      expect(Math.hypot(p[0], p[1], p[2])).toBeGreaterThanOrEqual(MIN_ORBIT - 1e-9);
+    }
   });
 
   it("pusta baza — pusty układ", () => {
