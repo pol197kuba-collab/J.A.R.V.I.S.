@@ -857,6 +857,165 @@ export type Database = {
         }
         Relationships: []
       }
+      fund_nav_daily: {
+        Row: {
+          cash_pln: number
+          invested_pln: number
+          nav_date: string
+          nav_pln: number
+          owner_id: string
+          portfolio_id: string
+        }
+        Insert: {
+          cash_pln: number
+          invested_pln: number
+          nav_date: string
+          nav_pln: number
+          owner_id: string
+          portfolio_id: string
+        }
+        Update: {
+          cash_pln?: number
+          invested_pln?: number
+          nav_date?: string
+          nav_pln?: number
+          owner_id?: string
+          portfolio_id?: string
+        }
+        Relationships: []
+      }
+      fund_orders: {
+        Row: {
+          confidence: number
+          direction: string
+          executed_on: string
+          fee_pln: number
+          fx_rate: number
+          id: string
+          notional_pln: number
+          owner_id: string
+          portfolio_id: string
+          prediction_id: string | null
+          price: number
+          realized_pln: number | null
+          reason: string | null
+          side: string
+          signal_on: string
+          symbol: string
+          units: number
+        }
+        Insert: {
+          confidence: number
+          direction: string
+          executed_on: string
+          fee_pln: number
+          fx_rate: number
+          id?: string
+          notional_pln: number
+          owner_id: string
+          portfolio_id: string
+          prediction_id?: string | null
+          price: number
+          realized_pln?: number | null
+          reason?: string | null
+          side: string
+          signal_on: string
+          symbol: string
+          units: number
+        }
+        Update: {
+          confidence?: number
+          direction?: string
+          executed_on?: string
+          fee_pln?: number
+          fx_rate?: number
+          id?: string
+          notional_pln?: number
+          owner_id?: string
+          portfolio_id?: string
+          prediction_id?: string | null
+          price?: number
+          realized_pln?: number | null
+          reason?: string | null
+          side?: string
+          signal_on?: string
+          symbol?: string
+          units?: number
+        }
+        Relationships: []
+      }
+      fund_portfolios: {
+        Row: {
+          cash_pln: number
+          computed_at: string | null
+          created_at: string
+          id: string
+          kind: string
+          label: string
+          metrics: Json
+          owner_id: string
+          player: string
+          start_cash_pln: number
+          started_on: string | null
+        }
+        Insert: {
+          cash_pln?: number
+          computed_at?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          label: string
+          metrics?: Json
+          owner_id: string
+          player: string
+          start_cash_pln?: number
+          started_on?: string | null
+        }
+        Update: {
+          cash_pln?: number
+          computed_at?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          label?: string
+          metrics?: Json
+          owner_id?: string
+          player?: string
+          start_cash_pln?: number
+          started_on?: string | null
+        }
+        Relationships: []
+      }
+      fund_positions: {
+        Row: {
+          as_of: string
+          cost_pln: number
+          owner_id: string
+          portfolio_id: string
+          symbol: string
+          units: number
+          value_pln: number
+        }
+        Insert: {
+          as_of: string
+          cost_pln: number
+          owner_id: string
+          portfolio_id: string
+          symbol: string
+          units: number
+          value_pln: number
+        }
+        Update: {
+          as_of?: string
+          cost_pln?: number
+          owner_id?: string
+          portfolio_id?: string
+          symbol?: string
+          units?: number
+          value_pln?: number
+        }
+        Relationships: []
+      }
       generated_files: {
         Row: {
           created_at: string
