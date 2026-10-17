@@ -159,6 +159,15 @@ export function ScanConfirm({
                   onChange={(e) => patch({ liters: e.target.value })}
                 />
               </Field>
+              <Field label="Zapłacono (zł)" className="col-span-full">
+                <input
+                  className={inputCls}
+                  inputMode="decimal"
+                  placeholder="— bez kwoty policzę szacunek z cennika Orlenu"
+                  value={form.amount}
+                  onChange={(e) => patch({ amount: e.target.value })}
+                />
+              </Field>
               <Field label="Uwaga" className="col-span-full">
                 <input
                   className={inputCls}

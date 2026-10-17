@@ -343,7 +343,7 @@ a każda transakcja ma zapisany powód.
       poprawienia, pozycje paragonu zwinięte, ostrzeżenia (suma ≠ pozycje,
       brak daty, data z przyszłości). Nic nie zapisuje się „w ciemno".
 - [x] Zdjęcia w prywatnym buckecie `scans` przez **30 dni** (`vision_scans.
-  photo_expires_at`); po terminie serwer kasuje plik przy kolejnym zapisie,
+photo_expires_at`); po terminie serwer kasuje plik przy kolejnym zapisie,
       dane zostają. Zdjęcie można też nie zachowywać (checkbox).
 - [x] Dodatkowo: **FOTO** — skan zdjęcia z galerii (paragon zrobiony
       wcześniej), `edited_fields` — ile pól trzeba było poprawić (jakość OCR).
@@ -357,10 +357,16 @@ a każda transakcja ma zapisany powód.
       części sumują się do całości), trend 6 miesięcy, lista paragonów z
       pozycjami, zdjęciem (30 dni) i usuwaniem. Sumy tylko w PLN, inne waluty
       osobno.
-- [ ] Licznik → `vehicle_log` (przebieg, litry) + ceny z `/paliwa` =
-      **realny koszt kilometra**.
-- [ ] Dokument → istniejący pipeline RAG (→ gwiazda w Mózgu).
-- [ ] Lodówka → przepis (bez zapisu albo jako notatka).
+- [x] Licznik → `vehicle_log` (przebieg, litry, **kwota z dystrybutora**) =
+      **realny koszt kilometra** w panelu „AUTO // KOSZT KILOMETRA” na
+      `/paliwa` (`src/lib/vehicle/costs.ts`, metoda „do pełna”: tankowanie
+      płaci za km od poprzedniego tankowania; odczyt bez tankowania tylko
+      dodaje km). Bez kwoty — ~szacunek z hurtu Orlen ON z dnia odczytu + 0,20 zł/l marży + VAT, zawsze oznaczony i policzony jako udział.
+- [x] Dokument → istniejący pipeline RAG: Markdown (tytuł, rodzaj,
+      streszczenie, pełny tekst) w buckecie `documents` + `processDocumentFn`
+      (→ gwiazda w Mózgu); toast śledzi przetwarzanie.
+- [x] Lodówka → notatka (`notes`, tagi `vision`, `lodówka`): produkty
+      i przepis z krokami.
 
 ### S4.3 — prawdziwe AR
 

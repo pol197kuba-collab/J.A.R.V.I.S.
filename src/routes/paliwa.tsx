@@ -25,6 +25,7 @@ import { MarketOverlayPanel } from "@/components/jarvis/fuel/MarketOverlayPanel"
 import { ForecastPanel } from "@/components/jarvis/fuel/ForecastPanel";
 import { ChangeHeatmap } from "@/components/jarvis/fuel/ChangeHeatmap";
 import { FuelNewsPanel } from "@/components/jarvis/fuel/FuelNewsPanel";
+import { VehicleCostPanel } from "@/components/jarvis/fuel/VehicleCostPanel";
 import { StandingOrdersPanel } from "@/components/jarvis/orders/StandingOrdersPanel";
 import { DEFAULT_PRODUCT_ID, productById } from "@/lib/fuel/orlen";
 import { listStandingOrders } from "@/lib/orders/orders.functions";
@@ -189,6 +190,8 @@ function FuelPage() {
       >
         <FuelHeroPanel fuel={selected} lastPublished={gridQuery.data?.lastPublished ?? null} />
       </HudPanel>
+
+      <VehicleCostPanel index={1} />
 
       <HudPanel index={1} title="PALIWA // PRZEGLĄD" tone="quiet" className="p-5 @max-[420px]:p-4">
         {gridQuery.isLoading ? (

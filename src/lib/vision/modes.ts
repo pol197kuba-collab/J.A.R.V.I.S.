@@ -10,7 +10,11 @@ export type ScanMode = "receipt" | "odometer" | "document" | "fridge" | "free";
 
 export const SCAN_MODES: readonly { id: ScanMode; label: string; hint: string }[] = [
   { id: "receipt", label: "Paragon", hint: "Cały paragon w kadrze, od nagłówka do sumy." },
-  { id: "odometer", label: "Licznik", hint: "Licznik przebiegu, a przy dystrybutorze litry." },
+  {
+    id: "odometer",
+    label: "Licznik",
+    hint: "Licznik przebiegu; przy tankowaniu też dystrybutor (litry i kwota).",
+  },
   { id: "document", label: "Dokument", hint: "Kartka płasko, cała strona w kadrze." },
   { id: "fridge", label: "Lodówka", hint: "Otwarta lodówka albo produkty na blacie." },
   { id: "free", label: "Dowolne", hint: "Cokolwiek — J.A.R.V.I.S. powie, co widzi." },
@@ -73,6 +77,8 @@ export type Receipt = z.infer<typeof ReceiptSchema>;
 export const OdometerSchema = z.object({
   odometerKm: z.number().int("Pełne kilometry").min(0).max(3_000_000),
   fuelLiters: z.number().finite().positive().max(500).nullable(),
+  /** What the pump or the fuel receipt says was paid, PLN. */
+  amountPln: z.number().finite().positive().max(10_000).nullable(),
   note: z.string().trim().max(200).nullable(),
 });
 export type Odometer = z.infer<typeof OdometerSchema>;
@@ -213,15 +219,22 @@ export function receiptWarnings(d: ReceiptDraft, today: string): string[] {
   return w;
 }
 
-export type OdometerDraft = { odometerKm: number | null; fuelLiters: number | null; note: string };
+export type OdometerDraft = {
+  odometerKm: number | null;
+  fuelLiters: number | null;
+  amountPln: number | null;
+  note: string;
+};
 
 export function normalizeOdometer(raw: unknown): OdometerDraft {
   const r = obj(raw);
   const km = parseAmount(r.odometerKm);
   const l = parseAmount(r.fuelLiters);
+  const a = parseAmount(r.amountPln);
   return {
     odometerKm: km !== null && km >= 0 ? Math.round(km) : null,
     fuelLiters: l !== null && l > 0 ? l : null,
+    amountPln: a !== null && a > 0 ? a : null,
     note: str(r.note, 200),
   };
 }
@@ -284,7 +297,8 @@ export const MODE_PROMPT: Record<StructuredMode, string> = {
     "pozycji wybierz z listy. Nie zgaduj: czego nie widać, zostaw puste lub null.",
   odometer:
     "Odczytaj licznik przebiegu samochodu (całkowity, nie dzienny — trip) w kilometrach. Jeśli na " +
-    "zdjęciu jest dystrybutor albo paragon za paliwo, odczytaj też liczbę zatankowanych litrów. " +
+    "zdjęciu jest dystrybutor albo paragon za paliwo, odczytaj też liczbę zatankowanych litrów " +
+    "i zapłaconą kwotę w PLN (DO ZAPŁATY / NALEŻNOŚĆ, nie cenę za litr). " +
     "Nie zgaduj: czego nie widać, zwróć null.",
   document:
     "Odczytaj dokument ze zdjęcia: nadaj mu krótki tytuł, rodzaj (np. faktura, umowa, pismo, " +
@@ -324,9 +338,10 @@ export const MODE_RESPONSE_SCHEMA: Record<StructuredMode, object> = {
     properties: {
       odometerKm: nullable(N("Całkowity przebieg w km")),
       fuelLiters: nullable(N("Zatankowane litry, jeśli widać")),
+      amountPln: nullable(N("Kwota zapłacona za paliwo w PLN, jeśli widać")),
       note: nullable(S("Krótka uwaga, np. który licznik odczytano")),
     },
-    required: ["odometerKm", "fuelLiters", "note"],
+    required: ["odometerKm", "fuelLiters", "amountPln", "note"],
   },
   document: {
     type: "OBJECT",

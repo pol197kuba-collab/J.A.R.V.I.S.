@@ -45,11 +45,11 @@ describe("confirmation form", () => {
   it("odometer needs km, liters are optional; fridge drops an empty recipe", () => {
     const o = formOf(normalizeScan("odometer", { odometerKm: null }));
     expect(checkForm(o).ok).toBe(false);
-    const ok = checkForm({ mode: "odometer", km: "123 456", liters: "", note: "" });
+    const ok = checkForm({ mode: "odometer", km: "123 456", liters: "", amount: "", note: "" });
     expect(ok).toEqual({
       ok: true,
       mode: "odometer",
-      data: { odometerKm: 123456, fuelLiters: null, note: null },
+      data: { odometerKm: 123456, fuelLiters: null, amountPln: null, note: null },
     });
     const fr = checkForm({
       mode: "fridge",

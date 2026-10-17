@@ -20,6 +20,8 @@ import {
   normalizeScan,
   type ScanDraft,
 } from "./modes";
+import { documentMarkdown, fridgeNote } from "./route";
+import { sanitizeFilename } from "@/lib/documents/chunking";
 
 const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 // A 1600px receipt JPEG is ~300–600 kB of base64; this is the backstop.
@@ -169,15 +171,27 @@ const SaveScanInput = z.object({
   model: z.string().max(80).nullable().default(null),
   /** Optional: no photo → only the fields are kept. */
   photo: ImageSchema.nullable().default(null),
+  /** The phone's calendar day — an odometer reading is logged on it. */
+  localDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
 });
 
 export type SavedScan = {
   id: string;
   photoKeptUntil: string | null;
   purgedPhotos: number;
-  /** A receipt becomes an expense on save (S4.2). */
-  expense: { id: string; total: number; currency: string; merchant: string } | null;
+  /** Where the confirmed scan went (S4.2): every mode lands somewhere useful. */
+  routed: Routed;
 };
+
+export type Routed =
+  | { kind: "expense"; id: string; total: number; currency: string; merchant: string }
+  | { kind: "vehicle"; id: string; odometerKm: number }
+  /** Still to be chunked and embedded: the client calls processDocumentFn. */
+  | { kind: "document"; id: string; title: string }
+  | { kind: "note"; id: string; title: string };
 
 function base64ToBytes(b64: string): Uint8Array {
   const bin = atob(b64);
@@ -237,31 +251,33 @@ export const saveScan = createServerFn({ method: "POST" })
       throw new Error(`Nie udało się zapisać skanu: ${error?.message ?? "brak odpowiedzi"}`);
     }
 
-    // A confirmed receipt is an expense right away — one scan, one tap.
-    // If the expense can't be written, the scan is rolled back too, so a
-    // retry doesn't leave a scan without its expense.
-    let expense: SavedScan["expense"] = null;
-    if (data.scan.mode === "receipt") {
-      const r = data.scan.data;
-      const rollback = async (why: string): Promise<never> => {
-        await supabase.from("vision_scans").delete().eq("id", row.id);
-        if (photoPath) await supabase.storage.from(BUCKET).remove([photoPath]);
-        throw new Error(`Nie udało się dodać wydatku: ${why}`);
-      };
-      const { data: exp, error: expErr } = await supabase
-        .from("expenses")
-        .insert({
-          owner_id: userId,
-          scan_id: row.id,
-          merchant: r.merchant,
-          spent_on: r.date,
-          total: r.total,
-          currency: r.currency,
-        })
-        .select("id")
-        .single();
-      if (expErr || !exp) await rollback(expErr?.message ?? "brak odpowiedzi");
-      else {
+    // Every confirmed scan lands where it's useful (S4.2): a receipt is an
+    // expense, an odometer reading goes to the car's log, a document to the
+    // RAG archive (→ a star in Mózg), the fridge to a note. If that write
+    // fails the scan is rolled back too, so a retry starts clean.
+    const rollback = async (why: string): Promise<never> => {
+      await supabase.from("vision_scans").delete().eq("id", row.id);
+      if (photoPath) await supabase.storage.from(BUCKET).remove([photoPath]);
+      throw new Error(`Skan nie trafił na miejsce: ${why}`);
+    };
+    const day = data.localDate ?? now.toISOString().slice(0, 10);
+    let routed: Routed;
+    switch (data.scan.mode) {
+      case "receipt": {
+        const r = data.scan.data;
+        const { data: exp, error: expErr } = await supabase
+          .from("expenses")
+          .insert({
+            owner_id: userId,
+            scan_id: row.id,
+            merchant: r.merchant,
+            spent_on: r.date,
+            total: r.total,
+            currency: r.currency,
+          })
+          .select("id")
+          .single();
+        if (expErr || !exp) return rollback(expErr?.message ?? "brak odpowiedzi");
         if (r.items.length) {
           const { error: itErr } = await supabase.from("expense_items").insert(
             r.items.map((it, position) => ({
@@ -276,10 +292,79 @@ export const saveScan = createServerFn({ method: "POST" })
           );
           if (itErr) {
             await supabase.from("expenses").delete().eq("id", exp.id);
-            await rollback(itErr.message);
+            return rollback(itErr.message);
           }
         }
-        expense = { id: exp.id, total: r.total, currency: r.currency, merchant: r.merchant };
+        routed = {
+          kind: "expense",
+          id: exp.id,
+          total: r.total,
+          currency: r.currency,
+          merchant: r.merchant,
+        };
+        break;
+      }
+      case "odometer": {
+        const o = data.scan.data;
+        const { data: log, error: logErr } = await supabase
+          .from("vehicle_log")
+          .insert({
+            owner_id: userId,
+            scan_id: row.id,
+            logged_on: day,
+            odometer_km: o.odometerKm,
+            fuel_liters: o.fuelLiters,
+            amount_pln: o.amountPln,
+            note: o.note,
+          })
+          .select("id")
+          .single();
+        if (logErr || !log) return rollback(logErr?.message ?? "brak odpowiedzi");
+        routed = { kind: "vehicle", id: log.id, odometerKm: o.odometerKm };
+        break;
+      }
+      case "document": {
+        const d = data.scan.data;
+        const md = new TextEncoder().encode(documentMarkdown(d, day));
+        const docId = crypto.randomUUID();
+        const filename = `${d.title.slice(0, 120)}.md`;
+        const storagePath = `${userId}/${docId}/${sanitizeFilename(filename)}`;
+        const { error: upErr } = await supabase.storage
+          .from("documents")
+          .upload(storagePath, md, { contentType: "text/markdown", upsert: false });
+        if (upErr) return rollback(upErr.message);
+        const { error: docErr } = await supabase.from("documents").insert({
+          id: docId,
+          user_id: userId,
+          filename,
+          mime_type: "text/markdown",
+          storage_path: storagePath,
+          size_bytes: md.byteLength,
+          status: "uploading",
+        });
+        if (docErr) {
+          await supabase.storage.from("documents").remove([storagePath]);
+          return rollback(docErr.message);
+        }
+        routed = { kind: "document", id: docId, title: d.title };
+        break;
+      }
+      case "fridge": {
+        const note = fridgeNote(data.scan.data, day);
+        const { data: n, error: nErr } = await supabase
+          .from("notes")
+          .insert({
+            owner_id: userId,
+            title: note.title,
+            body: note.body,
+            tags: ["vision", "lodówka"],
+            source: "vision",
+          })
+          .select("id")
+          .single();
+        if (nErr || !n) return rollback(nErr?.message ?? "brak odpowiedzi");
+        routed = { kind: "note", id: n.id, title: note.title };
+        break;
       }
     }
 
@@ -307,5 +392,5 @@ export const saveScan = createServerFn({ method: "POST" })
       }
     }
 
-    return { id: row.id, photoKeptUntil: expiresAt, purgedPhotos, expense };
+    return { id: row.id, photoKeptUntil: expiresAt, purgedPhotos, routed };
   });
