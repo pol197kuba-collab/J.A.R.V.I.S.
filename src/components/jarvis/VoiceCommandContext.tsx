@@ -19,6 +19,7 @@ import { matchesReboot } from "@/lib/ai/rebootPhrases";
 import { getUserSettings } from "@/lib/agents/runtime.functions";
 import { logClientEvent } from "@/lib/system/logClientEvent";
 import { COMMAND_REGISTRY, getCommand, type CommandActionId } from "@/lib/commands/registry";
+import type { ScanMode } from "@/lib/vision/modes";
 
 type Ctx = {
   enabled: boolean;
@@ -144,6 +145,18 @@ export function getSpeechCtor(): (new () => AnySpeechRecognition) | null {
 // "none" + every registry id), so routing a Gemini reply's action straight
 // into fire() needs no lookup beyond "is this id in the registry".
 type LocalAction = CommandActionId;
+
+/** Which Vision mode a scan command opens (S4.3). */
+const VOICE_SCAN_MODE: Record<
+  "vision_scan" | "scan_receipt" | "scan_odometer" | "scan_document" | "scan_fridge",
+  ScanMode
+> = {
+  vision_scan: "free",
+  scan_receipt: "receipt",
+  scan_odometer: "odometer",
+  scan_document: "document",
+  scan_fridge: "fridge",
+};
 
 const COMMANDS: Array<{ re: RegExp; action: LocalAction }> = COMMAND_REGISTRY.map((c) => ({
   re: c.pattern,
@@ -337,18 +350,27 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
           if (spokenLine) speak(spokenLine);
           break;
         case "vision_scan":
+        case "scan_receipt":
+        case "scan_odometer":
+        case "scan_document":
+        case "scan_fridge": {
           // Bridge to VisionScanner: the sessionStorage flag survives the
           // route transition when we're elsewhere, the event covers the
-          // already-on-/vision case (go() no-ops on same path).
+          // already-on-/vision case (go() no-ops on same path). The mode
+          // goes both ways too: localStorage for a fresh mount, the event
+          // detail for a mounted scanner. "Co widzisz" is always "free".
+          const mode = VOICE_SCAN_MODE[action];
           say(cmd.confirmation);
           try {
             window.sessionStorage.setItem("jarvis_pending_scan", "1");
+            window.localStorage.setItem("jarvis_vision_mode", mode);
           } catch {
             /* ignore */
           }
-          window.dispatchEvent(new CustomEvent("jarvis:vision-scan"));
+          window.dispatchEvent(new CustomEvent("jarvis:vision-scan", { detail: { mode } }));
           go("/vision");
           break;
+        }
         case "demo_showcase":
           // Bridge to ShowcaseProvider (mounted below this provider). It
           // speaks its own cold-open line — don't ALSO speak cmd.confirmation

@@ -370,10 +370,18 @@ photo_expires_at`); po terminie serwer kasuje plik przy kolejnym zapisie,
 
 ### S4.3 — prawdziwe AR
 
-- [ ] Tryb na żywo: klatka co N sekund, model zwraca ramki obiektów,
-      HUD rysuje je na wideo z etykietami (kolory z tokenów).
-- [ ] Głos: „J.A.R.V.I.S., zeskanuj paragon" (istniejąca globalna komenda).
-- [ ] Test na iPhonie w trybie PWA (kamera w standalone).
+- [x] Tryb na żywo (**LIVE** w `/vision`): klatka 640 px co 3 s, tylko gdy
+      obraz się zmienił (miniatura 16×16, `src/lib/vision/live.ts`), sam się
+      wyłącza po 60 s i przy ukryciu karty — każda klatka to płatne wywołanie.
+      Gemini zwraca ramki (`box_2d` 0–1000), HUD rysuje je na wideo przez
+      mapowanie object-fit: cover (kolory z tokenów). Stuknięcie w ramkę
+      wycina obiekt i J.A.R.V.I.S. mówi, co to jest.
+- [x] Głos: „J.A.R.V.I.S., zeskanuj paragon / licznik / dokument / lodówkę”
+      (`scan_*` w rejestrze komend) otwiera Vision od razu w tym trybie
+      i robi skan; „co widzisz” zawsze w trybie „Dowolne”. Zapis nadal
+      dopiero po potwierdzeniu.
+- [ ] Test na iPhonie w trybie PWA (kamera w standalone) — po stronie
+      użytkownika; manifest `standalone`, `playsInline` i `muted` są.
 
 **Gotowe, gdy:** paragon zeskanowany telefonem pojawia się w Wydatkach
 po jednym potwierdzeniu, a dokument w Mózgu jako nowa gwiazda.

@@ -10,11 +10,15 @@ import { extractScan, saveScan, type ScanExtraction } from "@/lib/vision/scan.fu
 import { processDocumentFn } from "@/lib/documents/documents.functions";
 import { FRAME_MAX_SIDE, SCAN_MODES, isScanMode, type ScanMode } from "@/lib/vision/modes";
 import { ScanConfirm, type ConfirmedScan } from "./vision/ScanConfirm";
+import { LiveOverlay } from "./vision/LiveOverlay";
+import { useLiveDetect } from "./vision/useLiveDetect";
+import { cropRect, type Detection } from "@/lib/vision/live";
 import { toast as notify } from "sonner";
 import {
   Aperture,
   Camera,
   ImageUp,
+  Radar,
   MessageSquare,
   ShieldAlert,
   VideoOff,
@@ -107,6 +111,9 @@ export function VisionScanner() {
   const runExtract = useServerFn(extractScan);
   const runSave = useServerFn(saveScan);
   const runProcess = useServerFn(processDocumentFn);
+  // S4.3 live mode: boxes every few seconds; a tapped box gets described.
+  const liveCtl = useLiveDetect(videoRef);
+  const [picking, setPicking] = useState<Detection | null>(null);
   const [mode, setModeState] = useState<ScanMode>(() => {
     try {
       const v = typeof window !== "undefined" ? window.localStorage.getItem(MODE_KEY) : null;
@@ -638,11 +645,23 @@ export function VisionScanner() {
 
   // Part 2: live event for when we're already mounted on /vision.
   useEffect(() => {
-    const onScanCmd = () => {
+    const onScanCmd = (e: Event) => {
       try {
         window.sessionStorage.removeItem(PENDING_SCAN_KEY);
       } catch {
         /* ignore */
+      }
+      // "zeskanuj paragon" names the mode; switch first, scan once it applied
+      const wanted = (e as CustomEvent<{ mode?: unknown }>).detail?.mode;
+      if (isScanMode(wanted) && wanted !== mode) {
+        setModeState(wanted);
+        try {
+          window.localStorage.setItem(MODE_KEY, wanted);
+        } catch {
+          /* ignore */
+        }
+        wantScanRef.current = true;
+        return;
       }
       if (state === "ready" && !analyzing) {
         wantScanRef.current = false;
@@ -653,7 +672,7 @@ export function VisionScanner() {
     };
     window.addEventListener("jarvis:vision-scan", onScanCmd);
     return () => window.removeEventListener("jarvis:vision-scan", onScanCmd);
-  }, [state, analyzing]);
+  }, [state, analyzing, mode]);
 
   // Part 3: fire a queued scan once the camera comes up. Short delay lets
   // auto-exposure settle so Gemini doesn't get a half-black boot frame.
@@ -662,7 +681,7 @@ export function VisionScanner() {
     wantScanRef.current = false;
     const t = window.setTimeout(() => void handleScanRef.current?.(), 400);
     return () => window.clearTimeout(t);
-  }, [state]);
+  }, [state, mode]);
 
   // "Discuss this" — drop the scan result into the Conversation Stream and
   // jump to the dashboard chat, so follow-up questions carry it as context
@@ -673,6 +692,47 @@ export function VisionScanner() {
     emitChat("jarvis", `[SKAN OPTYCZNY] ${analysis.text}`);
     setAnalysis(null);
     go("/");
+  };
+
+  // Tapped box → crop it from the current frame and ask what exactly it is
+  // (the same description call as "Dowolne").
+  const describeDetection = async (d: Detection) => {
+    const video = videoRef.current;
+    if (!video || video.videoWidth === 0 || analyzing) return;
+    audio.playClick();
+    setPicking(d);
+    const r = cropRect(d, video.videoWidth, video.videoHeight);
+    const scale = Math.min(1, 1024 / Math.max(r.sw, r.sh));
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(r.sw * scale));
+    c.height = Math.max(1, Math.round(r.sh * scale));
+    const ctx = c.getContext("2d");
+    const base64 = ctx
+      ? (ctx.drawImage(video, r.sx, r.sy, r.sw, r.sh, 0, 0, c.width, c.height),
+        c.toDataURL("image/jpeg", 0.85).split(",")[1])
+      : null;
+    if (!base64) {
+      setPicking(null);
+      return;
+    }
+    setAnalyzing(true);
+    setAnalysis(null);
+    try {
+      const result = await runScanAnalysis({
+        data: {
+          imageBase64: base64,
+          mimeType: "image/jpeg",
+          language: typeof navigator !== "undefined" ? navigator.language : "pl-PL",
+        },
+      });
+      setAnalysis({ kind: "ok", text: result.description });
+      speak(result.description);
+    } catch (err) {
+      setAnalysis({ kind: "error", text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setAnalyzing(false);
+      setPicking(null);
+    }
   };
 
   const digital = !zoomCaps;
@@ -744,6 +804,19 @@ export function VisionScanner() {
               }}
             />
 
+            {liveCtl.live && (
+              <LiveOverlay
+                detections={liveCtl.detections}
+                frame={liveCtl.frame}
+                picking={picking}
+                onPick={(d) => void describeDetection(d)}
+                style={{
+                  transform: digital && digitalScale > 1 ? `scale(${digitalScale})` : undefined,
+                  transformOrigin: "center center",
+                }}
+              />
+            )}
+
             {/* Vignette */}
             <div
               className="pointer-events-none absolute inset-0"
@@ -813,9 +886,13 @@ export function VisionScanner() {
               {lensLabel}
             </div>
             <div className="pointer-events-none absolute left-2 bottom-2 font-display text-[9px] uppercase tracking-[0.3em] text-primary/60">
-              {afLocked
-                ? "AF: LOCK"
-                : `MODE: ${SCAN_MODES.find((m) => m.id === mode)?.label ?? "SCAN"}`}
+              {liveCtl.live
+                ? liveCtl.error
+                  ? "AR: BŁĄD — PONAWIAM"
+                  : `AR · ${liveCtl.detections.length} OBJ · ${liveCtl.secondsLeft}s`
+                : afLocked
+                  ? "AF: LOCK"
+                  : `MODE: ${SCAN_MODES.find((m) => m.id === mode)?.label ?? "SCAN"}`}
             </div>
             <div className="pointer-events-none absolute right-2 bottom-2 font-display text-[9px] uppercase tracking-[0.3em] text-primary/60">
               ZOOM {zoomDisplay}
@@ -1019,8 +1096,8 @@ export function VisionScanner() {
               backgroundColor: "color-mix(in oklab, var(--primary) 6%, transparent)",
             }}
           >
-            <SwitchCamera className="h-4 w-4" strokeWidth={1.5} />
-            FLIP
+            <SwitchCamera className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+            <span className="@max-[330px]:hidden">FLIP</span>
           </button>
           {showLensesButton && (
             <div ref={lensPopoverRef} className="relative portrait:flex-1">
@@ -1036,7 +1113,7 @@ export function VisionScanner() {
                   backgroundColor: "color-mix(in oklab, var(--primary) 6%, transparent)",
                 }}
               >
-                <Aperture className="h-4 w-4" strokeWidth={1.5} />
+                <Aperture className="h-4 w-4 shrink-0" strokeWidth={1.5} />
                 LENSES
               </button>
               {lensPopoverOpen && (
@@ -1086,6 +1163,36 @@ export function VisionScanner() {
           )}
           <button
             type="button"
+            onClick={() => {
+              audio.playClick();
+              if (liveCtl.live) liveCtl.stop();
+              else {
+                setAnalysis(null);
+                liveCtl.start();
+              }
+            }}
+            disabled={state !== "ready"}
+            aria-pressed={liveCtl.live}
+            aria-label={liveCtl.live ? "Wyłącz tryb na żywo" : "Tryb na żywo: ramki obiektów"}
+            className="font-display flex min-w-0 items-center justify-center gap-2 border px-3 py-2 text-[10px] uppercase tracking-[0.3em] text-primary transition disabled:cursor-not-allowed disabled:opacity-40 portrait:flex-1 portrait:px-2 portrait:tracking-[0.24em]"
+            style={{
+              borderColor: liveCtl.live
+                ? "var(--primary)"
+                : "color-mix(in oklab, var(--primary) 55%, transparent)",
+              backgroundColor: liveCtl.live
+                ? "color-mix(in oklab, var(--primary) 18%, transparent)"
+                : "color-mix(in oklab, var(--primary) 6%, transparent)",
+              boxShadow: liveCtl.live ? "var(--glow-primary)" : undefined,
+            }}
+          >
+            <Radar
+              className={`h-4 w-4 shrink-0 ${liveCtl.live ? "animate-pulse" : ""}`}
+              strokeWidth={1.5}
+            />
+            {liveCtl.live ? `${liveCtl.secondsLeft}s` : "LIVE"}
+          </button>
+          <button
+            type="button"
             onClick={() => galleryRef.current?.click()}
             disabled={analyzing}
             aria-label="Zdjęcie z galerii"
@@ -1095,8 +1202,8 @@ export function VisionScanner() {
               backgroundColor: "color-mix(in oklab, var(--primary) 6%, transparent)",
             }}
           >
-            <ImageUp className="h-4 w-4" strokeWidth={1.5} />
-            FOTO
+            <ImageUp className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+            <span className="@max-[330px]:hidden">FOTO</span>
           </button>
           <input
             ref={galleryRef}
@@ -1121,9 +1228,9 @@ export function VisionScanner() {
             }}
           >
             {analyzing ? (
-              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" strokeWidth={1.5} />
             ) : (
-              <Camera className="h-4 w-4" strokeWidth={1.5} />
+              <Camera className="h-4 w-4 shrink-0" strokeWidth={1.5} />
             )}
             {analyzing ? "SCANNING" : "SCAN"}
           </button>
