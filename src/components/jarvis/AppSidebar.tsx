@@ -23,7 +23,7 @@ import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 import { useArkReboot } from "./ArkRebootContext";
 import { useShowcase } from "./ShowcaseContext";
-import { MODULE_GROUPS, type ModuleEntry } from "./modules";
+import { MENU_GROUPS, type ModuleEntry } from "./modules";
 import { openCommandPalette } from "./commandPaletteBus";
 
 const COLLAPSED_GROUPS_KEY = "jarvis:sidebar:collapsed-groups";
@@ -135,7 +135,7 @@ export function AppSidebar() {
           the top/bottom edge is masked instead of slicing content mid-glyph. */}
       <SidebarContent className="fade-scroll-y">
         <SidebarGroup className="gap-3 px-3 py-3 group-data-[collapsible=icon]:px-1.5">
-          {MODULE_GROUPS.map((group) => {
+          {MENU_GROUPS.map((group) => {
             const isCollapsed = !compact && collapsedGroups.includes(group.id);
             // A collapsed section still has to reveal where you actually are,
             // otherwise the active module can vanish from the rail entirely.

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouterState } from "@tanstack/react-router";
 
 import { cn } from "@/lib/utils";
@@ -8,116 +9,27 @@ import { useShowcase } from "./ShowcaseContext";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 import { GlobalVoiceCommand } from "./GlobalVoiceCommand";
-import { MODULE_ITEMS } from "./modules";
+import { MiniArcReactor } from "./MiniArcReactor";
+import { MENU_GROUPS, MODULE_ITEMS, type ModuleEntry, type ModuleGroup } from "./modules";
 
 /**
- * Mobile-only navigation rail pinned to the bottom of the viewport.
- * Horizontally scrollable — roughly five modules fit on screen, the rest
- * are a swipe away. Uses the exact same HUD transition navigation as the
- * desktop sidebar, so behaviour is identical across form factors.
+ * Mobile-only navigation bar pinned to the bottom of the viewport.
+ *
+ * Three cells: the module you're on, the reactor that opens the menu, and the
+ * mic. The menu itself is radial — four group nodes around the reactor, then
+ * the group's modules around it — so every module is two taps away and none
+ * hides behind a horizontal scroll. Uses the same HUD transition navigation
+ * as the desktop sidebar.
  */
 export function MobileBottomNav({ showVoice = true }: { showVoice?: boolean }) {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
-  const { go, isTransitioning } = useHudNavigate();
-  const { isDiagnosticRunning } = useArkReboot();
-  const { isRunning: isShowcaseRunning } = useShowcase();
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const activeRef = useRef<HTMLButtonElement>(null);
-  const drag = useRef({
-    active: false,
-    moved: false,
-    startX: 0,
-    startScroll: 0,
-    lastX: 0,
-    lastT: 0,
-    velocity: 0,
-    pointerId: -1,
-  });
-  const momentum = useRef<number | null>(null);
+  const [open, setOpen] = useState(false);
+  const current = MODULE_ITEMS.find((m) => m.url === pathname);
 
-  const stopMomentum = useCallback(() => {
-    if (momentum.current !== null) {
-      cancelAnimationFrame(momentum.current);
-      momentum.current = null;
-    }
-  }, []);
-
-  useEffect(() => stopMomentum, [stopMomentum]);
-
-  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === "mouse" && e.button !== 0) return;
-    stopMomentum();
-    const el = scrollerRef.current;
-    if (!el) return;
-    drag.current = {
-      active: true,
-      moved: false,
-      startX: e.clientX,
-      startScroll: el.scrollLeft,
-      lastX: e.clientX,
-      lastT: performance.now(),
-      velocity: 0,
-      pointerId: e.pointerId,
-    };
+  const toggle = () => {
+    audio.playClick();
+    setOpen((v) => !v);
   };
-
-  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const d = drag.current;
-    const el = scrollerRef.current;
-    if (!d.active || !el) return;
-    const dx = e.clientX - d.startX;
-    if (!d.moved && Math.abs(dx) > 4) {
-      d.moved = true;
-      el.setPointerCapture?.(d.pointerId);
-    }
-    if (!d.moved) return;
-    el.scrollLeft = d.startScroll - dx;
-    const now = performance.now();
-    const dt = now - d.lastT;
-    if (dt > 0) {
-      // px per ms, smoothed
-      const v = (e.clientX - d.lastX) / dt;
-      d.velocity = d.velocity * 0.7 + v * 0.3;
-      d.lastX = e.clientX;
-      d.lastT = now;
-    }
-  };
-
-  const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {
-    const d = drag.current;
-    const el = scrollerRef.current;
-    d.active = false;
-    if (!el) return;
-    try {
-      el.releasePointerCapture?.(e.pointerId);
-    } catch {
-      /* noop */
-    }
-    if (!d.moved) return;
-    // Flywheel: keep spinning and decelerate until it stops.
-    let velocity = d.velocity;
-    if (Math.abs(velocity) < 0.05) return;
-    let last = performance.now();
-    const step = () => {
-      const now = performance.now();
-      const dt = Math.min(now - last, 32);
-      last = now;
-      el.scrollLeft -= velocity * dt;
-      velocity *= Math.pow(0.995, dt);
-      const atEdge = el.scrollLeft <= 0 || el.scrollLeft >= el.scrollWidth - el.clientWidth;
-      if (Math.abs(velocity) < 0.02 || atEdge) {
-        momentum.current = null;
-        return;
-      }
-      momentum.current = requestAnimationFrame(step);
-    };
-    momentum.current = requestAnimationFrame(step);
-  };
-
-  // Keep the active module in view when the route changes.
-  useEffect(() => {
-    activeRef.current?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-  }, [pathname]);
 
   return (
     <nav
@@ -125,71 +37,213 @@ export function MobileBottomNav({ showVoice = true }: { showVoice?: boolean }) {
       className="hud-chrome relative z-20 shrink-0 border-t border-primary/20 shadow-[0_-8px_28px_-18px_color-mix(in_oklab,var(--primary)_70%,transparent)]"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      {/* Rząd paska: przewijalna lista modułów + stała komórka mikrofonu.
-          Mikrofon NALEŻY do paska (nie unosi się nad nim), więc nie ma
-          prawa zasłonić niczego w treści strony — wcześniej, zakotwiczony
-          przez `bottom-full`, lądował dokładnie na polu wysyłki czatu w
-          module J.A.R.V.I.S.
-
-          Jest rodzeństwem przewijarki, a nie jej elementem, więc zostaje w
-          miejscu przy przewijaniu ikon, a samo przewijanie (przeciąganie i
-          bezwładność) działa dokładnie jak dotąd — gesty łapie wyłącznie
-          przewijarka. `min-w-0` na niej jest konieczne: bez tego element
-          flex nie zejdzie poniżej swojej zawartości i wypchnąłby mikrofon
-          poza ekran. */}
-      <div className="flex items-stretch">
-        <div
-          ref={scrollerRef}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-          className="no-scrollbar fade-scroll-x flex min-w-0 flex-1 touch-pan-x items-stretch gap-1 overflow-x-auto px-2 py-1.5 select-none [scrollbar-width:none]"
-          style={{ overscrollBehaviorX: "contain" }}
+      {/* Mikrofon NALEŻY do paska (nie unosi się nad nim), więc nie zasłania
+          niczego w treści strony — wcześniej lądował na polu wysyłki czatu. */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 py-1.5">
+        <button
+          type="button"
+          onClick={toggle}
+          className="flex min-w-0 items-center gap-2 justify-self-start rounded-xl px-2 py-1 text-primary"
         >
-          {MODULE_ITEMS.map((item) => {
-            const active = pathname === item.url;
+          {current && <current.icon className="icon-neon h-4 w-4 shrink-0" strokeWidth={1.5} />}
+          <span className="font-display min-w-0 truncate text-[9px] uppercase tracking-[0.22em]">
+            {current?.shortTitle ?? "Menu"}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label="Menu modułów"
+          aria-expanded={open}
+          className="relative flex h-12 w-12 items-center justify-center rounded-full border border-primary/40 bg-primary/[0.06] shadow-[0_0_18px_-6px_var(--primary)]"
+        >
+          <MiniArcReactor size={34} />
+        </button>
+
+        <div className="flex justify-self-end">{showVoice && <GlobalVoiceCommand />}</div>
+      </div>
+
+      {open && <ReactorMenu pathname={pathname} onClose={() => setOpen(false)} />}
+    </nav>
+  );
+}
+
+type RingNode = {
+  key: string;
+  label: string;
+  icon: ModuleEntry["icon"];
+  active: boolean;
+  onTap: () => void;
+};
+
+const groupOf = (pathname: string): ModuleGroup | undefined =>
+  MENU_GROUPS.find((g) => g.items.some((i) => i.url === pathname));
+
+/** Unit-circle position of node `i` of `n`, starting at 12 o'clock. */
+const ringPos = (i: number, n: number) => {
+  const a = -Math.PI / 2 + (2 * Math.PI * i) / n;
+  return { x: Math.cos(a), y: Math.sin(a) };
+};
+
+function ReactorMenu({ pathname, onClose }: { pathname: string; onClose: () => void }) {
+  const { go, isTransitioning } = useHudNavigate();
+  const { isDiagnosticRunning } = useArkReboot();
+  const { isRunning: isShowcaseRunning } = useShowcase();
+  const locked = isTransitioning || isDiagnosticRunning || isShowcaseRunning;
+
+  const [group, setGroup] = useState<ModuleGroup | null>(null);
+  const activeGroup = groupOf(pathname);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (group) setGroup(null);
+      else onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [group, onClose]);
+
+  const back = () => {
+    audio.playClick();
+    if (group) setGroup(null);
+    else onClose();
+  };
+
+  const openModule = (item: ModuleEntry) => {
+    if (locked) return;
+    audio.playClick();
+    if (item.url === "/situation-room") speak("Uruchamiam telemetrię satelitarną.");
+    onClose();
+    if (item.url !== pathname) go(item.url);
+  };
+
+  const nodes: RingNode[] = group
+    ? group.items.map((item) => ({
+        key: item.url,
+        label: item.shortTitle,
+        icon: item.icon,
+        active: item.url === pathname,
+        onTap: () => openModule(item),
+      }))
+    : MENU_GROUPS.map((g) => ({
+        key: g.id,
+        label: g.label,
+        icon: g.icon,
+        active: g.id === activeGroup?.id,
+        onTap: () => {
+          audio.playClick();
+          setGroup(g);
+        },
+      }));
+
+  // Pierścień rośnie z liczbą węzłów, ale z węzłem (56 px) i podpisem mieści
+  // się w szerokości telefonu.
+  const radius = nodes.length > 4 ? "min(36vw, 150px)" : "min(30vw, 120px)";
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Menu modułów"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-md motion-safe:animate-in motion-safe:fade-in"
+      onClick={onClose}
+    >
+      <p className="font-display absolute top-[max(1.5rem,env(safe-area-inset-top))] text-[10px] uppercase tracking-[0.35em] text-primary/70">
+        {group ? `Menu // ${group.label}` : "Menu // wybierz sekcję"}
+      </p>
+
+      <div
+        className="relative h-[min(100vw,420px)] w-[min(100vw,420px)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <svg
+          viewBox="0 0 100 100"
+          aria-hidden
+          className="pointer-events-none absolute inset-0 h-full w-full animate-mini-reactor-spin"
+        >
+          <circle
+            cx="50"
+            cy="50"
+            r="38"
+            fill="none"
+            strokeWidth="0.3"
+            strokeDasharray="1 2"
+            style={{ stroke: "color-mix(in oklab, var(--primary) 45%, transparent)" }}
+          />
+          <circle
+            cx="50"
+            cy="50"
+            r="48"
+            fill="none"
+            strokeWidth="0.2"
+            style={{ stroke: "color-mix(in oklab, var(--primary) 20%, transparent)" }}
+          />
+        </svg>
+
+        {/* Środek: na poziomie sekcji zamyka menu, na poziomie modułów wraca. */}
+        <button
+          type="button"
+          onClick={back}
+          aria-label={group ? "Wróć do sekcji" : "Zamknij menu"}
+          className="absolute top-1/2 left-1/2 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center gap-0.5 rounded-full border border-primary/50 bg-background/80 shadow-[0_0_28px_-6px_var(--primary)]"
+        >
+          <MiniArcReactor size={40} />
+          <span className="font-display text-[7px] uppercase tracking-[0.25em] text-primary/80">
+            {group ? "wróć" : "zamknij"}
+          </span>
+        </button>
+
+        {/* key: zmiana poziomu przemontowuje węzły, żeby rozbłysły od nowa. */}
+        <div key={group?.id ?? "groups"}>
+          {nodes.map((n, i) => {
+            const { x, y } = ringPos(i, nodes.length);
             return (
-              <button
-                key={item.url}
-                ref={active ? activeRef : undefined}
-                type="button"
-                disabled={isTransitioning || isDiagnosticRunning || isShowcaseRunning}
-                aria-current={active ? "page" : undefined}
-                onClick={() => {
-                  if (drag.current.moved) return;
-                  audio.playClick();
-                  if (item.url === "/situation-room") speak("Uruchamiam telemetrię satelitarną.");
-                  go(item.url);
+              <div
+                key={n.key}
+                className="absolute top-1/2 left-1/2"
+                style={{
+                  transform: `translate(-50%, -50%) translate(calc(${x.toFixed(4)} * ${radius}), calc(${y.toFixed(4)} * ${radius}))`,
                 }}
-                className={cn(
-                  "group relative flex w-[19vw] min-w-[68px] shrink-0 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-1.5 transition-all duration-200 disabled:opacity-50",
-                  active
-                    ? "bg-gradient-to-b from-primary/20 to-primary/5 text-primary shadow-[inset_0_1px_0_color-mix(in_oklab,var(--primary)_30%,transparent),0_0_18px_-8px_var(--primary)]"
-                    : "text-muted-foreground",
-                )}
               >
-                <item.icon
-                  className={cn("h-[18px] w-[18px]", active && "icon-neon")}
-                  strokeWidth={1.5}
-                />
-                <span className="font-display max-w-full truncate text-[8px] uppercase tracking-[0.18em]">
-                  {item.shortTitle}
-                </span>
-                {active && (
-                  <span className="absolute -top-[7px] h-1 w-1 rounded-full bg-primary shadow-[0_0_8px_var(--primary)]" />
-                )}
-              </button>
+                <button
+                  type="button"
+                  disabled={group !== null && locked}
+                  onClick={n.onTap}
+                  aria-current={n.active ? "page" : undefined}
+                  className="relative block motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-50 motion-safe:fill-mode-both disabled:opacity-50"
+                  style={{ animationDelay: `${i * 35}ms` }}
+                >
+                  <span
+                    className={cn(
+                      "flex h-14 w-14 items-center justify-center rounded-full border transition-colors",
+                      n.active
+                        ? "border-primary bg-primary/20 text-primary shadow-[0_0_18px_-4px_var(--primary)]"
+                        : "border-primary/35 bg-background/90 text-primary/80",
+                    )}
+                  >
+                    <n.icon className="icon-neon h-5 w-5" strokeWidth={1.5} />
+                  </span>
+                  <span
+                    className={cn(
+                      "font-display absolute top-full left-1/2 mt-1 -translate-x-1/2 whitespace-nowrap text-[8px] uppercase tracking-[0.18em]",
+                      n.active ? "text-primary" : "text-muted-foreground",
+                    )}
+                  >
+                    {n.label}
+                  </span>
+                </button>
+              </div>
             );
           })}
         </div>
-
-        {showVoice && (
-          <div className="flex shrink-0 items-center border-l border-primary/20 px-3 py-1.5">
-            <GlobalVoiceCommand />
-          </div>
-        )}
       </div>
-    </nav>
+
+      <p className="font-display absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] text-[9px] uppercase tracking-[0.3em] text-muted-foreground/70">
+        dotknij tła, by zamknąć
+      </p>
+    </div>,
+    document.body,
   );
 }
