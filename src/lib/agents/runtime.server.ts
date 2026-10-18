@@ -28,6 +28,7 @@ import type { GeminiContent, GeminiPart } from "./providers/types";
 import { AGENT_SLUGS, isToolForcedForAgent } from "@/lib/constants/agentSlugs";
 import { UI_ACTIONS, type UiAction } from "@/lib/constants/uiActions";
 import { COMMAND_REGISTRY } from "@/lib/commands/registry";
+import { raiseProviderAlarm } from "@/lib/system/providerAlarm.server";
 
 export { UI_ACTIONS };
 const UI_ACTION_TOOL_NAME = "perform_ui_action";
@@ -798,6 +799,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       message,
       meta: (meta ?? {}) as Json,
     });
+    if (level !== "info") await raiseProviderAlarm(supabase, userId, message, source);
   };
 
   // Zmiana modelu w połowie miesiąca bez śladu w logu wygląda jak awaria
