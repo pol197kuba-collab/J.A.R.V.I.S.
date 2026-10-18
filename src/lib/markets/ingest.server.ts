@@ -35,6 +35,7 @@ import { fetchAllPages } from "@/lib/db/paginate";
 import { chooseVariant } from "@/lib/darwin/variants.server";
 import { classifyRegime, type MarketRegime } from "./regime";
 import { deriveLessons, LESSON_WINDOW_DAYS, type LessonInput } from "./lessons";
+import { raiseProviderAlarm } from "@/lib/system/providerAlarm.server";
 
 /** Klient Supabase — sesja użytkownika albo service_role, zależnie od tego, kto woła. */
 export type Db = SupabaseClient<Database>;
@@ -81,6 +82,7 @@ export async function logEvent(
     await supabase
       .from("system_events")
       .insert({ owner_id: userId, level, source: "market-grid", message, meta });
+    if (level !== "info") await raiseProviderAlarm(supabase, userId, message, "market-grid");
   } catch {
     // Logowanie nie ma prawa wysypać żądania ani przebiegu joba.
   }
