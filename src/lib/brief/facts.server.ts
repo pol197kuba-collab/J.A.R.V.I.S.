@@ -7,6 +7,8 @@
 // nadpisałby swoją: ta sama tabela dostałaby dwa różne „dziś" i statystyka
 // trafności liczyłaby się z czegoś, czego typer nigdy nie powiedział.
 // Briefing czyta to, co już postanowiono, i tyle.
+import { isWaiting } from "@/lib/fund/verdict";
+import type { PlayerKind } from "@/lib/fund/players";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { assetBySymbol } from "@/lib/markets/assets";
@@ -129,9 +131,18 @@ async function loadAccuracy(db: Db, ownerId: string): Promise<BriefFacts["accura
 async function loadFund(db: Db, ownerId: string): Promise<BriefFacts["fund"]> {
   const { data: portfolios } = await db
     .from("fund_portfolios")
-    .select("id, label, metrics")
+    .select("id, label, kind, metrics")
     .eq("owner_id", ownerId);
   if (!portfolios || portfolios.length === 0) return null;
+  // Gracz, który jeszcze nie gra (zero prognoz), nie jest ani ruchem dnia,
+  // ani liderem — jego 0% wyglądałoby na wynik.
+  const playing = portfolios.filter(
+    (p) =>
+      !isWaiting({
+        kind: p.kind as PlayerKind,
+        metrics: p.metrics as { trades: number; signals?: number } | null,
+      }),
+  );
   const since = isoDate(new Date(Date.now() - 7 * DAY_MS));
   const { data: nav } = await db
     .from("fund_nav_daily")
@@ -151,7 +162,7 @@ async function loadFund(db: Db, ownerId: string): Promise<BriefFacts["fund"]> {
   let day = "";
   const yesterday: Array<{ label: string; changePct: number }> = [];
   let leader: { label: string; returnPct: number } | null = null;
-  for (const p of portfolios) {
+  for (const p of playing) {
     const pts = byPortfolio.get(p.id) ?? [];
     if (pts.length === 2 && pts[1].nav > 0) {
       yesterday.push({ label: p.label, changePct: (pts[0].nav / pts[1].nav - 1) * 100 });

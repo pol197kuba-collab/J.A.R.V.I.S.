@@ -7,6 +7,7 @@
 // uwierzytelnienie, walidacja wejścia, progi świeżości i kształt odpowiedzi.
 //
 // Ten sam podział co w module paliwowym (fuel.functions.ts + ingest.server.ts).
+import type { LessonProgress } from "./lessons";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
@@ -399,6 +400,8 @@ export type PredictionScoreboard = Scoreboard & {
   justResolved: number;
   /** Wnioski z rozliczonych prognoz (lessons.ts), najmocniejsze pierwsze. */
   lessons: Array<{ kind: "direction" | "base_rate"; textPl: string; cases: number }>;
+  /** Ile brakuje do pierwszego wniosku (gdy lista jest pusta). */
+  lessonProgress: LessonProgress;
   recent: Array<{
     symbol: string;
     madeAt: string;
@@ -447,8 +450,9 @@ export const getPredictionScoreboard = createServerFn({ method: "GET" })
 
     // Te same wnioski, które dostaje model w wariancie „z wnioskami" — panel
     // pokazuje dokładnie to, czego typer się nauczył, nie osobną interpretację.
-    const { deriveLessons } = await import("./lessons");
-    const lessons = deriveLessons(await loadLessonInputs(supabase, userId)).map((l) => ({
+    const { deriveLessons, lessonProgress } = await import("./lessons");
+    const lessonInputs = await loadLessonInputs(supabase, userId);
+    const lessons = deriveLessons(lessonInputs).map((l) => ({
       kind: l.kind,
       textPl: l.textPl,
       cases: l.cases,
@@ -457,6 +461,7 @@ export const getPredictionScoreboard = createServerFn({ method: "GET" })
     return {
       ...buildScoreboard(scored),
       lessons,
+      lessonProgress: lessonProgress(lessonInputs),
       justResolved,
       recent: (rows ?? []).slice(0, 25).map((r) => ({
         symbol: r.symbol,

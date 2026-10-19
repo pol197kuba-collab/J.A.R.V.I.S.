@@ -198,3 +198,54 @@ export function deriveLessons(rows: LessonInput[], now: number = Date.now()): Le
     .slice(0, MAX_LESSONS)
     .map(({ strength: _strength, ...lesson }) => lesson);
 }
+
+export type LessonProgress = {
+  /** Rozliczone prognozy z reżimem w oknie — surowiec na wnioski. */
+  settled: number;
+  /** Sytuacja (reżim × kierunek) najbliższa progu, której jeszcze brakuje przypadków. */
+  closest: { scope: string; direction: string; cases: number; weeks: number } | null;
+  /** Sytuacje z wystarczającą próbką, w których trafność nie odbiega od losowej. */
+  enoughButRandom: number;
+};
+
+/**
+ * Ile brakuje do pierwszego wniosku — żeby pusta lista nie wyglądała na
+ * awarię. Liczy te same grupy co deriveLessons (kierunek w reżimie, razem
+ * i per klasa aktywów).
+ */
+export function lessonProgress(rows: LessonInput[], now: number = Date.now()): LessonProgress {
+  const since = now - LESSON_WINDOW_DAYS * 86_400_000;
+  const recent = rows.filter(
+    (r) => r.regime && Date.parse(r.madeAt) >= since && Number.isFinite(r.actualChangePct),
+  );
+  let closest: LessonProgress["closest"] = null;
+  let best = -1;
+  let enoughButRandom = 0;
+  for (const keyOf of [
+    (r: LessonInput) => `${r.regime}|*|${r.direction}`,
+    (r: LessonInput) => `${r.regime}|${classOf(r.symbol)}|${r.direction}`,
+  ]) {
+    for (const [key, { rows: group }] of groupBy(recent, keyOf)) {
+      const [regime, cls, direction] = key.split("|");
+      const n = group.length;
+      const weeks = new Set(group.map((r) => weekOf(r.madeAt))).size;
+      if (n >= MIN_CASES && weeks >= MIN_WEEKS) {
+        const hits = group.filter((r) => r.outcome === "hit").length;
+        if (Math.abs(shrink(hits, n) - BASELINE) < MIN_DEVIATION) enoughButRandom += 1;
+        continue;
+      }
+      // postęp = słabsze z dwóch kryteriów; przy remisie więcej przypadków
+      const progress = Math.min(n / MIN_CASES, weeks / MIN_WEEKS) + n / 1000;
+      if (progress > best) {
+        best = progress;
+        closest = {
+          scope: scopeLabel(regime, cls === "*" ? null : cls),
+          direction: DIRECTION_PL[direction] ?? direction,
+          cases: n,
+          weeks,
+        };
+      }
+    }
+  }
+  return { settled: recent.length, closest, enoughButRandom };
+}

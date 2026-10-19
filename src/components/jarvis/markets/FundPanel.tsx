@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 import { assetBySymbol } from "@/lib/markets/assets";
 import type { FundView } from "@/lib/fund/fund.functions";
 import { DEFAULT_RULES } from "@/lib/fund/engine";
-import { fundVerdict } from "@/lib/fund/verdict";
+import { fundVerdict, isWaiting, waitingFor } from "@/lib/fund/verdict";
 
 const PLAYER_COLOR: Record<string, string> = {
   ai_learned: "var(--market-1)",
@@ -107,9 +107,15 @@ export function FundPanel({
   onRecompute: () => void;
   recomputing: boolean;
 }) {
+  // Gracz bez prognoz nie gra — jego 0% nie może stać w rankingu nad tymi,
+  // którzy grają i tracą. Idzie na koniec, bez numeru, z powodem.
   const ranked = useMemo(
     () =>
-      [...view.players].sort((a, b) => (b.metrics?.returnPct ?? 0) - (a.metrics?.returnPct ?? 0)),
+      [...view.players].sort(
+        (a, b) =>
+          Number(isWaiting(a)) - Number(isWaiting(b)) ||
+          (b.metrics?.returnPct ?? 0) - (a.metrics?.returnPct ?? 0),
+      ),
     [view.players],
   );
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -127,6 +133,7 @@ export function FundPanel({
           label: p.label,
           kind: p.kind,
           returnPct: p.metrics?.returnPct ?? 0,
+          waiting: isWaiting(p),
         })),
         view.nav.length,
       ),
@@ -200,6 +207,7 @@ export function FundPanel({
         {ranked.map((p, i) => {
           const m = p.metrics;
           const active = selected?.key === p.key;
+          const waiting = isWaiting(p);
           return (
             <button
               key={p.key}
@@ -214,7 +222,7 @@ export function FundPanel({
             >
               <span className="flex w-full min-w-0 items-center gap-2">
                 <span className="w-4 shrink-0 font-mono text-[10px] text-muted-foreground">
-                  {i + 1}.
+                  {waiting ? "–" : `${i + 1}.`}
                 </span>
                 <Swatch
                   color={PLAYER_COLOR[p.key] ?? "var(--muted-foreground)"}
@@ -227,25 +235,44 @@ export function FundPanel({
                       {KIND_BADGE[p.kind]}
                     </span>
                   )}
+                  {waiting && (
+                    <span className="ml-2 font-display text-[8px] uppercase tracking-widest text-[color:var(--warning)]">
+                      nie gra
+                    </span>
+                  )}
                 </span>
                 <span
                   className="shrink-0 font-mono text-sm font-bold"
-                  style={{ color: m ? signColor(m.returnPct) : "var(--muted-foreground)" }}
+                  style={{
+                    color: m && !waiting ? signColor(m.returnPct) : "var(--muted-foreground)",
+                  }}
                 >
-                  {m ? pctFmt(m.returnPct) : "—"}
+                  {m && !waiting ? pctFmt(m.returnPct) : "—"}
                 </span>
                 <span className="w-24 shrink-0 text-right font-mono text-[11px] text-muted-foreground @max-[460px]:hidden">
                   {plnFmt(p.navPln)} zł
                 </span>
               </span>
-              {m && (
-                <span className="flex flex-wrap gap-x-3 gap-y-0.5 pl-6 font-mono text-[10px] text-muted-foreground">
-                  <span className="hidden @max-[460px]:inline">{plnFmt(p.navPln)} zł</span>
-                  <span>obsunięcie {pctFmt(m.maxDrawdownPct, 1)}</span>
-                  <span>Sharpe {m.sharpe === null ? "—" : plnFmt(m.sharpe, 2)}</span>
-                  <span>{m.trades} transakcji</span>
-                  <span>prowizje {plnFmt(m.feesPln)} zł</span>
+              {waiting ? (
+                <span className="pl-6 font-mono text-[10px] text-muted-foreground">
+                  Czeka na {waitingFor(p.key)} — bez nich nie dostaje prognoz, więc trzyma gotówkę.
                 </span>
+              ) : (
+                m && (
+                  <span className="flex flex-wrap gap-x-3 gap-y-0.5 pl-6 font-mono text-[10px] text-muted-foreground">
+                    {p.kind === "source" && m.signals !== undefined && (
+                      <span>
+                        {m.signals} prognoz
+                        {m.lastSignalOn ? ` · ostatnia ${shortDate(m.lastSignalOn)}` : ""}
+                      </span>
+                    )}
+                    <span className="hidden @max-[460px]:inline">{plnFmt(p.navPln)} zł</span>
+                    <span>obsunięcie {pctFmt(m.maxDrawdownPct, 1)}</span>
+                    <span>Sharpe {m.sharpe === null ? "—" : plnFmt(m.sharpe, 2)}</span>
+                    <span>{m.trades} transakcji</span>
+                    <span>prowizje {plnFmt(m.feesPln)} zł</span>
+                  </span>
+                )
               )}
             </button>
           );
@@ -256,17 +283,19 @@ export function FundPanel({
         // Legenda w HTML, nie z recharts: zawija się na telefonie zamiast
         // nachodzić na oś i pokazuje kreskowanie odniesień (koszyk, małpa).
         <ul className="mt-4 flex flex-wrap gap-x-4 gap-y-1" aria-label="Legenda wykresu">
-          {view.players.map((p) => (
-            <li key={p.key} className="flex items-center gap-1.5">
-              <Swatch
-                color={PLAYER_COLOR[p.key] ?? "var(--muted-foreground)"}
-                dashed={p.kind !== "source"}
-              />
-              <span className="font-display text-[9px] uppercase tracking-widest text-muted-foreground">
-                {p.label}
-              </span>
-            </li>
-          ))}
+          {view.players
+            .filter((p) => !isWaiting(p))
+            .map((p) => (
+              <li key={p.key} className="flex items-center gap-1.5">
+                <Swatch
+                  color={PLAYER_COLOR[p.key] ?? "var(--muted-foreground)"}
+                  dashed={p.kind !== "source"}
+                />
+                <span className="font-display text-[9px] uppercase tracking-widest text-muted-foreground">
+                  {p.label}
+                </span>
+              </li>
+            ))}
         </ul>
       )}
       {chartRows.length > 1 && (
@@ -301,22 +330,24 @@ export function FundPanel({
                 cursor={{ stroke: "var(--primary)", strokeOpacity: 0.35 }}
               />
 
-              {view.players.map((p) => (
-                <Line
-                  key={p.key}
-                  type="monotone"
-                  dataKey={p.key}
-                  name={p.label}
-                  stroke={PLAYER_COLOR[p.key] ?? "var(--muted-foreground)"}
-                  strokeWidth={selected?.key === p.key ? 2.5 : 1.5}
-                  strokeOpacity={selected && selected.key !== p.key ? 0.55 : 1}
-                  strokeDasharray={p.kind === "source" ? undefined : "5 4"}
-                  dot={false}
-                  activeDot={{ r: 4, strokeWidth: 0 }}
-                  connectNulls
-                  animationDuration={450}
-                />
-              ))}
+              {view.players
+                .filter((p) => !isWaiting(p))
+                .map((p) => (
+                  <Line
+                    key={p.key}
+                    type="monotone"
+                    dataKey={p.key}
+                    name={p.label}
+                    stroke={PLAYER_COLOR[p.key] ?? "var(--muted-foreground)"}
+                    strokeWidth={selected?.key === p.key ? 2.5 : 1.5}
+                    strokeOpacity={selected && selected.key !== p.key ? 0.55 : 1}
+                    strokeDasharray={p.kind === "source" ? undefined : "5 4"}
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 0 }}
+                    connectNulls
+                    animationDuration={450}
+                  />
+                ))}
             </LineChart>
           </ResponsiveContainer>
         </div>
