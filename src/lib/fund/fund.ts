@@ -86,11 +86,19 @@ export function buildFund(
     start,
     end,
     players: PLAYERS.map((player) => {
-      const result = simulate(signalsFor(player), book, { start, end });
+      const signals = signalsFor(player);
+      const result = simulate(signals, book, { start, end });
       return {
         ...player,
         result,
-        metrics: computeMetrics(result.nav, result.trades, DEFAULT_RULES.startCashPln),
+        metrics: {
+          ...computeMetrics(result.nav, result.trades, DEFAULT_RULES.startCashPln),
+          signals: signals.length,
+          lastSignalOn: signals.reduce<string | null>(
+            (m, s) => (m === null || s.madeOn > m ? s.madeOn : m),
+            null,
+          ),
+        },
       };
     }),
   };

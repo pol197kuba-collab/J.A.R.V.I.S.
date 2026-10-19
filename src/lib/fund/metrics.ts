@@ -17,6 +17,13 @@ export type FundMetrics = {
   turnover: number;
   trades: number;
   feesPln: number;
+  /**
+   * Ile sygnałów (prognoz) gracz dostał i z którego dnia ostatni. Zero przy
+   * graczu-źródle = jeszcze nie gra (np. „AI z wnioskami” bez wniosków), a nie
+   * wynik 0%. Brak pola = portfel przeliczony przed dodaniem licznika.
+   */
+  signals?: number;
+  lastSignalOn?: string | null;
 };
 
 export function computeMetrics(

@@ -7,6 +7,7 @@
 // hunched after a loss, upbeat after a gain.
 
 import type { FundView } from "@/lib/fund/fund.functions";
+import { isWaiting } from "@/lib/fund/verdict";
 
 /** Short tags that fit the 3×5 pixel font of the boards. */
 export const FUND_TAG: Record<string, string> = {
@@ -35,6 +36,8 @@ export type TownFundPlayer = {
   /** Change of the last day's valuation, %; null with < 2 days of history. */
   dayPct: number | null;
   navPln: number;
+  /** No forecast yet (e.g. AI+ without lessons) — not playing, ranked last. */
+  waiting: boolean;
 };
 
 export type TownMood = "up" | "down" | "flat";
@@ -118,12 +121,13 @@ export function townFund(view: FundView | null | undefined): TownFund | null {
         returnPct: p.metrics?.returnPct ?? 0,
         dayPct,
         navPln: p.navPln,
+        waiting: isWaiting(p),
       };
     })
-    .sort((x, y) => y.returnPct - x.returnPct);
+    .sort((x, y) => Number(x.waiting) - Number(y.waiting) || y.returnPct - x.returnPct);
 
   const sourceDays = players
-    .filter((p) => SOURCE_KINDS.has(p.kind) && p.dayPct !== null)
+    .filter((p) => SOURCE_KINDS.has(p.kind) && !p.waiting && p.dayPct !== null)
     .map((p) => p.dayPct as number);
   const dayAvg =
     sourceDays.length > 0 ? sourceDays.reduce((s, v) => s + v, 0) / sourceDays.length : null;
@@ -141,7 +145,7 @@ export function townFund(view: FundView | null | undefined): TownFund | null {
     .map((pos) => ({ symbol: pos.symbol, plPct: (pos.valuePln / pos.costPln - 1) * 100 }));
 
   const ticker: TownFund["ticker"] = [{ text: "FUNDUSZ J.A.R.V.I.S.", sign: 0 }];
-  for (const p of players) {
+  for (const p of players.filter((x) => !x.waiting)) {
     ticker.push({ text: `${p.tag} ${pctLabel(p.returnPct)}`, sign: signOf(p.returnPct) });
     if (p.dayPct !== null) {
       ticker.push({ text: `${p.tag} DZIS ${pctLabel(p.dayPct)}`, sign: signOf(p.dayPct) });
@@ -194,6 +198,7 @@ const plPct = (v: number, digits = 2) => pctLabel(v, digits);
 export function rankingText(fund: TownFund | null, verdict: readonly string[]): string {
   if (!fund) return "Tablica jest pusta — fundusz nie był jeszcze przeliczony.";
   const top = fund.players
+    .filter((p) => !p.waiting)
     .slice(0, 3)
     .map((p, i) => `${i + 1}. ${p.label} ${plPct(p.returnPct)}`)
     .join("\n");

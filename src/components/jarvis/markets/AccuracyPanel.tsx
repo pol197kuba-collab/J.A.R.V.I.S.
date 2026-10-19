@@ -119,10 +119,7 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
               ))}
             </ul>
           ) : (
-            <p className="mt-1.5 font-mono text-[10px] text-muted-foreground/70">
-              Jeszcze za mało rozliczonych prognoz — wniosek wymaga co najmniej 12 przypadków z
-              dwóch różnych tygodni.
-            </p>
+            <LessonProgressNote progress={board.lessonProgress} />
           )}
         </div>
 
@@ -197,5 +194,31 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
         )}
       </PanelHint>
     </>
+  );
+}
+
+/** Why there's no lesson yet, in numbers — so an empty list doesn't look broken. */
+function LessonProgressNote({ progress }: { progress?: PredictionScoreboard["lessonProgress"] }) {
+  const p = progress;
+  return (
+    <div className="mt-1.5 space-y-1 font-mono text-[10px] leading-snug text-muted-foreground/80">
+      <p>
+        Wniosek wymaga co najmniej 12 rozliczonych przypadków z dwóch różnych tygodni i trafności
+        wyraźnie (o 10 pp) innej niż losowa. Do tego czasu „Model AI + wnioski” nie prognozuje.
+      </p>
+      {p && p.settled === 0 && <p>Na razie nie ma rozliczonych prognoz z rozpoznanym reżimem.</p>}
+      {p?.closest && (
+        <p>
+          Najbliżej: „{p.closest.scope}”, prognozy {p.closest.direction} — {p.closest.cases}/12
+          przypadków, {Math.min(p.closest.weeks, 2)}/2 tyg.
+        </p>
+      )}
+      {p && p.enoughButRandom > 0 && (
+        <p>
+          {p.enoughButRandom} {p.enoughButRandom === 1 ? "sytuacja ma" : "sytuacje mają"} już dość
+          przypadków, ale trafność nie odbiega od losowej — tu nie ma czego się nauczyć.
+        </p>
+      )}
+    </div>
   );
 }

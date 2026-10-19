@@ -64,3 +64,16 @@ export const emitSystemEvent = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true as const };
   });
+
+/** Wipes the owner's own log — the "clean slate" button on /system-logs. */
+export const clearSystemEvents = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<{ deleted: number }> => {
+    const { supabase, userId } = context;
+    const { count, error } = await supabase
+      .from("system_events")
+      .delete({ count: "exact" })
+      .eq("owner_id", userId);
+    if (error) throw new Error(`Nie udało się wyczyścić logów: ${error.message}`);
+    return { deleted: count ?? 0 };
+  });

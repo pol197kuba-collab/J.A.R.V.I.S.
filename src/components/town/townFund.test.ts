@@ -42,6 +42,25 @@ const view = (overrides: Partial<FundView> = {}): FundView => ({
 });
 
 describe("townFund", () => {
+  it("a player with no forecasts isn't ranked above the ones playing, nor on the ticker", () => {
+    const v = view();
+    v.players.push({
+      key: "ai_learned",
+      label: "AI z wnioskami",
+      kind: "source",
+      metrics: { returnPct: 0, trades: 0, signals: 0 } as never,
+      navPln: 100_000,
+      cashPln: 100_000,
+    });
+    v.nav = v.nav.map((r) => ({ ...r, ai_learned: 100_000 }));
+    const f = townFund(v)!;
+    expect(f.players.map((p) => p.key)).toEqual(["ai", "basket", "signals", "ai_learned"]);
+    expect(f.ticker.some((t) => t.text.startsWith("AI+"))).toBe(false);
+    // mood from the forecast players that actually play
+    const playing = ((102_500 / 102_000 - 1) * 100 + (99_000 / 99_500 - 1) * 100) / 2;
+    expect(f.dayAvg).toBeCloseTo(playing);
+  });
+
   it("ranks players and derives yesterday's change from the last two valuations", () => {
     const f = townFund(view())!;
     expect(f.players.map((p) => p.key)).toEqual(["ai", "basket", "signals"]);

@@ -83,3 +83,29 @@ describe("deriveLessons", () => {
     expect(deriveLessons(series(40, { regime: null }), NOW)).toEqual([]);
   });
 });
+
+describe("lessonProgress", () => {
+  it("says how far the first lesson is", async () => {
+    const { lessonProgress, MIN_CASES } = await import("./lessons");
+    const now = Date.parse("2026-10-19T12:00:00Z");
+    const row = (i: number, direction: "up" | "down", outcome: "hit" | "miss") => ({
+      symbol: "BTC",
+      direction,
+      regime: "trend_up",
+      outcome,
+      actualChangePct: 1,
+      flatBandPct: 1,
+      madeAt: new Date(now - (i + 1) * 86_400_000).toISOString(),
+    });
+    expect(lessonProgress([], now)).toEqual({ settled: 0, closest: null, enoughButRandom: 0 });
+    const few = Array.from({ length: 5 }, (_, i) => row(i, "up", "hit"));
+    const p = lessonProgress(few, now);
+    expect(p.settled).toBe(5);
+    expect(p.closest).toMatchObject({ direction: "wzrostu", cases: 5 });
+    // enough cases, hit rate ~ random → no lesson, but counted
+    const many = Array.from({ length: MIN_CASES * 2 + 3 }, (_, i) =>
+      row(i, "down", i % 3 === 0 ? "hit" : "miss"),
+    );
+    expect(lessonProgress(many, now).enoughButRandom).toBeGreaterThan(0);
+  });
+});

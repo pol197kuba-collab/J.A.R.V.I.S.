@@ -359,4 +359,26 @@ describe("fundVerdict", () => {
       /^Prowadzi/,
     );
   });
+
+  it("gracz bez prognoz nie gra: poza rankingiem i z jasnym powodem", async () => {
+    const { fundVerdict, isWaiting } = await import("./verdict");
+    const lines = fundVerdict(
+      [
+        { key: "ai_learned", label: "AI z wnioskami", kind: "source", returnPct: 0, waiting: true },
+        { key: "ai", label: "AI", kind: "source", returnPct: -2 },
+        { key: "basket", label: "Koszyk", kind: "benchmark", returnPct: -1 },
+      ],
+      30,
+    );
+    expect(lines[0]).toBe("Prowadzi: Koszyk (−1,00%).");
+    expect(lines).toContain(
+      "AI z wnioskami: jeszcze nie gra — czeka na wnioski z rozliczonych prognoz.",
+    );
+    expect(isWaiting({ kind: "source", metrics: { trades: 0, signals: 0 } })).toBe(true);
+    // prognozy są, ale wszystkie „bez zmian” — gra, tylko stoi w gotówce
+    expect(isWaiting({ kind: "source", metrics: { trades: 0, signals: 12 } })).toBe(false);
+    // stary portfel bez licznika: zero transakcji = nie gra
+    expect(isWaiting({ kind: "source", metrics: { trades: 0 } })).toBe(true);
+    expect(isWaiting({ kind: "benchmark", metrics: { trades: 0, signals: 0 } })).toBe(false);
+  });
 });
