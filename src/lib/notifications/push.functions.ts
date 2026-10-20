@@ -90,3 +90,89 @@ export const countPushSubscriptions = createServerFn({ method: "GET" })
       .eq("owner_id", context.userId);
     return { count: count ?? 0 };
   });
+
+// ---------- test powiadomienia i stan dostarczania briefingu ----------
+
+export type PushTest = {
+  id: string;
+  requestedAt: string;
+  doneAt: string | null;
+  sent: number | null;
+  failed: number | null;
+  pruned: number | null;
+  skipped: string | null;
+};
+
+/**
+ * Prosi o testowe powiadomienie. Wysyła je job GitHub (tą samą drogą co
+ * briefing) — wiersz w push_tests sam go wywołuje (trigger w bazie), jeśli w
+ * Ustawieniach jest token GitHub; inaczej test czeka na najbliższy przebieg.
+ */
+export const requestPushTest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<{ id: string }> => {
+    const { data, error } = await context.supabase
+      .from("push_tests")
+      .insert({ owner_id: context.userId })
+      .select("id")
+      .single();
+    if (error || !data) throw new Error(`Nie udało się zlecić testu: ${error?.message ?? "?"}`);
+    return { id: data.id };
+  });
+
+export const getPushTest = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ id: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }): Promise<PushTest | null> => {
+    const { data: row } = await context.supabase
+      .from("push_tests")
+      .select("id, requested_at, done_at, sent, failed, pruned, skipped")
+      .eq("id", data.id)
+      .eq("owner_id", context.userId)
+      .maybeSingle();
+    if (!row) return null;
+    return {
+      id: row.id,
+      requestedAt: row.requested_at,
+      doneAt: row.done_at,
+      sent: row.sent,
+      failed: row.failed,
+      pruned: row.pruned,
+      skipped: row.skipped,
+    };
+  });
+
+export type BriefDelivery = {
+  /** Czy w Ustawieniach jest token GitHub — bez niego briefing czeka na crona. */
+  hasGithubToken: boolean;
+  lastBrief: { date: string; createdAt: string } | null;
+  /** Ostatnie wywołania joba przez bazę i odpowiedź GitHuba (204 = OK). */
+  dispatches: { at: string; reason: string; status: number | null; error: string | null }[];
+};
+
+export const getBriefDelivery = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<BriefDelivery> => {
+    const { supabase, userId } = context;
+    const [{ data: secret }, { data: brief }, { data: dispatches }] = await Promise.all([
+      supabase.from("user_secrets").select("github_token").eq("owner_id", userId).maybeSingle(),
+      supabase
+        .from("daily_briefs")
+        .select("brief_date, created_at")
+        .eq("owner_id", userId)
+        .order("brief_date", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase.rpc("job_dispatch_status"),
+    ]);
+    return {
+      hasGithubToken: Boolean(secret?.github_token?.trim()),
+      lastBrief: brief ? { date: brief.brief_date, createdAt: brief.created_at } : null,
+      dispatches: (dispatches ?? []).map((d) => ({
+        at: d.created_at,
+        reason: d.reason,
+        status: d.status_code ?? null,
+        error: d.error ?? null,
+      })),
+    };
+  });

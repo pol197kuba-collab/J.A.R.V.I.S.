@@ -1149,6 +1149,33 @@ export type Database = {
         }
         Relationships: []
       }
+      job_dispatches: {
+        Row: {
+          created_at: string
+          id: number
+          owner_id: string
+          reason: string
+          request_id: number | null
+          workflow: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          owner_id: string
+          reason: string
+          request_id?: number | null
+          workflow: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          owner_id?: string
+          reason?: string
+          request_id?: number | null
+          workflow?: string
+        }
+        Relationships: []
+      }
       local_jobs: {
         Row: {
           args: Json
@@ -1721,6 +1748,39 @@ export type Database = {
         }
         Relationships: []
       }
+      push_tests: {
+        Row: {
+          done_at: string | null
+          failed: number | null
+          id: string
+          owner_id: string
+          pruned: number | null
+          requested_at: string
+          sent: number | null
+          skipped: string | null
+        }
+        Insert: {
+          done_at?: string | null
+          failed?: number | null
+          id?: string
+          owner_id: string
+          pruned?: number | null
+          requested_at?: string
+          sent?: number | null
+          skipped?: string | null
+        }
+        Update: {
+          done_at?: string | null
+          failed?: number | null
+          id?: string
+          owner_id?: string
+          pruned?: number | null
+          requested_at?: string
+          sent?: number | null
+          skipped?: string | null
+        }
+        Relationships: []
+      }
       standing_orders: {
         Row: {
           condition: string
@@ -2142,6 +2202,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      job_dispatch_status: {
+        Args: never
+        Returns: {
+          created_at: string
+          error: string
+          reason: string
+          status_code: number
+        }[]
+      }
       agent_variant_stats: {
         Args: { p_owner: string; p_slug: string }
         Returns: {
