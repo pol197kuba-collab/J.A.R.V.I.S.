@@ -146,6 +146,8 @@ export type BriefDelivery = {
   /** Czy w Ustawieniach jest token GitHub — bez niego briefing czeka na crona. */
   hasGithubToken: boolean;
   lastBrief: { date: string; createdAt: string } | null;
+  /** Ostatni zaciąg Market Grid (job_runs) — uruchamiany przez bazę o 20:00. */
+  lastMarketRun: { finishedAt: string; trigger: string | null; failures: number } | null;
   /** Ostatnie wywołania joba przez bazę i odpowiedź GitHuba (204 = OK). */
   dispatches: { at: string; reason: string; status: number | null; error: string | null }[];
 };
@@ -154,20 +156,32 @@ export const getBriefDelivery = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<BriefDelivery> => {
     const { supabase, userId } = context;
-    const [{ data: secret }, { data: brief }, { data: dispatches }] = await Promise.all([
-      supabase.from("user_secrets").select("github_token").eq("owner_id", userId).maybeSingle(),
-      supabase
-        .from("daily_briefs")
-        .select("brief_date, created_at")
-        .eq("owner_id", userId)
-        .order("brief_date", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      supabase.rpc("job_dispatch_status"),
-    ]);
+    const [{ data: secret }, { data: brief }, { data: dispatches }, { data: market }] =
+      await Promise.all([
+        supabase.from("user_secrets").select("github_token").eq("owner_id", userId).maybeSingle(),
+        supabase
+          .from("daily_briefs")
+          .select("brief_date, created_at")
+          .eq("owner_id", userId)
+          .order("brief_date", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase.rpc("job_dispatch_status"),
+        supabase
+          .from("job_runs")
+          .select("finished_at, trigger, failures")
+          .eq("owner_id", userId)
+          .eq("workflow", "market-grid.yml")
+          .order("finished_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
     return {
       hasGithubToken: Boolean(secret?.github_token?.trim()),
       lastBrief: brief ? { date: brief.brief_date, createdAt: brief.created_at } : null,
+      lastMarketRun: market
+        ? { finishedAt: market.finished_at, trigger: market.trigger, failures: market.failures }
+        : null,
       dispatches: (dispatches ?? []).map((d) => ({
         at: d.created_at,
         reason: d.reason,

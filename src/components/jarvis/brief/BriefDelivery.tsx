@@ -1,9 +1,10 @@
-// Skąd wiadomo, czy briefing przyjdzie o czasie: czy baza może sama
-// uruchomić job (token GitHub), kiedy powstał ostatni i co GitHub
-// odpowiedział na ostatnie wywołania.
+// Skąd wiadomo, czy briefing (i Market Grid o 20:00) przyjdzie o czasie:
+// czy baza może sama uruchomić job (token GitHub), kiedy był ostatni
+// przebieg i co GitHub odpowiedział na ostatnie wywołania.
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getBriefDelivery } from "@/lib/notifications/push.functions";
+import { MARKET_HOUR } from "@/lib/markets/schedule";
 
 const fmt = (iso: string) =>
   new Date(iso).toLocaleString("pl-PL", {
@@ -12,6 +13,17 @@ const fmt = (iso: string) =>
     hour: "2-digit",
     minute: "2-digit",
   });
+
+const REASON_LABEL: Record<string, string> = {
+  brief_hour: "briefing",
+  push_test: "test",
+  market_hour: "Market Grid",
+};
+
+const TRIGGER_LABEL: Record<string, string> = {
+  workflow_dispatch: "z bazy lub ręcznie",
+  schedule: "cron GitHuba",
+};
 
 const STATUS_HINT: Record<number, string> = {
   204: "OK — job uruchomiony",
@@ -37,8 +49,8 @@ export function BriefDelivery() {
         ) : (
           <span className="text-[color:var(--warning)]">
             wyłączone — dodaj token GitHub w zakładce Klucze (uprawnienie Actions: write do repo
-            J.A.R.V.I.S.). Bez niego briefing czeka na cron GitHuba, który bywa spóźniony o kilka
-            godzin.
+            J.A.R.V.I.S.). Bez niego briefing i Market Grid czekają na cron GitHuba, który bywa
+            spóźniony o kilka godzin.
           </span>
         )}
       </p>
@@ -48,10 +60,21 @@ export function BriefDelivery() {
           ? `${d.lastBrief.date}, złożony ${fmt(d.lastBrief.createdAt)}`
           : "jeszcze żaden"}
       </p>
+      <p className="min-w-0 break-words">
+        Market Grid (codziennie o {MARKET_HOUR}:00):{" "}
+        {d.lastMarketRun
+          ? `ostatni zaciąg ${fmt(d.lastMarketRun.finishedAt)}` +
+            (d.lastMarketRun.trigger
+              ? `, ${TRIGGER_LABEL[d.lastMarketRun.trigger] ?? d.lastMarketRun.trigger}`
+              : "") +
+            (d.lastMarketRun.failures > 0
+              ? ` — ${d.lastMarketRun.failures} kroków z błędem (System Logs)`
+              : "")
+          : "jeszcze bez śladu przebiegu"}
+      </p>
       {last && (
         <p className="min-w-0 break-words">
-          Ostatnie wywołanie joba: {fmt(last.at)} (
-          {last.reason === "push_test" ? "test" : "briefing"}) —{" "}
+          Ostatnie wywołanie joba: {fmt(last.at)} ({REASON_LABEL[last.reason] ?? last.reason}) —{" "}
           {last.status === null ? (
             "czekam na odpowiedź GitHuba"
           ) : (
