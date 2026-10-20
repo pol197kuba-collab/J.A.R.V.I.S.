@@ -1,3 +1,5 @@
+import { PushTestButton } from "@/components/jarvis/orders/PushTestButton";
+import { BriefDelivery } from "@/components/jarvis/brief/BriefDelivery";
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
@@ -389,13 +391,15 @@ function NotificationsSection() {
           aplikacja jest zamknięta — osobno w każdej przeglądarce (iPhone: po dodaniu do ekranu
           początkowego).
         </p>
-        <div className="mt-4">
+        <div className="mt-4 space-y-4">
           <PushToggle />
+          <PushTestButton />
         </div>
       </HudPanel>
       <HudPanel index={2} title="PORANNY BRIEFING" tone="quiet" className="p-5">
         <div className="mt-3">
           <BriefScheduleControls />
+          <BriefDelivery />
         </div>
       </HudPanel>
     </div>

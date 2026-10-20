@@ -17,6 +17,7 @@ import type { Database, Json } from "@/integrations/supabase/types";
 import { callAnthropic } from "@/lib/agents/providers/anthropic";
 import type { GeminiContent } from "@/lib/agents/providers/types";
 import { notifyOwner } from "@/lib/notifications/notify.server";
+import type { PushResult } from "@/lib/notifications/push.server";
 import { composeBrief, sectionsToSpoken } from "./compose";
 import { gatherFacts } from "./facts.server";
 import type { BriefSection, ComposedBrief, DailyBrief } from "./types";
@@ -205,6 +206,8 @@ export type BuildBriefResult = {
   brief: DailyBrief;
   /** Czy powiadomienie o gotowym briefingu poszło (feed + urządzenia). */
   notified: boolean;
+  /** Co się stało z powiadomieniem na urządzenia; null, gdy nie próbowano. */
+  push?: PushResult | null;
   error: string | null;
 };
 
@@ -281,6 +284,7 @@ export async function buildDailyBrief(
       silent: options.push === false,
     });
     notified = result.id !== null;
+    return { brief, notified, push: result.push ?? null, error: null };
   }
 
   return { brief, notified, error: null };

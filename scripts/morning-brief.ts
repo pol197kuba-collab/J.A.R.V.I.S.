@@ -30,6 +30,7 @@ import { decideBriefRun, DEFAULT_BRIEF_HOUR } from "../src/lib/brief/schedule";
 import { rescueDocumentJobs } from "../src/lib/agents/documentJobs.rescue";
 import { rescueStuckAgents } from "../src/lib/agents/agentStatus.rescue";
 import { warsawDate, warsawHour } from "../src/lib/format/warsaw";
+import { sendPushToOwner, type PushResult } from "../src/lib/notifications/push.server";
 
 const args = new Set(process.argv.slice(2));
 const DRY_RUN = args.has("--dry-run");
@@ -42,6 +43,36 @@ function warn(message: string) {
 }
 function fail(message: string) {
   console.log(`::error::${message}`);
+}
+
+/** Wynik wysyłki po polsku — do logu Actions i System Logs. */
+function pushLine(r: PushResult): string {
+  if (r.skipped === "no_subscriptions")
+    return "brak zapisanych urządzeń — włącz powiadomienia na telefonie w Ustawieniach";
+  if (r.skipped === "no_vapid_keys")
+    return "brak kluczy VAPID — włącz powiadomienia w Ustawieniach";
+  if (r.skipped) return `pominięto (${r.skipped})`;
+  return (
+    `wysłano na ${r.sent} urządz.` +
+    (r.failed ? `, nieudane: ${r.failed}` : "") +
+    (r.pruned ? `, usunięte wygasłe: ${r.pruned}` : "")
+  );
+}
+
+type Db = ReturnType<typeof createClient<Database>>;
+
+async function logEvent(db: Db, ownerId: string, level: "info" | "warn", message: string) {
+  try {
+    await db.from("system_events").insert({
+      owner_id: ownerId,
+      level,
+      source: "morning-brief",
+      message,
+      meta: {} as Json,
+    });
+  } catch {
+    // log w Actions zostaje
+  }
 }
 
 function requireEnv(name: string): string {
@@ -156,6 +187,45 @@ async function main(): Promise<void> {
     warn(`agenci: ${err instanceof Error ? err.message : String(err)}`);
   }
 
+  // ---------- Test powiadomienia (przycisk w Ustawieniach) ----------
+  // Test idzie tą samą drogą co briefing: ten job, ta sama biblioteka, te
+  // same subskrypcje. Wynik wraca do wiersza, a Ustawienia go pokazują.
+  try {
+    const { data: tests } = await db
+      .from("push_tests")
+      .select("id")
+      .eq("owner_id", ownerId)
+      .is("done_at", null)
+      .gte("requested_at", new Date(Date.now() - 86_400_000).toISOString());
+    for (const t of tests ?? []) {
+      const result = await sendPushToOwner(db, ownerId, {
+        title: "J.A.R.V.I.S. — test powiadomienia",
+        body: "Jeśli widzisz to przy zamkniętej aplikacji, poranny briefing też dotrze.",
+        url: "/settings",
+        tag: "push-test",
+      });
+      await db
+        .from("push_tests")
+        .update({
+          done_at: new Date().toISOString(),
+          sent: result.sent,
+          failed: result.failed,
+          pruned: result.pruned,
+          skipped: result.skipped,
+        })
+        .eq("id", t.id);
+      notice(`test powiadomienia: ${pushLine(result)}`);
+      await logEvent(
+        db,
+        ownerId,
+        result.sent > 0 ? "info" : "warn",
+        `test powiadomienia — ${pushLine(result)}`,
+      );
+    }
+  } catch (err) {
+    warn(`test powiadomienia: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   // ---------- Czy to już ta godzina ----------
   // Job biegnie CO GODZINĘ, bo harmonogram GitHuba jest jeden dla wszystkich,
   // a godzina briefingu należy do użytkownika. Ta decyzja jest czysta i
@@ -191,7 +261,7 @@ async function main(): Promise<void> {
   }
 
   try {
-    const { brief, notified, error } = await buildDailyBrief(db, ownerId, keys, {
+    const { brief, notified, push, error } = await buildDailyBrief(db, ownerId, keys, {
       notify: true,
       push: schedule.push,
     });
@@ -221,6 +291,13 @@ async function main(): Promise<void> {
     // Brak powiadomienia przy udanym zapisie znaczy, że briefing jest, ale
     // nikt się o nim nie dowie — warto, żeby było to widać w przebiegu.
     if (!notified) warn("Briefing zapisany, ale meldunek się nie zapisał.");
+    // Wynik pukania w telefony — bez tego „nie dostałem powiadomienia” nie
+    // miało żadnego śladu: ani w Actions, ani w System Logs.
+    if (push) {
+      const line = pushLine(push);
+      notice(`push: ${line}`);
+      await logEvent(db, ownerId, push.sent > 0 ? "info" : "warn", `briefing — push: ${line}`);
+    }
   } catch (err) {
     fail(err instanceof Error ? (err.stack ?? err.message) : String(err));
     process.exit(1);
