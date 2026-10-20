@@ -6,6 +6,12 @@ name: Market Grid
 # historia bez dziur w dni, gdy nikt nie otworzył aplikacji; rozliczenie
 # prognozy W JEJ TERMINIE, a nie przy następnej wizycie; i regularną,
 # codzienną próbkę prognoz zamiast zlepka dni, w które ktoś akurat zajrzał.
+#
+# O CZASIE: od 20.10.2026 job uruchamia baza (pg_cron → workflow_dispatch,
+# supabase/migrations/20261020120000_market_grid_dispatch.sql) o 20:00 czasu
+# PL — cron poniżej GitHub realizował z opóźnieniem 2–4 h. Cron zostaje jako
+# zapas; gdy przyjdzie po przebiegu z bazy, skrypt kończy się bez pracy
+# (src/lib/markets/schedule.ts).
 on:
   schedule:
     # Po zamknięciu sesji w Warszawie i przed otwarciem w USA — wtedy dzień

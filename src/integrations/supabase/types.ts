@@ -1176,6 +1176,36 @@ export type Database = {
         }
         Relationships: []
       }
+      job_runs: {
+        Row: {
+          failures: number
+          finished_at: string
+          id: number
+          owner_id: string
+          started_at: string
+          trigger: string | null
+          workflow: string
+        }
+        Insert: {
+          failures?: number
+          finished_at?: string
+          id?: number
+          owner_id: string
+          started_at: string
+          trigger?: string | null
+          workflow: string
+        }
+        Update: {
+          failures?: number
+          finished_at?: string
+          id?: number
+          owner_id?: string
+          started_at?: string
+          trigger?: string | null
+          workflow?: string
+        }
+        Relationships: []
+      }
       local_jobs: {
         Row: {
           args: Json

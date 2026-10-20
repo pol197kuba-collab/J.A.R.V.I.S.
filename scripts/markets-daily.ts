@@ -35,6 +35,7 @@ import {
 } from "../src/lib/markets/ingest.server";
 import { evaluateStandingOrders } from "../src/lib/orders/evaluate.server";
 import { recomputeFund } from "../src/lib/fund/fund.server";
+import { decideMarketRun } from "../src/lib/markets/schedule";
 
 const args = new Set(process.argv.slice(2));
 const DRY_RUN = args.has("--dry-run");
@@ -146,6 +147,29 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // ---------- 0. Czy ten przebieg w ogóle ma działać ----------
+  // Od 20.10.2026 job uruchamia baza o 20:00 (workflow_dispatch). Spóźniony
+  // cron GitHuba, który przyjdzie po takim przebiegu, kończy się tutaj —
+  // drugi zaciąg to drugie wywołanie modelu za te same dane.
+  const startedAt = new Date();
+  const event = process.env.GITHUB_EVENT_NAME;
+  const { data: lastRun } = await db
+    .from("job_runs")
+    .select("finished_at")
+    .eq("owner_id", ownerId)
+    .eq("workflow", "market-grid.yml")
+    .order("finished_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const decision = decideMarketRun(event, lastRun?.finished_at ?? null, startedAt);
+  if (!decision.run) {
+    notice(
+      `Pomijam przebieg z crona: zaciąg był ${decision.lastFinishedAt} ` +
+        "(uruchomiony przez bazę o 20:00).",
+    );
+    return;
+  }
+
   const failures: string[] = [];
 
   /** Zapisuje awarię tak, żeby była widoczna i w Actions, i w /system-logs. */
@@ -255,6 +279,18 @@ async function main(): Promise<void> {
   } catch (err) {
     await report("rozkazy", err instanceof Error ? err.message : String(err));
   }
+
+  // Ślad przebiegu — po nim baza wie, że dziś nie trzeba już wołać joba,
+  // a cron GitHuba, że może odpuścić. Zapisany także przy awariach kroków:
+  // powtórka dałaby tylko drugie wywołanie modelu z tym samym wynikiem.
+  const { error: runError } = await db.from("job_runs").insert({
+    owner_id: ownerId,
+    workflow: "market-grid.yml",
+    trigger: event ?? null,
+    started_at: startedAt.toISOString(),
+    failures: failures.length,
+  });
+  if (runError) warn(`Nie zapisałem śladu przebiegu (job_runs): ${runError.message}`);
 
   if (failures.length > 0) {
     fail(`Przebieg zakończony z ${failures.length} awariami.`);

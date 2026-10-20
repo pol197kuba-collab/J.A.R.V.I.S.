@@ -61,11 +61,11 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     label: "GitHub",
     required: false,
     modules:
-      "D.R.O.I.D.: zadania programistyczne (issue) i podgląd repozytoriów; poranny briefing o czasie (uruchamia job).",
+      "D.R.O.I.D.: zadania programistyczne (issue) i podgląd repozytoriów; poranny briefing i Market Grid o czasie (uruchamia joby).",
     ifBroken:
-      "D.R.O.I.D. nie założy issue ani nie zajrzy do repo; briefing czeka na cron GitHuba (bywa spóźniony o godziny).",
+      "D.R.O.I.D. nie założy issue ani nie zajrzy do repo; briefing i Market Grid czekają na cron GitHuba (bywa spóźniony o godziny).",
     source:
-      "github.com/settings/personal-access-tokens (Issues: read/write, Contents: read, Actions: read/write — Actions uruchamia poranny briefing o czasie)",
+      "github.com/settings/personal-access-tokens (Issues: read/write, Contents: read, Actions: read/write — Actions uruchamia briefing i Market Grid o czasie)",
   },
 ];
 
