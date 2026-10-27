@@ -117,6 +117,13 @@ paneli zewnętrznych. Trzymane tutaj, żeby nie zginęły między sesjami.
       dostawca Google w Supabase Auth, publikacja i test. Stara baza
       (`myjynbqzlovanoarppyt`) zostaje jako kopia do czasu potwierdzenia.
 
+- [ ] **Garage Radar w tej bazie: wystawić schemat `garage_radar`** (po
+      merge migracji `20261027120000_garage_radar.sql`). Supabase →
+      Integrations → Data API → Settings → *Exposed schemas* → zaznaczyć
+      `garage_radar` → Save. Bez tego aplikacja Garage Radar (osobne repo,
+      Vercel) nie widzi swoich tabel. Schemat `public` J.A.R.V.I.S.-a nie
+      jest przez tę migrację zmieniany.
+
 ## 1. [UI] Dashboard redesign — holo-panels with depth — **shipped 2026-07-16, confirmed working**
 
 Root cause (confirmed against the screenshot + `src/routes/index.tsx:25`,
