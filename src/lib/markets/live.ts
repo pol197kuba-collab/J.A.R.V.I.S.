@@ -39,17 +39,36 @@ export function liveDecisions(
   players: PlayerState[],
   prices: Map<string, LivePrice>,
   now: Date,
-): { events: PlayerEvent[]; alarms: AlarmCandidate[] } {
+): { events: PlayerEvent[]; alarms: AlarmCandidate[]; skipped: LiveSkips } {
   const fresh = (p: LivePrice | undefined): p is LivePrice =>
     !!p && p.price > 0 && now.getTime() - Date.parse(p.at) <= MAX_PRICE_AGE_MIN * 60_000;
   const events: PlayerEvent[] = [];
   const alarms = new Map<string, AlarmCandidate>();
+  const skipped: LiveSkips = { noPrice: [], stale: [], beforeForecast: [], noTime: [] };
+  const note = (list: string[], symbol: string) => {
+    if (!list.includes(symbol)) list.push(symbol);
+  };
 
   for (const pl of players) {
     for (const o of pl.pending) {
       const px = prices.get(o.symbol);
       // Realizacja tylko po cenie zaobserwowanej PO postawieniu prognozy.
-      if (!fresh(px) || !o.madeAt || px.at <= o.madeAt) continue;
+      if (!px) {
+        note(skipped.noPrice, o.symbol);
+        continue;
+      }
+      if (!fresh(px)) {
+        note(skipped.stale, o.symbol);
+        continue;
+      }
+      if (!o.madeAt) {
+        note(skipped.noTime, o.symbol);
+        continue;
+      }
+      if (Date.parse(px.at) <= Date.parse(o.madeAt)) {
+        note(skipped.beforeForecast, o.symbol);
+        continue;
+      }
       events.push({
         player: pl.key,
         kind: "fill",
@@ -91,8 +110,20 @@ export function liveDecisions(
       }
     }
   }
-  return { events, alarms: [...alarms.values()] };
+  return { events, alarms: [...alarms.values()], skipped };
 }
+
+/** Dlaczego czekające zlecenia nie weszły w tym przebiegu — do logu. */
+export type LiveSkips = {
+  /** Brak ceny ze źródła. */
+  noPrice: string[];
+  /** Cena starsza niż MAX_PRICE_AGE_MIN — zwykle zamknięta giełda. */
+  stale: string[];
+  /** Cena zaobserwowana przed postawieniem prognozy. */
+  beforeForecast: string[];
+  /** Prognoza bez chwili postawienia (wiersz sprzed made_at). */
+  noTime: string[];
+};
 
 /** Odpowiedź modelu w alarmie → decyzja; wszystko inne niż wyraźne „close” = trzymaj. */
 export function parseAlarmReply(text: string | null): {

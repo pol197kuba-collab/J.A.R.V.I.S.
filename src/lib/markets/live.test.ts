@@ -42,11 +42,22 @@ describe("liveDecisions", () => {
       [{ key: "ai", pending, live: [] }],
       new Map([
         ["BTC", px(101)],
-        ["ETH", px(50)], // cena sprzed prognozy
+        ["ETH", px(50)], // cena sprzed prognozy (09:55 < 09:58)
         ["SPY.US", px(500, "2026-11-01T21:00:00Z")], // nieświeża — giełda zamknięta
       ]),
       NOW,
     );
+    const { skipped } = liveDecisions(
+      [{ key: "ai", pending, live: [] }],
+      new Map([
+        ["BTC", px(101)],
+        ["ETH", px(50)],
+        ["SPY.US", px(500, "2026-11-01T21:00:00Z")],
+      ]),
+      NOW,
+    );
+    expect(skipped.beforeForecast).toEqual(["ETH"]);
+    expect(skipped.stale).toEqual(["SPY.US"]);
     expect(events).toEqual([
       {
         player: "ai",
