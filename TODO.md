@@ -35,6 +35,15 @@
 Rzeczy, których żaden commit nie załatwi, bo wymagają dostępu do kont i
 paneli zewnętrznych. Trzymane tutaj, żeby nie zginęły między sesjami.
 
+- [ ] **Rynki — fundusz z dźwignią i granie na żywo (PR #188, #189, 2026-11-01).**
+      Wkleić w edytorze SQL, w tej kolejności:
+      `20261101210000_market_model_usage.sql` (budżet tokenów — bez tej
+      tabeli model nie jest wołany wcale) i `20261102090000_market_live.sql`
+      (zdarzenia na żywo + pg_cron co 15 min → `market-live.yml`). Potem
+      Lovable → Publish → Update, żeby nowy UI /rynki trafił na produkcję.
+      Sprawdzenie: Actions → Market Live ma przebiegi co ~15 min, a panel
+      Fundusz pokazuje zieloną kropkę „Na żywo”.
+
 - [ ] **`GEMINI_API_KEY` jako sekret w GitHubie** (Settings → Secrets and
       variables → Actions). Bez niego nocne joby działają, ale newsy
       dostają ocenę słownikową zamiast modelu, a typer zapisuje wyłącznie
