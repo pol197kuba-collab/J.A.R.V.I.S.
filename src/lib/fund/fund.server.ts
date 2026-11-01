@@ -100,6 +100,14 @@ export type FundSummary = {
  * aktualnego stanu (czekające zlecenia, pozycje z progami), a zapisuje
  * dopiero, gdy coś się wydarzyło.
  */
+/**
+ * Kolumny prognoz dla funduszu. `made_at` jest konieczne: bez niego żadna
+ * prognoza nie może się zrealizować w przebiegu na żywo (silnik realizuje
+ * tylko po cenie zaobserwowanej PO chwili postawienia prognozy).
+ */
+export const PREDICTION_COLUMNS =
+  "id, symbol, source, made_on, made_at, direction, confidence, rationale_pl, stale, horizon_days";
+
 export async function computeFund(
   db: Db,
   ownerId: string,
@@ -109,9 +117,7 @@ export async function computeFund(
   const predictions = await fetchAllPages<Row>((from, to) =>
     db
       .from("market_predictions")
-      .select(
-        "id, symbol, source, made_on, direction, confidence, rationale_pl, stale, horizon_days",
-      )
+      .select(PREDICTION_COLUMNS)
       .eq("owner_id", ownerId)
       .in("horizon_days", HORIZONS)
       .order("made_at", { ascending: true })

@@ -730,3 +730,12 @@ describe("werdykt — gracz na starcie", () => {
     expect(lines).toContain("AI: dopiero zaczyna — 13 zleceń czeka na realizację.");
   });
 });
+
+describe("odczyt prognoz funduszu", () => {
+  it("pobiera made_at — bez niego nic nie realizuje się na żywo", async () => {
+    const { PREDICTION_COLUMNS } = await import("./fund.server");
+    expect(PREDICTION_COLUMNS.split(",").map((c) => c.trim())).toEqual(
+      expect.arrayContaining(["made_at", "horizon_days", "stale", "made_on"]),
+    );
+  });
+});
