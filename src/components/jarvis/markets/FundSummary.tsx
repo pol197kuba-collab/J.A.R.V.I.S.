@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { assetBySymbol } from "@/lib/markets/assets";
 import type { FundPlayer, FundView } from "@/lib/fund/fund.functions";
 import { compareBySymbol, type PlayerSummary } from "@/lib/fund/summary";
-import { isWaiting, waitingFor } from "@/lib/fund/verdict";
+import { isWaiting, startingWith, waitingFor } from "@/lib/fund/verdict";
 import {
   KIND_BADGE,
   PLAYER_COLOR,
@@ -111,8 +111,11 @@ function PlayerCard({
 
           {noTrades ? (
             <span className="pl-6 text-[11px] leading-snug text-foreground/75">
-              {m?.signals ?? 0} prognoz, 0 transakcji — żadna nie otworzyła pozycji (same „bez
-              zmian”), więc cały czas trzyma gotówkę.
+              {(m?.pending ?? 0) > 0
+                ? `${m?.signals ?? 0} prognoz, jeszcze bez transakcji — ${m?.pending} ${
+                    m?.pending === 1 ? "zlecenie czeka" : "zleceń czeka"
+                  } na realizację (krypto po najbliższej cenie z przebiegu na żywo, akcje i ETF po otwarciu sesji).`
+                : `${m?.signals ?? 0} prognoz, 0 transakcji — żadna nie otworzyła pozycji (same „bez zmian”), więc cały czas trzyma gotówkę.`}
             </span>
           ) : (
             s && (
@@ -224,7 +227,8 @@ export function PlayerCards({
       aria-label="Wyniki graczy"
     >
       {ranked.map((p) => {
-        const waiting = isWaiting(p);
+        // Bez numeru: gracz, który nie gra albo dopiero czeka na pierwsze zlecenia.
+        const waiting = isWaiting(p) || startingWith(p) > 0;
         if (!waiting) rank += 1;
         return (
           <div key={p.key} role="listitem" className="min-w-0">

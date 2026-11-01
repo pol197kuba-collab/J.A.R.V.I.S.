@@ -37,6 +37,8 @@ export type FundMetrics = {
   };
   /** Horyzont prognoz gracza w dniach. */
   horizonDays?: number;
+  /** Zlecenia czekające na realizację na koniec przeliczenia. */
+  pending?: number;
 };
 
 export function computeMetrics(

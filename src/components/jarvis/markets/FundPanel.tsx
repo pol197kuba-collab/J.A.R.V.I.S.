@@ -24,7 +24,7 @@ import { EmptyState, PanelHint } from "@/components/jarvis/fuel/chrome";
 import { assetBySymbol } from "@/lib/markets/assets";
 import type { FundOrder, FundView } from "@/lib/fund/fund.functions";
 import { DEFAULT_RULES } from "@/lib/fund/engine";
-import { fundVerdict, isWaiting } from "@/lib/fund/verdict";
+import { fundVerdict, isWaiting, startingWith } from "@/lib/fund/verdict";
 import { Fold } from "./Fold";
 import { PlayerCards, SymbolComparison } from "./FundSummary";
 import { PLAYER_COLOR, plnFmt, shortDate, signColor } from "./fundFormat";
@@ -139,7 +139,8 @@ export function FundPanel({
     () =>
       [...view.players].sort(
         (a, b) =>
-          Number(isWaiting(a)) - Number(isWaiting(b)) ||
+          Number(isWaiting(a) || startingWith(a) > 0) -
+            Number(isWaiting(b) || startingWith(b) > 0) ||
           (b.metrics?.returnPct ?? 0) - (a.metrics?.returnPct ?? 0),
       ),
     [view.players],
@@ -160,6 +161,7 @@ export function FundPanel({
           kind: p.kind,
           returnPct: p.metrics?.returnPct ?? 0,
           waiting: isWaiting(p),
+          startingWith: startingWith(p),
         })),
         view.nav.length,
       ),
