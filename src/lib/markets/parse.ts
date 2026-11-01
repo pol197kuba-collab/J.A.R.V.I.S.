@@ -106,3 +106,31 @@ export function parseFrankfurterSeries(raw: unknown, quote: string): PricePoint[
   }
   return points;
 }
+
+// ------------------------------------------------- ceny na żywo (tick) ----
+
+export type LiveQuote = { price: number; at: string };
+
+/** CoinGecko /simple/price z include_last_updated_at → cena per id. */
+export function parseCoinGeckoSimple(raw: unknown): Map<string, LiveQuote> {
+  const out = new Map<string, LiveQuote>();
+  if (!raw || typeof raw !== "object") return out;
+  for (const [id, v] of Object.entries(raw as Record<string, unknown>)) {
+    const row = v as { usd?: unknown; last_updated_at?: unknown };
+    const price = Number(row?.usd);
+    const ts = Number(row?.last_updated_at);
+    if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(ts) || ts <= 0) continue;
+    out.set(id, { price, at: new Date(ts * 1000).toISOString() });
+  }
+  return out;
+}
+
+/** Yahoo chart → ostatnia cena rynkowa i jej czas (meta.regularMarket*). */
+export function parseYahooLive(raw: unknown): LiveQuote | null {
+  const meta = (raw as { chart?: { result?: Array<{ meta?: Record<string, unknown> }> } })?.chart
+    ?.result?.[0]?.meta;
+  const price = Number(meta?.regularMarketPrice);
+  const ts = Number(meta?.regularMarketTime);
+  if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(ts) || ts <= 0) return null;
+  return { price, at: new Date(ts * 1000).toISOString() };
+}

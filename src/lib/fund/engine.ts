@@ -54,6 +54,54 @@ export type FundSignal = {
   weight?: number;
   /** Horyzont tej prognozy w dniach; brak = rules.horizonDays. */
   horizonDays?: number;
+  /**
+   * Chwila postawienia prognozy (ISO). Z nią prognoza może się zrealizować
+   * po pierwszej cenie z ciągu dnia PO tej chwili (zdarzenie „fill” z
+   * przebiegu na żywo), a nie dopiero po kolejnym zamknięciu.
+   */
+  madeAt?: string;
+};
+
+/**
+ * Zdarzenie z przebiegu na żywo (co 15 min, scripts/markets-live.ts),
+ * zapisane w bazie z ceną i chwilą — dzięki temu przeliczenie całej
+ * historii od zera daje zawsze ten sam wynik.
+ * - fill: czekająca prognoza zrealizowana po cenie z ciągu dnia,
+ * - stop / take: stop-loss / take-profit trafiony w trakcie sesji,
+ * - alarm: model w alarmie zdecydował zamknąć pozycję.
+ */
+export type LiveEvent = {
+  at: string;
+  symbol: string;
+  kind: "fill" | "stop" | "take" | "alarm";
+  /** Cena środkowa w walucie instrumentu (spread dolicza silnik). */
+  price: number;
+  /** fill: dzień prognozy, którą realizuje (pending.madeOn). */
+  signalOn?: string | null;
+  /** stop/take/alarm: której strony pozycji dotyczy. */
+  side?: "long" | "short" | null;
+  reason?: string | null;
+};
+
+/** Czekające zlecenie na koniec symulacji — do realizacji na żywo. */
+export type PendingOrder = {
+  symbol: string;
+  madeOn: string;
+  madeAt: string | null;
+  direction: Direction;
+};
+
+/** Otwarta pozycja z progami ryzyka na koniec symulacji. */
+export type LivePosition = {
+  symbol: string;
+  side: "long" | "short";
+  refPx: number;
+  /** Progi jako ułamek ruchu od refPx (np. 0,04 = 4%); null = brak. */
+  stop: number | null;
+  take: number | null;
+  expiresOn: string;
+  signalOn: string;
+  reason: string | null;
 };
 
 export type FundRules = {
@@ -168,7 +216,16 @@ export type SimResult = {
   /** Koszt dźwigni i pożyczonych papierów (≥ 0), już odjęty od gotówki. */
   financingPln: number;
   /** Ile razy zadziałał stop-loss / take-profit / margin call. */
-  exits: { stopLoss: number; takeProfit: number; marginCall: number; horizon: number };
+  exits: {
+    stopLoss: number;
+    takeProfit: number;
+    marginCall: number;
+    horizon: number;
+    alarm: number;
+  };
+  /** Stan na koniec: czekające zlecenia i pozycje z progami (dla przebiegu na żywo). */
+  pending: PendingOrder[];
+  live: LivePosition[];
 };
 
 // ---------- daty ----------
@@ -292,6 +349,8 @@ export const HORIZON_EXIT_REASON =
 export const STOP_LOSS_REASON = "Stop-loss (zależny od zmienności) — zamknięcie pozycji.";
 export const TAKE_PROFIT_REASON = "Take-profit (zależny od zmienności) — realizacja zysku.";
 export const MARGIN_CALL_REASON = "Margin call — kapitał poniżej wymaganego depozytu, zamknięcie.";
+export const LIVE_STOP_REASON = "Stop-loss w trakcie sesji (zależny od zmienności).";
+export const LIVE_TAKE_REASON = "Take-profit w trakcie sesji (zależny od zmienności).";
 
 type Live = {
   signal: FundSignal;
@@ -305,7 +364,7 @@ type Live = {
 export function simulate(
   signals: FundSignal[],
   book: PriceBook,
-  opts: { start: string; end: string; rules?: Partial<FundRules> },
+  opts: { start: string; end: string; rules?: Partial<FundRules>; events?: LiveEvent[] },
 ): SimResult {
   const rules: FundRules = { ...DEFAULT_RULES, ...opts.rules };
   const prices = new Prices(book.closes);
@@ -319,7 +378,17 @@ export function simulate(
 
   let cash = rules.startCashPln;
   let financingPln = 0;
-  const exits = { stopLoss: 0, takeProfit: 0, marginCall: 0, horizon: 0 };
+  const exits = { stopLoss: 0, takeProfit: 0, marginCall: 0, horizon: 0, alarm: 0 };
+  const eventsByDay = new Map<string, LiveEvent[]>();
+  for (const e of opts.events ?? []) {
+    if (!book.instruments.has(e.symbol) || !(e.price > 0)) continue;
+    const day = e.at.slice(0, 10);
+    const list = eventsByDay.get(day) ?? [];
+    list.push(e);
+    eventsByDay.set(day, list);
+  }
+  /** Prognozy dnia zrealizowane już w trakcie tego dnia — nie trafią do kolejki. */
+  const consumed = new Set<FundSignal>();
   const holdings = new Map<string, Position>();
   const pending = new Map<string, FundSignal>();
   const live = new Map<string, Live>();
@@ -346,9 +415,16 @@ export function simulate(
   const buyingPowerAt = (date: string): number =>
     Math.max(1, rules.maxLeverage) * navAt(date) - grossAt(date);
 
-  const execute = (signal: FundSignal, date: string, target: number, reason: string | null) => {
+  const execute = (
+    signal: FundSignal,
+    date: string,
+    target: number,
+    reason: string | null,
+    /** Cena z ciągu dnia (zdarzenie na żywo); brak = zamknięcie dnia. */
+    atPx?: number,
+  ) => {
     const inst = book.instruments.get(signal.symbol)!;
-    const px = prices.on(signal.symbol, date)!;
+    const px = atPx ?? prices.on(signal.symbol, date)!;
     const fx = fxToPln(prices, inst.currency, date);
     if (fx === null) return;
     const half = rules.spreadByClass[inst.assetClass] / 2;
@@ -442,14 +518,14 @@ export function simulate(
   };
 
   /** Ustawia horyzont i progi ryzyka pozycji po prognozie, która ją otworzyła/potwierdziła. */
-  const arm = (s: FundSignal, date: string): void => {
+  const arm = (s: FundSignal, date: string, atPx?: number): void => {
     const inst = book.instruments.get(s.symbol)!;
     const days = s.horizonDays ?? rules.horizonDays;
     if (days === null) {
       live.delete(s.symbol);
       return;
     }
-    const px = prices.on(s.symbol, date)!;
+    const px = atPx ?? prices.on(s.symbol, date)!;
     const sigma = prices.sigma(s.symbol, date, rules.volLookback);
     const scale = sigma === null ? null : sigma * Math.sqrt(horizonSessions(days, inst.assetClass));
     live.set(s.symbol, {
@@ -473,6 +549,52 @@ export function simulate(
     };
 
   for (let date = opts.start; date <= opts.end; date = addDays(date, 1)) {
+    // 0. Zdarzenia z przebiegu na żywo, w kolejności czasu — przed
+    //    zamknięciem dnia, bo zdarzyły się w jego trakcie.
+    const todaySignals = bySignalDay.get(date) ?? [];
+    for (const e of [...(eventsByDay.get(date) ?? [])].sort((a, b) => a.at.localeCompare(b.at))) {
+      if (e.kind === "fill") {
+        // Czekająca prognoza z wcześniejszego dnia albo dzisiejsza, postawiona
+        // przed chwilą zdarzenia — tylko ta, na którą wskazuje zdarzenie.
+        const waiting = pending.get(e.symbol);
+        const s =
+          waiting && waiting.madeOn === e.signalOn
+            ? waiting
+            : todaySignals.find(
+                (x) =>
+                  x.symbol === e.symbol &&
+                  x.madeOn === e.signalOn &&
+                  !consumed.has(x) &&
+                  (x.madeAt === undefined || x.madeAt < e.at),
+              );
+        if (!s) continue;
+        const target = targetWeight(s, rules);
+        if (waiting === s) pending.delete(e.symbol);
+        else consumed.add(s);
+        if (target === null) continue;
+        execute(s, date, target, s.reason, e.price);
+        if (s.weight !== undefined || !holdings.has(e.symbol)) live.delete(e.symbol);
+        else arm(s, date, e.price);
+        continue;
+      }
+      const held = holdings.get(e.symbol);
+      if (!held) continue;
+      const side = held.units > 0 ? "long" : "short";
+      if (e.side && e.side !== side) continue;
+      const l = live.get(e.symbol);
+      const reason =
+        e.kind === "stop"
+          ? LIVE_STOP_REASON
+          : e.kind === "take"
+            ? LIVE_TAKE_REASON
+            : (e.reason ?? "Alarm AI — zamknięcie pozycji.");
+      execute(l?.signal ?? exitSignal(e.symbol, date), date, 0, reason, e.price);
+      live.delete(e.symbol);
+      if (e.kind === "stop") exits.stopLoss += 1;
+      else if (e.kind === "take") exits.takeProfit += 1;
+      else exits.alarm += 1;
+    }
+
     // 1. Realizacja czekających zleceń na dzisiejszym notowaniu — najpierw
     //    zmniejszenia ekspozycji (zwalniają depozyt), potem zwiększenia; w
     //    obrębie strony stała kolejność symboli. Pozycje po horyzoncie bez
@@ -529,9 +651,8 @@ export function simulate(
 
     // 3. Dzisiejsze prognozy → zlecenia na kolejne notowanie. Nowsza
     //    prognoza zastępuje czekającą; „bez zmian” ją anuluje.
-    for (const s of (bySignalDay.get(date) ?? []).sort((a, b) =>
-      a.symbol.localeCompare(b.symbol),
-    )) {
+    for (const s of [...todaySignals].sort((a, b) => a.symbol.localeCompare(b.symbol))) {
+      if (consumed.has(s)) continue;
       if (targetWeight(s, rules) === null) pending.delete(s.symbol);
       else pending.set(s.symbol, s);
     }
@@ -573,6 +694,28 @@ export function simulate(
     cashPln: cash,
     financingPln,
     exits,
+    pending: [...pending.values()].map((p) => ({
+      symbol: p.symbol,
+      madeOn: p.madeOn,
+      madeAt: p.madeAt ?? null,
+      direction: p.direction,
+    })),
+    live: [...live.entries()].flatMap(([symbol, l]) => {
+      const h = holdings.get(symbol);
+      if (!h) return [];
+      return [
+        {
+          symbol,
+          side: h.units > 0 ? ("long" as const) : ("short" as const),
+          refPx: l.refPx,
+          stop: l.stop,
+          take: l.take,
+          expiresOn: l.expiresOn,
+          signalOn: l.signal.madeOn,
+          reason: l.signal.reason,
+        },
+      ];
+    }),
     holdings: [...holdings.entries()]
       .map(([symbol, h]) => ({
         symbol,

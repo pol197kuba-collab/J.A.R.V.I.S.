@@ -179,6 +179,7 @@ function PlayerCard({
               {m.exits && m.exits.stopLoss > 0 && <span>stop-loss {m.exits.stopLoss}×</span>}
               {m.exits && m.exits.takeProfit > 0 && <span>take-profit {m.exits.takeProfit}×</span>}
               {m.exits && m.exits.horizon > 0 && <span>koniec horyzontu {m.exits.horizon}×</span>}
+              {m.exits && (m.exits.alarm ?? 0) > 0 && <span>alarm AI {m.exits.alarm}×</span>}
               {m.exits && m.exits.marginCall > 0 && (
                 <span className="text-destructive">margin call {m.exits.marginCall}×</span>
               )}

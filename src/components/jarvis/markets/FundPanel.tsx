@@ -30,6 +30,64 @@ import { PlayerCards, SymbolComparison } from "./FundSummary";
 import { PLAYER_COLOR, plnFmt, shortDate, signColor } from "./fundFormat";
 import { Swatch } from "./Swatch";
 
+const LIVE_KIND: Record<string, string> = {
+  stop: "stop-loss",
+  take: "take-profit",
+  alarm: "alarm: zamknięcie",
+  alarm_hold: "alarm: trzymaj",
+};
+
+/** Granie na żywo: czy przebieg co 15 min działa i co dziś zrobił. */
+function LiveStrip({ live }: { live: NonNullable<FundView["live"]> }) {
+  const last = live.lastRunAt ? new Date(live.lastRunAt) : null;
+  const ageMin = last ? (Date.now() - last.getTime()) / 60_000 : null;
+  const ok = ageMin !== null && ageMin < 40;
+  const t = live.today;
+  return (
+    <div className="mt-3 min-w-0 border border-primary/15 px-3 py-2">
+      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span
+            className="h-1.5 w-1.5 rounded-full"
+            style={{ background: ok ? "var(--success)" : "var(--warning)" }}
+          />
+          <span className="font-display text-[9px] uppercase tracking-widest text-primary/80">
+            Na żywo
+          </span>
+        </span>
+        <span>
+          {last
+            ? `ostatni przebieg ${last.toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" })}`
+            : "jeszcze nie biegł"}
+          {last && !ok && " — przerwa, sprawdź Actions → Market Live"}
+        </span>
+        <span>
+          24 h: {t.fill} realizacji · {t.stop} stop-loss · {t.take} take-profit · {t.alarm} zamknięć
+          z alarmu · {t.alarmHold} „trzymaj”
+        </span>
+      </p>
+      {live.recent.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5">
+          {live.recent.map((e) => (
+            <li
+              key={`${e.at}-${e.player}-${e.symbol}-${e.kind}`}
+              className="min-w-0 break-words text-[11px] leading-snug text-foreground/80"
+            >
+              <span className="font-mono text-[10px] text-muted-foreground">
+                {new Date(e.at).toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" })}
+              </span>{" "}
+              {assetBySymbol(e.symbol)?.label ?? e.symbol} · {LIVE_KIND[e.kind] ?? e.kind}
+              {e.kind.startsWith("alarm") && e.reason
+                ? ` — ${e.reason.replace(/^Alarm AI[^:]*: /, "")}`
+                : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /** Co transakcja zrobiła z pozycją — prostymi słowami. */
 function orderAction(o: FundOrder): string {
   const closing = o.realizedPln !== null;
@@ -156,6 +214,8 @@ export function FundPanel({
   return (
     <>
       {header}
+
+      {view.live && <LiveStrip live={view.live} />}
 
       {verdict.length > 0 && (
         <div className="mt-3 space-y-1 border-l-2 border-primary/40 pl-3">
@@ -366,16 +426,18 @@ export function FundPanel({
 
       <Fold title="Zasady gry">
         <PanelHint>
-          Realizacja po kolejnym notowaniu (nigdy po cenie, którą prognoza już znała), prowizja 0,1%
-          + spread. „Wzrost” = kupno, „spadek” = krótka sprzedaż (na papierze), „bez zmian” = nic
-          nowego. Pozycja = 20% × pewność × dźwignia; dźwignia rośnie z pewnością od 1× (do 60%) do
-          2× (100%), łączna ekspozycja najwyżej 2× kapitału. Pożyczona gotówka kosztuje 7% rocznie,
-          pożyczone papiery 1–10% rocznie (krypto najdrożej). Margin call: gdy kapitał spadnie
-          poniżej połowy wymaganego depozytu, wszystko jest zamykane. Stop-loss 1σ i take-profit
-          1,5σ zmienności w horyzoncie, przesuwane przy każdym potwierdzeniu prognozy. Pozycja żyje
-          tyle, ile horyzont prognozy (2 dni; gracz kontrolny — 7 dni). Koszyk kupuje wszystko po
-          równo w dniu startu i trzyma bez dźwigni; małpa rzuca losowo na tych samych zasadach co
-          gracze.
+          Realizacja po pierwszej cenie z ciągu dnia PO postawieniu prognozy (przebieg na żywo co 15
+          min), a bez niej — po kolejnym zamknięciu; nigdy po cenie, którą prognoza już znała.
+          Prowizja 0,1% + spread. Stop-loss i take-profit sprawdzane co 15 minut w trakcie sesji;
+          pozycję AI blisko stopu ocenia model (alarm: trzymaj albo zamknij). „Wzrost” = kupno,
+          „spadek” = krótka sprzedaż (na papierze), „bez zmian” = nic nowego. Pozycja = 20% ×
+          pewność × dźwignia; dźwignia rośnie z pewnością od 1× (do 60%) do 2× (100%), łączna
+          ekspozycja najwyżej 2× kapitału. Pożyczona gotówka kosztuje 7% rocznie, pożyczone papiery
+          1–10% rocznie (krypto najdrożej). Margin call: gdy kapitał spadnie poniżej połowy
+          wymaganego depozytu, wszystko jest zamykane. Stop-loss 1σ i take-profit 1,5σ zmienności w
+          horyzoncie, przesuwane przy każdym potwierdzeniu prognozy. Pozycja żyje tyle, ile horyzont
+          prognozy (2 dni; gracz kontrolny — 7 dni). Koszyk kupuje wszystko po równo w dniu startu i
+          trzyma bez dźwigni; małpa rzuca losowo na tych samych zasadach co gracze.
         </PanelHint>
       </Fold>
     </>

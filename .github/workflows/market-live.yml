@@ -1,0 +1,46 @@
+name: Market Live
+
+# Granie na żywo: co 15 minut realizacje prognoz po cenie z ciągu dnia,
+# stop-loss / take-profit w trakcie sesji i alarm modelu przy pozycjach
+# blisko stopu (scripts/markets-live.ts). Uruchamia baza: pg_cron →
+# workflow_dispatch co 15 minut (migracja 20261102090000_market_live.sql).
+# Bez crona GitHuba — ten spóźnia się o godziny, a przebieg co 15 minut
+# spóźniony o godzinę traci sens.
+on:
+  workflow_dispatch:
+
+# Jeden przebieg naraz; nowszy czekający zastępuje starszy (to ten sam stan
+# rynku). Osobna grupa niż market-grid.yml, żeby nie anulować wieczornego
+# przebiegu — okno 20:00–20:45 skrypt omija sam.
+concurrency:
+  group: market-live
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    name: ceny na żywo, stopy, alarmy
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Tick
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          JARVIS_OWNER_ID: ${{ secrets.JARVIS_OWNER_ID }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          JARVIS_EMAIL: ${{ secrets.JARVIS_EMAIL }}
+          JARVIS_PASSWORD: ${{ secrets.JARVIS_PASSWORD }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        # tsx przypięty tutaj, jak w market-grid.yml.
+        run: npx --yes tsx@4.21.0 scripts/markets-live.ts

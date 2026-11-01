@@ -59,7 +59,7 @@ const CRYPTO: Array<[string, string, string, string]> = [
   ["IMX", "Immutable", "immutable-x", "IMX10603-USD"],
   ["STX", "Stacks", "blockstack", "STX4847-USD"],
   ["MNT", "Mantle", "mantle", "MNT27075-USD"],
-  ["TIA", "Celestia", "celestia", "TIA22861-USD"],
+  ["THETA", "Theta Network", "theta-token", "THETA-USD"],
   ["SEI", "Sei", "sei-network", "SEI-USD"],
   ["WLD", "Worldcoin", "worldcoin-wld", "WLD-USD"],
   ["ONDO", "Ondo", "ondo-finance", "ONDO-USD"],

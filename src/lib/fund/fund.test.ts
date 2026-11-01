@@ -625,3 +625,90 @@ describe("fundVerdict", () => {
     expect(isWaiting({ kind: "benchmark", metrics: { trades: 0, signals: 0 } })).toBe(false);
   });
 });
+
+describe("zdarzenia na żywo", () => {
+  const start = "2026-10-01";
+  const flat10 = (n: number) =>
+    series(
+      start,
+      Array.from({ length: n }, () => 10),
+    );
+  const live = (s: Partial<FundSignal>) =>
+    sig({ symbol: "A", madeOn: start, madeAt: `${start}T18:30:00Z`, ...s });
+
+  it("fill: prognoza realizuje się po cenie z ciągu dnia, tego samego dnia po jej postawieniu", () => {
+    const r = engineSimulate([live({})], book({ A: flat10(4) }, { A: PLN_EQ }), {
+      start,
+      end: addDays(start, 3),
+      rules: BASIC,
+      events: [{ at: `${start}T18:45:00Z`, symbol: "A", kind: "fill", price: 9, signalOn: start }],
+    });
+    expect(r.trades[0].executedOn).toBe(start);
+    expect(r.trades[0].price).toBeCloseTo(9 * (1 + DEFAULT_RULES.spreadByClass.equity / 2));
+    // Już zrealizowana — nie wchodzi drugi raz po zamknięciu.
+    expect(r.trades.filter((t) => t.side === "buy")).toHaveLength(1);
+  });
+
+  it("fill sprzed chwili postawienia prognozy jest ignorowany (bez zaglądania w przyszłość)", () => {
+    const r = engineSimulate([live({})], book({ A: flat10(3) }, { A: PLN_EQ }), {
+      start,
+      end: addDays(start, 2),
+      rules: BASIC,
+      events: [{ at: `${start}T10:00:00Z`, symbol: "A", kind: "fill", price: 5, signalOn: start }],
+    });
+    expect(r.trades[0].executedOn).toBe(addDays(start, 1));
+    expect(r.trades[0].price).toBeGreaterThan(9.9);
+  });
+
+  it("stop w trakcie sesji zamyka po cenie zdarzenia; stan końcowy podaje pozycje i kolejkę", () => {
+    const r = engineSimulate([live({})], book({ A: flat10(4) }, { A: PLN_EQ }), {
+      start,
+      end: addDays(start, 3),
+      rules: BASIC,
+      events: [
+        {
+          at: `${addDays(start, 2)}T11:00:00Z`,
+          symbol: "A",
+          kind: "stop",
+          price: 9.5,
+          side: "long",
+        },
+      ],
+    });
+    const stop = r.trades.find((t) => t.side === "sell")!;
+    expect(stop.executedOn).toBe(addDays(start, 2));
+    expect(stop.price).toBeCloseTo(9.5 * (1 - DEFAULT_RULES.spreadByClass.equity / 2));
+    expect(r.exits.stopLoss).toBe(1);
+    expect(r.live).toHaveLength(0);
+
+    const open = engineSimulate(
+      [live({}), live({ symbol: "B", madeOn: addDays(start, 3) })],
+      book({ A: flat10(4), B: flat10(4) }, { A: PLN_EQ, B: PLN_EQ }),
+      { start, end: addDays(start, 3), rules: BASIC },
+    );
+    expect(open.live.map((l) => [l.symbol, l.side])).toEqual([["A", "long"]]);
+    expect(open.pending.map((p) => p.symbol)).toEqual(["B"]);
+  });
+
+  it("alarm zamyka tylko pozycję po wskazanej stronie", () => {
+    const run = (side: "long" | "short") =>
+      engineSimulate([live({})], book({ A: flat10(4) }, { A: PLN_EQ }), {
+        start,
+        end: addDays(start, 3),
+        rules: BASIC,
+        events: [
+          {
+            at: `${addDays(start, 2)}T09:00:00Z`,
+            symbol: "A",
+            kind: "alarm",
+            price: 10,
+            side,
+            reason: "Alarm AI: test",
+          },
+        ],
+      });
+    expect(run("long").trades.at(-1)!.reason).toBe("Alarm AI: test");
+    expect(run("long").exits.alarm).toBe(1);
+    expect(run("short").exits.alarm).toBe(0);
+  });
+});

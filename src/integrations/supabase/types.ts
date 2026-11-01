@@ -1248,6 +1248,51 @@ export type Database = {
         }
         Relationships: []
       }
+      market_live_events: {
+        Row: {
+          at: string
+          created_at: string
+          id: number
+          kind: string
+          model: string | null
+          owner_id: string
+          player: string
+          price: number
+          reason: string | null
+          side: string | null
+          signal_on: string | null
+          symbol: string
+        }
+        Insert: {
+          at: string
+          created_at?: string
+          id?: number
+          kind: string
+          model?: string | null
+          owner_id: string
+          player: string
+          price: number
+          reason?: string | null
+          side?: string | null
+          signal_on?: string | null
+          symbol: string
+        }
+        Update: {
+          at?: string
+          created_at?: string
+          id?: number
+          kind?: string
+          model?: string | null
+          owner_id?: string
+          player?: string
+          price?: number
+          reason?: string | null
+          side?: string | null
+          signal_on?: string | null
+          symbol?: string
+        }
+        Relationships: []
+      }
       market_model_usage: {
         Row: {
           estimated: boolean

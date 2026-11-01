@@ -9,7 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { fetchAllPages } from "@/lib/db/paginate";
 import type { PricePoint } from "@/lib/markets/series";
-import { addDays, DEFAULT_RULES } from "./engine";
+import { addDays, DEFAULT_RULES, type LiveEvent } from "./engine";
 import { buildFund, type FundRun, type PredictionRow } from "./fund";
 import { CONTROL_HORIZON, MAIN_HORIZON } from "./players";
 
@@ -95,11 +95,16 @@ export type FundSummary = {
   players: { key: string; label: string; returnPct: number; trades: number }[];
 };
 
-export async function recomputeFund(
+/**
+ * Przelicza fundusz w pamięci, bez zapisu — przebieg na żywo potrzebuje
+ * aktualnego stanu (czekające zlecenia, pozycje z progami), a zapisuje
+ * dopiero, gdy coś się wydarzyło.
+ */
+export async function computeFund(
   db: Db,
   ownerId: string,
   today = new Date().toISOString().slice(0, 10),
-): Promise<FundSummary> {
+): Promise<FundRun | null> {
   type Row = Omit<PredictionRow, "made_on"> & { made_on: string | null; stale: boolean };
   const predictions = await fetchAllPages<Row>((from, to) =>
     db
@@ -118,7 +123,7 @@ export async function recomputeFund(
   const live = predictions.filter(
     (p): p is Row & { made_on: string } => !p.stale && p.made_on !== null,
   );
-  if (live.length === 0) return { start: null, players: [] };
+  if (live.length === 0) return null;
 
   const start = live.reduce((m, p) => (p.made_on < m ? p.made_on : m), live[0].made_on);
   const symbols = [...new Set([...live.map((p) => p.symbol), "USDPLN", "EURPLN"])];
@@ -141,9 +146,57 @@ export async function recomputeFund(
     closes.set(q.symbol, list);
   }
 
-  const run = buildFund(live, closes, today);
-  if (!run) return { start: null, players: [] };
+  // Zdarzenia z przebiegu na żywo (realizacje, stopy, alarmy) — per gracz.
+  const eventRows = await fetchAllPages<{
+    player: string;
+    symbol: string;
+    kind: string;
+    at: string;
+    price: number;
+    side: string | null;
+    signal_on: string | null;
+    reason: string | null;
+  }>((from, to) =>
+    db
+      .from("market_live_events")
+      .select("player, symbol, kind, at, price, side, signal_on, reason, id")
+      .eq("owner_id", ownerId)
+      .neq("kind", "alarm_hold")
+      .gte("at", `${start}T00:00:00Z`)
+      .order("at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  const events = new Map<string, LiveEvent[]>();
+  for (const e of eventRows) {
+    const list = events.get(e.player) ?? [];
+    list.push({
+      at: e.at,
+      symbol: e.symbol,
+      kind: e.kind as LiveEvent["kind"],
+      price: Number(e.price),
+      signalOn: e.signal_on,
+      side: e.side === "long" || e.side === "short" ? e.side : null,
+      reason: e.reason,
+    });
+    events.set(e.player, list);
+  }
 
+  return buildFund(live, closes, today, events);
+}
+
+export async function recomputeFund(
+  db: Db,
+  ownerId: string,
+  today = new Date().toISOString().slice(0, 10),
+): Promise<FundSummary> {
+  const run = await computeFund(db, ownerId, today);
+  if (!run) return { start: null, players: [] };
+  return persistFund(db, ownerId, run);
+}
+
+/** Zapis wyniku przeliczenia: portfele (upsert), zlecenia/pozycje/wycena (podmiana). */
+export async function persistFund(db: Db, ownerId: string, run: FundRun): Promise<FundSummary> {
   // Portfele: upsert po (owner, player) — id zostaje stałe między przebiegami.
   const computedAt = new Date().toISOString();
   const { data: portfolios, error: upErr } = await db
