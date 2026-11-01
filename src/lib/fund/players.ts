@@ -70,7 +70,7 @@ const MONKEY_THROW = 0.35;
 const DIRECTIONS: Direction[] = ["up", "down", "flat"];
 
 export function monkeySignals(
-  symbolDays: { symbol: string; day: string }[],
+  symbolDays: { symbol: string; day: string; at?: string | null }[],
   seed = 1984,
   horizonDays = MAIN_HORIZON,
 ): FundSignal[] {
@@ -79,7 +79,7 @@ export function monkeySignals(
     (a, b) => a.day.localeCompare(b.day) || a.symbol.localeCompare(b.symbol),
   );
   const out: FundSignal[] = [];
-  for (const { symbol, day } of sorted) {
+  for (const { symbol, day, at } of sorted) {
     // Zawsze trzy losowania na krok — wynik nie zależy od tego, czy rzuciła.
     const throwIt = rnd() < MONKEY_THROW;
     const direction = DIRECTIONS[Math.floor(rnd() * 3)];
@@ -93,6 +93,7 @@ export function monkeySignals(
       reason: "Rzut rzutką.",
       predictionId: null,
       horizonDays,
+      ...(at ? { madeAt: at } : {}),
     });
   }
   return out;

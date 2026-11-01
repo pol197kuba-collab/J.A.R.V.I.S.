@@ -75,3 +75,25 @@ describe("parseFrankfurterSeries", () => {
     expect(parseFrankfurterSeries({ rates: { "2026-09-10": { EUR: 0.9 } } }, "PLN")).toEqual([]);
   });
 });
+
+describe("ceny na żywo", () => {
+  it("CoinGecko simple price: cena i czas aktualizacji", async () => {
+    const { parseCoinGeckoSimple } = await import("./parse");
+    const m = parseCoinGeckoSimple({
+      bitcoin: { usd: 81000.5, last_updated_at: 1793613600 },
+      broken: { usd: "x" },
+    });
+    expect(m.get("bitcoin")).toEqual({ price: 81000.5, at: "2026-11-02T10:00:00.000Z" });
+    expect(m.has("broken")).toBe(false);
+  });
+
+  it("Yahoo: meta.regularMarketPrice z czasem notowania", async () => {
+    const { parseYahooLive } = await import("./parse");
+    expect(
+      parseYahooLive({
+        chart: { result: [{ meta: { regularMarketPrice: 512.3, regularMarketTime: 1793613600 } }] },
+      }),
+    ).toEqual({ price: 512.3, at: "2026-11-02T10:00:00.000Z" });
+    expect(parseYahooLive({ chart: { result: [] } })).toBeNull();
+  });
+});

@@ -12,6 +12,7 @@ import {
   type Direction,
   type FundSignal,
   type Instrument,
+  type LiveEvent,
   type SimResult,
 } from "./engine";
 import { computeMetrics, type FundMetrics } from "./metrics";
@@ -27,6 +28,8 @@ export type PredictionRow = {
   rationale_pl: string | null;
   /** Brak = 7 (wiersze sprzed horyzontu dwudniowego). */
   horizon_days?: number;
+  /** Chwila postawienia (ISO) — pozwala na realizację w ciągu dnia. */
+  made_at?: string | null;
 };
 
 export type PlayerResult = PlayerDef & { result: SimResult; metrics: FundMetrics };
@@ -45,6 +48,7 @@ export function toSignal(p: PredictionRow): FundSignal | null {
     reason: p.rationale_pl,
     predictionId: p.id,
     horizonDays: p.horizon_days ?? 7,
+    ...(p.made_at ? { madeAt: p.made_at } : {}),
   };
 }
 
@@ -62,6 +66,8 @@ export function buildFund(
   predictions: PredictionRow[],
   closes: Map<string, PricePoint[]>,
   end: string,
+  /** Zdarzenia z przebiegu na żywo, per gracz (klucz = PLAYERS.key). */
+  events: Map<string, LiveEvent[]> = new Map(),
 ): FundRun | null {
   const valid = predictions.filter((p) => assetBySymbol(p.symbol) && isDirection(p.direction));
   if (valid.length === 0) return null;
@@ -70,11 +76,16 @@ export function buildFund(
   const book = { closes, instruments: instrumentsFor(universe) };
 
   // Dni i instrumenty, na których grali prawdziwi gracze — tam rzuca małpa.
-  const symbolDays = [
-    ...new Map(
-      valid.map((p) => [`${p.symbol}|${p.made_on}`, { symbol: p.symbol, day: p.made_on }]),
-    ).values(),
-  ];
+  // Chwila rzutu = najwcześniejsza prognoza graczy na tym instrumencie i dniu.
+  const sd = new Map<string, { symbol: string; day: string; at: string | null }>();
+  for (const p of valid) {
+    const key = `${p.symbol}|${p.made_on}`;
+    const cur = sd.get(key);
+    const at = p.made_at ?? null;
+    if (!cur) sd.set(key, { symbol: p.symbol, day: p.made_on, at });
+    else if (at && (!cur.at || at < cur.at)) cur.at = at;
+  }
+  const symbolDays = [...sd.values()];
 
   const signalsFor = (player: PlayerDef): FundSignal[] => {
     if (player.kind === "benchmark") return basketSignals(universe, start);
@@ -92,7 +103,7 @@ export function buildFund(
     end,
     players: PLAYERS.map((player) => {
       const signals = signalsFor(player);
-      const result = simulate(signals, book, { start, end });
+      const result = simulate(signals, book, { start, end, events: events.get(player.key) });
       return {
         ...player,
         result,

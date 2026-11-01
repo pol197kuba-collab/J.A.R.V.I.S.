@@ -51,6 +51,18 @@ export type FundView = {
   orders: Record<string, FundOrder[]>;
   /** Proste podsumowanie z WSZYSTKICH transakcji gracza (nie tylko ostatnich). */
   summary: Record<string, PlayerSummary>;
+  /** Granie na żywo: ostatni przebieg co 15 min i dzisiejsze zdarzenia. */
+  live?: {
+    lastRunAt: string | null;
+    today: { fill: number; stop: number; take: number; alarm: number; alarmHold: number };
+    recent: Array<{
+      at: string;
+      player: string;
+      symbol: string;
+      kind: string;
+      reason: string | null;
+    }>;
+  };
 };
 
 const ORDER = new Map(PLAYERS.map((p, i) => [p.key, i]));
@@ -192,7 +204,34 @@ export const getFund = createServerFn({ method: "GET" })
       );
     }
 
+    // Granie na żywo — kiedy ostatnio biegło i co się dziś wydarzyło.
+    const { data: lastLive } = await supabase
+      .from("job_runs")
+      .select("finished_at")
+      .eq("owner_id", userId)
+      .eq("workflow", "market-live.yml")
+      .order("finished_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const { data: liveRows } = await supabase
+      .from("market_live_events")
+      .select("at, player, symbol, kind, reason")
+      .eq("owner_id", userId)
+      .gte("at", new Date(Date.now() - 24 * 3_600_000).toISOString())
+      .order("at", { ascending: false })
+      .limit(200);
+    const today = { fill: 0, stop: 0, take: 0, alarm: 0, alarmHold: 0 };
+    for (const e of liveRows ?? []) {
+      if (e.kind === "alarm_hold") today.alarmHold += 1;
+      else if (e.kind in today) today[e.kind as "fill" | "stop" | "take" | "alarm"] += 1;
+    }
+
     return {
+      live: {
+        lastRunAt: lastLive?.finished_at ?? null,
+        today,
+        recent: (liveRows ?? []).filter((e) => e.kind !== "fill").slice(0, 8),
+      },
       startedOn: list[0].started_on,
       computedAt: list.reduce<string | null>(
         (m, p) => (p.computed_at && (!m || p.computed_at > m) ? p.computed_at : m),
