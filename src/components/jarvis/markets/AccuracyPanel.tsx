@@ -8,6 +8,37 @@ import { assetBySymbol } from "@/lib/markets/assets";
 import type { PredictionScoreboard } from "@/lib/markets/markets.functions";
 import type { ScoreRow } from "@/lib/markets/scoreboard";
 import { REGIME_LABEL_PL } from "@/lib/markets/regime";
+import { Fold } from "./Fold";
+
+/** Ile wniosków widać od razu — reszta pod „Wszystkie wnioski”. */
+const LESSONS_VISIBLE = 3;
+
+type BoardLesson = PredictionScoreboard["lessons"][number];
+
+const lessonBorder = (lesson: BoardLesson): string =>
+  lesson.kind === "pnl"
+    ? lesson.rate < 0
+      ? "color-mix(in oklab, var(--destructive) 70%, transparent)"
+      : "color-mix(in oklab, var(--success) 70%, transparent)"
+    : lesson.kind === "direction"
+      ? "color-mix(in oklab, var(--warning) 70%, transparent)"
+      : "color-mix(in oklab, var(--primary) 50%, transparent)";
+
+function LessonList({ lessons }: { lessons: BoardLesson[] }) {
+  return (
+    <ul className="mt-1.5 space-y-1.5">
+      {lessons.map((lesson) => (
+        <li
+          key={lesson.textPl}
+          className="min-w-0 break-words border-l-2 pl-2 text-[11px] leading-snug text-foreground/85"
+          style={{ borderColor: lessonBorder(lesson) }}
+        >
+          {lesson.textPl}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 const SOURCE_LABEL: Record<string, string> = {
   signals: "Sygnały (arytmetyka)",
@@ -99,32 +130,6 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
 
         <div>
           <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
-            Czego się nauczyłem
-          </p>
-          {board.lessons.length > 0 ? (
-            <ul className="mt-1.5 space-y-1.5">
-              {board.lessons.map((lesson) => (
-                <li
-                  key={lesson.textPl}
-                  className="min-w-0 break-words border-l-2 pl-2 text-[11px] leading-snug text-foreground/85"
-                  style={{
-                    borderColor:
-                      lesson.kind === "direction"
-                        ? "color-mix(in oklab, var(--warning) 70%, transparent)"
-                        : "color-mix(in oklab, var(--primary) 50%, transparent)",
-                  }}
-                >
-                  {lesson.textPl}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <LessonProgressNote progress={board.lessonProgress} />
-          )}
-        </div>
-
-        <div>
-          <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
             Wg źródła
           </p>
           <div className="mt-1.5">
@@ -134,65 +139,85 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
 
         <div>
           <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
-            Wg kierunku
+            Czego się nauczyłem
           </p>
-          <div className="mt-1.5">
-            <RateRows rows={board.byDirection} labels={DIRECTION_LABEL} meaningful={meaningful} />
-          </div>
+          {board.lessons.length > 0 ? (
+            <LessonList lessons={board.lessons.slice(0, LESSONS_VISIBLE)} />
+          ) : (
+            <LessonProgressNote progress={board.lessonProgress} />
+          )}
         </div>
-
-        {board.byRegime.length > 0 && (
-          <div>
-            <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
-              Wg sytuacji rynkowej
-            </p>
-            <div className="mt-1.5">
-              <RateRows rows={board.byRegime} labels={REGIME_LABEL_PL} meaningful={meaningful} />
-            </div>
-          </div>
-        )}
-
-        {board.bySourceFixedBand.length > 0 && (
-          <div>
-            <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
-              Dla porównania: stary próg ±1%
-            </p>
-            <div className="mt-1.5 opacity-70">
-              <RateRows rows={board.bySourceFixedBand} labels={SOURCE_LABEL} meaningful={false} />
-            </div>
-          </div>
-        )}
-
-        {board.bySymbol.length > 0 && (
-          <div>
-            <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
-              Wg instrumentu
-            </p>
-            <div className="no-scrollbar mt-1.5 max-h-40 overflow-x-hidden overflow-y-auto">
-              <RateRows rows={board.bySymbol.slice(0, 12)} meaningful={meaningful} />
-            </div>
-          </div>
-        )}
       </div>
 
-      <PanelHint>
-        {meaningful ? (
-          <>
-            „Bez zmian” to ruch mniejszy niż pół typowego tygodniowego ruchu danego instrumentu (np.
-            ±0,3% dla EURPLN, ±4% dla BTC), a wzrost lub spadek musi być co najmniej taki. Wtedy
-            losowe zgadywanie daje ok. 33% — wszystko powyżej to realna wartość prognozy. Porównanie
-            „Sygnały” vs „Model AI” odpowiada na pytanie, czy model bije prostą arytmetykę, a „Model
-            AI” vs „Model AI + wnioski” — czy nauka z historii realnie podnosi trafność (test A/B:
-            ten sam model i chwila, różnią się tylko wnioski).
-          </>
-        ) : (
-          <>
-            Za mało danych, żeby te liczby cokolwiek znaczyły — potrzeba co najmniej{" "}
-            {board.minimumMeaningful} rozliczonych prognoz, jest {board.resolved}. Trafność liczona
-            z kilku prognoz to przypadek, nie wynik, dlatego wartości są wyszarzone.
-          </>
-        )}
-      </PanelHint>
+      {board.lessons.length > LESSONS_VISIBLE && (
+        <Fold title="Wszystkie wnioski" hint={`+${board.lessons.length - LESSONS_VISIBLE}`}>
+          <LessonList lessons={board.lessons.slice(LESSONS_VISIBLE)} />
+        </Fold>
+      )}
+
+      <Fold title="Szczegóły skuteczności" hint="kierunek · sytuacja · instrument">
+        <div className="space-y-4">
+          <div>
+            <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
+              Wg kierunku
+            </p>
+            <div className="mt-1.5">
+              <RateRows rows={board.byDirection} labels={DIRECTION_LABEL} meaningful={meaningful} />
+            </div>
+          </div>
+
+          {board.byRegime.length > 0 && (
+            <div>
+              <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
+                Wg sytuacji rynkowej
+              </p>
+              <div className="mt-1.5">
+                <RateRows rows={board.byRegime} labels={REGIME_LABEL_PL} meaningful={meaningful} />
+              </div>
+            </div>
+          )}
+
+          {board.bySourceFixedBand.length > 0 && (
+            <div>
+              <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
+                Dla porównania: stary próg ±1%
+              </p>
+              <div className="mt-1.5 opacity-70">
+                <RateRows rows={board.bySourceFixedBand} labels={SOURCE_LABEL} meaningful={false} />
+              </div>
+            </div>
+          )}
+
+          {board.bySymbol.length > 0 && (
+            <div>
+              <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
+                Wg instrumentu
+              </p>
+              <div className="no-scrollbar mt-1.5 max-h-40 overflow-x-hidden overflow-y-auto">
+                <RateRows rows={board.bySymbol.slice(0, 12)} meaningful={meaningful} />
+              </div>
+            </div>
+          )}
+        </div>
+        <PanelHint>
+          {meaningful ? (
+            <>
+              „Bez zmian” to ruch mniejszy niż pół typowego tygodniowego ruchu danego instrumentu
+              (np. ±0,3% dla EURPLN, ±4% dla BTC), a wzrost lub spadek musi być co najmniej taki.
+              Wtedy losowe zgadywanie daje ok. 33% — wszystko powyżej to realna wartość prognozy.
+              Porównanie „Sygnały” vs „Model AI” odpowiada na pytanie, czy model bije prostą
+              arytmetykę, a „Model AI” vs „Model AI + wnioski” — czy nauka z historii realnie
+              podnosi trafność (test A/B: ten sam model i chwila, różnią się tylko wnioski).
+            </>
+          ) : (
+            <>
+              Za mało danych, żeby te liczby cokolwiek znaczyły — potrzeba co najmniej{" "}
+              {board.minimumMeaningful} rozliczonych prognoz, jest {board.resolved}. Trafność
+              liczona z kilku prognoz to przypadek, nie wynik, dlatego wartości są wyszarzone.
+            </>
+          )}
+        </PanelHint>
+      </Fold>
     </>
   );
 }

@@ -140,9 +140,13 @@ export function townFund(view: FundView | null | undefined): TownFund | null {
 
   const leader = players.find((p) => SOURCE_KINDS.has(p.kind)) ?? players[0];
   const heat = (view.positions[leader.key] ?? [])
-    .filter((pos) => pos.costPln > 0)
+    .filter((pos) => pos.costPln !== 0)
     .slice(0, 8)
-    .map((pos) => ({ symbol: pos.symbol, plPct: (pos.valuePln / pos.costPln - 1) * 100 }));
+    // Wynik = wartość − koszt, także dla krótkiej (obie liczby ujemne).
+    .map((pos) => ({
+      symbol: pos.symbol,
+      plPct: ((pos.valuePln - pos.costPln) / Math.abs(pos.costPln)) * 100,
+    }));
 
   const ticker: TownFund["ticker"] = [{ text: "FUNDUSZ J.A.R.V.I.S.", sign: 0 }];
   for (const p of players.filter((x) => !x.waiting)) {

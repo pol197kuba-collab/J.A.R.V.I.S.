@@ -13,7 +13,8 @@
 // - liczone jest tylko okno ostatnich dni (LESSON_WINDOW_DAYS), bo rynek
 //   zmienia charakter, a wniosek z września nie musi obowiązywać w grudniu.
 // Czysta logika, bez I/O.
-import { assetBySymbol } from "./assets";
+import { DEFAULT_RULES } from "@/lib/fund/engine";
+import { assetBySymbol, type AssetClass } from "./assets";
 import { REGIME_LABEL_PL, isMarketRegime } from "./regime";
 
 /** Poziom losowy: pasmo „bez zmian" dobiera trzy wyniki ~równo prawdopodobne. */
@@ -26,6 +27,16 @@ export const MIN_DEVIATION = 0.1;
 export const LESSON_WINDOW_DAYS = 90;
 /** Ile wniosków trafia do promptu — więcej to szum, który model i tak rozmyje. */
 export const MAX_LESSONS = 8;
+/**
+ * Wnioski w złotówkach: ile średnio dawało ZAGRANIE prognozy w funduszu
+ * („wzrost” = kupno, „spadek” = krótka sprzedaż) po kosztach. Trafność to
+ * nie pieniądze — trafne „bez zmian” zarabia 0 zł, a 40% trafionych wzrostów
+ * może zarabiać, jeśli trafienia są duże. Ostrożnie: średnia ściągana do zera
+ * z siłą PRIOR_WEIGHT przypadków, wniosek dopiero od MIN_PNL_PCT.
+ */
+export const MIN_PNL_PCT = 0.5;
+/** Ile miejsc w MAX_LESSONS jest zarezerwowanych na wnioski w złotówkach. */
+export const MAX_PNL_LESSONS = 3;
 
 export type LessonInput = {
   symbol: string;
@@ -38,15 +49,21 @@ export type LessonInput = {
 };
 
 export type Lesson = {
-  /** „direction" = jak wypada dany typ prognozy; „base_rate" = co rynek faktycznie robił. */
-  kind: "direction" | "base_rate";
+  /**
+   * „direction" = jak wypada dany typ prognozy; „base_rate" = co rynek
+   * faktycznie robił; „pnl" = ile dawało zagranie prognozy w złotówkach.
+   */
+  kind: "direction" | "base_rate" | "pnl";
   regime: string;
   /** Klasa aktywów albo null = wszystkie razem. */
   assetClass: string | null;
   direction: "up" | "down" | "flat" | null;
   cases: number;
   weeks: number;
-  /** Surowa trafność (direction) albo udział dominującego wyniku (base_rate), 0–1. */
+  /**
+   * Surowa trafność (direction), udział dominującego wyniku (base_rate), 0–1,
+   * albo średni wynik zagrania po kosztach jako ułamek (pnl, np. −0,012).
+   */
   rate: number;
   /** Ta sama wartość ściągnięta do poziomu losowego — ona decyduje o wniosku. */
   shrunkRate: number;
@@ -68,6 +85,19 @@ const shrink = (hits: number, n: number): number =>
 const weekOf = (iso: string): number => Math.floor(Date.parse(iso) / (7 * 86_400_000));
 
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
+
+const signedPl = (v: number, digits: number): string =>
+  `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toLocaleString("pl-PL", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })}`;
+
+/** Koszt zagrania tam i z powrotem (prowizja ×2 + pełny spread), w %. */
+function roundTripCostPct(symbol: string): number {
+  const cls = assetBySymbol(symbol)?.assetClass as AssetClass | undefined;
+  const spread = cls ? DEFAULT_RULES.spreadByClass[cls] : DEFAULT_RULES.spreadByClass.equity;
+  return (2 * DEFAULT_RULES.commissionRate + spread) * 100;
+}
 
 function realized(row: LessonInput): "up" | "down" | "flat" {
   const band = row.flatBandPct ?? 1;
@@ -193,10 +223,57 @@ export function deriveLessons(rows: LessonInput[], now: number = Date.now()): Le
     }
   }
 
-  return lessons
-    .sort((a, b) => b.strength - a.strength)
-    .slice(0, MAX_LESSONS)
-    .map(({ strength: _strength, ...lesson }) => lesson);
+  // 3) Ile dawało zagranie prognozy w funduszu — w złotówkach, po kosztach.
+  const money: Array<Lesson & { strength: number }> = [];
+  for (const keyOf of scopes) {
+    for (const [key, { rows: group }] of groupBy(recent, keyOf)) {
+      const [regime, cls, direction] = key.split("|");
+      if (direction !== "up" && direction !== "down") continue;
+      const n = group.length;
+      const weeks = new Set(group.map((r) => weekOf(r.madeAt))).size;
+      if (n < MIN_CASES || weeks < MIN_WEEKS) continue;
+      const sum = group.reduce(
+        (s, r) =>
+          s +
+          (direction === "up" ? r.actualChangePct : -r.actualChangePct) -
+          roundTripCostPct(r.symbol),
+        0,
+      );
+      const mean = sum / n;
+      const shrunk = sum / (n + PRIOR_WEIGHT);
+      if (Math.abs(shrunk) < MIN_PNL_PCT) continue;
+      const assetClass = cls === "*" ? null : cls;
+      const action =
+        direction === "up"
+          ? "kupno po prognozie wzrostu dawało"
+          : "krótka sprzedaż po prognozie spadku dawała";
+      const verdict =
+        shrunk < 0
+          ? "w tej sytuacji to traci pieniądze — nie stawiaj tego kierunku albo daj niską pewność"
+          : "w tej sytuacji to zarabia";
+      money.push({
+        kind: "pnl",
+        regime,
+        assetClass,
+        direction: direction as Lesson["direction"],
+        cases: n,
+        weeks,
+        rate: mean / 100,
+        shrunkRate: shrunk / 100,
+        textPl:
+          `Sytuacja „${scopeLabel(regime, assetClass)}”: ${action} średnio ${signedPl(mean, 1)}% ` +
+          `w 7 dni po kosztach (≈ ${signedPl(Math.round(mean * 100), 0)} zł na każde 10 000 zł; ` +
+          `ostrożnie liczone ${signedPl(shrunk, 1)}%, ${n} przypadków, ${weeks} tyg.) — ${verdict}.`,
+        strength: Math.abs(shrunk) * Math.sqrt(n),
+      });
+    }
+  }
+
+  const strip = ({ strength: _strength, ...lesson }: Lesson & { strength: number }): Lesson =>
+    lesson;
+  const pnl = money.sort((a, b) => b.strength - a.strength).slice(0, MAX_PNL_LESSONS);
+  const rest = lessons.sort((a, b) => b.strength - a.strength).slice(0, MAX_LESSONS - pnl.length);
+  return [...pnl, ...rest].map(strip);
 }
 
 export type LessonProgress = {

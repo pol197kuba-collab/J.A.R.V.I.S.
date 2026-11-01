@@ -399,7 +399,13 @@ export type PredictionScoreboard = Scoreboard & {
   /** Ile prognoz rozliczono podczas tego wywołania. */
   justResolved: number;
   /** Wnioski z rozliczonych prognoz (lessons.ts), najmocniejsze pierwsze. */
-  lessons: Array<{ kind: "direction" | "base_rate"; textPl: string; cases: number }>;
+  /** rate: dla „pnl” średni wynik zagrania (ułamek, znak = zysk/strata). */
+  lessons: Array<{
+    kind: "direction" | "base_rate" | "pnl";
+    textPl: string;
+    cases: number;
+    rate: number;
+  }>;
   /** Ile brakuje do pierwszego wniosku (gdy lista jest pusta). */
   lessonProgress: LessonProgress;
   recent: Array<{
@@ -456,6 +462,7 @@ export const getPredictionScoreboard = createServerFn({ method: "GET" })
       kind: l.kind,
       textPl: l.textPl,
       cases: l.cases,
+      rate: l.rate,
     }));
 
     return {

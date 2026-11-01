@@ -109,3 +109,36 @@ describe("lessonProgress", () => {
     expect(lessonProgress(many, now).enoughButRandom).toBeGreaterThan(0);
   });
 });
+
+describe("wnioski w złotówkach", () => {
+  it("zakupy w trendzie, po których cena spadała, to wniosek o stracie w zł", () => {
+    const rows = series(40, { actualChangePct: -2 }, ["BTC", "ETH", "SOL"]);
+    const money = deriveLessons(rows, NOW).filter((l) => l.kind === "pnl");
+    expect(money.length).toBeGreaterThan(0);
+    expect(money[0].direction).toBe("up");
+    expect(money[0].rate).toBeLessThan(-0.02);
+    expect(money[0].textPl).toContain("kupno po prognozie wzrostu");
+    expect(money[0].textPl).toContain("traci pieniądze");
+    expect(money[0].textPl).toContain("zł na każde 10 000 zł");
+  });
+
+  it("krótka sprzedaż przy spadkach to wniosek o zysku; wnioski w zł idą pierwsze", () => {
+    const rows = series(40, { direction: "down", outcome: "hit", actualChangePct: -3 }, [
+      "BTC",
+      "ETH",
+    ]);
+    const lessons = deriveLessons(rows, NOW);
+    expect(lessons[0].kind).toBe("pnl");
+    expect(lessons[0].textPl).toContain("krótka sprzedaż");
+    expect(lessons[0].textPl).toContain("zarabia");
+  });
+
+  it("„bez zmian” nie daje wniosku w zł (brak pozycji = 0 zł), mały ruch też nie", () => {
+    expect(
+      deriveLessons(series(40, { direction: "flat" }), NOW).filter((l) => l.kind === "pnl"),
+    ).toEqual([]);
+    expect(
+      deriveLessons(series(40, { actualChangePct: 0.3 }), NOW).filter((l) => l.kind === "pnl"),
+    ).toEqual([]);
+  });
+});

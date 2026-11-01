@@ -99,6 +99,7 @@ ${lessons.map((l) => `- ${l}`).join("\n")}
 Jak z nich korzystać:
 - Przy każdym instrumencie masz podaną „sytuację rynkową". Jeśli wniosek dotyczy tej sytuacji, potraktuj go jako ważną przesłankę obok wskaźników — także wtedy, gdy przeczy temu, co sugerują średnie i momentum.
 - Wnioski pochodzą z kilku tygodni rynku, nie są prawem natury. Gdy wskaźniki są wyjątkowo jednoznaczne, możesz od nich odstąpić, ale wtedy napisz to w uzasadnieniu.
+- Wnioski o złotówkach mówią, ile dawało ZAGRANIE prognozy: „up” = kupno, „down” = krótka sprzedaż, „flat” = brak pozycji (0 zł). „Flat” jest poprawne przy słabych danych, ale nic nie zarabia — kierunek wskazuj tam, gdzie wnioski w złotówkach pokazują, że w tej sytuacji zarabia, a unikaj tam, gdzie traci.
 - Nie powołuj się na liczby, których tu nie ma.`;
 }
 
