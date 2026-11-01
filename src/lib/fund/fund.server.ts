@@ -79,17 +79,6 @@ export function fundRows(run: FundRun, ownerId: string, portfolioIds: Map<string
   return { orders, positions, nav };
 }
 
-async function insertChunked<T extends "fund_orders" | "fund_positions" | "fund_nav_daily">(
-  db: Db,
-  table: T,
-  rows: Insert<T>[],
-): Promise<void> {
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const { error } = await db.from(table).insert(rows.slice(i, i + CHUNK) as never);
-    if (error) throw new Error(`${table}: ${error.message}`);
-  }
-}
-
 export type FundSummary = {
   start: string | null;
   players: { key: string; label: string; returnPct: number; trades: number }[];
@@ -203,37 +192,115 @@ export async function recomputeFund(
 
 /** Zapis wyniku przeliczenia: portfele (upsert), zlecenia/pozycje/wycena (podmiana). */
 export async function persistFund(db: Db, ownerId: string, run: FundRun): Promise<FundSummary> {
-  // Portfele: upsert po (owner, player) — id zostaje stałe między przebiegami.
+  // KOLEJNOŚĆ MA ZNACZENIE: najpierw nowe wiersze, dopiero potem usunięcie
+  // starych. Wcześniej było odwrotnie i odrzucony insert (2026-11-01:
+  // ograniczenie executed_on > signal_on przy realizacji w ciągu dnia)
+  // zostawiał fundusz pusty aż do następnego udanego przeliczenia.
   const computedAt = new Date().toISOString();
-  const { data: portfolios, error: upErr } = await db
-    .from("fund_portfolios")
-    .upsert(
-      run.players.map((p) => ({
-        owner_id: ownerId,
-        player: p.key,
-        label: p.label,
-        kind: p.kind,
-        start_cash_pln: DEFAULT_RULES.startCashPln,
-        started_on: run.start,
-        metrics: p.metrics as unknown as Json,
-        cash_pln: pln(p.result.cashPln),
-        computed_at: computedAt,
-      })),
-      { onConflict: "owner_id,player" },
-    )
-    .select("id, player");
-  if (upErr) throw new Error(`fund_portfolios: ${upErr.message}`);
-  const ids = new Map((portfolios ?? []).map((p) => [p.player, p.id]));
-  const idList = [...ids.values()];
 
-  for (const table of ["fund_orders", "fund_positions", "fund_nav_daily"] as const) {
-    const { error } = await db.from(table).delete().in("portfolio_id", idList);
-    if (error) throw new Error(`${table} (czyszczenie): ${error.message}`);
+  // 1. Portfele — id graczy (nowi gracze dostają wiersz od razu).
+  const { data: existing, error: exErr } = await db
+    .from("fund_portfolios")
+    .select("id, player")
+    .eq("owner_id", ownerId);
+  if (exErr) throw new Error(`fund_portfolios: ${exErr.message}`);
+  const ids = new Map((existing ?? []).map((p) => [p.player, p.id]));
+  const missing = run.players.filter((p) => !ids.has(p.key));
+  if (missing.length > 0) {
+    const { data: created, error } = await db
+      .from("fund_portfolios")
+      .upsert(
+        missing.map((p) => ({
+          owner_id: ownerId,
+          player: p.key,
+          label: p.label,
+          kind: p.kind,
+          start_cash_pln: DEFAULT_RULES.startCashPln,
+          started_on: run.start,
+        })),
+        { onConflict: "owner_id,player" },
+      )
+      .select("id, player");
+    if (error) throw new Error(`fund_portfolios: ${error.message}`);
+    for (const p of created ?? []) ids.set(p.player, p.id);
   }
+  const idList = run.players.map((p) => ids.get(p.key)).filter((x): x is string => !!x);
   const rows = fundRows(run, ownerId, ids);
-  await insertChunked(db, "fund_orders", rows.orders);
-  await insertChunked(db, "fund_positions", rows.positions);
-  await insertChunked(db, "fund_nav_daily", rows.nav);
+
+  // 2. Zlecenia: wstaw nowe, a gdy coś się nie uda — wycofaj wstawione;
+  //    stare usuwamy dopiero po udanym wstawieniu wszystkich.
+  const oldOrders = await fetchAllPages<{ id: string }>((from, to) =>
+    db
+      .from("fund_orders")
+      .select("id")
+      .in("portfolio_id", idList)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  const inserted: string[] = [];
+  try {
+    for (let i = 0; i < rows.orders.length; i += CHUNK) {
+      const { data, error } = await db
+        .from("fund_orders")
+        .insert(rows.orders.slice(i, i + CHUNK))
+        .select("id");
+      if (error) throw new Error(`fund_orders: ${error.message}`);
+      inserted.push(...(data ?? []).map((r) => r.id));
+    }
+  } catch (err) {
+    await deleteIds(db, inserted);
+    throw err;
+  }
+  await deleteIds(
+    db,
+    oldOrders.map((o) => o.id),
+  );
+
+  // 3. Pozycje i wycena: upsert po kluczu głównym, potem usunięcie tego, czego już nie ma.
+  for (let i = 0; i < rows.positions.length; i += CHUNK) {
+    const { error } = await db
+      .from("fund_positions")
+      .upsert(rows.positions.slice(i, i + CHUNK), { onConflict: "portfolio_id,symbol" });
+    if (error) throw new Error(`fund_positions: ${error.message}`);
+  }
+  const { data: posNow } = await db
+    .from("fund_positions")
+    .select("portfolio_id, symbol")
+    .in("portfolio_id", idList);
+  const keep = new Set(rows.positions.map((p) => `${p.portfolio_id}|${p.symbol}`));
+  for (const p of posNow ?? []) {
+    if (keep.has(`${p.portfolio_id}|${p.symbol}`)) continue;
+    await db
+      .from("fund_positions")
+      .delete()
+      .eq("portfolio_id", p.portfolio_id)
+      .eq("symbol", p.symbol);
+  }
+  for (let i = 0; i < rows.nav.length; i += CHUNK) {
+    const { error } = await db
+      .from("fund_nav_daily")
+      .upsert(rows.nav.slice(i, i + CHUNK), { onConflict: "portfolio_id,nav_date" });
+    if (error) throw new Error(`fund_nav_daily: ${error.message}`);
+  }
+  await db.from("fund_nav_daily").delete().in("portfolio_id", idList).lt("nav_date", run.start);
+  await db.from("fund_nav_daily").delete().in("portfolio_id", idList).gt("nav_date", run.end);
+
+  // 4. Metryki portfeli na końcu — dopiero gdy reszta jest zapisana.
+  const { error: upErr } = await db.from("fund_portfolios").upsert(
+    run.players.map((p) => ({
+      owner_id: ownerId,
+      player: p.key,
+      label: p.label,
+      kind: p.kind,
+      start_cash_pln: DEFAULT_RULES.startCashPln,
+      started_on: run.start,
+      metrics: p.metrics as unknown as Json,
+      cash_pln: pln(p.result.cashPln),
+      computed_at: computedAt,
+    })),
+    { onConflict: "owner_id,player" },
+  );
+  if (upErr) throw new Error(`fund_portfolios: ${upErr.message}`);
 
   return {
     start: run.start,
@@ -244,4 +311,17 @@ export async function persistFund(db: Db, ownerId: string, run: FundRun): Promis
       trades: p.metrics.trades,
     })),
   };
+}
+
+/** Id idą w adresie żądania — paczki po 150 UUID mieszczą się w limicie URL. */
+const DELETE_CHUNK = 150;
+
+async function deleteIds(db: Db, ids: string[]): Promise<void> {
+  for (let i = 0; i < ids.length; i += DELETE_CHUNK) {
+    const { error } = await db
+      .from("fund_orders")
+      .delete()
+      .in("id", ids.slice(i, i + DELETE_CHUNK));
+    if (error) throw new Error(`fund_orders (czyszczenie): ${error.message}`);
+  }
 }
