@@ -11,6 +11,7 @@
 import { DEFAULT_GEMINI_MODEL } from "@/lib/agents/models";
 import { callAnthropic } from "@/lib/agents/providers/anthropic";
 import { callGeminiText } from "@/lib/agents/providers/geminiText";
+import { estimateTokens, UNLIMITED_BUDGET, type ModelBudget } from "./budget";
 import type { GeminiContent } from "@/lib/agents/providers/types";
 import { dedupeNews, parseRss, type RssItem } from "@/lib/rss/parse";
 import type { MarketAsset } from "./assets";
@@ -124,6 +125,7 @@ export async function classifyMarketNews(
   titles: string[],
   assets: readonly MarketAsset[],
   keys: NewsClassifierKeys,
+  budget: ModelBudget = UNLIMITED_BUDGET,
 ): Promise<MarketVerdict[]> {
   if (titles.length === 0) return [];
   const fallback = () => titles.map((t) => heuristicVerdict(t, assets));
@@ -135,6 +137,14 @@ export async function classifyMarketNews(
   for (let i = 0; i < titles.length; i += CLASSIFY_BATCH) {
     const batch = titles.slice(i, i + CLASSIFY_BATCH);
     let text: string | null = null;
+
+    // Budżet tokenów: ocena newsów ma tani zamiennik (heurystykę), więc
+    // przy braku budżetu po prostu z niego korzystamy.
+    const estimate = estimateTokens(system + userPrompt(batch)) + batch.length * 40;
+    if (await budget.check("news", estimate)) {
+      out.push(...batch.map((t) => heuristicVerdict(t, assets)));
+      continue;
+    }
 
     if (keys.anthropicApiKey) {
       try {
@@ -148,6 +158,13 @@ export async function classifyMarketNews(
           timeoutMs: MODEL_TIMEOUT_MS,
         });
         text = result.text || null;
+        await budget.record("news", {
+          model: ANTHROPIC_NEWS_MODEL,
+          tokensIn:
+            result.tokensIn + (result.cacheReadTokens ?? 0) + (result.cacheWriteTokens ?? 0),
+          tokensOut: result.tokensOut,
+          estimated: false,
+        });
       } catch {
         text = null;
       }
@@ -164,6 +181,14 @@ export async function classifyMarketNews(
         timeoutMs: MODEL_TIMEOUT_MS,
       });
       text = gemini.ok ? gemini.text : null;
+      if (gemini.ok) {
+        await budget.record("news", {
+          model: DEFAULT_GEMINI_MODEL,
+          tokensIn: estimateTokens(system + userPrompt(batch)),
+          tokensOut: estimateTokens(gemini.text),
+          estimated: true,
+        });
+      }
     }
 
     const parsed = text ? extractJsonArray(text) : null;
@@ -212,6 +237,16 @@ export async function ingestMarketNews(
   assets: readonly MarketAsset[],
   keys: NewsClassifierKeys,
   limit = 80,
+  opts: {
+    budget?: ModelBudget;
+    /**
+     * Newsy już ocenione przez model (guid). Nie oceniamy ich drugi raz —
+     * każdy przebieg widzi w kanałach w większości te same nagłówki, a
+     * ponowna ocena to te same tokeny za ten sam wynik. Nie wracają też w
+     * wyniku, żeby zapis nie nadpisał oceny modelu heurystyką.
+     */
+    skipGuids?: ReadonlySet<string>;
+  } = {},
 ): Promise<{ items: MarketNewsItem[]; errors: string[] }> {
   const errors: string[] = [];
 
@@ -226,13 +261,16 @@ export async function ingestMarketNews(
     }),
   );
 
-  const deduped = dedupeNews(perFeed.flat()).slice(0, limit);
+  const deduped = dedupeNews(perFeed.flat())
+    .slice(0, limit)
+    .filter((i) => !opts.skipGuids?.has(i.guid));
   if (deduped.length === 0) return { items: [], errors };
 
   const verdicts = await classifyMarketNews(
     deduped.map((i) => i.title),
     assets,
     keys,
+    opts.budget,
   );
 
   const items: MarketNewsItem[] = deduped.map((raw, idx) => {

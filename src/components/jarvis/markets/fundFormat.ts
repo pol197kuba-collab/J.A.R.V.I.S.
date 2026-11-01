@@ -9,6 +9,7 @@ export const PLAYER_COLOR: Record<string, string> = {
   ai_learned: "var(--market-1)",
   ai: "var(--market-2)",
   signals: "var(--market-3)",
+  ai_7d: "var(--market-6)",
   basket: "var(--market-4)",
   monkey: "var(--market-5)",
 };
@@ -18,6 +19,7 @@ export const PLAYER_SHORT: Record<string, string> = {
   ai_learned: "AI+W",
   ai: "AI",
   signals: "Sygn.",
+  ai_7d: "AI 7d",
   basket: "Koszyk",
   monkey: "Małpa",
 };

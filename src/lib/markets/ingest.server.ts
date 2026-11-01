@@ -35,6 +35,9 @@ import { fetchAllPages } from "@/lib/db/paginate";
 import { chooseVariant } from "@/lib/darwin/variants.server";
 import { classifyRegime, type MarketRegime } from "./regime";
 import { deriveLessons, LESSON_WINDOW_DAYS, type LessonInput } from "./lessons";
+import { createModelBudget } from "./budget";
+import { CONTROL_HORIZON_DAYS, PRIMARY_HORIZON_DAYS } from "./forecast.server";
+import { horizonEnd } from "@/lib/fund/engine";
 import { raiseProviderAlarm } from "@/lib/system/providerAlarm.server";
 
 /** Klient Supabase — sesja użytkownika albo service_role, zależnie od tego, kto woła. */
@@ -52,8 +55,20 @@ export type ModelKeys = {
 const MIN_REFRESH_MS = 30 * 60_000;
 const MIN_REFRESH_CRYPTO_MS = 10 * 60_000;
 
-/** Ile dni do przodu dotyczy prognoza. Krótki horyzont da się rozliczyć. */
-export const HORIZON_DAYS = 7;
+/**
+ * Horyzont prognoz: główny 2 dni (krypto — 2 dni, reszta — 1 sesja), plus
+ * kontrolny 7 dni z tej samej odpowiedzi modelu — żeby wiedzieć, czy
+ * skrócenie horyzontu w ogóle pomogło (fundusz ma gracza „AI (7 dni)”).
+ */
+export const HORIZON_DAYS = PRIMARY_HORIZON_DAYS;
+export const CONTROL_HORIZON = CONTROL_HORIZON_DAYS;
+
+/**
+ * Ile instrumentów dostaje model w jednym przebiegu. Skaner liczy sygnały
+ * dla wszystkich (0 tokenów), a model ocenia tylko najmocniejsze sytuacje —
+ * tak cały rynek mieści się w dziennym budżecie tokenów.
+ */
+export const MODEL_INSTRUMENTS = 14;
 
 /**
  * Wersja kontekstu zapisywanego przy prognozie (pasmo, reżim, kopia).
@@ -105,15 +120,27 @@ export type OutlookRow = {
   drivers: SignalDriver[];
   /** Pasmo „bez zmian" w % dla tego instrumentu i horyzontu (scoreboard.flatBandPct). */
   flatBandPct: number;
+  /** To samo dla horyzontu kontrolnego (7 dni). */
+  controlBandPct: number;
+  /** Czy instrument trafił do zestawu ocenianego przez model w tym przebiegu. */
+  scored: boolean;
   /** Reżim rynku w chwili prognozy (regime.ts); null przy zbyt krótkiej serii. */
   regime: MarketRegime | null;
   /** Werdykt modelu — null, gdy nie ma klucza albo model zawiódł. */
-  ai: { direction: SignalDirection; confidence: number; rationalePl: string | null } | null;
+  ai: AiRow | null;
   /**
    * Werdykt tego samego modelu z wnioskami z rozliczonych prognoz (test A/B,
    * źródło 'ai_learned'). null, gdy wniosków jeszcze nie ma albo model zawiódł.
    */
-  aiLearned: { direction: SignalDirection; confidence: number; rationalePl: string | null } | null;
+  aiLearned: AiRow | null;
+};
+
+type AiRow = {
+  direction: SignalDirection;
+  confidence: number;
+  rationalePl: string | null;
+  /** Prognoza kontrolna 7 dni z tej samej odpowiedzi; null = model jej nie dał. */
+  control: { direction: SignalDirection; confidence: number } | null;
 };
 
 // ---------------------------------------------------------- watchlista ----
@@ -235,7 +262,17 @@ export async function ingestNews(
   keys: ModelKeys,
 ): Promise<{ written: number; aiCount: number; errors: string[] }> {
   const { ingestMarketNews } = await import("./news.server");
-  const { items, errors } = await ingestMarketNews(assets, keys);
+  // Już ocenione przez model z ostatnich dni — nie płacimy za nie drugi raz.
+  const { data: known } = await supabase
+    .from("market_news_items")
+    .select("guid")
+    .eq("classified_by", "ai")
+    .gte("published_at", new Date(Date.now() - 7 * 86_400_000).toISOString())
+    .limit(1000);
+  const { items, errors } = await ingestMarketNews(assets, keys, 80, {
+    budget: createModelBudget(supabase, userId),
+    skipGuids: new Set((known ?? []).map((k) => k.guid)),
+  });
 
   for (const err of errors) {
     await logEvent(supabase, userId, "warn", `Kanał newsów: ${err}`, {} as Json);
@@ -247,7 +284,8 @@ export async function ingestNews(
     return {
       written: 0,
       aiCount: 0,
-      errors: errors.length > 0 ? errors : ["żaden kanał nie zwrócił pozycji"],
+      // Pusto bez błędów kanałów = wszystko już było ocenione wcześniej.
+      errors,
     };
   }
 
@@ -293,9 +331,24 @@ export async function buildOutlook(
   supabase: Db,
   userId: string,
   keys: ModelKeys,
+  opts: {
+    /**
+     * Dodatkowe instrumenty skanera (job). Sygnały liczone dla wszystkich,
+     * model dostaje MODEL_INSTRUMENTS najmocniejszych.
+     */
+    scan?: MarketAsset[];
+    /**
+     * Zapis prognoz do market_predictions. Tylko job i ręczne „Przelicz” —
+     * wejście na stronę albo pytanie do JARVIS-a nie stawia prognoz o
+     * przypadkowej porze i nie woła modelu (to robi job, w budżecie).
+     */
+    record?: boolean;
+  } = {},
 ): Promise<{ rows: OutlookRow[]; model: string | null }> {
-  const symbols = await loadWatchlist(supabase, userId);
+  const watch = await loadWatchlist(supabase, userId);
+  const symbols = [...new Set([...watch, ...(opts.scan ?? []).map((a) => a.symbol)])];
   const assets = symbols.map(assetBySymbol).filter((a): a is MarketAsset => Boolean(a));
+  const record = opts.record ?? false;
 
   // Notowania bierzemy z cache'u — typer nie odświeża danych sam, żeby
   // jedno kliknięcie nie odpalało dwudziestu żądań do darmowych API.
@@ -382,31 +435,67 @@ export async function buildOutlook(
           signals.volatility,
           sessionsInHorizon(HORIZON_DAYS, asset.assetClass),
         ),
+        controlBandPct: flatBandPct(
+          signals.volatility,
+          sessionsInHorizon(CONTROL_HORIZON, asset.assetClass),
+        ),
         regime: classifyRegime(signals),
       },
     ];
   });
 
+  // Zestaw dla modelu: najmocniejsze sytuacje (|wynik sygnałów|), remis —
+  // watchlista przed skanerem. Ten sam zestaw dostają WSZYSTKIE źródła
+  // (sygnały, AI, AI z wnioskami), żeby porównanie było uczciwe.
+  const watchSet = new Set(watch);
+  const ranked = [...prepared].sort(
+    (a, b) =>
+      Math.abs(b.technical.score) - Math.abs(a.technical.score) ||
+      Number(watchSet.has(b.asset.symbol)) - Number(watchSet.has(a.asset.symbol)),
+  );
+  const chosen = new Set(ranked.slice(0, MODEL_INSTRUMENTS).map((p) => p.asset.symbol));
+  const forModel = prepared.filter((p) => chosen.has(p.asset.symbol));
+  const useModel = record && Boolean(keys.anthropicApiKey || keys.geminiApiKey);
+  const budget = createModelBudget(supabase, userId);
+
   // Darwin: który wariant promptu typera prognozuje dziś (champion albo
   // pretendent). Bez kluczy model i tak nie ruszy — wtedy bez losowania.
   // Błąd bazy = null = zwykły prompt (prognoza nie może przez to paść).
-  const variant =
-    keys.anthropicApiKey || keys.geminiApiKey
-      ? await chooseVariant(supabase, userId, TYPER_SLUG, { baseline: TYPER_BASELINE })
-      : null;
+  const variant = useModel
+    ? await chooseVariant(supabase, userId, TYPER_SLUG, { baseline: TYPER_BASELINE })
+    : null;
   const strategy = variant?.prompt;
 
-  const forecast = await forecastWithModel(prepared, keys, { strategy });
+  const noKeys = { anthropicApiKey: null, geminiApiKey: null };
+  const forecast = await forecastWithModel(forModel, useModel ? keys : noKeys, {
+    strategy,
+    budget,
+  });
 
   // Wariant „z wnioskami" testu A/B: ten sam model, ten sam prompt, plus
   // wnioski z rozliczonych prognoz. Tylko gdy wnioski są — bez nich byłby
   // kopią kontrolnego i rozmywał porównanie.
-  const lessons = forecast.model ? deriveLessons(await loadLessonInputs(supabase, userId)) : [];
+  // Wnioski z prognoz głównego horyzontu; dopóki ich nie ma (pierwsze dni
+  // po zmianie), z horyzontu 7-dniowego — opisane jako takie.
+  let lessons: ReturnType<typeof deriveLessons> = [];
+  if (forecast.model) {
+    lessons = deriveLessons(await loadLessonInputs(supabase, userId, HORIZON_DAYS), Date.now(), {
+      horizonDays: HORIZON_DAYS,
+    });
+    if (lessons.length === 0) {
+      lessons = deriveLessons(
+        await loadLessonInputs(supabase, userId, CONTROL_HORIZON),
+        Date.now(),
+        { horizonDays: CONTROL_HORIZON },
+      );
+    }
+  }
   const learned =
     lessons.length > 0
-      ? await forecastWithModel(prepared, keys, {
+      ? await forecastWithModel(forModel, keys, {
           lessons: lessons.map((l) => l.textPl),
           strategy,
+          budget,
         })
       : null;
   if (learned?.failure) {
@@ -428,9 +517,12 @@ export async function buildOutlook(
     );
   }
 
-  const rows: OutlookRow[] = prepared.map((input, idx) => {
+  const modelIdx = new Map(forModel.map((p, i) => [p.asset.symbol, i]));
+  const rows: OutlookRow[] = prepared.map((input) => {
     const combined = combineOutlook(input.technical, input.sentimentScore, input.sentimentItems);
-    const verdict = forecast.verdicts[idx];
+    const idx = modelIdx.get(input.asset.symbol);
+    const verdict = idx === undefined ? undefined : forecast.verdicts[idx];
+    const learnedVerdict = idx === undefined ? undefined : learned?.verdicts[idx];
     return {
       symbol: input.asset.symbol,
       label: input.asset.label,
@@ -446,35 +538,46 @@ export async function buildOutlook(
       sentimentItems: input.sentimentItems,
       drivers: input.technical.drivers,
       flatBandPct: input.flatBandPct,
+      controlBandPct: input.controlBandPct,
+      scored: idx !== undefined,
       regime: input.regime,
       // Werdykt „ai" istnieje tylko wtedy, gdy model faktycznie
       // odpowiedział — inaczej podpisalibyśmy arytmetykę nazwą modelu.
-      ai: forecast.model
-        ? {
-            direction: verdict.direction,
-            confidence: verdict.confidence,
-            rationalePl: verdict.rationalePl,
-          }
-        : null,
-      aiLearned:
-        learned?.model && learned.verdicts[idx]
+      ai:
+        forecast.model && verdict
           ? {
-              direction: learned.verdicts[idx].direction,
-              confidence: learned.verdicts[idx].confidence,
-              rationalePl: learned.verdicts[idx].rationalePl,
+              direction: verdict.direction,
+              confidence: verdict.confidence,
+              rationalePl: verdict.rationalePl,
+              control: verdict.control,
+            }
+          : null,
+      aiLearned:
+        learned?.model && learnedVerdict
+          ? {
+              direction: learnedVerdict.direction,
+              confidence: learnedVerdict.confidence,
+              rationalePl: learnedVerdict.rationalePl,
+              control: learnedVerdict.control,
             }
           : null,
     };
   });
 
-  await recordPredictions(
-    supabase,
-    userId,
-    rows,
-    forecast.model,
-    learned?.model ? { model: learned.model, lessons: lessons.map((l) => l.textPl) } : null,
-    variant?.id ?? null,
-  );
+  // Bez wywołania modelu (strona, JARVIS) pokazujemy ostatnie zapisane
+  // werdykty modelu — te z joba — zamiast pustych pól.
+  if (!useModel) await attachStoredVerdicts(supabase, userId, rows);
+
+  if (record) {
+    await recordPredictions(
+      supabase,
+      userId,
+      rows.filter((r) => r.scored),
+      forecast.model,
+      learned?.model ? { model: learned.model, lessons: lessons.map((l) => l.textPl) } : null,
+      variant?.id ?? null,
+    );
+  }
 
   // Pusty typer wygląda w UI tak samo, niezależnie od przyczyny: braku
   // notowań w cache'u, zbyt krótkich serii czy pustej watchlisty. Bez tego
@@ -519,95 +622,106 @@ async function recordPredictions(
   variantId: string | null = null,
 ): Promise<void> {
   if (rows.length === 0) return;
-  const dueAt = new Date(Date.now() + HORIZON_DAYS * 86_400_000).toISOString();
+  const now = new Date();
+  const timeOfDay = now.toISOString().slice(10);
+  const today = now.toISOString().slice(0, 10);
+  /** Termin rozliczenia: krypto — dni kalendarzowe, reszta — sesje. */
+  const dueAt = (assetClass: string, days: number): string =>
+    `${horizonEnd(today, days, assetClass)}${timeOfDay}`;
 
-  // Ostatnia cena wejściowa per instrument i źródło. Ta sama cena co w
-  // poprzedniej prognozie = notowania się nie odświeżyły (weekend, awaria
-  // źródła) i nowa prognoza byłaby kopią poprzedniej, liczoną drugi raz w
-  // trafności. Porównanie per ŹRÓDŁO, bo prognoza AI bywa dopisywana później
-  // tego samego dnia na tych samych notowaniach co sygnałowa — i to nie kopia.
+  // Ostatnia cena wejściowa per instrument, źródło i horyzont. Ta sama cena
+  // co w poprzedniej prognozie = notowania się nie odświeżyły (weekend,
+  // awaria źródła) i nowa prognoza byłaby kopią poprzedniej, liczoną drugi
+  // raz w trafności.
   const { data: recent } = await supabase
     .from("market_predictions")
-    .select("symbol, source, price_at_prediction")
+    .select("symbol, source, horizon_days, price_at_prediction")
     .eq("owner_id", userId)
-    .eq("horizon_days", HORIZON_DAYS)
+    .in("horizon_days", [HORIZON_DAYS, CONTROL_HORIZON])
     .order("made_at", { ascending: false })
-    .limit(300);
+    .limit(1000);
   const lastPrice = new Map<string, number>();
   for (const r of recent ?? []) {
-    const key = `${r.symbol}|${r.source}`;
+    const key = `${r.symbol}|${r.source}|${r.horizon_days}`;
     if (!lastPrice.has(key)) lastPrice.set(key, Number(r.price_at_prediction));
   }
-  const isCopy = (symbol: string, source: string, price: number): boolean => {
-    const prev = lastPrice.get(`${symbol}|${source}`);
+  const isCopy = (symbol: string, source: string, horizon: number, price: number): boolean => {
+    const prev = lastPrice.get(`${symbol}|${source}|${horizon}`);
     return prev !== undefined && samePrice(prev, price);
   };
 
-  const base = rows.map((row) => ({
+  const base = (row: OutlookRow, horizon: number) => ({
     owner_id: userId,
     symbol: row.symbol,
-    horizon_days: HORIZON_DAYS,
-    due_at: dueAt,
-    flat_band_pct: row.flatBandPct,
+    horizon_days: horizon,
+    due_at: dueAt(row.assetClass, horizon),
+    flat_band_pct: horizon === HORIZON_DAYS ? row.flatBandPct : row.controlBandPct,
     regime: row.regime,
     context_version: PREDICTION_CONTEXT_VERSION,
     price_at_prediction: row.lastPrice,
     technical_score: row.technicalScore,
     sentiment_score: row.sentimentScore,
-  }));
+  });
 
-  const signalRows = base.map((b, i) => ({
-    ...b,
-    direction: rows[i].direction,
-    confidence: rows[i].confidence,
-    rationale_pl: rows[i].drivers[0]?.note ?? null,
+  // Sygnały: tylko horyzont główny — arytmetyka nie ma osobnego zdania o
+  // tygodniu, a kopia tej samej prognozy pod dwoma horyzontami nic nie mówi.
+  const signalRows = rows.map((row) => ({
+    ...base(row, HORIZON_DAYS),
+    direction: row.direction,
+    confidence: row.confidence,
+    rationale_pl: row.drivers[0]?.note ?? null,
     source: "signals" as const,
     model: null,
   }));
 
+  // Prognozy modelu: główna (2 dni) i kontrolna (7 dni) z tej samej odpowiedzi.
+  const modelRows = (
+    source: "ai" | "ai_learned",
+    pick: (r: OutlookRow) => AiRow | null,
+    extra: Record<string, unknown>,
+  ) =>
+    rows.flatMap((row) => {
+      const v = pick(row);
+      if (!v) return [];
+      const out = [
+        {
+          ...base(row, HORIZON_DAYS),
+          direction: v.direction,
+          confidence: v.confidence,
+          rationale_pl: v.rationalePl,
+          source,
+          variant_id: variantId,
+          ...extra,
+        },
+      ];
+      if (v.control) {
+        out.push({
+          ...base(row, CONTROL_HORIZON),
+          direction: v.control.direction,
+          confidence: v.control.confidence,
+          rationale_pl: v.rationalePl,
+          source,
+          variant_id: variantId,
+          ...extra,
+        });
+      }
+      return out;
+    });
+
   // Prognoza modelu zapisywana OSOBNO, żeby panel skuteczności mógł
   // odpowiedzieć, czy model bije prostą arytmetykę.
-  const aiRows = model
-    ? base.flatMap((b, i) => {
-        const ai = rows[i].ai;
-        if (!ai) return [];
-        return [
-          {
-            ...b,
-            direction: ai.direction,
-            confidence: ai.confidence,
-            rationale_pl: ai.rationalePl,
-            source: "ai" as const,
-            model,
-            variant_id: variantId,
-          },
-        ];
-      })
-    : [];
-
+  const aiRows = model ? modelRows("ai", (r) => r.ai, { model }) : [];
   const learnedRows = learned
-    ? base.flatMap((b, i) => {
-        const v = rows[i].aiLearned;
-        if (!v) return [];
-        return [
-          {
-            ...b,
-            direction: v.direction,
-            confidence: v.confidence,
-            rationale_pl: v.rationalePl,
-            source: "ai_learned" as const,
-            model: learned.model,
-            // Które wnioski widział model — bez tego nie da się później
-            // ocenić, co faktycznie pomogło, a co zaszkodziło.
-            lessons: learned.lessons as unknown as Json,
-            variant_id: variantId,
-          },
-        ];
+    ? modelRows("ai_learned", (r) => r.aiLearned, {
+        model: learned.model,
+        // Które wnioski widział model — bez tego nie da się później
+        // ocenić, co faktycznie pomogło, a co zaszkodziło.
+        lessons: learned.lessons as unknown as Json,
       })
     : [];
 
   const fresh = [...signalRows, ...aiRows, ...learnedRows].filter(
-    (r) => !isCopy(r.symbol, r.source, r.price_at_prediction),
+    (r) => !isCopy(r.symbol, r.source, r.horizon_days, r.price_at_prediction),
   );
   if (fresh.length === 0) return;
 
@@ -810,7 +924,12 @@ export async function backfillPredictionContext(supabase: Db, userId: string): P
 }
 
 /** Rozliczone, nie-kopie, z okna wniosków — wejście dla lessons.deriveLessons. */
-export async function loadLessonInputs(supabase: Db, userId: string): Promise<LessonInput[]> {
+export async function loadLessonInputs(
+  supabase: Db,
+  userId: string,
+  /** Tylko prognozy z tym horyzontem; brak = wszystkie (historycznie były tylko 7-dniowe). */
+  horizonDays?: number,
+): Promise<LessonInput[]> {
   const since = new Date(Date.now() - LESSON_WINDOW_DAYS * 86_400_000).toISOString();
   const rows = await fetchAllPages<{
     symbol: string;
@@ -820,18 +939,17 @@ export async function loadLessonInputs(supabase: Db, userId: string): Promise<Le
     actual_change_pct: number | null;
     flat_band_pct: number | null;
     made_at: string;
-  }>((from, to) =>
-    supabase
+  }>((from, to) => {
+    let q = supabase
       .from("market_predictions")
       .select("symbol, direction, regime, outcome, actual_change_pct, flat_band_pct, made_at")
       .eq("owner_id", userId)
       .eq("stale", false)
       .not("outcome", "is", null)
-      .gte("made_at", since)
-      .order("made_at", { ascending: true })
-      .order("id", { ascending: true })
-      .range(from, to),
-  );
+      .gte("made_at", since);
+    if (horizonDays !== undefined) q = q.eq("horizon_days", horizonDays);
+    return q.order("made_at", { ascending: true }).order("id", { ascending: true }).range(from, to);
+  });
   return rows.flatMap((r) =>
     r.actual_change_pct === null || (r.outcome !== "hit" && r.outcome !== "miss")
       ? []
@@ -847,4 +965,48 @@ export async function loadLessonInputs(supabase: Db, userId: string): Promise<Le
           },
         ],
   );
+}
+
+/**
+ * Ostatnie werdykty modelu z bazy (zapisane przez job) → wiersze typera.
+ * Tylko z ostatnich 36 godzin: starszy werdykt opisuje inny rynek.
+ */
+async function attachStoredVerdicts(supabase: Db, userId: string, rows: OutlookRow[]) {
+  if (rows.length === 0) return;
+  const since = new Date(Date.now() - 36 * 3_600_000).toISOString();
+  const { data } = await supabase
+    .from("market_predictions")
+    .select("symbol, source, horizon_days, direction, confidence, rationale_pl, made_at")
+    .eq("owner_id", userId)
+    .in("source", ["ai", "ai_learned"])
+    .in(
+      "symbol",
+      rows.map((r) => r.symbol),
+    )
+    .gte("made_at", since)
+    .order("made_at", { ascending: false })
+    .limit(500);
+  const latest = new Map<string, NonNullable<typeof data>[number]>();
+  for (const r of data ?? []) {
+    const key = `${r.symbol}|${r.source}|${r.horizon_days}`;
+    if (!latest.has(key)) latest.set(key, r);
+  }
+  const pick = (symbol: string, source: string): AiRow | null => {
+    const main = latest.get(`${symbol}|${source}|${HORIZON_DAYS}`);
+    if (!main) return null;
+    const ctl = latest.get(`${symbol}|${source}|${CONTROL_HORIZON}`);
+    return {
+      direction: main.direction as SignalDirection,
+      confidence: main.confidence,
+      rationalePl: main.rationale_pl,
+      control: ctl
+        ? { direction: ctl.direction as SignalDirection, confidence: ctl.confidence }
+        : null,
+    };
+  };
+  for (const row of rows) {
+    row.ai = pick(row.symbol, "ai");
+    row.aiLearned = pick(row.symbol, "ai_learned");
+    row.scored = row.ai !== null || row.scored;
+  }
 }

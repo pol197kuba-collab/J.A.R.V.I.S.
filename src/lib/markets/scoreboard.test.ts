@@ -60,10 +60,14 @@ describe("buildScoreboard", () => {
       row({ source: "signals", outcome: "miss", actualChangePct: -3 }),
       row({ source: "ai", outcome: "hit" }),
       row({ source: "ai", outcome: "hit" }),
+      row({ source: "ai", outcome: "miss", horizonDays: 2 }),
     ]);
-    const ai = board.bySource.find((r) => r.key === "ai");
-    const signals = board.bySource.find((r) => r.key === "signals");
+    // Klucz = źródło·horyzont: trafności 2- i 7-dniowych prognoz się nie mieszają.
+    const ai = board.bySource.find((r) => r.key === "ai·7");
+    const ai2 = board.bySource.find((r) => r.key === "ai·2");
+    const signals = board.bySource.find((r) => r.key === "signals·7");
     expect(ai?.hitRate).toBe(100);
+    expect(ai2?.hitRate).toBe(0);
     expect(signals?.hitRate).toBe(50);
   });
 

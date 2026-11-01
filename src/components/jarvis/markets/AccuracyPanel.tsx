@@ -40,11 +40,44 @@ function LessonList({ lessons }: { lessons: BoardLesson[] }) {
   );
 }
 
+// Klucz = źródło·horyzont (scoreboard.sourceKey) — 2 dni to gra bieżąca,
+// 7 dni to kontrola i historia sprzed zmiany horyzontu.
 const SOURCE_LABEL: Record<string, string> = {
-  signals: "Sygnały (arytmetyka)",
-  ai: "Model AI",
-  ai_learned: "Model AI + wnioski",
+  "signals·2": "Sygnały · 2 dni",
+  "ai·2": "Model AI · 2 dni",
+  "ai_learned·2": "AI + wnioski · 2 dni",
+  "signals·7": "Sygnały · 7 dni",
+  "ai·7": "Model AI · 7 dni",
+  "ai_learned·7": "AI + wnioski · 7 dni",
 };
+
+/** Licznik dziennego budżetu tokenów modelu. */
+function TokenMeter({ tokens }: { tokens: NonNullable<PredictionScoreboard["tokens"]> }) {
+  const share = Math.min(1, tokens.used / tokens.limit);
+  const color =
+    share >= 0.9 ? "var(--destructive)" : share >= 0.7 ? "var(--warning)" : "var(--primary)";
+  return (
+    <div className="min-w-0">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
+          Tokeny modelu dziś
+        </span>
+        <span className="font-mono text-[10px] text-foreground">
+          {tokens.used.toLocaleString("pl-PL")} / {tokens.limit.toLocaleString("pl-PL")}
+        </span>
+      </div>
+      <div className="mt-1 h-1.5 w-full overflow-hidden bg-primary/10">
+        <div className="h-full" style={{ width: `${share * 100}%`, background: color }} />
+      </div>
+      <p className="mt-1 font-mono text-[9px] text-muted-foreground">
+        prognozy{" "}
+        {(tokens.byPurpose.forecast + tokens.byPurpose.forecast_learned).toLocaleString("pl-PL")} ·
+        newsy {tokens.byPurpose.news.toLocaleString("pl-PL")} · alarmy{" "}
+        {tokens.byPurpose.alarm.toLocaleString("pl-PL")} — po wyczerpaniu działa sama arytmetyka
+      </p>
+    </div>
+  );
+}
 
 const DIRECTION_LABEL: Record<string, string> = {
   up: "Prognozy wzrostu",
@@ -109,6 +142,7 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
   return (
     <>
       <div className="mt-3 space-y-4">
+        {board.tokens && <TokenMeter tokens={board.tokens} />}
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <span className="font-mono text-[10px] text-muted-foreground">
             rozliczone: <span className="text-foreground">{board.resolved}</span>

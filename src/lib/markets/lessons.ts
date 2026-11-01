@@ -77,6 +77,7 @@ const CLASS_PL: Record<string, string> = {
   index: "indeksy",
   commodity: "surowce",
   fx: "waluty",
+  etf: "ETF",
 };
 
 const shrink = (hits: number, n: number): number =>
@@ -133,7 +134,13 @@ function scopeLabel(regime: string, assetClass: string | null): string {
  * @param rows rozliczone, nie-kopie, dowolne źródło
  * @param now  „teraz" w ms — parametr, żeby test był deterministyczny
  */
-export function deriveLessons(rows: LessonInput[], now: number = Date.now()): Lesson[] {
+export function deriveLessons(
+  rows: LessonInput[],
+  now: number = Date.now(),
+  /** Horyzont prognoz w wierszach — tylko do treści wniosków („po 2 dniach”). */
+  opts: { horizonDays?: number } = {},
+): Lesson[] {
+  const h = opts.horizonDays ?? 7;
   const since = now - LESSON_WINDOW_DAYS * 86_400_000;
   const recent = rows.filter(
     (r) => r.regime && Date.parse(r.madeAt) >= since && Number.isFinite(r.actualChangePct),
@@ -215,7 +222,7 @@ export function deriveLessons(rows: LessonInput[], now: number = Date.now()): Le
         rate: topCount / n,
         shrunkRate: shrunk,
         textPl:
-          `Sytuacja „${scopeLabel(regime, assetClass)}”: po 7 dniach cena wzrosła w ${pct(counts.up / n)}, ` +
+          `Sytuacja „${scopeLabel(regime, assetClass)}”: po ${h} ${h === 1 ? "dniu" : "dniach"} cena wzrosła w ${pct(counts.up / n)}, ` +
           `została w paśmie w ${pct(counts.flat / n)}, spadła w ${pct(counts.down / n)} przypadków ` +
           `(${n} obserwacji, ${weeks} tyg.).`,
         strength: (shrunk - BASELINE) * Math.sqrt(n),
@@ -262,7 +269,7 @@ export function deriveLessons(rows: LessonInput[], now: number = Date.now()): Le
         shrunkRate: shrunk / 100,
         textPl:
           `Sytuacja „${scopeLabel(regime, assetClass)}”: ${action} średnio ${signedPl(mean, 1)}% ` +
-          `w 7 dni po kosztach (≈ ${signedPl(Math.round(mean * 100), 0)} zł na każde 10 000 zł; ` +
+          `w ${h} dni po kosztach (≈ ${signedPl(Math.round(mean * 100), 0)} zł na każde 10 000 zł; ` +
           `ostrożnie liczone ${signedPl(shrunk, 1)}%, ${n} przypadków, ${weeks} tyg.) — ${verdict}.`,
         strength: Math.abs(shrunk) * Math.sqrt(n),
       });

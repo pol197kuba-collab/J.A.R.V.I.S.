@@ -25,6 +25,8 @@ export type PredictionRow = {
   direction: string;
   confidence: number;
   rationale_pl: string | null;
+  /** Brak = 7 (wiersze sprzed horyzontu dwudniowego). */
+  horizon_days?: number;
 };
 
 export type PlayerResult = PlayerDef & { result: SimResult; metrics: FundMetrics };
@@ -42,6 +44,7 @@ export function toSignal(p: PredictionRow): FundSignal | null {
     confidence: p.confidence,
     reason: p.rationale_pl,
     predictionId: p.id,
+    horizonDays: p.horizon_days ?? 7,
   };
 }
 
@@ -76,8 +79,10 @@ export function buildFund(
   const signalsFor = (player: PlayerDef): FundSignal[] => {
     if (player.kind === "benchmark") return basketSignals(universe, start);
     if (player.kind === "monkey") return monkeySignals(symbolDays);
+    const source = player.source ?? player.key;
+    const horizon = player.horizonDays ?? 7;
     return valid
-      .filter((p) => p.source === player.key)
+      .filter((p) => p.source === source && (p.horizon_days ?? 7) === horizon)
       .map(toSignal)
       .filter((s): s is FundSignal => s !== null);
   };
@@ -93,6 +98,9 @@ export function buildFund(
         result,
         metrics: {
           ...computeMetrics(result.nav, result.trades, DEFAULT_RULES.startCashPln),
+          financingPln: result.financingPln,
+          exits: result.exits,
+          horizonDays: player.horizonDays,
           signals: signals.length,
           lastSignalOn: signals.reduce<string | null>(
             (m, s) => (m === null || s.madeOn > m ? s.madeOn : m),

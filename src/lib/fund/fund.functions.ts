@@ -184,9 +184,11 @@ export const getFund = createServerFn({ method: "GET" })
     }
     const summary: Record<string, PlayerSummary> = {};
     for (const p of list) {
+      const m = p.metrics as { financingPln?: number } | null;
       summary[p.player] = summarizePlayer(
         ordersByKey.get(p.player) ?? [],
         positions[p.player] ?? [],
+        typeof m?.financingPln === "number" ? m.financingPln : 0,
       );
     }
 

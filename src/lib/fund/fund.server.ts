@@ -11,11 +11,12 @@ import { fetchAllPages } from "@/lib/db/paginate";
 import type { PricePoint } from "@/lib/markets/series";
 import { addDays, DEFAULT_RULES } from "./engine";
 import { buildFund, type FundRun, type PredictionRow } from "./fund";
+import { CONTROL_HORIZON, MAIN_HORIZON } from "./players";
 
 type Db = SupabaseClient<Database>;
 
-/** Horyzont prognoz, na których gra fundusz (jak typer). */
-const HORIZON_DAYS = 7;
+/** Horyzonty prognoz, na których grają gracze funduszu (players.ts). */
+const HORIZONS = [MAIN_HORIZON, CONTROL_HORIZON];
 /** Zapas notowań przed startem — wycena w dzień bez sesji bierze ostatnią. */
 const QUOTES_LEAD_DAYS = 10;
 const CHUNK = 500;
@@ -103,9 +104,11 @@ export async function recomputeFund(
   const predictions = await fetchAllPages<Row>((from, to) =>
     db
       .from("market_predictions")
-      .select("id, symbol, source, made_on, direction, confidence, rationale_pl, stale")
+      .select(
+        "id, symbol, source, made_on, direction, confidence, rationale_pl, stale, horizon_days",
+      )
       .eq("owner_id", ownerId)
-      .eq("horizon_days", HORIZON_DAYS)
+      .in("horizon_days", HORIZONS)
       .order("made_at", { ascending: true })
       .order("id", { ascending: true })
       .range(from, to),

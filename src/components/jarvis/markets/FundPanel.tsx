@@ -366,12 +366,16 @@ export function FundPanel({
 
       <Fold title="Zasady gry">
         <PanelHint>
-          Realizacja po kolejnym zamknięciu (nigdy po cenie, którą prognoza już znała), prowizja
-          0,1% + spread, najwyżej 20% portfela w jednym instrumencie, bez dźwigni. „Wzrost” = kupno
-          za 20% × pewność, „spadek” = krótka sprzedaż (na papierze, bez opłaty za pożyczenie) za
-          20% × pewność, „bez zmian” = nic nowego. Pozycja żyje 7 dni od prognozy — bez nowej
-          prognozy w tym samym kierunku zamyka się po upływie horyzontu. Koszyk kupuje wszystko po
-          równo w dniu startu i trzyma; małpa rzuca losowo na tych samych zasadach.
+          Realizacja po kolejnym notowaniu (nigdy po cenie, którą prognoza już znała), prowizja 0,1%
+          + spread. „Wzrost” = kupno, „spadek” = krótka sprzedaż (na papierze), „bez zmian” = nic
+          nowego. Pozycja = 20% × pewność × dźwignia; dźwignia rośnie z pewnością od 1× (do 60%) do
+          2× (100%), łączna ekspozycja najwyżej 2× kapitału. Pożyczona gotówka kosztuje 7% rocznie,
+          pożyczone papiery 1–10% rocznie (krypto najdrożej). Margin call: gdy kapitał spadnie
+          poniżej połowy wymaganego depozytu, wszystko jest zamykane. Stop-loss 1σ i take-profit
+          1,5σ zmienności w horyzoncie, przesuwane przy każdym potwierdzeniu prognozy. Pozycja żyje
+          tyle, ile horyzont prognozy (2 dni; gracz kontrolny — 7 dni). Koszyk kupuje wszystko po
+          równo w dniu startu i trzyma bez dźwigni; małpa rzuca losowo na tych samych zasadach co
+          gracze.
         </PanelHint>
       </Fold>
     </>

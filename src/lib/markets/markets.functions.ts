@@ -377,7 +377,9 @@ export const getMarketOutlook = createServerFn({ method: "GET" })
 
     const { buildOutlook, HORIZON_DAYS } = await import("./ingest.server");
     const keys = await loadModelKeys(supabase, userId);
-    const { rows, model } = await buildOutlook(supabase, userId, keys);
+    // Model woła tylko ręczne „Przelicz” (force) — zwykłe wejście na stronę
+    // pokazuje werdykty z wieczornego joba i nie zjada budżetu tokenów.
+    const { rows, model } = await buildOutlook(supabase, userId, keys, { record: force });
 
     const result: MarketOutlook = {
       rows,
@@ -396,6 +398,8 @@ export const getMarketOutlook = createServerFn({ method: "GET" })
 // --------------------------------------------- skuteczność (backtest) ----
 
 export type PredictionScoreboard = Scoreboard & {
+  /** Dzisiejsze zużycie tokenów modelu wobec budżetu (budget.ts). */
+  tokens?: import("./budget").BudgetState;
   /** Ile prognoz rozliczono podczas tego wywołania. */
   justResolved: number;
   /** Wnioski z rozliczonych prognoz (lessons.ts), najmocniejsze pierwsze. */
@@ -433,15 +437,45 @@ export const getPredictionScoreboard = createServerFn({ method: "GET" })
     await backfillPredictionContext(supabase, userId);
     const justResolved = await resolveDuePredictions(supabase, userId);
 
-    const { data: rows, error } = await supabase
-      .from("market_predictions")
-      .select(
-        "symbol, made_at, direction, source, confidence, actual_change_pct, outcome, outcome_fixed_band, flat_band_pct, regime, stale, rationale_pl",
-      )
+    // Okno 60 dni, stronicowane: przy skanerze to kilkadziesiąt prognoz
+    // dziennie, a cichy limit 1000 wierszy uciąłby historię.
+    const since = new Date(Date.now() - 60 * 86_400_000).toISOString();
+    const rows = await fetchAllPages<{
+      symbol: string;
+      made_at: string;
+      direction: string;
+      source: string;
+      confidence: number;
+      actual_change_pct: number | null;
+      outcome: string | null;
+      outcome_fixed_band: string | null;
+      flat_band_pct: number | null;
+      regime: string | null;
+      stale: boolean;
+      rationale_pl: string | null;
+      horizon_days: number;
+    }>((from, to) =>
+      supabase
+        .from("market_predictions")
+        .select(
+          "symbol, made_at, direction, source, confidence, actual_change_pct, outcome, outcome_fixed_band, flat_band_pct, regime, stale, rationale_pl, horizon_days, id",
+        )
+        .eq("owner_id", userId)
+        .gte("made_at", since)
+        .order("made_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+
+    // Zużycie tokenów modelu dziś — do licznika w panelu.
+    const { budgetState, warsawDay } = await import("./budget");
+    const day = warsawDay();
+    const { data: usageRows } = await supabase
+      .from("market_model_usage")
+      .select("purpose, tokens_in, tokens_out")
       .eq("owner_id", userId)
-      .order("made_at", { ascending: false })
-      .limit(500);
-    if (error) throw new Error(error.message);
+      .eq("used_on", day);
+    const tokens = budgetState(usageRows ?? [], day);
 
     const scored = (rows ?? []).map((r) => ({
       source: toPredictionSource(r.source),
@@ -452,13 +486,22 @@ export const getPredictionScoreboard = createServerFn({ method: "GET" })
       outcomeFixedBand: (r.outcome_fixed_band as "hit" | "miss" | null) ?? null,
       regime: r.regime,
       stale: r.stale,
+      horizonDays: r.horizon_days,
     }));
 
     // Te same wnioski, które dostaje model w wariancie „z wnioskami" — panel
     // pokazuje dokładnie to, czego typer się nauczył, nie osobną interpretację.
     const { deriveLessons, lessonProgress } = await import("./lessons");
-    const lessonInputs = await loadLessonInputs(supabase, userId);
-    const lessons = deriveLessons(lessonInputs).map((l) => ({
+    // Te same wnioski co w prompcie: z horyzontu głównego, a dopóki ich nie
+    // ma — z 7-dniowego.
+    const { HORIZON_DAYS: MAIN_H, CONTROL_HORIZON } = await import("./ingest.server");
+    let lessonInputs = await loadLessonInputs(supabase, userId, MAIN_H);
+    let lessonH = MAIN_H;
+    if (deriveLessons(lessonInputs, Date.now(), { horizonDays: MAIN_H }).length === 0) {
+      lessonInputs = await loadLessonInputs(supabase, userId, CONTROL_HORIZON);
+      lessonH = CONTROL_HORIZON;
+    }
+    const lessons = deriveLessons(lessonInputs, Date.now(), { horizonDays: lessonH }).map((l) => ({
       kind: l.kind,
       textPl: l.textPl,
       cases: l.cases,
@@ -467,6 +510,7 @@ export const getPredictionScoreboard = createServerFn({ method: "GET" })
 
     return {
       ...buildScoreboard(scored),
+      tokens,
       lessons,
       lessonProgress: lessonProgress(lessonInputs),
       justResolved,

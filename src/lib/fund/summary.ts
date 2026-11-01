@@ -2,7 +2,8 @@
 // zysk, co stratę. Każdy osobno i wszyscy w jednej tabeli. Czysta logika.
 //
 // Wynik w zł = zrealizowany (zamknięte transakcje, po kosztach obu stron) +
-// niezrealizowany (otwarte pozycje: wartość − koszt). Ta suma to dokładnie
+// niezrealizowany (otwarte pozycje: wartość − koszt) − koszt dźwigni i
+// pożyczonych papierów. Ta suma to dokładnie
 // wycena − 100 000 zł, więc podsumowanie zgadza się z rankingiem co do grosza
 // (z dokładnością do zaokrągleń w bazie).
 
@@ -40,6 +41,8 @@ export type PlayerSummary = {
   unrealizedPln: number;
   totalPln: number;
   feesPln: number;
+  /** Koszt dźwigni i pożyczonych papierów — już wliczony w totalPln. */
+  financingPln: number;
   /** Najlepszy i najgorszy instrument (null, gdy nic nie zarobił / nie stracił). */
   best: SymbolResult | null;
   worst: SymbolResult | null;
@@ -50,6 +53,7 @@ export type PlayerSummary = {
 export function summarizePlayer(
   orders: SummaryOrder[],
   positions: SummaryPosition[],
+  financingPln = 0,
 ): PlayerSummary {
   const map = new Map<string, SymbolResult>();
   const row = (symbol: string): SymbolResult => {
@@ -108,8 +112,9 @@ export function summarizePlayer(
     wins,
     realizedPln,
     unrealizedPln,
-    totalPln: realizedPln + unrealizedPln,
+    totalPln: realizedPln + unrealizedPln - financingPln,
     feesPln,
+    financingPln,
     best: first && first.totalPln > 0 ? first : null,
     worst: last && last.totalPln < 0 ? last : null,
     bySymbol,

@@ -23,7 +23,7 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import type { Database, Json } from "../src/integrations/supabase/types";
-import { assetBySymbol, type MarketAsset } from "../src/lib/markets/assets";
+import { assetBySymbol, SCAN_ASSETS, type MarketAsset } from "../src/lib/markets/assets";
 import {
   buildOutlook,
   ingestNews,
@@ -36,6 +36,7 @@ import {
 import { evaluateStandingOrders } from "../src/lib/orders/evaluate.server";
 import { recomputeFund } from "../src/lib/fund/fund.server";
 import { decideMarketRun } from "../src/lib/markets/schedule";
+import { DAILY_TOKEN_BUDGET, warsawDay } from "../src/lib/markets/budget";
 
 const args = new Set(process.argv.slice(2));
 const DRY_RUN = args.has("--dry-run");
@@ -67,6 +68,7 @@ async function main(): Promise<void> {
     const { MARKET_ASSETS } = await import("../src/lib/markets/assets");
     const { fetchManyAssetSeries } = await import("../src/lib/markets/quotes.server");
 
+    // Cały słownik, także skaner — tu widać, które tickery trzeba poprawić.
     const outcomes = await fetchManyAssetSeries([...MARKET_ASSETS], 30);
     for (const outcome of outcomes) {
       if (!outcome.ok) {
@@ -204,12 +206,28 @@ async function main(): Promise<void> {
   // `force: true`, bo job biegnie rzadko i zawsze ma domknąć dzień —
   // progi świeżości chronią przed zbyt częstym odpytywaniem z przeglądarki,
   // nie przed planowym przebiegiem.
+  //
+  // Watchlista + skaner (płynne krypto i ETF-y). Awaria instrumentu z
+  // watchlisty to awaria przebiegu; ze skanera — tylko ostrzeżenie, bo przy
+  // ponad stu darmowych zapytaniach pojedyncze odmowy są normalne, a skaner
+  // i tak ma z czego wybierać.
+  const watchSymbols = new Set(assets.map((a) => a.symbol));
+  const scan = SCAN_ASSETS.filter((a) => !watchSymbols.has(a.symbol));
   try {
-    const { errors } = await ingestQuotes(db, ownerId, assets, 200, true);
+    const all = [...assets, ...scan];
+    const { errors } = await ingestQuotes(db, ownerId, all, 200, true);
+    let scanMisses = 0;
     for (const [symbol, message] of errors) {
-      await report("notowania", `${symbol} — ${message}`);
+      if (watchSymbols.has(symbol)) await report("notowania", `${symbol} — ${message}`);
+      else {
+        scanMisses += 1;
+        warn(`skaner: ${symbol} — ${message}`);
+      }
     }
-    notice(`notowania: ${assets.length - errors.size} z ${assets.length} instrumentów zaciągnięte`);
+    notice(
+      `notowania: ${all.length - errors.size} z ${all.length} instrumentów zaciągnięte` +
+        (scanMisses > 0 ? ` (skaner: ${scanMisses} bez danych)` : ""),
+    );
   } catch (err) {
     await report("notowania", err instanceof Error ? err.message : String(err));
   }
@@ -225,13 +243,21 @@ async function main(): Promise<void> {
   // ---------- 3. Typer ----------
   // Po notowaniach i newsach, bo liczy z jednego i drugiego.
   try {
-    const { rows, model } = await buildOutlook(db, ownerId, keys);
-    const up = rows.filter((r) => r.direction === "up").length;
-    const down = rows.filter((r) => r.direction === "down").length;
+    const { rows, model } = await buildOutlook(db, ownerId, keys, { scan, record: true });
+    const scored = rows.filter((r) => r.scored);
+    const up = scored.filter((r) => (r.ai?.direction ?? r.direction) === "up").length;
+    const down = scored.filter((r) => (r.ai?.direction ?? r.direction) === "down").length;
     notice(
-      `typer: ${rows.length} prognoz (${up} wzrostowych, ${down} spadkowych), ` +
-        `interpretacja: ${model ?? "same sygnały"}`,
+      `typer: przeskanowano ${rows.length}, model ocenił ${scored.length} najmocniejszych ` +
+        `(${up} wzrostowych, ${down} spadkowych), interpretacja: ${model ?? "same sygnały"}`,
     );
+    const { data: usage } = await db
+      .from("market_model_usage")
+      .select("tokens_in, tokens_out")
+      .eq("owner_id", ownerId)
+      .eq("used_on", warsawDay());
+    const used = (usage ?? []).reduce((s, u) => s + u.tokens_in + u.tokens_out, 0);
+    notice(`tokeny dziś: ${used} z ${DAILY_TOKEN_BUDGET}`);
   } catch (err) {
     await report("typer", err instanceof Error ? err.message : String(err));
   }

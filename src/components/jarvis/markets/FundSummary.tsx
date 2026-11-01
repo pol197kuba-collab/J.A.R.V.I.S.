@@ -171,10 +171,25 @@ function PlayerCard({
             )
           )}
 
+          {s && m && (s.financingPln > 0.5 || m.exits) && (
+            <span className="flex flex-wrap gap-x-3 gap-y-0.5 pl-6 font-mono text-[10px] text-muted-foreground">
+              {s.financingPln > 0.5 && (
+                <span>dźwignia i pożyczki −{plnFmt(s.financingPln)} zł</span>
+              )}
+              {m.exits && m.exits.stopLoss > 0 && <span>stop-loss {m.exits.stopLoss}×</span>}
+              {m.exits && m.exits.takeProfit > 0 && <span>take-profit {m.exits.takeProfit}×</span>}
+              {m.exits && m.exits.horizon > 0 && <span>koniec horyzontu {m.exits.horizon}×</span>}
+              {m.exits && m.exits.marginCall > 0 && (
+                <span className="text-destructive">margin call {m.exits.marginCall}×</span>
+              )}
+            </span>
+          )}
+
           {m && (
             <span className="flex flex-wrap gap-x-3 gap-y-0.5 pl-6 font-mono text-[10px] text-muted-foreground">
               {player.kind === "source" && m.signals !== undefined && (
                 <span>
+                  {m.horizonDays ? `horyzont ${m.horizonDays} dni · ` : ""}
                   {m.signals} prognoz
                   {m.lastSignalOn ? ` · ostatnia ${shortDate(m.lastSignalOn)}` : ""}
                 </span>

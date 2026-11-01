@@ -82,7 +82,9 @@ describe("summarizePlayer", () => {
         realizedPln: t.realizedPln,
       })),
       r.holdings,
+      r.financingPln,
     );
+    expect(r.financingPln).toBeGreaterThan(0);
     expect(s.totalPln).toBeCloseTo(r.nav.at(-1)!.navPln - 100_000, 6);
   });
 });

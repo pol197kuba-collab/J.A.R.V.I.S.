@@ -10,7 +10,7 @@
 // nie jest to identyfikator zewnętrznego API; te siedzą w `source`, żeby
 // zmiana dostawcy nie unieważniła zgromadzonych danych historycznych.
 
-export type AssetClass = "crypto" | "equity" | "index" | "commodity" | "fx";
+export type AssetClass = "crypto" | "equity" | "index" | "commodity" | "fx" | "etf";
 
 /**
  * Skąd pobrać notowania. Każdy wariant ma osobny adapter w ./providers.
@@ -45,7 +45,9 @@ export type MarketAsset = {
   hint?: string;
 };
 
-export const MARKET_ASSETS: MarketAsset[] = [
+import { SCAN_CRYPTO, SCAN_ETF } from "./scanUniverse";
+
+const CORE_ASSETS: MarketAsset[] = [
   // ---------------------------------------------------------------- krypto
   {
     symbol: "BTC",
@@ -237,6 +239,21 @@ export const MARKET_ASSETS: MarketAsset[] = [
   },
 ];
 
+/**
+ * Wszystkie instrumenty: rdzeń (ręcznie dobrany) + zbiór skanera (płynne
+ * krypto i ETF-y, scanUniverse.ts). Rdzeń wygrywa przy powtórce symbolu.
+ */
+const CORE_SYMBOLS = new Set(CORE_ASSETS.map((a) => a.symbol));
+export const MARKET_ASSETS: MarketAsset[] = [
+  ...CORE_ASSETS,
+  ...[...SCAN_CRYPTO, ...SCAN_ETF].filter((a) => !CORE_SYMBOLS.has(a.symbol)),
+];
+
+/** Co co wieczór skanuje job: całe krypto i wszystkie ETF-y ze słownika. */
+export const SCAN_ASSETS: MarketAsset[] = MARKET_ASSETS.filter(
+  (a) => a.assetClass === "crypto" || a.assetClass === "etf",
+);
+
 /** Watchlista nowego użytkownika — przekrój wszystkich klas aktywów. */
 export const DEFAULT_WATCHLIST: readonly string[] = [
   "BTC",
@@ -257,6 +274,7 @@ export const ASSET_CLASS_LABELS: Readonly<Record<AssetClass, string>> = {
   index: "Indeksy",
   commodity: "Surowce",
   fx: "Waluty",
+  etf: "ETF",
 };
 
 const BY_SYMBOL = new Map(MARKET_ASSETS.map((a) => [a.symbol, a]));

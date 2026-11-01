@@ -15,13 +15,37 @@ import type { Direction, FundSignal } from "./engine";
 
 export type PlayerKind = "source" | "benchmark" | "monkey";
 
-export type PlayerDef = { key: string; label: string; kind: PlayerKind };
+export type PlayerDef = {
+  key: string;
+  label: string;
+  kind: PlayerKind;
+  /** Gracz-źródło: czyje prognozy gra (market_predictions.source). Brak = key. */
+  source?: string;
+  /** Gracz-źródło: prognozy o jakim horyzoncie gra. */
+  horizonDays?: number;
+};
 
-/** Gracze funduszu: źródła prognoz + odniesienia. Kolejność = kolejność w UI. */
+/** Horyzont główny i kontrolny — te same co w typerze (forecast.server). */
+export const MAIN_HORIZON = 2;
+export const CONTROL_HORIZON = 7;
+
+/**
+ * Gracze funduszu: źródła prognoz + odniesienia. Kolejność = kolejność w UI.
+ * „AI (7 dni)” to kontrola zmiany horyzontu: ten sam model, ta sama
+ * odpowiedź, ale prognoza tygodniowa i jej wcześniejsza historia — jeśli
+ * gracze dwudniowi go nie biją, skrócenie horyzontu nie pomogło.
+ */
 export const PLAYERS: PlayerDef[] = [
-  { key: "ai_learned", label: "AI z wnioskami", kind: "source" },
-  { key: "ai", label: "AI", kind: "source" },
-  { key: "signals", label: "Sygnały techniczne", kind: "source" },
+  { key: "ai_learned", label: "AI z wnioskami", kind: "source", horizonDays: MAIN_HORIZON },
+  { key: "ai", label: "AI", kind: "source", horizonDays: MAIN_HORIZON },
+  { key: "signals", label: "Sygnały techniczne", kind: "source", horizonDays: MAIN_HORIZON },
+  {
+    key: "ai_7d",
+    label: "AI (7 dni, kontrola)",
+    kind: "source",
+    source: "ai",
+    horizonDays: CONTROL_HORIZON,
+  },
   { key: "basket", label: "Kup i trzymaj wszystko", kind: "benchmark" },
   { key: "monkey", label: "Małpa z rzutkami", kind: "monkey" },
 ];
@@ -48,6 +72,7 @@ const DIRECTIONS: Direction[] = ["up", "down", "flat"];
 export function monkeySignals(
   symbolDays: { symbol: string; day: string }[],
   seed = 1984,
+  horizonDays = MAIN_HORIZON,
 ): FundSignal[] {
   const rnd = seededRandom(seed);
   const sorted = [...symbolDays].sort(
@@ -67,6 +92,7 @@ export function monkeySignals(
       confidence,
       reason: "Rzut rzutką.",
       predictionId: null,
+      horizonDays,
     });
   }
   return out;

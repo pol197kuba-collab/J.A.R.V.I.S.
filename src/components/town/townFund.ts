@@ -14,6 +14,7 @@ export const FUND_TAG: Record<string, string> = {
   ai_learned: "AI+",
   ai: "AI",
   signals: "SYGN",
+  ai_7d: "AI7",
   basket: "KOSZ",
   monkey: "MALPA",
 };

@@ -9,23 +9,27 @@
 //   prognoza już znała.
 // - Koszty: prowizja od wartości transakcji + połowa spreadu przy każdej
 //   stronie (kupno drożej, sprzedaż taniej), spread zależny od klasy aktywów.
-// - Najwyżej 20% portfela w jednym instrumencie (przy składaniu zlecenia),
-//   w obie strony. Bez dźwigni: „wolna gotówka” = gotówka − 2 × zobowiązanie
-//   z krótkich pozycji (wpływ ze sprzedaży + 100% depozytu są zablokowane),
-//   więc suma pozycji nigdy nie przekracza kapitału.
-// - Wielkość pozycji: „wzrost” → długa, cel = 20% × pewność; „spadek” →
-//   krótka (na papierze), cel = −20% × pewność (albo sprzedaż całości, gdy
-//   krótka sprzedaż wyłączona); „bez zmian” → nie otwieraj nic nowego (i
-//   anuluj czekające zlecenie).
-// - Horyzont: prognoza mówi o 7 dniach, więc pozycja żyje 7 dni od prognozy,
-//   która ją otworzyła albo potwierdziła. Bez nowej prognozy w tym samym
-//   kierunku — zamknięcie na pierwszym zamknięciu po upływie horyzontu.
-//   Wcześniej pozycja wisiała do prognozy „spadek”, a „bez zmian” trzymało ją
-//   tygodniami — prognoza tygodniowa zamieniała się w inwestycję bezterminową.
+// - Wielkość pozycji: „wzrost” → długa, „spadek” → krótka (na papierze),
+//   „bez zmian” → nie otwieraj nic nowego (i anuluj czekające zlecenie).
+//   Cel = 20% × pewność × dźwignia, gdzie dźwignia rośnie z pewnością: do
+//   60% pewności 1×, przy 100% — maxLeverage (2×). Czyli najwyżej 40%
+//   portfela w jednym instrumencie.
+// - Dźwignia: łączna ekspozycja (suma |pozycji|) ≤ maxLeverage × kapitał.
+//   Pożyczona gotówka (ujemne saldo) kosztuje financingRate rocznie, krótka
+//   pozycja — opłatę za pożyczenie papierów (borrowRateByClass), naliczane
+//   codziennie. Margin call: gdy kapitał spadnie poniżej maintenanceShare
+//   wymaganego depozytu (ekspozycja / maxLeverage), wszystkie pozycje są
+//   przymusowo zamykane po bieżącej cenie.
+// - Horyzont: pozycja żyje tyle, ile horyzont prognozy, która ją otworzyła
+//   albo potwierdziła (krypto — dni kalendarzowe, reszta — sesje). Bez nowej
+//   prognozy w tym samym kierunku — zamknięcie po upływie horyzontu.
+// - Stop-loss / take-profit zależne od zmienności: odległość = k × σ dzienna
+//   (z 20 ostatnich sesji) × √(sesje horyzontu), od ceny wejścia albo
+//   ostatniego potwierdzenia (działa jak trailing). Sprawdzane na każdym
+//   notowaniu, jakie mamy — dziś na zamknięciach dziennych.
 // - Drobne korekty (< 500 zł albo < 2% portfela) są pomijane — inaczej
 //   codzienne wahania pewności (65% → 68%) dokupowałyby po tysiąc złotych
 //   i mieliły prowizję. Pełne zamknięcie pozycji zawsze przechodzi.
-// - Krótka sprzedaż jest uproszczona: bez opłaty za pożyczenie papierów.
 //
 // Całą historię liczymy od nowa przy każdym przebiegu (to kilkanaście
 // instrumentów × kilkadziesiąt dni): zmiana zasad działa wstecz spójnie,
@@ -48,6 +52,8 @@ export type FundSignal = {
   predictionId: string | null;
   /** Cel wprost (ułamek portfela) — dla benchmarku; nadpisuje regułę pewności. */
   weight?: number;
+  /** Horyzont tej prognozy w dniach; brak = rules.horizonDays. */
+  horizonDays?: number;
 };
 
 export type FundRules = {
@@ -66,6 +72,21 @@ export type FundRules = {
   horizonDays: number | null;
   /** „Spadek” otwiera krótką pozycję zamiast tylko zamykać długą. */
   allowShort: boolean;
+  /** Łączna ekspozycja ≤ maxLeverage × kapitał; 1 = bez dźwigni. */
+  maxLeverage: number;
+  /** Pewność (0–1), od której zaczyna rosnąć dźwignia pojedynczej pozycji. */
+  leverageFromConfidence: number;
+  /** Roczny koszt pożyczonej gotówki (ujemnego salda). */
+  financingRate: number;
+  /** Roczna opłata za pożyczenie papierów do krótkiej sprzedaży. */
+  borrowRateByClass: Record<AssetClass, number>;
+  /** Margin call, gdy kapitał < maintenanceShare × (ekspozycja / maxLeverage). */
+  maintenanceShare: number;
+  /** Stop-loss i take-profit w wielokrotnościach σ horyzontu; null = wyłączone. */
+  stopSigma: number | null;
+  takeSigma: number | null;
+  /** Z ilu ostatnich zmian dziennych liczona jest σ. */
+  volLookback: number;
 };
 
 export const DEFAULT_RULES: FundRules = {
@@ -81,9 +102,25 @@ export const DEFAULT_RULES: FundRules = {
     index: 0.001,
     commodity: 0.0008,
     fx: 0.0004,
+    etf: 0.0006,
   },
   horizonDays: 7,
   allowShort: true,
+  maxLeverage: 2,
+  leverageFromConfidence: 0.6,
+  financingRate: 0.07,
+  borrowRateByClass: {
+    crypto: 0.1,
+    equity: 0.03,
+    index: 0.02,
+    commodity: 0.03,
+    fx: 0.01,
+    etf: 0.02,
+  },
+  maintenanceShare: 0.5,
+  stopSigma: 1,
+  takeSigma: 1.5,
+  volLookback: 20,
 };
 
 export type Instrument = { assetClass: AssetClass; currency: string };
@@ -123,7 +160,16 @@ export type NavPoint = { date: string; navPln: number; cashPln: number; invested
  */
 export type Holding = { symbol: string; units: number; costPln: number; valuePln: number };
 
-export type SimResult = { trades: Trade[]; nav: NavPoint[]; holdings: Holding[]; cashPln: number };
+export type SimResult = {
+  trades: Trade[];
+  nav: NavPoint[];
+  holdings: Holding[];
+  cashPln: number;
+  /** Koszt dźwigni i pożyczonych papierów (≥ 0), już odjęty od gotówki. */
+  financingPln: number;
+  /** Ile razy zadziałał stop-loss / take-profit / margin call. */
+  exits: { stopLoss: number; takeProfit: number; marginCall: number; horizon: number };
+};
 
 // ---------- daty ----------
 
@@ -131,6 +177,31 @@ export function addDays(date: string, days: number): string {
   const d = new Date(`${date}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+/** Dzień tygodnia 0 = niedziela. */
+const weekday = (date: string): number => new Date(`${date}T00:00:00Z`).getUTCDay();
+
+/** Ile sesji mieści horyzont: krypto handluje codziennie, reszta w dni robocze. */
+export function horizonSessions(days: number, assetClass: string): number {
+  return assetClass === "crypto" ? Math.max(1, days) : Math.max(1, Math.round((days * 5) / 7));
+}
+
+/**
+ * Dzień końca horyzontu prognozy z dnia `madeOn`. Krypto — dni kalendarzowe;
+ * reszta — dni robocze, żeby prognoza dwudniowa z piątku nie „kończyła się”
+ * w niedzielę na piątkowej cenie (zero ruchu = darmowe „bez zmian”).
+ */
+export function horizonEnd(madeOn: string, days: number, assetClass: string): string {
+  if (assetClass === "crypto") return addDays(madeOn, days);
+  let left = horizonSessions(days, assetClass);
+  let d = madeOn;
+  while (left > 0) {
+    d = addDays(d, 1);
+    const wd = weekday(d);
+    if (wd !== 0 && wd !== 6) left -= 1;
+  }
+  return d;
 }
 
 // ---------- kursy ----------
@@ -152,6 +223,22 @@ class Prices {
   /** Zamknięcie dokładnie z danego dnia (dzień sesyjny) albo null. */
   on(symbol: string, date: string): number | null {
     return this.exact.get(symbol)?.get(date) ?? null;
+  }
+
+  /** σ dziennych zmian logarytmicznych z `lookback` ostatnich sesji ≤ date; null przy < 5. */
+  sigma(symbol: string, date: string, lookback: number): number | null {
+    const s = this.series.get(symbol);
+    if (!s) return null;
+    let end = s.length - 1;
+    while (end >= 0 && s[end].date > date) end -= 1;
+    const from = Math.max(1, end - lookback + 1);
+    const r: number[] = [];
+    for (let i = from; i <= end; i++) r.push(Math.log(s[i].close / s[i - 1].close));
+    if (r.length < 5) return null;
+    const mean = r.reduce((a, b) => a + b, 0) / r.length;
+    const v = r.reduce((a, b) => a + (b - mean) ** 2, 0) / (r.length - 1);
+    const sd = Math.sqrt(v);
+    return sd > 1e-9 ? sd : null;
   }
 
   /** Ostatnie zamknięcie z datą ≤ date (wycena w dni bez sesji). */
@@ -177,22 +264,43 @@ function fxToPln(prices: Prices, currency: string, date: string): number | null 
   return pair ? prices.atOrBefore(pair, date) : null;
 }
 
+/** Dźwignia pojedynczej pozycji: 1× do progu pewności, liniowo do maxLeverage przy 100%. */
+export function leverageFor(confidence01: number, rules: FundRules = DEFAULT_RULES): number {
+  if (rules.maxLeverage <= 1) return 1;
+  const from = rules.leverageFromConfidence;
+  const t = from >= 1 ? 0 : Math.min(1, Math.max(0, (confidence01 - from) / (1 - from)));
+  return 1 + (rules.maxLeverage - 1) * t;
+}
+
 /** Docelowy udział w portfelu albo null = nie ruszaj pozycji. */
 export function targetWeight(signal: FundSignal, rules: FundRules = DEFAULT_RULES): number | null {
   if (signal.weight !== undefined) return Math.min(rules.maxWeight, Math.max(0, signal.weight));
   if (signal.direction === "flat") return null;
   const c = Math.min(100, Math.max(0, signal.confidence)) / 100;
-  if (signal.direction === "down") return rules.allowShort ? -rules.maxWeight * c : 0;
-  return rules.maxWeight * c;
+  const w = rules.maxWeight * c * leverageFor(c, rules);
+  if (signal.direction === "down") return rules.allowShort ? -w : 0;
+  return w;
 }
 
 // ---------- symulacja ----------
 
 type Position = { units: number; costPln: number };
 
-/** Powód transakcji zamykającej pozycję po upływie horyzontu prognozy. */
+/** Powody transakcji wymuszonych regułami, a nie nową prognozą. */
 export const HORIZON_EXIT_REASON =
   "Minął horyzont prognozy bez potwierdzenia — zamknięcie pozycji.";
+export const STOP_LOSS_REASON = "Stop-loss (zależny od zmienności) — zamknięcie pozycji.";
+export const TAKE_PROFIT_REASON = "Take-profit (zależny od zmienności) — realizacja zysku.";
+export const MARGIN_CALL_REASON = "Margin call — kapitał poniżej wymaganego depozytu, zamknięcie.";
+
+type Live = {
+  signal: FundSignal;
+  expiresOn: string;
+  /** Cena odniesienia (wejście albo ostatnie potwierdzenie) i progi w ułamkach. */
+  refPx: number;
+  stop: number | null;
+  take: number | null;
+};
 
 export function simulate(
   signals: FundSignal[],
@@ -210,10 +318,11 @@ export function simulate(
   }
 
   let cash = rules.startCashPln;
+  let financingPln = 0;
+  const exits = { stopLoss: 0, takeProfit: 0, marginCall: 0, horizon: 0 };
   const holdings = new Map<string, Position>();
   const pending = new Map<string, FundSignal>();
-  /** Prognoza, która ostatnio otworzyła/potwierdziła pozycję, i dzień wygaśnięcia. */
-  const live = new Map<string, { signal: FundSignal; expiresOn: string }>();
+  const live = new Map<string, Live>();
   const trades: Trade[] = [];
   const nav: NavPoint[] = [];
 
@@ -228,14 +337,14 @@ export function simulate(
     for (const [symbol, h] of holdings) total += valueOf(symbol, h.units, date);
     return total;
   };
-  /** Gotówka, za którą wolno otworzyć nową pozycję (bez dźwigni). */
-  const freeCashAt = (date: string): number => {
-    let shortLiability = 0;
-    for (const [symbol, h] of holdings) {
-      if (h.units < 0) shortLiability += -valueOf(symbol, h.units, date);
-    }
-    return cash - 2 * shortLiability;
+  const grossAt = (date: string): number => {
+    let g = 0;
+    for (const [symbol, h] of holdings) g += Math.abs(valueOf(symbol, h.units, date));
+    return g;
   };
+  /** Ile jeszcze ekspozycji wolno otworzyć: maxLeverage × kapitał − obecna ekspozycja. */
+  const buyingPowerAt = (date: string): number =>
+    Math.max(1, rules.maxLeverage) * navAt(date) - grossAt(date);
 
   const execute = (signal: FundSignal, date: string, target: number, reason: string | null) => {
     const inst = book.instruments.get(signal.symbol)!;
@@ -281,7 +390,7 @@ export function simulate(
 
     /** Otwiera/powiększa pozycję o `amountPln` (> 0) w stronę `long`. */
     const open = (amountPln: number, long: boolean): void => {
-      const budget = Math.min(amountPln, freeCashAt(date) / (1 + rules.commissionRate));
+      const budget = Math.min(amountPln, buyingPowerAt(date) / (1 + rules.commissionRate));
       if (budget < rules.minTradePln) return;
       const held = holdings.get(signal.symbol) ?? { units: 0, costPln: 0 };
       const price = long ? px * (1 + half) : px * (1 - half);
@@ -332,12 +441,42 @@ export function simulate(
     open(add, desired > 0);
   };
 
+  /** Ustawia horyzont i progi ryzyka pozycji po prognozie, która ją otworzyła/potwierdziła. */
+  const arm = (s: FundSignal, date: string): void => {
+    const inst = book.instruments.get(s.symbol)!;
+    const days = s.horizonDays ?? rules.horizonDays;
+    if (days === null) {
+      live.delete(s.symbol);
+      return;
+    }
+    const px = prices.on(s.symbol, date)!;
+    const sigma = prices.sigma(s.symbol, date, rules.volLookback);
+    const scale = sigma === null ? null : sigma * Math.sqrt(horizonSessions(days, inst.assetClass));
+    live.set(s.symbol, {
+      signal: s,
+      expiresOn: horizonEnd(s.madeOn, days, inst.assetClass),
+      refPx: px,
+      stop: scale !== null && rules.stopSigma !== null ? rules.stopSigma * scale : null,
+      take: scale !== null && rules.takeSigma !== null ? rules.takeSigma * scale : null,
+    });
+  };
+
+  /** Prognoza, na którą powołuje się transakcja wymuszona (signalOn < dziś). */
+  const exitSignal = (symbol: string, date: string): FundSignal =>
+    live.get(symbol)?.signal ?? {
+      symbol,
+      madeOn: addDays(date, -1),
+      direction: "flat",
+      confidence: 0,
+      reason: null,
+      predictionId: null,
+    };
+
   for (let date = opts.start; date <= opts.end; date = addDays(date, 1)) {
-    // 1. Realizacja czekających zleceń na dzisiejszym zamknięciu — najpierw
-    //    zmniejszenia ekspozycji (zwalniają gotówkę), potem zwiększenia; w
-    //    obrębie strony stała kolejność symboli, żeby wynik nie zależał od
-    //    kolejności wejścia. Pozycje po horyzoncie bez nowej prognozy
-    //    zamykają się tutaj razem z resztą.
+    // 1. Realizacja czekających zleceń na dzisiejszym notowaniu — najpierw
+    //    zmniejszenia ekspozycji (zwalniają depozyt), potem zwiększenia; w
+    //    obrębie strony stała kolejność symboli. Pozycje po horyzoncie bez
+    //    nowej prognozy zamykają się tutaj razem z resztą.
     const today = navAt(date);
     type Ready = { s: FundSignal; target: number; reason: string | null; exit: boolean };
     const ready: Ready[] = [...pending.values()]
@@ -358,22 +497,37 @@ export function simulate(
         Number(exposureChange(a) >= 0) - Number(exposureChange(b) >= 0) ||
         a.s.symbol.localeCompare(b.s.symbol),
     );
+    const touched = new Set<string>();
     for (const r of ready) {
       const symbol = r.s.symbol;
       pending.delete(symbol);
       execute(r.s, date, r.target, r.reason);
-      // Pozycja z prognozy żyje horyzont od tej prognozy; koszyk (waga
-      // wprost) i wyjście po horyzoncie nie odnawiają niczego.
-      if (r.exit || r.s.weight !== undefined || rules.horizonDays === null) {
-        live.delete(symbol);
-      } else if (holdings.has(symbol)) {
-        live.set(symbol, { signal: r.s, expiresOn: addDays(r.s.madeOn, rules.horizonDays) });
-      } else {
-        live.delete(symbol);
-      }
+      touched.add(symbol);
+      if (r.exit) exits.horizon += 1;
+      // Koszyk (waga wprost) i wyjście po horyzoncie nie uzbrajają niczego.
+      if (r.exit || r.s.weight !== undefined || !holdings.has(symbol)) live.delete(symbol);
+      else arm(r.s, date);
     }
 
-    // 2. Dzisiejsze prognozy → zlecenia na kolejne zamknięcie. Nowsza
+    // 2. Stop-loss / take-profit na dzisiejszym notowaniu — dla pozycji,
+    //    których dziś nie ruszała prognoza.
+    for (const [symbol, l] of [...live]) {
+      if (touched.has(symbol) || !holdings.has(symbol)) continue;
+      const px = prices.on(symbol, date);
+      if (px === null) continue;
+      const long = holdings.get(symbol)!.units > 0;
+      const move = (px / l.refPx - 1) * (long ? 1 : -1);
+      const hitStop = l.stop !== null && move <= -l.stop;
+      const hitTake = l.take !== null && move >= l.take;
+      if (!hitStop && !hitTake) continue;
+      execute(l.signal, date, 0, hitStop ? STOP_LOSS_REASON : TAKE_PROFIT_REASON);
+      if (hitStop) exits.stopLoss += 1;
+      else exits.takeProfit += 1;
+      live.delete(symbol);
+      touched.add(symbol);
+    }
+
+    // 3. Dzisiejsze prognozy → zlecenia na kolejne notowanie. Nowsza
     //    prognoza zastępuje czekającą; „bez zmian” ją anuluje.
     for (const s of (bySignalDay.get(date) ?? []).sort((a, b) =>
       a.symbol.localeCompare(b.symbol),
@@ -382,7 +536,33 @@ export function simulate(
       else pending.set(s.symbol, s);
     }
 
-    // 3. Wycena na koniec dnia.
+    // 4. Koszt dźwigni i pożyczonych papierów za dzień.
+    let cost = cash < 0 ? (-cash * rules.financingRate) / 365 : 0;
+    for (const [symbol, h] of holdings) {
+      if (h.units >= 0) continue;
+      const cls = book.instruments.get(symbol)!.assetClass;
+      cost += (-valueOf(symbol, h.units, date) * rules.borrowRateByClass[cls]) / 365;
+    }
+    cash -= cost;
+    financingPln += cost;
+
+    // 5. Margin call: kapitał poniżej depozytu podtrzymującego → zamknij
+    //    wszystko, co ma dziś notowanie (reszta przy pierwszym notowaniu).
+    const gross = grossAt(date);
+    if (
+      gross > 0 &&
+      navAt(date) < (rules.maintenanceShare * gross) / Math.max(1, rules.maxLeverage)
+    ) {
+      for (const symbol of [...holdings.keys()].sort()) {
+        if (prices.on(symbol, date) === null) continue;
+        execute(exitSignal(symbol, date), date, 0, MARGIN_CALL_REASON);
+        live.delete(symbol);
+        pending.delete(symbol);
+        exits.marginCall += 1;
+      }
+    }
+
+    // 6. Wycena na koniec dnia.
     const total = navAt(date);
     nav.push({ date, navPln: total, cashPln: cash, investedPln: total - cash });
   }
@@ -391,6 +571,8 @@ export function simulate(
     trades,
     nav,
     cashPln: cash,
+    financingPln,
+    exits,
     holdings: [...holdings.entries()]
       .map(([symbol, h]) => ({
         symbol,

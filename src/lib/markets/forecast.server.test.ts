@@ -31,15 +31,17 @@ const input = (symbol: string, points = rising(80)): ForecastInput => ({
 describe("describeForModel", () => {
   it("hands the model computed values instead of asking it to compute them", () => {
     const text = describeForModel(input("BTC"));
-    expect(text).toContain("RSI(14):");
-    expect(text).toContain("momentum 20 sesji:");
-    expect(text).toContain("wynik sygnałów:");
+    expect(text).toContain("RSI14 ");
+    expect(text).toContain("mom20 ");
+    expect(text).toContain("sygnały ");
+    // Jedna linia na instrument — skróty objaśnia HORIZONS_BLOCK.
+    expect(text).not.toContain("\n");
   });
 
   it("says 'brak' rather than inventing a value the series cannot support", () => {
     // Krótka seria nie ma SMA50 — model musi zobaczyć „brak", a nie liczbę.
     const text = describeForModel(input("BTC", rising(25)));
-    expect(text).toContain("SMA20 vs SMA50: brak");
+    expect(text).toContain("SMA20/50 brak");
   });
 
   it("rounds the price instead of pasting a raw float into the prompt", () => {
@@ -47,28 +49,29 @@ describe("describeForModel", () => {
     // ma, i zjada tokeny bez żadnej wartości.
     const base = input("BTC");
     const text = describeForModel({ ...base, lastPrice: 81160.9500675369 });
-    expect(text).toContain("cena: 81160.95");
+    expect(text).toContain("cena 81160.95");
     expect(text).not.toContain("81160.9500675369");
   });
 
   it("tells the model the flat band it will be scored against", () => {
-    expect(describeForModel({ ...input("BTC"), flatBandPct: 4.2 })).toContain(
-      'pasmo „bez zmian" (7 dni): ±4.20%',
+    expect(describeForModel({ ...input("BTC"), flatBandPct: 4.2 })).toContain("pasmo 2d ±4.20%");
+    expect(describeForModel({ ...input("BTC"), flatBandPct: 2.1, controlBandPct: 4.2 })).toContain(
+      "pasmo 2d ±2.10%, pasmo 7d ±4.20%",
     );
     expect(describeForModel(input("BTC"))).not.toContain("pasmo");
   });
 
   it("shows the market situation only to the learning variant", () => {
     const withRegime = { ...input("BTC"), regime: "uptrend" };
-    expect(describeForModel(withRegime)).not.toContain("sytuacja rynkowa");
+    expect(describeForModel(withRegime)).not.toContain("sytuacja");
     expect(describeForModel(withRegime, { withRegime: true })).toContain(
-      "sytuacja rynkowa: trend wzrostowy",
+      "sytuacja: trend wzrostowy",
     );
   });
 
   it("marks the absence of news explicitly", () => {
     const text = describeForModel({ ...input("BTC"), sentimentScore: null, sentimentItems: 0 });
-    expect(text).toContain("wydźwięk newsów: brak newsów");
+    expect(text).toContain("newsy: brak");
   });
 });
 
@@ -78,7 +81,24 @@ describe("normalizeAiVerdict", () => {
       { symbol: "BTC", direction: "down", confidence: 65, rationale_pl: "Bo tak." },
       input("BTC"),
     );
-    expect(v).toEqual({ symbol: "BTC", direction: "down", confidence: 65, rationalePl: "Bo tak." });
+    expect(v).toEqual({
+      symbol: "BTC",
+      direction: "down",
+      confidence: 65,
+      rationalePl: "Bo tak.",
+      control: null,
+    });
+  });
+
+  it("reads the 7-day control forecast only when the model gave it", () => {
+    const v = normalizeAiVerdict(
+      { direction: "up", confidence: 60, direction_7d: "down", confidence_7d: 140 },
+      input("BTC"),
+    );
+    expect(v.control).toEqual({ direction: "down", confidence: 100 });
+    expect(
+      normalizeAiVerdict({ direction: "up", confidence: 60 }, input("BTC")).control,
+    ).toBeNull();
   });
 
   it("falls back to the signal verdict, not to a made-up neutral one", () => {
@@ -103,6 +123,22 @@ describe("normalizeAiVerdict", () => {
   it("keeps the symbol from our own catalog, not from the model", () => {
     const v = normalizeAiVerdict({ symbol: "TSLA", direction: "up", confidence: 10 }, input("BTC"));
     expect(v.symbol).toBe("BTC");
+  });
+});
+
+describe("forecastWithModel — budżet", () => {
+  it("does not call the model when the token budget says no", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const result = await forecastWithModel(
+      [input("BTC")],
+      { anthropicApiKey: "k", geminiApiKey: null },
+      { budget: { check: async () => "budżet dzienny: wyczerpany", record: async () => {} } },
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(result.model).toBeNull();
+    expect(result.failure).toContain("budżet tokenów");
+    vi.unstubAllGlobals();
   });
 });
 
