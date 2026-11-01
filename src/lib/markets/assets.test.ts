@@ -82,3 +82,18 @@ describe("fallback providers", () => {
     expect(fx.length).toBeGreaterThan(0);
   });
 });
+
+describe("SCAN_ASSETS", () => {
+  it("skanuje ok. 50 krypto i ok. 60 ETF-ów, bez powtórek symboli", async () => {
+    const { SCAN_ASSETS } = await import("./assets");
+    const crypto = SCAN_ASSETS.filter((a) => a.assetClass === "crypto");
+    const etf = SCAN_ASSETS.filter((a) => a.assetClass === "etf");
+    expect(crypto.length).toBeGreaterThanOrEqual(50);
+    expect(etf.length).toBeGreaterThanOrEqual(60);
+    expect(etf.every((a) => a.symbol.endsWith(".US") && a.currency === "USD")).toBe(true);
+    // Bez stablecoinów — nie mają własnego ruchu ceny.
+    for (const s of ["USDT", "USDC", "DAI", "WBTC"]) {
+      expect(SCAN_ASSETS.some((a) => a.symbol === s)).toBe(false);
+    }
+  });
+});

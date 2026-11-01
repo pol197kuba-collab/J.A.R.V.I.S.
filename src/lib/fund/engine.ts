@@ -9,13 +9,27 @@
 //   prognoza już znała.
 // - Koszty: prowizja od wartości transakcji + połowa spreadu przy każdej
 //   stronie (kupno drożej, sprzedaż taniej), spread zależny od klasy aktywów.
-// - Najwyżej 20% portfela w jednym instrumencie (przy składaniu zlecenia),
-//   bez krótkiej sprzedaży, bez dźwigni (kupno tylko za posiadaną gotówkę).
-// - Wielkość pozycji: „wzrost” → cel = 20% × pewność; „spadek” → sprzedaj
-//   całość; „bez zmian” → trzymaj, nie dokupuj (i anuluj czekające zlecenie).
+// - Wielkość pozycji: „wzrost” → długa, „spadek” → krótka (na papierze),
+//   „bez zmian” → nie otwieraj nic nowego (i anuluj czekające zlecenie).
+//   Cel = 20% × pewność × dźwignia, gdzie dźwignia rośnie z pewnością: do
+//   60% pewności 1×, przy 100% — maxLeverage (2×). Czyli najwyżej 40%
+//   portfela w jednym instrumencie.
+// - Dźwignia: łączna ekspozycja (suma |pozycji|) ≤ maxLeverage × kapitał.
+//   Pożyczona gotówka (ujemne saldo) kosztuje financingRate rocznie, krótka
+//   pozycja — opłatę za pożyczenie papierów (borrowRateByClass), naliczane
+//   codziennie. Margin call: gdy kapitał spadnie poniżej maintenanceShare
+//   wymaganego depozytu (ekspozycja / maxLeverage), wszystkie pozycje są
+//   przymusowo zamykane po bieżącej cenie.
+// - Horyzont: pozycja żyje tyle, ile horyzont prognozy, która ją otworzyła
+//   albo potwierdziła (krypto — dni kalendarzowe, reszta — sesje). Bez nowej
+//   prognozy w tym samym kierunku — zamknięcie po upływie horyzontu.
+// - Stop-loss / take-profit zależne od zmienności: odległość = k × σ dzienna
+//   (z 20 ostatnich sesji) × √(sesje horyzontu), od ceny wejścia albo
+//   ostatniego potwierdzenia (działa jak trailing). Sprawdzane na każdym
+//   notowaniu, jakie mamy — dziś na zamknięciach dziennych.
 // - Drobne korekty (< 500 zł albo < 2% portfela) są pomijane — inaczej
 //   codzienne wahania pewności (65% → 68%) dokupowałyby po tysiąc złotych
-//   i mieliły prowizję. Pełna sprzedaż („spadek”) zawsze przechodzi.
+//   i mieliły prowizję. Pełne zamknięcie pozycji zawsze przechodzi.
 //
 // Całą historię liczymy od nowa przy każdym przebiegu (to kilkanaście
 // instrumentów × kilkadziesiąt dni): zmiana zasad działa wstecz spójnie,
@@ -38,6 +52,8 @@ export type FundSignal = {
   predictionId: string | null;
   /** Cel wprost (ułamek portfela) — dla benchmarku; nadpisuje regułę pewności. */
   weight?: number;
+  /** Horyzont tej prognozy w dniach; brak = rules.horizonDays. */
+  horizonDays?: number;
 };
 
 export type FundRules = {
@@ -49,6 +65,28 @@ export type FundRules = {
   commissionRate: number;
   /** Pełny spread (kupno–sprzedaż) jako ułamek ceny, per klasa aktywów. */
   spreadByClass: Record<AssetClass, number>;
+  /**
+   * Ile dni żyje pozycja z prognozy bez potwierdzenia (horyzont prognozy).
+   * null = bez wygasania (pozycja do prognozy przeciwnej).
+   */
+  horizonDays: number | null;
+  /** „Spadek” otwiera krótką pozycję zamiast tylko zamykać długą. */
+  allowShort: boolean;
+  /** Łączna ekspozycja ≤ maxLeverage × kapitał; 1 = bez dźwigni. */
+  maxLeverage: number;
+  /** Pewność (0–1), od której zaczyna rosnąć dźwignia pojedynczej pozycji. */
+  leverageFromConfidence: number;
+  /** Roczny koszt pożyczonej gotówki (ujemnego salda). */
+  financingRate: number;
+  /** Roczna opłata za pożyczenie papierów do krótkiej sprzedaży. */
+  borrowRateByClass: Record<AssetClass, number>;
+  /** Margin call, gdy kapitał < maintenanceShare × (ekspozycja / maxLeverage). */
+  maintenanceShare: number;
+  /** Stop-loss i take-profit w wielokrotnościach σ horyzontu; null = wyłączone. */
+  stopSigma: number | null;
+  takeSigma: number | null;
+  /** Z ilu ostatnich zmian dziennych liczona jest σ. */
+  volLookback: number;
 };
 
 export const DEFAULT_RULES: FundRules = {
@@ -64,7 +102,25 @@ export const DEFAULT_RULES: FundRules = {
     index: 0.001,
     commodity: 0.0008,
     fx: 0.0004,
+    etf: 0.0006,
   },
+  horizonDays: 7,
+  allowShort: true,
+  maxLeverage: 2,
+  leverageFromConfidence: 0.6,
+  financingRate: 0.07,
+  borrowRateByClass: {
+    crypto: 0.1,
+    equity: 0.03,
+    index: 0.02,
+    commodity: 0.03,
+    fx: 0.01,
+    etf: 0.02,
+  },
+  maintenanceShare: 0.5,
+  stopSigma: 1,
+  takeSigma: 1.5,
+  volLookback: 20,
 };
 
 export type Instrument = { assetClass: AssetClass; currency: string };
@@ -98,9 +154,22 @@ export type Trade = {
 
 export type NavPoint = { date: string; navPln: number; cashPln: number; investedPln: number };
 
+/**
+ * Pozycja na koniec okresu. Krótka: units < 0, valuePln < 0 (zobowiązanie),
+ * costPln < 0 (wpływ netto ze sprzedaży). Wynik w obu przypadkach = value − cost.
+ */
 export type Holding = { symbol: string; units: number; costPln: number; valuePln: number };
 
-export type SimResult = { trades: Trade[]; nav: NavPoint[]; holdings: Holding[]; cashPln: number };
+export type SimResult = {
+  trades: Trade[];
+  nav: NavPoint[];
+  holdings: Holding[];
+  cashPln: number;
+  /** Koszt dźwigni i pożyczonych papierów (≥ 0), już odjęty od gotówki. */
+  financingPln: number;
+  /** Ile razy zadziałał stop-loss / take-profit / margin call. */
+  exits: { stopLoss: number; takeProfit: number; marginCall: number; horizon: number };
+};
 
 // ---------- daty ----------
 
@@ -108,6 +177,31 @@ export function addDays(date: string, days: number): string {
   const d = new Date(`${date}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+/** Dzień tygodnia 0 = niedziela. */
+const weekday = (date: string): number => new Date(`${date}T00:00:00Z`).getUTCDay();
+
+/** Ile sesji mieści horyzont: krypto handluje codziennie, reszta w dni robocze. */
+export function horizonSessions(days: number, assetClass: string): number {
+  return assetClass === "crypto" ? Math.max(1, days) : Math.max(1, Math.round((days * 5) / 7));
+}
+
+/**
+ * Dzień końca horyzontu prognozy z dnia `madeOn`. Krypto — dni kalendarzowe;
+ * reszta — dni robocze, żeby prognoza dwudniowa z piątku nie „kończyła się”
+ * w niedzielę na piątkowej cenie (zero ruchu = darmowe „bez zmian”).
+ */
+export function horizonEnd(madeOn: string, days: number, assetClass: string): string {
+  if (assetClass === "crypto") return addDays(madeOn, days);
+  let left = horizonSessions(days, assetClass);
+  let d = madeOn;
+  while (left > 0) {
+    d = addDays(d, 1);
+    const wd = weekday(d);
+    if (wd !== 0 && wd !== 6) left -= 1;
+  }
+  return d;
 }
 
 // ---------- kursy ----------
@@ -129,6 +223,22 @@ class Prices {
   /** Zamknięcie dokładnie z danego dnia (dzień sesyjny) albo null. */
   on(symbol: string, date: string): number | null {
     return this.exact.get(symbol)?.get(date) ?? null;
+  }
+
+  /** σ dziennych zmian logarytmicznych z `lookback` ostatnich sesji ≤ date; null przy < 5. */
+  sigma(symbol: string, date: string, lookback: number): number | null {
+    const s = this.series.get(symbol);
+    if (!s) return null;
+    let end = s.length - 1;
+    while (end >= 0 && s[end].date > date) end -= 1;
+    const from = Math.max(1, end - lookback + 1);
+    const r: number[] = [];
+    for (let i = from; i <= end; i++) r.push(Math.log(s[i].close / s[i - 1].close));
+    if (r.length < 5) return null;
+    const mean = r.reduce((a, b) => a + b, 0) / r.length;
+    const v = r.reduce((a, b) => a + (b - mean) ** 2, 0) / (r.length - 1);
+    const sd = Math.sqrt(v);
+    return sd > 1e-9 ? sd : null;
   }
 
   /** Ostatnie zamknięcie z datą ≤ date (wycena w dni bez sesji). */
@@ -154,16 +264,43 @@ function fxToPln(prices: Prices, currency: string, date: string): number | null 
   return pair ? prices.atOrBefore(pair, date) : null;
 }
 
+/** Dźwignia pojedynczej pozycji: 1× do progu pewności, liniowo do maxLeverage przy 100%. */
+export function leverageFor(confidence01: number, rules: FundRules = DEFAULT_RULES): number {
+  if (rules.maxLeverage <= 1) return 1;
+  const from = rules.leverageFromConfidence;
+  const t = from >= 1 ? 0 : Math.min(1, Math.max(0, (confidence01 - from) / (1 - from)));
+  return 1 + (rules.maxLeverage - 1) * t;
+}
+
 /** Docelowy udział w portfelu albo null = nie ruszaj pozycji. */
 export function targetWeight(signal: FundSignal, rules: FundRules = DEFAULT_RULES): number | null {
   if (signal.weight !== undefined) return Math.min(rules.maxWeight, Math.max(0, signal.weight));
-  if (signal.direction === "down") return 0;
   if (signal.direction === "flat") return null;
   const c = Math.min(100, Math.max(0, signal.confidence)) / 100;
-  return rules.maxWeight * c;
+  const w = rules.maxWeight * c * leverageFor(c, rules);
+  if (signal.direction === "down") return rules.allowShort ? -w : 0;
+  return w;
 }
 
 // ---------- symulacja ----------
+
+type Position = { units: number; costPln: number };
+
+/** Powody transakcji wymuszonych regułami, a nie nową prognozą. */
+export const HORIZON_EXIT_REASON =
+  "Minął horyzont prognozy bez potwierdzenia — zamknięcie pozycji.";
+export const STOP_LOSS_REASON = "Stop-loss (zależny od zmienności) — zamknięcie pozycji.";
+export const TAKE_PROFIT_REASON = "Take-profit (zależny od zmienności) — realizacja zysku.";
+export const MARGIN_CALL_REASON = "Margin call — kapitał poniżej wymaganego depozytu, zamknięcie.";
+
+type Live = {
+  signal: FundSignal;
+  expiresOn: string;
+  /** Cena odniesienia (wejście albo ostatnie potwierdzenie) i progi w ułamkach. */
+  refPx: number;
+  stop: number | null;
+  take: number | null;
+};
 
 export function simulate(
   signals: FundSignal[],
@@ -181,8 +318,11 @@ export function simulate(
   }
 
   let cash = rules.startCashPln;
-  const holdings = new Map<string, { units: number; costPln: number }>();
+  let financingPln = 0;
+  const exits = { stopLoss: 0, takeProfit: 0, marginCall: 0, horizon: 0 };
+  const holdings = new Map<string, Position>();
   const pending = new Map<string, FundSignal>();
+  const live = new Map<string, Live>();
   const trades: Trade[] = [];
   const nav: NavPoint[] = [];
 
@@ -197,98 +337,197 @@ export function simulate(
     for (const [symbol, h] of holdings) total += valueOf(symbol, h.units, date);
     return total;
   };
+  const grossAt = (date: string): number => {
+    let g = 0;
+    for (const [symbol, h] of holdings) g += Math.abs(valueOf(symbol, h.units, date));
+    return g;
+  };
+  /** Ile jeszcze ekspozycji wolno otworzyć: maxLeverage × kapitał − obecna ekspozycja. */
+  const buyingPowerAt = (date: string): number =>
+    Math.max(1, rules.maxLeverage) * navAt(date) - grossAt(date);
 
-  const execute = (signal: FundSignal, date: string, target: number): void => {
+  const execute = (signal: FundSignal, date: string, target: number, reason: string | null) => {
     const inst = book.instruments.get(signal.symbol)!;
     const px = prices.on(signal.symbol, date)!;
     const fx = fxToPln(prices, inst.currency, date);
     if (fx === null) return;
     const half = rules.spreadByClass[inst.assetClass] / 2;
-    const held = holdings.get(signal.symbol) ?? { units: 0, costPln: 0 };
-    const current = held.units * px * fx;
-    const nav = navAt(date);
-    const delta = target * nav - current;
-    const minTrade = Math.max(rules.minTradePln, rules.minTradeNavShare * nav);
     const base = {
       symbol: signal.symbol,
       fxRate: fx,
       signalOn: signal.madeOn,
       executedOn: date,
       predictionId: signal.predictionId,
-      reason: signal.reason,
+      reason,
       direction: signal.direction,
       confidence: signal.confidence,
     };
+    const mid = px * fx;
 
-    if (delta > 0) {
-      // Kupno tylko za gotówkę, z miejscem na prowizję.
-      if (delta < minTrade) return;
-      const budget = Math.min(delta, cash / (1 + rules.commissionRate));
+    /** Zamyka `units` (> 0) z bieżącej pozycji — sprzedaż długiej albo odkup krótkiej. */
+    const close = (units: number): void => {
+      const held = holdings.get(signal.symbol)!;
+      const long = held.units > 0;
+      const price = long ? px * (1 - half) : px * (1 + half);
+      const notional = units * price * fx;
+      const fee = notional * rules.commissionRate;
+      const cashFlow = long ? notional - fee : -(notional + fee);
+      const costShare = held.costPln * (units / Math.abs(held.units));
+      cash += cashFlow;
+      const left = held.units + (long ? -units : units);
+      if (Math.abs(left) <= Math.abs(held.units) * 1e-9) holdings.delete(signal.symbol);
+      else holdings.set(signal.symbol, { units: left, costPln: held.costPln - costShare });
+      trades.push({
+        ...base,
+        side: long ? "sell" : "buy",
+        units,
+        price,
+        notionalPln: notional,
+        feePln: fee,
+        realizedPln: cashFlow - costShare,
+      });
+    };
+
+    /** Otwiera/powiększa pozycję o `amountPln` (> 0) w stronę `long`. */
+    const open = (amountPln: number, long: boolean): void => {
+      const budget = Math.min(amountPln, buyingPowerAt(date) / (1 + rules.commissionRate));
       if (budget < rules.minTradePln) return;
-      const price = px * (1 + half);
+      const held = holdings.get(signal.symbol) ?? { units: 0, costPln: 0 };
+      const price = long ? px * (1 + half) : px * (1 - half);
       const units = budget / (price * fx);
       const fee = budget * rules.commissionRate;
-      cash -= budget + fee;
+      const cashFlow = long ? -(budget + fee) : budget - fee;
+      cash += cashFlow;
       holdings.set(signal.symbol, {
-        units: held.units + units,
-        costPln: held.costPln + budget + fee,
+        units: held.units + (long ? units : -units),
+        costPln: held.costPln - cashFlow,
       });
       trades.push({
         ...base,
-        side: "buy",
+        side: long ? "buy" : "sell",
         units,
         price,
         notionalPln: budget,
         feePln: fee,
         realizedPln: null,
       });
-    } else if (delta < 0 && held.units > 0) {
-      const sellAll = target === 0;
-      if (!sellAll && -delta < minTrade) return;
-      const units = sellAll ? held.units : Math.min(held.units, -delta / (px * fx));
-      const price = px * (1 - half);
-      const proceeds = units * price * fx;
-      const fee = proceeds * rules.commissionRate;
-      const costShare = held.costPln * (units / held.units);
-      cash += proceeds - fee;
-      const left = held.units - units;
-      if (left <= held.units * 1e-9) holdings.delete(signal.symbol);
-      else holdings.set(signal.symbol, { units: left, costPln: held.costPln - costShare });
-      trades.push({
-        ...base,
-        side: "sell",
-        units,
-        price,
-        notionalPln: proceeds,
-        feePln: fee,
-        realizedPln: proceeds - fee - costShare,
-      });
+    };
+
+    const nav = navAt(date);
+    const minTrade = Math.max(rules.minTradePln, rules.minTradeNavShare * nav);
+    const held = holdings.get(signal.symbol);
+    const current = held ? held.units * mid : 0;
+    const desired = target * nav;
+
+    // 1. Zamknięcie: cel po drugiej stronie zera (albo zero) = zamknij całość;
+    //    cel po tej samej stronie, ale mniejszy = częściowa redukcja.
+    if (held && current !== 0) {
+      const flips = desired === 0 || Math.sign(desired) !== Math.sign(current);
+      if (flips) {
+        close(Math.abs(held.units));
+      } else if (Math.abs(desired) < Math.abs(current)) {
+        const reduce = Math.abs(current) - Math.abs(desired);
+        if (reduce >= minTrade) close(reduce / mid);
+        return;
+      }
     }
+
+    // 2. Otwarcie / dokupienie w stronę celu.
+    if (desired === 0) return;
+    const now = holdings.get(signal.symbol);
+    const have = now ? Math.abs(now.units * mid) : 0;
+    const add = Math.abs(desired) - have;
+    if (add < minTrade) return;
+    open(add, desired > 0);
   };
 
+  /** Ustawia horyzont i progi ryzyka pozycji po prognozie, która ją otworzyła/potwierdziła. */
+  const arm = (s: FundSignal, date: string): void => {
+    const inst = book.instruments.get(s.symbol)!;
+    const days = s.horizonDays ?? rules.horizonDays;
+    if (days === null) {
+      live.delete(s.symbol);
+      return;
+    }
+    const px = prices.on(s.symbol, date)!;
+    const sigma = prices.sigma(s.symbol, date, rules.volLookback);
+    const scale = sigma === null ? null : sigma * Math.sqrt(horizonSessions(days, inst.assetClass));
+    live.set(s.symbol, {
+      signal: s,
+      expiresOn: horizonEnd(s.madeOn, days, inst.assetClass),
+      refPx: px,
+      stop: scale !== null && rules.stopSigma !== null ? rules.stopSigma * scale : null,
+      take: scale !== null && rules.takeSigma !== null ? rules.takeSigma * scale : null,
+    });
+  };
+
+  /** Prognoza, na którą powołuje się transakcja wymuszona (signalOn < dziś). */
+  const exitSignal = (symbol: string, date: string): FundSignal =>
+    live.get(symbol)?.signal ?? {
+      symbol,
+      madeOn: addDays(date, -1),
+      direction: "flat",
+      confidence: 0,
+      reason: null,
+      predictionId: null,
+    };
+
   for (let date = opts.start; date <= opts.end; date = addDays(date, 1)) {
-    // 1. Realizacja czekających zleceń na dzisiejszym zamknięciu — najpierw
-    //    sprzedaże (zwalniają gotówkę), potem kupna; w obrębie strony stała
-    //    kolejność symboli, żeby wynik nie zależał od kolejności wejścia.
+    // 1. Realizacja czekających zleceń na dzisiejszym notowaniu — najpierw
+    //    zmniejszenia ekspozycji (zwalniają depozyt), potem zwiększenia; w
+    //    obrębie strony stała kolejność symboli. Pozycje po horyzoncie bez
+    //    nowej prognozy zamykają się tutaj razem z resztą.
     const today = navAt(date);
-    const ready = [...pending.values()]
+    type Ready = { s: FundSignal; target: number; reason: string | null; exit: boolean };
+    const ready: Ready[] = [...pending.values()]
       .filter((s) => s.madeOn < date && prices.on(s.symbol, date) !== null)
-      .map((s) => {
-        const target = targetWeight(s, rules)!;
-        const units = holdings.get(s.symbol)?.units ?? 0;
-        // Ujemna zmiana = sprzedaż (także częściowa redukcja).
-        return { s, target, change: target * today - valueOf(s.symbol, units, date) };
-      });
+      .map((s) => ({ s, target: targetWeight(s, rules)!, reason: s.reason, exit: false }));
+    const readySymbols = new Set(ready.map((r) => r.s.symbol));
+    for (const [symbol, l] of live) {
+      if (l.expiresOn > date || pending.has(symbol) || readySymbols.has(symbol)) continue;
+      if (!holdings.has(symbol) || prices.on(symbol, date) === null) continue;
+      ready.push({ s: l.signal, target: 0, reason: HORIZON_EXIT_REASON, exit: true });
+    }
+    const exposureChange = (r: Ready): number => {
+      const units = holdings.get(r.s.symbol)?.units ?? 0;
+      return Math.abs(r.target * today) - Math.abs(valueOf(r.s.symbol, units, date));
+    };
     ready.sort(
       (a, b) =>
-        Number(a.change >= 0) - Number(b.change >= 0) || a.s.symbol.localeCompare(b.s.symbol),
+        Number(exposureChange(a) >= 0) - Number(exposureChange(b) >= 0) ||
+        a.s.symbol.localeCompare(b.s.symbol),
     );
-    for (const { s, target } of ready) {
-      pending.delete(s.symbol);
-      execute(s, date, target);
+    const touched = new Set<string>();
+    for (const r of ready) {
+      const symbol = r.s.symbol;
+      pending.delete(symbol);
+      execute(r.s, date, r.target, r.reason);
+      touched.add(symbol);
+      if (r.exit) exits.horizon += 1;
+      // Koszyk (waga wprost) i wyjście po horyzoncie nie uzbrajają niczego.
+      if (r.exit || r.s.weight !== undefined || !holdings.has(symbol)) live.delete(symbol);
+      else arm(r.s, date);
     }
 
-    // 2. Dzisiejsze prognozy → zlecenia na kolejne zamknięcie. Nowsza
+    // 2. Stop-loss / take-profit na dzisiejszym notowaniu — dla pozycji,
+    //    których dziś nie ruszała prognoza.
+    for (const [symbol, l] of [...live]) {
+      if (touched.has(symbol) || !holdings.has(symbol)) continue;
+      const px = prices.on(symbol, date);
+      if (px === null) continue;
+      const long = holdings.get(symbol)!.units > 0;
+      const move = (px / l.refPx - 1) * (long ? 1 : -1);
+      const hitStop = l.stop !== null && move <= -l.stop;
+      const hitTake = l.take !== null && move >= l.take;
+      if (!hitStop && !hitTake) continue;
+      execute(l.signal, date, 0, hitStop ? STOP_LOSS_REASON : TAKE_PROFIT_REASON);
+      if (hitStop) exits.stopLoss += 1;
+      else exits.takeProfit += 1;
+      live.delete(symbol);
+      touched.add(symbol);
+    }
+
+    // 3. Dzisiejsze prognozy → zlecenia na kolejne notowanie. Nowsza
     //    prognoza zastępuje czekającą; „bez zmian” ją anuluje.
     for (const s of (bySignalDay.get(date) ?? []).sort((a, b) =>
       a.symbol.localeCompare(b.symbol),
@@ -297,7 +536,33 @@ export function simulate(
       else pending.set(s.symbol, s);
     }
 
-    // 3. Wycena na koniec dnia.
+    // 4. Koszt dźwigni i pożyczonych papierów za dzień.
+    let cost = cash < 0 ? (-cash * rules.financingRate) / 365 : 0;
+    for (const [symbol, h] of holdings) {
+      if (h.units >= 0) continue;
+      const cls = book.instruments.get(symbol)!.assetClass;
+      cost += (-valueOf(symbol, h.units, date) * rules.borrowRateByClass[cls]) / 365;
+    }
+    cash -= cost;
+    financingPln += cost;
+
+    // 5. Margin call: kapitał poniżej depozytu podtrzymującego → zamknij
+    //    wszystko, co ma dziś notowanie (reszta przy pierwszym notowaniu).
+    const gross = grossAt(date);
+    if (
+      gross > 0 &&
+      navAt(date) < (rules.maintenanceShare * gross) / Math.max(1, rules.maxLeverage)
+    ) {
+      for (const symbol of [...holdings.keys()].sort()) {
+        if (prices.on(symbol, date) === null) continue;
+        execute(exitSignal(symbol, date), date, 0, MARGIN_CALL_REASON);
+        live.delete(symbol);
+        pending.delete(symbol);
+        exits.marginCall += 1;
+      }
+    }
+
+    // 6. Wycena na koniec dnia.
     const total = navAt(date);
     nav.push({ date, navPln: total, cashPln: cash, investedPln: total - cash });
   }
@@ -306,6 +571,8 @@ export function simulate(
     trades,
     nav,
     cashPln: cash,
+    financingPln,
+    exits,
     holdings: [...holdings.entries()]
       .map(([symbol, h]) => ({
         symbol,
@@ -313,6 +580,6 @@ export function simulate(
         costPln: h.costPln,
         valuePln: valueOf(symbol, h.units, opts.end),
       }))
-      .sort((a, b) => b.valuePln - a.valuePln),
+      .sort((a, b) => Math.abs(b.valuePln) - Math.abs(a.valuePln)),
   };
 }

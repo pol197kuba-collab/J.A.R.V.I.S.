@@ -12,6 +12,7 @@ import { fetchAllPages } from "@/lib/db/paginate";
 import { logServerError } from "@/lib/system/logServerError";
 import type { FundMetrics } from "./metrics";
 import { PLAYERS, type PlayerKind } from "./players";
+import { summarizePlayer, type PlayerSummary, type SummaryOrder } from "./summary";
 
 /** Ile ostatnich transakcji na gracza trafia do panelu. */
 const ORDERS_PER_PLAYER = 60;
@@ -48,6 +49,8 @@ export type FundView = {
   nav: Array<{ date: string } & Record<string, number | string>>;
   positions: Record<string, FundPosition[]>;
   orders: Record<string, FundOrder[]>;
+  /** Proste podsumowanie z WSZYSTKICH transakcji gracza (nie tylko ostatnich). */
+  summary: Record<string, PlayerSummary>;
 };
 
 const ORDER = new Map(PLAYERS.map((p, i) => [p.key, i]));
@@ -68,7 +71,15 @@ export const getFund = createServerFn({ method: "GET" })
       (a, b) => (ORDER.get(a.player) ?? 99) - (ORDER.get(b.player) ?? 99),
     );
     if (list.length === 0) {
-      return { startedOn: null, computedAt: null, players: [], nav: [], positions: {}, orders: {} };
+      return {
+        startedOn: null,
+        computedAt: null,
+        players: [],
+        nav: [],
+        positions: {},
+        orders: {},
+        summary: {},
+      };
     }
     const keyById = new Map(list.map((p) => [p.id, p.player]));
     const ids = list.map((p) => p.id);
@@ -140,6 +151,47 @@ export const getFund = createServerFn({ method: "GET" })
       }),
     );
 
+    // Podsumowanie liczone z pełnej historii — lista transakcji niżej to
+    // tylko ostatnie ORDERS_PER_PLAYER, a wynik musi się zgadzać z wyceną.
+    const allOrders = await fetchAllPages<{
+      portfolio_id: string;
+      symbol: string;
+      side: string;
+      notional_pln: number;
+      fee_pln: number;
+      realized_pln: number | null;
+    }>((from, to) =>
+      supabase
+        .from("fund_orders")
+        .select("portfolio_id, symbol, side, notional_pln, fee_pln, realized_pln, id")
+        .in("portfolio_id", ids)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    const ordersByKey = new Map<string, SummaryOrder[]>();
+    for (const o of allOrders) {
+      const key = keyById.get(o.portfolio_id);
+      if (!key) continue;
+      const list = ordersByKey.get(key) ?? [];
+      list.push({
+        symbol: o.symbol,
+        side: o.side === "sell" ? "sell" : "buy",
+        notionalPln: Number(o.notional_pln),
+        feePln: Number(o.fee_pln),
+        realizedPln: o.realized_pln === null ? null : Number(o.realized_pln),
+      });
+      ordersByKey.set(key, list);
+    }
+    const summary: Record<string, PlayerSummary> = {};
+    for (const p of list) {
+      const m = p.metrics as { financingPln?: number } | null;
+      summary[p.player] = summarizePlayer(
+        ordersByKey.get(p.player) ?? [],
+        positions[p.player] ?? [],
+        typeof m?.financingPln === "number" ? m.financingPln : 0,
+      );
+    }
+
     return {
       startedOn: list[0].started_on,
       computedAt: list.reduce<string | null>(
@@ -163,6 +215,7 @@ export const getFund = createServerFn({ method: "GET" })
       nav: [...byDate.values()],
       positions,
       orders,
+      summary,
     };
   });
 

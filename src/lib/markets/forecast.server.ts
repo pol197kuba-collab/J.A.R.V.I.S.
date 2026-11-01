@@ -18,6 +18,7 @@ import { stripMarkers } from "@/lib/darwin/prompt";
 import type { MarketAsset } from "./assets";
 import type { SignalDirection, TechnicalOutlook } from "./signals";
 import { REGIME_LABEL_PL, isMarketRegime } from "./regime";
+import { estimateTokens, UNLIMITED_BUDGET, type ModelBudget } from "./budget";
 
 const MODEL_TIMEOUT_MS = 60_000;
 const ANTHROPIC_FORECAST_MODEL = "claude-opus-5";
@@ -36,6 +37,8 @@ export type ForecastInput = {
    * rozliczana, więc model musi je znać, żeby wiedzieć, co znaczy „flat".
    */
   flatBandPct?: number;
+  /** Pasmo „bez zmian” horyzontu kontrolnego (7 dni). Podane = prośba o drugą prognozę. */
+  controlBandPct?: number;
   /** Reżim rynku (regime.ts) — pokazywany tylko wariantowi z wnioskami. */
   regime?: string | null;
 };
@@ -45,7 +48,31 @@ export type AiVerdict = {
   direction: SignalDirection;
   confidence: number;
   rationalePl: string | null;
+  /**
+   * Prognoza na horyzont kontrolny (7 dni) z tej samej odpowiedzi. null, gdy
+   * model jej nie podał — wtedy nie zapisujemy nic (nie zmyślamy).
+   */
+  control: { direction: SignalDirection; confidence: number } | null;
 };
+
+/** Horyzont główny i kontrolny (dni). */
+export const PRIMARY_HORIZON_DAYS = 2;
+export const CONTROL_HORIZON_DAYS = 7;
+
+/**
+ * Dopisek systemowy: dwa horyzonty w jednej odpowiedzi i legenda skrótów
+ * zwięzłego opisu instrumentów. Doklejany ZA promptem (także wariantem
+ * Darwina), więc nie rusza zablokowanych sekcji — tylko je doprecyzowuje.
+ */
+export const HORIZONS_BLOCK = `
+
+AKTUALIZACJA ZASAD 2 i FORMATU (ma pierwszeństwo przed wcześniejszą wzmianką o 7 dniach):
+- Główna prognoza dotyczy ${PRIMARY_HORIZON_DAYS} dni (dla akcji, ETF, walut i surowców: 1 sesji; dla krypto: 2 dni) i jest rozliczana wg „pasmo 2d”. Pola: "direction", "confidence".
+- Dodatkowo podaj prognozę kontrolną na 7 dni, rozliczaną wg „pasmo 7d”. Pola: "direction_7d", "confidence_7d". Obie oceniaj niezależnie — krótki ruch może iść pod prąd tygodniowego.
+- Uzasadnienie ("rationale_pl") dotyczy prognozy głównej.
+- Każda prognoza jest grana: "up" = kupno, "down" = krótka sprzedaż, "flat" = brak pozycji.
+Legenda opisu: RSI14; mom5/mom20 = zmiana ceny z 5/20 sesji; SMA20/50 = odległość SMA20 od SMA50; zakres60 = pozycja ceny w zakresie 60 sesji (0 = dołek, 100 = szczyt); zmienność = roczna; sygnały = wynik arytmetyki (kierunek, pewność); newsy = wydźwięk −100..100 z N pozycji.
+Obiekt: {"symbol","direction","confidence","direction_7d","confidence_7d","rationale_pl"}.`;
 
 export const SYSTEM_PROMPT = `Jesteś analitykiem rynkowym. Dostajesz POLICZONE wskaźniki dla kilku instrumentów i Twoim zadaniem jest je zinterpretować.
 
@@ -99,6 +126,7 @@ ${lessons.map((l) => `- ${l}`).join("\n")}
 Jak z nich korzystać:
 - Przy każdym instrumencie masz podaną „sytuację rynkową". Jeśli wniosek dotyczy tej sytuacji, potraktuj go jako ważną przesłankę obok wskaźników — także wtedy, gdy przeczy temu, co sugerują średnie i momentum.
 - Wnioski pochodzą z kilku tygodni rynku, nie są prawem natury. Gdy wskaźniki są wyjątkowo jednoznaczne, możesz od nich odstąpić, ale wtedy napisz to w uzasadnieniu.
+- Wnioski o złotówkach mówią, ile dawało ZAGRANIE prognozy: „up” = kupno, „down” = krótka sprzedaż, „flat” = brak pozycji (0 zł). „Flat” jest poprawne przy słabych danych, ale nic nie zarabia — kierunek wskazuj tam, gdzie wnioski w złotówkach pokazują, że w tej sytuacji zarabia, a unikaj tam, gdzie traci.
 - Nie powołuj się na liczby, których tu nie ma.`;
 }
 
@@ -114,41 +142,49 @@ export function describeForModel(
   // zjada tokeny bez żadnej wartości.
   const priceDigits = Math.abs(lastPrice) >= 100 ? 2 : Math.abs(lastPrice) >= 1 ? 4 : 6;
 
-  const lines = [
+  // JEDNA linia na instrument, skróty objaśnione raz w HORIZONS_BLOCK —
+  // przy kilkunastu instrumentach to ok. 40% mniej tokenów niż opis
+  // wielowierszowy, a liczby są te same.
+  const parts = [
     `${asset.symbol} (${asset.label}, ${asset.currency})`,
-    `  cena: ${lastPrice.toFixed(priceDigits)}`,
-    `  RSI(14): ${fmt(s.rsi, 0)}`,
-    `  momentum 5 sesji: ${fmt(s.momentum5)}%`,
-    `  momentum 20 sesji: ${fmt(s.momentum20)}%`,
-    `  SMA20 vs SMA50: ${
+    `cena ${lastPrice.toFixed(priceDigits)}`,
+    `RSI14 ${fmt(s.rsi, 0)}`,
+    `mom5 ${fmt(s.momentum5)}%`,
+    `mom20 ${fmt(s.momentum20)}%`,
+    `SMA20/50 ${
       s.sma20 !== null && s.sma50 !== null
         ? `${(((s.sma20 - s.sma50) / s.sma50) * 100).toFixed(1)}%`
         : "brak"
     }`,
-    `  pozycja w zakresie 60 sesji: ${fmt(s.rangePosition, 0)}%`,
-    `  zmienność roczna: ${fmt(s.volatility, 0)}%`,
+    `zakres60 ${fmt(s.rangePosition, 0)}%`,
+    `zmienność ${fmt(s.volatility, 0)}%`,
     ...(opts.withRegime && input.regime && isMarketRegime(input.regime)
-      ? [`  sytuacja rynkowa: ${REGIME_LABEL_PL[input.regime]}`]
+      ? [`sytuacja: ${REGIME_LABEL_PL[input.regime]}`]
       : []),
     ...(input.flatBandPct !== undefined
-      ? [`  pasmo „bez zmian" (7 dni): ±${input.flatBandPct.toFixed(2)}%`]
+      ? [
+          `pasmo 2d ±${input.flatBandPct.toFixed(2)}%` +
+            (input.controlBandPct !== undefined
+              ? `, pasmo 7d ±${input.controlBandPct.toFixed(2)}%`
+              : ""),
+        ]
       : []),
-    `  wynik sygnałów: ${technical.score} (kierunek ${technical.direction}, pewność ${technical.confidence})`,
-    `  wydźwięk newsów: ${
+    `sygnały ${technical.score} (${technical.direction}, ${technical.confidence})`,
+    `newsy: ${
       sentimentScore === null || sentimentItems === 0
-        ? "brak newsów"
-        : `${sentimentScore} z ${sentimentItems} pozycji`
+        ? "brak"
+        : `${sentimentScore} z ${sentimentItems}`
     }`,
   ];
   if (headlines.length > 0) {
-    lines.push(
-      `  nagłówki: ${headlines
-        .slice(0, 4)
-        .map((h) => `„${h}"`)
+    parts.push(
+      `nagłówki: ${headlines
+        .slice(0, 2)
+        .map((h) => `„${h.length > 90 ? `${h.slice(0, 89)}…` : h}"`)
         .join("; ")}`,
     );
   }
-  return lines.join("\n");
+  return parts.join(" | ");
 }
 
 function extractJsonArray(text: string): unknown {
@@ -169,7 +205,12 @@ type RawVerdict = {
   direction?: unknown;
   confidence?: unknown;
   rationale_pl?: unknown;
+  direction_7d?: unknown;
+  confidence_7d?: unknown;
 };
+
+const asDirection = (v: unknown): SignalDirection | null =>
+  v === "up" || v === "down" || v === "flat" ? v : null;
 
 /**
  * Normalizuje jeden werdykt modelu do kształtu, któremu ufa reszta modułu.
@@ -184,6 +225,7 @@ export function normalizeAiVerdict(raw: unknown, input: ForecastInput): AiVerdic
     direction: input.technical.direction,
     confidence: input.technical.confidence,
     rationalePl: null,
+    control: null,
   };
   if (typeof raw !== "object" || raw === null) return fallback;
   const row = raw as RawVerdict;
@@ -204,7 +246,20 @@ export function normalizeAiVerdict(raw: unknown, input: ForecastInput): AiVerdic
       ? row.rationale_pl.trim().slice(0, 400)
       : null;
 
-  return { symbol: input.asset.symbol, direction, confidence, rationalePl };
+  // Kontrolna 7d: tylko gdy model ją podał — brak = brak, nie kopia głównej.
+  const controlDir = asDirection(row.direction_7d);
+  const c7Raw =
+    typeof row.confidence_7d === "number" ? row.confidence_7d : Number(row.confidence_7d);
+  const control = controlDir
+    ? {
+        direction: controlDir,
+        confidence: Number.isFinite(c7Raw)
+          ? Math.max(0, Math.min(100, Math.round(c7Raw)))
+          : confidence,
+      }
+    : null;
+
+  return { symbol: input.asset.symbol, direction, confidence, rationalePl, control };
 }
 
 export type ForecastKeys = {
@@ -247,6 +302,8 @@ export async function forecastWithModel(
      * porównanie A/B wniosków zostaje uczciwe.
      */
     strategy?: string;
+    /** Strażnik dziennego budżetu tokenów; brak = bez limitu (testy). */
+    budget?: ModelBudget;
   } = {},
 ): Promise<ForecastResult> {
   const fallback: ForecastResult = {
@@ -255,6 +312,7 @@ export async function forecastWithModel(
       direction: i.technical.direction,
       confidence: i.technical.confidence,
       rationalePl: null,
+      control: null,
     })),
     model: null,
     failure: null,
@@ -264,8 +322,19 @@ export async function forecastWithModel(
 
   const learned = opts.lessons !== undefined;
   const base = opts.strategy ? stripMarkers(opts.strategy) : SYSTEM_PROMPT;
-  const system = learned ? base + lessonsBlock(opts.lessons ?? []) : base;
-  const user = inputs.map((i) => describeForModel(i, { withRegime: learned })).join("\n\n");
+  const withHorizons = inputs.some((i) => i.controlBandPct !== undefined);
+  const system =
+    base + (withHorizons ? HORIZONS_BLOCK : "") + (learned ? lessonsBlock(opts.lessons ?? []) : "");
+  const user = inputs.map((i) => describeForModel(i, { withRegime: learned })).join("\n");
+
+  // Budżet: szacunek wejścia + ~80 tokenów odpowiedzi na instrument.
+  const budget = opts.budget ?? UNLIMITED_BUDGET;
+  const purpose = learned ? "forecast_learned" : "forecast";
+  const estimate = estimateTokens(system + user) + inputs.length * 80;
+  const denied = await budget.check(purpose, estimate);
+  if (denied) return { ...fallback, failure: `budżet tokenów — ${denied}` };
+  // Odpowiedź z dwoma horyzontami jest dłuższa — limit wyjścia z zapasem.
+  const maxOutputTokens = Math.min(8192, 400 + inputs.length * 160);
   let text: string | null = null;
   let model: string | null = null;
   const failures: string[] = [];
@@ -278,10 +347,16 @@ export async function forecastWithModel(
         model: ANTHROPIC_FORECAST_MODEL,
         systemPrompt: system,
         contents,
-        maxOutputTokens: 8192,
+        maxOutputTokens,
         timeoutMs: MODEL_TIMEOUT_MS,
       });
       text = result.text || null;
+      await budget.record(purpose, {
+        model: ANTHROPIC_FORECAST_MODEL,
+        tokensIn: result.tokensIn + (result.cacheReadTokens ?? 0) + (result.cacheWriteTokens ?? 0),
+        tokensOut: result.tokensOut,
+        estimated: false,
+      });
       if (text) model = ANTHROPIC_FORECAST_MODEL;
       else failures.push("Claude: pusta odpowiedź");
     } catch (err) {
@@ -300,6 +375,12 @@ export async function forecastWithModel(
     if (gemini.ok) {
       text = gemini.text;
       model = DEFAULT_GEMINI_MODEL;
+      await budget.record(purpose, {
+        model,
+        tokensIn: estimateTokens(system + user),
+        tokensOut: estimateTokens(gemini.text),
+        estimated: true,
+      });
     } else {
       failures.push(gemini.reason);
     }

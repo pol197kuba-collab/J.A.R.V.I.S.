@@ -24,6 +24,12 @@ export type FundMetrics = {
    */
   signals?: number;
   lastSignalOn?: string | null;
+  /** Koszt dźwigni i pożyczonych papierów (zł). Brak = portfel sprzed dźwigni. */
+  financingPln?: number;
+  /** Wyjścia wymuszone regułami ryzyka. */
+  exits?: { stopLoss: number; takeProfit: number; marginCall: number; horizon: number };
+  /** Horyzont prognoz gracza w dniach. */
+  horizonDays?: number;
 };
 
 export function computeMetrics(

@@ -1248,6 +1248,42 @@ export type Database = {
         }
         Relationships: []
       }
+      market_model_usage: {
+        Row: {
+          estimated: boolean
+          id: string
+          model: string | null
+          owner_id: string
+          purpose: string
+          tokens_in: number
+          tokens_out: number
+          used_at: string
+          used_on: string
+        }
+        Insert: {
+          estimated?: boolean
+          id?: string
+          model?: string | null
+          owner_id: string
+          purpose: string
+          tokens_in?: number
+          tokens_out?: number
+          used_at?: string
+          used_on: string
+        }
+        Update: {
+          estimated?: boolean
+          id?: string
+          model?: string | null
+          owner_id?: string
+          purpose?: string
+          tokens_in?: number
+          tokens_out?: number
+          used_at?: string
+          used_on?: string
+        }
+        Relationships: []
+      }
       market_news_items: {
         Row: {
           classified_by: string | null

@@ -119,7 +119,13 @@ type Scored = {
    * jednego wyniku, więc nie wchodzi do żadnej trafności.
    */
   stale?: boolean;
+  /** Horyzont prognozy w dniach; brak = 7 (historia sprzed horyzontu 2-dniowego). */
+  horizonDays?: number;
 };
+
+/** Klucz źródła z horyzontem: „ai·2”, „signals·7” — trafności różnych horyzontów się nie miesza. */
+export const sourceKey = (source: string, horizonDays: number | undefined): string =>
+  `${source}·${horizonDays ?? 7}`;
 
 function tally(rows: Scored[], keyOf: (row: Scored) => string): ScoreRow[] {
   const acc = new Map<
@@ -183,7 +189,7 @@ export const MINIMUM_MEANINGFUL_RESOLUTIONS = 20;
 export function buildScoreboard(allRows: Scored[]): Scoreboard {
   const rows = allRows.filter((r) => !r.stale);
   return {
-    bySource: tally(rows, (r) => r.source),
+    bySource: tally(rows, (r) => sourceKey(r.source, r.horizonDays)),
     byDirection: tally(rows, (r) => r.direction),
     bySymbol: tally(rows, (r) => r.symbol),
     byRegime: tally(
@@ -194,7 +200,7 @@ export function buildScoreboard(allRows: Scored[]): Scoreboard {
       rows
         .filter((r) => r.outcome && r.outcomeFixedBand)
         .map((r) => ({ ...r, outcome: r.outcomeFixedBand ?? null })),
-      (r) => r.source,
+      (r) => sourceKey(r.source, r.horizonDays),
     ),
     resolved: rows.filter((r) => r.outcome).length,
     pending: rows.filter((r) => !r.outcome).length,

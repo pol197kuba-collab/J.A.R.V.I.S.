@@ -379,6 +379,21 @@ function MarketsPage() {
         </HudPanel>
       )}
 
+      {/* Fundusz wyżej: wyniki agentów w złotówkach to pierwsze, co sprawdzamy. */}
+      <HudPanel index={3} title="MARKET GRID // FUNDUSZ" tone="elevated" className="min-w-0 p-5">
+        {fund.isLoading ? (
+          <EmptyState>Ładowanie funduszu…</EmptyState>
+        ) : fund.data ? (
+          <FundPanel
+            view={fund.data}
+            onRecompute={() => fundMutation.mutate()}
+            recomputing={fundMutation.isPending}
+          />
+        ) : (
+          <EmptyState>Nie udało się wczytać funduszu</EmptyState>
+        )}
+      </HudPanel>
+
       <div className="grid gap-6 @[900px]:grid-cols-[1fr_360px]">
         <HudPanel index={3} title="MARKET GRID // TYPER" tone="elevated" className="min-w-0 p-5">
           {outlook.isLoading ? (
@@ -402,20 +417,6 @@ function MarketsPage() {
           )}
         </HudPanel>
       </div>
-
-      <HudPanel index={3} title="MARKET GRID // FUNDUSZ" tone="elevated" className="min-w-0 p-5">
-        {fund.isLoading ? (
-          <EmptyState>Ładowanie funduszu…</EmptyState>
-        ) : fund.data ? (
-          <FundPanel
-            view={fund.data}
-            onRecompute={() => fundMutation.mutate()}
-            recomputing={fundMutation.isPending}
-          />
-        ) : (
-          <EmptyState>Nie udało się wczytać funduszu</EmptyState>
-        )}
-      </HudPanel>
 
       <div className="grid gap-6 @[900px]:grid-cols-[1fr_360px]">
         <HudPanel index={3} title="MARKET GRID // NEWSY" className="min-w-0 p-5">

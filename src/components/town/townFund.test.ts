@@ -38,6 +38,7 @@ const view = (overrides: Partial<FundView> = {}): FundView => ({
   ],
   positions: { ai: [{ symbol: "CDR.PL", valuePln: 11_000, costPln: 10_000 }] },
   orders: {},
+  summary: {},
   ...overrides,
 });
 

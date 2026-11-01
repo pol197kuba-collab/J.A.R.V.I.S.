@@ -15,6 +15,7 @@ const CLASS_FILTERS: ReadonlyArray<{ value: AssetClass | "all"; label: string }>
   { value: "equity", label: "Akcje" },
   { value: "index", label: "Indeksy" },
   { value: "commodity", label: "Surowce" },
+  { value: "etf", label: "ETF" },
   { value: "fx", label: "Waluty" },
 ];
 

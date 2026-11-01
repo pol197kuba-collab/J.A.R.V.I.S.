@@ -152,29 +152,50 @@ export async function fetchAssetSeries(asset: MarketAsset, days = 120): Promise<
  * i Frankfurter mają darmowe limity liczone na minutę, a dwadzieścia
  * jednoczesnych żądań to najprostszy sposób, żeby w nie wejść.
  */
+/**
+ * Darmowy CoinGecko wytrzymuje ok. 30 zapytań na minutę z jednego IP. Przy
+ * kilkudziesięciu monetach skanera paczki krypto idą po dwie co 4 sekundy;
+ * reszta (Stooq/Yahoo/Frankfurter) bez przerw. Przy kilku instrumentach (strona) pauzy nie ma.
+ */
+const COINGECKO_BATCH = 2;
+const COINGECKO_PAUSE_MS = 4_000;
+const PACE_FROM = 8;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export async function fetchManyAssetSeries(
   assets: MarketAsset[],
   days = 120,
   batchSize = 4,
 ): Promise<FetchOutcome[]> {
+  const gecko = assets.filter((a) => a.source.kind === "coingecko");
+  const paced = gecko.length >= PACE_FROM;
+  const rest = paced ? assets.filter((a) => a.source.kind !== "coingecko") : assets;
   const out: FetchOutcome[] = [];
-  for (let i = 0; i < assets.length; i += batchSize) {
-    const batch = assets.slice(i, i + batchSize);
-    const settled = await Promise.all(
-      batch.map(async (asset): Promise<FetchOutcome> => {
-        try {
-          const { points, source } = await fetchAssetSeries(asset, days);
-          return { symbol: asset.symbol, ok: true, points, source };
-        } catch (err) {
-          return {
-            symbol: asset.symbol,
-            ok: false,
-            error: err instanceof Error ? err.message : String(err),
-          };
-        }
-      }),
-    );
-    out.push(...settled);
+  if (paced) {
+    for (let i = 0; i < gecko.length; i += COINGECKO_BATCH) {
+      if (i > 0) await sleep(COINGECKO_PAUSE_MS);
+      out.push(...(await fetchBatch(gecko.slice(i, i + COINGECKO_BATCH), days)));
+    }
+  }
+  for (let i = 0; i < rest.length; i += batchSize) {
+    out.push(...(await fetchBatch(rest.slice(i, i + batchSize), days)));
   }
   return out;
+}
+
+async function fetchBatch(batch: MarketAsset[], days: number): Promise<FetchOutcome[]> {
+  return Promise.all(
+    batch.map(async (asset): Promise<FetchOutcome> => {
+      try {
+        const { points, source } = await fetchAssetSeries(asset, days);
+        return { symbol: asset.symbol, ok: true, points, source };
+      } catch (err) {
+        return {
+          symbol: asset.symbol,
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }),
+  );
 }

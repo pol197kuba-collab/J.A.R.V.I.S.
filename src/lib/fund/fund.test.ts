@@ -3,7 +3,12 @@ import type { PricePoint } from "@/lib/markets/series";
 import {
   addDays,
   DEFAULT_RULES,
-  simulate,
+  HORIZON_EXIT_REASON,
+  leverageFor,
+  MARGIN_CALL_REASON,
+  simulate as engineSimulate,
+  STOP_LOSS_REASON,
+  TAKE_PROFIT_REASON,
   targetWeight,
   type FundSignal,
   type Instrument,
@@ -29,6 +34,12 @@ function book(
 }
 
 const PLN_EQ: Instrument = { assetClass: "equity", currency: "PLN" };
+/** Zasady sprzed krótkiej sprzedaży — do testów mechaniki, która jej nie dotyczy. */
+const LONG_ONLY = { allowShort: false };
+/** Mechanika bez dźwigni i stopów — testy podstaw nie zależą od nowych reguł ryzyka. */
+const BASIC = { maxLeverage: 1, stopSigma: null, takeSigma: null };
+const simulate: typeof engineSimulate = (signals, b, o) =>
+  engineSimulate(signals, b, { ...o, rules: { ...BASIC, ...o.rules } });
 const sig = (s: Partial<FundSignal> & Pick<FundSignal, "symbol" | "madeOn">): FundSignal => ({
   direction: "up",
   confidence: 100,
@@ -38,11 +49,23 @@ const sig = (s: Partial<FundSignal> & Pick<FundSignal, "symbol" | "madeOn">): Fu
 });
 
 describe("targetWeight", () => {
-  it("wzrost = 20% × pewność, spadek = 0, bez zmian = nie ruszaj", () => {
-    expect(targetWeight(sig({ symbol: "A", madeOn: "2026-10-01", confidence: 70 }))).toBeCloseTo(
-      0.14,
-    );
-    expect(targetWeight(sig({ symbol: "A", madeOn: "2026-10-01", direction: "down" }))).toBe(0);
+  it("wzrost = 20% × pewność, spadek = krótka 20% × pewność, bez zmian = nie ruszaj", () => {
+    const r1 = { ...DEFAULT_RULES, ...BASIC };
+    expect(
+      targetWeight(sig({ symbol: "A", madeOn: "2026-10-01", confidence: 70 }), r1),
+    ).toBeCloseTo(0.14);
+    expect(
+      targetWeight(
+        sig({ symbol: "A", madeOn: "2026-10-01", direction: "down", confidence: 50 }),
+        r1,
+      ),
+    ).toBeCloseTo(-0.1);
+    expect(
+      targetWeight(sig({ symbol: "A", madeOn: "2026-10-01", direction: "down" }), {
+        ...DEFAULT_RULES,
+        ...LONG_ONLY,
+      }),
+    ).toBe(0);
     expect(targetWeight(sig({ symbol: "A", madeOn: "2026-10-01", direction: "flat" }))).toBeNull();
     expect(targetWeight(sig({ symbol: "A", madeOn: "2026-10-01", weight: 0.5 }))).toBe(0.2);
   });
@@ -92,7 +115,7 @@ describe("simulate", () => {
         sig({ symbol: "A", madeOn: addDays(start, 1), direction: "down" }),
       ],
       book({ A: series(start, [10, 10, 10, 10]) }, { A: PLN_EQ }),
-      { start, end: addDays(start, 3) },
+      { start, end: addDays(start, 3), rules: LONG_ONLY },
     );
     const [buy, sell] = r.trades;
     expect(buy.notionalPln).toBeCloseTo(20_000);
@@ -109,7 +132,7 @@ describe("simulate", () => {
     const r = simulate(
       [sig({ symbol: "A", madeOn: start, direction: "down" })],
       book({ A: series(start, [10, 8, 6]) }, { A: PLN_EQ }),
-      { start, end: addDays(start, 2) },
+      { start, end: addDays(start, 2), rules: LONG_ONLY },
     );
     expect(r.trades).toHaveLength(0);
     expect(r.nav.at(-1)!.navPln).toBe(100_000);
@@ -159,11 +182,209 @@ describe("simulate", () => {
         sig({ symbol: "F", madeOn: addDays(start, 1) }),
       ],
       book(closes, inst),
-      { start, end: addDays(start, 3) },
+      { start, end: addDays(start, 3), rules: LONG_ONLY },
     );
     const day2 = r.trades.filter((t) => t.executedOn === addDays(start, 2));
     expect(day2.map((t) => `${t.side}:${t.symbol}`)).toEqual(["sell:A", "buy:F"]);
     expect(day2[1].notionalPln).toBeGreaterThan(19_000);
+  });
+});
+
+describe("horyzont i krótka sprzedaż", () => {
+  const start = "2026-10-01";
+  const flat = (n: number) =>
+    series(
+      start,
+      Array.from({ length: n }, () => 10),
+    );
+
+  it("pozycja bez potwierdzenia zamyka się po 7 dniach od prognozy", () => {
+    const r = simulate(
+      [sig({ symbol: "A", madeOn: start })],
+      book({ A: flat(12) }, { A: PLN_EQ }),
+      {
+        start,
+        end: addDays(start, 11),
+      },
+    );
+    expect(r.trades.map((t) => `${t.side}:${t.executedOn}`)).toEqual([
+      `buy:${addDays(start, 1)}`,
+      `sell:${addDays(start, 7)}`,
+    ]);
+    expect(r.trades[1].reason).toBe(HORIZON_EXIT_REASON);
+    expect(r.trades[1].signalOn).toBe(start);
+    expect(r.holdings).toHaveLength(0);
+  });
+
+  it("nowa prognoza w tym samym kierunku przedłuża pozycję, „bez zmian” nie", () => {
+    const renewed = simulate(
+      [sig({ symbol: "A", madeOn: start }), sig({ symbol: "A", madeOn: addDays(start, 5) })],
+      book({ A: flat(16) }, { A: PLN_EQ }),
+      { start, end: addDays(start, 15) },
+    );
+    expect(renewed.trades.map((t) => t.executedOn)).toEqual([
+      addDays(start, 1),
+      addDays(start, 12),
+    ]);
+    const flatOnly = simulate(
+      [
+        sig({ symbol: "A", madeOn: start }),
+        sig({ symbol: "A", madeOn: addDays(start, 5), direction: "flat" }),
+      ],
+      book({ A: flat(16) }, { A: PLN_EQ }),
+      { start, end: addDays(start, 15) },
+    );
+    expect(flatOnly.trades.map((t) => t.executedOn)).toEqual([
+      addDays(start, 1),
+      addDays(start, 7),
+    ]);
+  });
+
+  it("bez horyzontu (null) pozycja trzyma się do prognozy przeciwnej", () => {
+    const r = simulate(
+      [sig({ symbol: "A", madeOn: start })],
+      book({ A: flat(12) }, { A: PLN_EQ }),
+      {
+        start,
+        end: addDays(start, 11),
+        rules: { horizonDays: null },
+      },
+    );
+    expect(r.trades).toHaveLength(1);
+  });
+
+  it("spadek otwiera krótką pozycję, która zarabia na spadku ceny", () => {
+    const prices = [10, 10, 9, 8, 8, 8, 8, 8, 8, 8];
+    const r = simulate(
+      [sig({ symbol: "A", madeOn: start, direction: "down" })],
+      book({ A: series(start, prices) }, { A: PLN_EQ }),
+      { start, end: addDays(start, 9) },
+    );
+    const [open, cover] = r.trades;
+    expect(open.side).toBe("sell");
+    expect(open.notionalPln).toBeCloseTo(20_000);
+    expect(open.realizedPln).toBeNull();
+    expect(cover.side).toBe("buy");
+    expect(cover.reason).toBe(HORIZON_EXIT_REASON);
+    // −20% ceny na 20 000 zł krótkiej ≈ +4 000 zł minus koszty.
+    expect(cover.realizedPln!).toBeGreaterThan(3_900);
+    expect(cover.realizedPln!).toBeLessThan(4_000);
+    // Opłata za pożyczenie papierów (krótka) też idzie z kapitału.
+    expect(r.financingPln).toBeGreaterThan(0);
+    expect(r.nav.at(-1)!.navPln).toBeCloseTo(100_000 + cover.realizedPln! - r.financingPln, 2);
+  });
+
+  it("w trakcie krótka pozycja jest długiem: wycena maleje, gdy cena rośnie", () => {
+    const r = simulate(
+      [sig({ symbol: "A", madeOn: start, direction: "down" })],
+      book({ A: series(start, [10, 10, 11]) }, { A: PLN_EQ }),
+      { start, end: addDays(start, 2) },
+    );
+    expect(r.holdings[0].units).toBeLessThan(0);
+    expect(r.holdings[0].valuePln).toBeLessThan(0);
+    // +10% ceny na 20 000 zł krótkiej ≈ −2 000 zł.
+    expect(r.nav.at(-1)!.navPln).toBeLessThan(98_000);
+    expect(r.nav.at(-1)!.navPln).toBeGreaterThan(97_900);
+  });
+
+  it("bez dźwigni: krótkie pozycje blokują gotówkę na nowe kupna", () => {
+    const sym = ["A", "B", "C", "D", "E", "F"];
+    const closes = Object.fromEntries(sym.map((s) => [s, flat(4)]));
+    const inst = Object.fromEntries(sym.map((s) => [s, PLN_EQ]));
+    const r = simulate(
+      [
+        ...["A", "B", "C", "D", "E"].map((s) =>
+          sig({ symbol: s, madeOn: start, direction: "down" }),
+        ),
+        sig({ symbol: "F", madeOn: addDays(start, 1) }),
+      ],
+      book(closes, inst),
+      { start, end: addDays(start, 3) },
+    );
+    // Pięć krótkich po ~20% wyczerpuje kapitał — kupno F się nie mieści.
+    expect(r.trades.filter((t) => t.symbol === "F")).toHaveLength(0);
+    expect(r.trades.filter((t) => t.side === "sell")).toHaveLength(5);
+  });
+});
+
+describe("dźwignia i ryzyko", () => {
+  const start = "2026-10-01";
+
+  it("dźwignia rośnie z pewnością: 1× do 60%, 2× przy 100%", () => {
+    expect(leverageFor(0.5)).toBe(1);
+    expect(leverageFor(0.6)).toBe(1);
+    expect(leverageFor(0.8)).toBeCloseTo(1.5);
+    expect(leverageFor(1)).toBe(2);
+    expect(targetWeight(sig({ symbol: "A", madeOn: start, confidence: 100 }))).toBeCloseTo(0.4);
+    expect(targetWeight(sig({ symbol: "A", madeOn: start, confidence: 50 }))).toBeCloseTo(0.1);
+  });
+
+  it("łączna ekspozycja nie przekracza 2× kapitału, pożyczona gotówka kosztuje", () => {
+    const sym = ["A", "B", "C", "D", "E", "F"];
+    const closes = Object.fromEntries(
+      sym.map((s) => [
+        s,
+        series(
+          start,
+          Array.from({ length: 6 }, () => 10),
+        ),
+      ]),
+    );
+    const inst = Object.fromEntries(sym.map((s) => [s, PLN_EQ]));
+    const r = engineSimulate(
+      sym.map((s) => sig({ symbol: s, madeOn: start })),
+      book(closes, inst),
+      { start, end: addDays(start, 5), rules: { stopSigma: null, takeSigma: null } },
+    );
+    const bought = r.trades.reduce((s, t) => s + t.notionalPln, 0);
+    expect(bought).toBeGreaterThan(195_000);
+    expect(bought).toBeLessThanOrEqual(200_000);
+    expect(r.cashPln).toBeLessThan(0);
+    expect(r.financingPln).toBeGreaterThan(0);
+  });
+
+  it("margin call zamyka wszystko, gdy kapitał spada poniżej depozytu", () => {
+    const sym = ["A", "B", "C", "D", "E"];
+    // Po wejściu ceny spadają o 45% — przy 2× ekspozycji kapitał topnieje.
+    const path = [10, 10, 10, 5.5, 5.5, 5.5];
+    const closes = Object.fromEntries(sym.map((s) => [s, series(start, path)]));
+    const inst = Object.fromEntries(sym.map((s) => [s, PLN_EQ]));
+    const r = engineSimulate(
+      sym.map((s) => sig({ symbol: s, madeOn: start })),
+      book(closes, inst),
+      { start, end: addDays(start, 5), rules: { stopSigma: null, takeSigma: null } },
+    );
+    const forced = r.trades.filter((t) => t.reason === MARGIN_CALL_REASON);
+    expect(forced.length).toBe(5);
+    expect(forced[0].executedOn).toBe(addDays(start, 3));
+    expect(r.exits.marginCall).toBe(5);
+    expect(r.holdings).toHaveLength(0);
+  });
+
+  it("stop-loss i take-profit liczone od zmienności instrumentu", () => {
+    // Spokojna historia (σ ≈ 1%), potem wejście i ruch o kilka σ.
+    const calm = [100, 101, 100, 101, 100, 101, 100, 101, 100, 101, 100];
+    const down = engineSimulate(
+      [sig({ symbol: "A", madeOn: addDays(start, 9) })],
+      book({ A: series(start, [...calm, 95, 95]) }, { A: PLN_EQ }),
+      { start, end: addDays(start, 12) },
+    );
+    expect(down.trades.map((t) => t.reason)).toEqual(["test", STOP_LOSS_REASON]);
+    expect(down.trades[1].realizedPln!).toBeLessThan(0);
+    const up = engineSimulate(
+      [sig({ symbol: "A", madeOn: addDays(start, 9) })],
+      book({ A: series(start, [...calm, 106, 106]) }, { A: PLN_EQ }),
+      { start, end: addDays(start, 12) },
+    );
+    expect(up.trades.map((t) => t.reason)).toEqual(["test", TAKE_PROFIT_REASON]);
+    expect(up.exits.takeProfit).toBe(1);
+  });
+
+  it("horyzont 2 dni dla akcji liczony w sesjach: prognoza z piątku kończy się w poniedziałek", async () => {
+    const { horizonEnd } = await import("./engine");
+    expect(horizonEnd("2026-10-02", 2, "equity")).toBe("2026-10-05");
+    expect(horizonEnd("2026-10-02", 2, "crypto")).toBe("2026-10-04");
+    expect(horizonEnd("2026-10-01", 7, "equity")).toBe("2026-10-08");
   });
 });
 
@@ -228,7 +449,15 @@ describe("buildFund", () => {
       ["CDR.PL", series(start, [50, 49, 48, 50, 51, 52])],
       ["USDPLN", series(start, [4, 4, 4, 4, 4, 4])],
     ]);
-    const pred = (id: string, source: string, symbol: string, day: number, direction: string) => ({
+    const pred = (
+      id: string,
+      source: string,
+      symbol: string,
+      day: number,
+      direction: string,
+      horizon_days = 2,
+    ) => ({
+      horizon_days,
       id,
       source,
       symbol,
@@ -244,6 +473,7 @@ describe("buildFund", () => {
         pred("3", "ai", "BTC", 3, "down"),
         pred("4", "unknown_src", "BTC", 0, "up"),
         pred("5", "ai", "NIEZNANY", 0, "up"),
+        pred("6", "ai", "CDR.PL", 0, "up", 7),
       ],
       closes,
       addDays(start, 5),
@@ -253,14 +483,23 @@ describe("buildFund", () => {
       "ai_learned",
       "ai",
       "signals",
+      "ai_7d",
       "basket",
       "monkey",
     ]);
     const ai = run.players.find((p) => p.key === "ai")!;
+    // Horyzont 2 dni zamyka długą, potem „spadek” otwiera krótką.
     expect(ai.result.trades.map((t) => `${t.side}:${t.symbol}:${t.predictionId}`)).toEqual([
       "buy:BTC:1",
+      "sell:BTC:1",
       "sell:BTC:3",
+      "buy:BTC:3",
     ]);
+    // Kontrola 7 dni gra tylko prognozy 7-dniowe tego samego modelu.
+    const control = run.players.find((p) => p.key === "ai_7d")!;
+    expect(control.result.trades.map((t) => t.predictionId)).toEqual(["6"]);
+    expect(ai.result.trades[1].realizedPln).not.toBeNull();
+    expect(ai.result.trades[2].realizedPln).toBeNull();
     expect(ai.result.trades[0].reason).toBe("ai up");
     const learned = run.players.find((p) => p.key === "ai_learned")!;
     expect(learned.result.trades).toHaveLength(0);
@@ -290,6 +529,7 @@ describe("fundRows", () => {
           direction: "up",
           confidence: 73,
           rationale_pl: "powód",
+          horizon_days: 2,
         },
       ],
       new Map([["CDR.PL", series(start, [10, 10.37, 11])]]),
@@ -298,7 +538,8 @@ describe("fundRows", () => {
     const ids = new Map(run.players.map((p) => [p.key, `id-${p.key}`]));
     const rows = fundRows(run, "u1", ids);
     const aiOrders = rows.orders.filter((o) => o.portfolio_id === "id-ai");
-    expect(aiOrders).toHaveLength(1);
+    // Kupno + zamknięcie po horyzoncie (1 sesja dla akcji).
+    expect(aiOrders).toHaveLength(2);
     expect(aiOrders[0]).toMatchObject({
       owner_id: "u1",
       side: "buy",
@@ -311,7 +552,9 @@ describe("fundRows", () => {
     expect(Number.isInteger(aiOrders[0].notional_pln * 100)).toBe(true);
     // Wycena: dzień po dniu dla każdego z 5 graczy.
     expect(rows.nav.filter((n) => n.portfolio_id === "id-ai")).toHaveLength(3);
-    expect(rows.positions.filter((p) => p.portfolio_id === "id-ai")[0].as_of).toBe(
+    // Pozycja zamknięta po horyzoncie — pozycje ma tylko koszyk.
+    expect(rows.positions.filter((p) => p.portfolio_id === "id-ai")).toHaveLength(0);
+    expect(rows.positions.filter((p) => p.portfolio_id === "id-basket")[0].as_of).toBe(
       addDays(start, 2),
     );
     // Gracz bez id portfela (np. błąd upsertu) — pominięty, nie wywraca reszty.

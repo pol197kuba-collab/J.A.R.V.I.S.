@@ -23,6 +23,11 @@ on:
     # którym termin wypadł w sobotę lub niedzielę.
     - cron: "0 18 * * 0,6"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Tylko sprawdź źródła notowań (cały słownik + skaner), nic nie zapisuj"
+        type: boolean
+        default: false
 
 # Dwa przebiegi na raz zapisywałyby te same wiersze — upsert by to przeżył,
 # ale nie ma powodu płacić za wyścig ani za podwójne wywołanie modelu.
@@ -72,4 +77,4 @@ jobs:
         # tutaj — ten sam powód co w orlen-prices.yml: dopisanie go do
         # package.json podbijało esbuild w całym drzewie i rozjeżdżało
         # bun.lock z package-lock.json, a bunem buduje Lovable.
-        run: npx --yes tsx@4.21.0 scripts/markets-daily.ts
+        run: npx --yes tsx@4.21.0 scripts/markets-daily.ts ${{ inputs.dry_run && '--dry-run' || '' }}
