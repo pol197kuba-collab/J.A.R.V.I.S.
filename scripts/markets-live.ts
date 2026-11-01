@@ -136,7 +136,14 @@ async function main() {
 
   // ---------- 3. decyzje ----------
   const now = new Date();
-  const { events, alarms } = liveDecisions(players, prices, now);
+  const { events, alarms, skipped } = liveDecisions(players, prices, now);
+  const pendingCount = players.reduce((n, p) => n + p.pending.length, 0);
+  const list = (xs: string[]) => (xs.length > 0 ? xs.join(", ") : "—");
+  notice(
+    `czekające zlecenia: ${pendingCount}; bez realizacji — giełda zamknięta/cena nieświeża: ` +
+      `${list(skipped.stale)}; brak ceny: ${list(skipped.noPrice)}; cena sprzed prognozy: ` +
+      `${list(skipped.beforeForecast)}; bez godziny prognozy: ${list(skipped.noTime)}`,
+  );
   type Row = Omit<PlayerEvent, "kind"> & { kind: PlayerEvent["kind"] | "alarm_hold" };
   const toRow = (e: Row, extra: { model?: string | null } = {}) => ({
     owner_id: ownerId,
