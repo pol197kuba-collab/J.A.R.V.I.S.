@@ -112,6 +112,7 @@ export function buildFund(
           financingPln: result.financingPln,
           exits: result.exits,
           horizonDays: player.horizonDays,
+          pending: result.pending.length,
           signals: signals.length,
           lastSignalOn: signals.reduce<string | null>(
             (m, s) => (m === null || s.madeOn > m ? s.madeOn : m),

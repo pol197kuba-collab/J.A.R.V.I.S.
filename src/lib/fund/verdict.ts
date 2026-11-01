@@ -16,7 +16,21 @@ export type VerdictPlayer = {
   returnPct: number;
   /** Gracz-źródło bez żadnej prognozy — nie gra, więc nie wchodzi do rankingu. */
   waiting?: boolean;
+  /**
+   * Gracz-źródło, który ma prognozy, ale jeszcze żadnej transakcji, bo jego
+   * zlecenia czekają na realizację — to start, a nie wynik 0%.
+   */
+  startingWith?: number;
 };
+
+/** Ile zleceń czeka u gracza, który jeszcze nic nie zagrał; 0 = nie dotyczy. */
+export function startingWith(p: {
+  kind: PlayerKind;
+  metrics: { trades: number; pending?: number } | null;
+}): number {
+  if (p.kind !== "source" || !p.metrics || p.metrics.trades > 0) return 0;
+  return p.metrics.pending ?? 0;
+}
 
 /**
  * Gracz-źródło, który jeszcze nie dostał ani jednej prognozy. Jego 0% to nie
@@ -52,7 +66,7 @@ export function fundVerdict(players: VerdictPlayer[], days: number): string[] {
       `Za wcześnie na wnioski: ${days} ${days === 1 ? "dzień" : "dni"} historii. Uczciwy werdykt po ok. ${MIN_DAYS_FOR_VERDICT} dniach.`,
     );
   }
-  const playing = players.filter((p) => !p.waiting);
+  const playing = players.filter((p) => !p.waiting && !p.startingWith);
   const ranked = [...playing].sort((a, b) => b.returnPct - a.returnPct);
   const top = ranked[0];
   if (top) lines.push(`Prowadzi: ${top.label} (${sign(top.returnPct)}${num(top.returnPct, 2)}%).`);
@@ -62,6 +76,12 @@ export function fundVerdict(players: VerdictPlayer[], days: number): string[] {
   for (const p of players.filter((x) => x.kind === "source")) {
     if (p.waiting) {
       lines.push(`${p.label}: jeszcze nie gra — czeka na ${waitingFor(p.key)}.`);
+      continue;
+    }
+    if (p.startingWith) {
+      lines.push(
+        `${p.label}: dopiero zaczyna — ${p.startingWith} ${p.startingWith === 1 ? "zlecenie czeka" : "zleceń czeka"} na realizację.`,
+      );
       continue;
     }
     const parts: string[] = [];

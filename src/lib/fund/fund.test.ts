@@ -712,3 +712,21 @@ describe("zdarzenia na żywo", () => {
     expect(run("short").exits.alarm).toBe(0);
   });
 });
+
+describe("werdykt — gracz na starcie", () => {
+  it("gracz z czekającymi zleceniami nie „prowadzi” i nie „bije koszyka” wynikiem 0%", async () => {
+    const { fundVerdict, startingWith } = await import("./verdict");
+    expect(startingWith({ kind: "source", metrics: { trades: 0, pending: 13 } })).toBe(13);
+    expect(startingWith({ kind: "source", metrics: { trades: 5, pending: 13 } })).toBe(0);
+    const lines = fundVerdict(
+      [
+        { key: "ai", label: "AI", kind: "source", returnPct: 0, startingWith: 13 },
+        { key: "ai_7d", label: "AI 7d", kind: "source", returnPct: -1 },
+        { key: "basket", label: "Koszyk", kind: "benchmark", returnPct: -10 },
+      ],
+      40,
+    );
+    expect(lines[0]).toBe("Prowadzi: AI 7d (−1,00%).");
+    expect(lines).toContain("AI: dopiero zaczyna — 13 zleceń czeka na realizację.");
+  });
+});
