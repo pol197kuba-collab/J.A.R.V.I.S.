@@ -13,9 +13,12 @@ import {
   ModuleTransitionLayer,
   type ModuleTransitionHandle,
 } from "@/components/jarvis/module-transition/ModuleTransitionLayer";
+// Type-only: erased at build, so three.js never reaches the main bundle.
+import type { MenuControl } from "@/components/jarvis/module-transition/createTransitionScene";
 import {
   PAGE_IN,
   PAGE_OUT,
+  JARVIS_PATH,
   isFastJump,
   pickKind,
   transitionDuration,
@@ -38,10 +41,15 @@ export type RouteTransition =
   | "core-out"
   | "enter-3d";
 
+/** How a navigation went: the 3D overlay, the CSS fallback, or not at all (busy / same page). */
+export type TransitionStart = "3d" | "css" | false;
+
 type Ctx = {
   transition: RouteTransition;
   isTransitioning: boolean;
-  startTransition: (path: string) => void;
+  startTransition: (path: string, opts?: { fromMenu?: boolean }) => TransitionStart;
+  /** The 3D orbit menu, when the 3D layer is on and loaded (else the flat menu is used). */
+  menu3d: () => MenuControl | null;
   /** CSS durations of the page leaving / entering during a 3D transition, ms. */
   pageTiming: { out: number; in: number };
 };
@@ -49,7 +57,8 @@ type Ctx = {
 const TransitionCtx = createContext<Ctx>({
   transition: "idle",
   isTransitioning: false,
-  startTransition: () => {},
+  startTransition: () => false,
+  menu3d: () => null,
   pageTiming: { out: 0, in: 0 },
 });
 
@@ -81,12 +90,18 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
   useEffect(() => () => clearTimers(), []);
 
   const startTransition = useCallback(
-    (path: string) => {
-      if (transition !== "idle") return;
-      if (path === pathname) return;
+    (path: string, opts?: { fromMenu?: boolean }): TransitionStart => {
+      if (transition !== "idle") return false;
+      if (path === pathname) return false;
       const l = layer.current;
       if (can3d && l?.ready()) {
-        const kind = pickKind(pathname, path);
+        // from the orbit menu the camera is already inside a node: no Arc Core
+        // flight out of /jarvis, the tunnel (or the core, for /jarvis) follows
+        const kind = opts?.fromMenu
+          ? path === JARVIS_PATH
+            ? "core-enter"
+            : "tunnel"
+          : pickKind(pathname, path);
         const now = performance.now();
         const durationMs = transitionDuration(kind, isFastJump(now, lastEnd.current));
         setPageTiming({
@@ -98,6 +113,7 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
           from: pathname,
           to: path,
           durationMs,
+          coverStart: opts?.fromMenu,
           onSwap: () => {
             void router.navigate({ to: path });
             setTransition("enter-3d");
@@ -109,7 +125,7 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
         });
         if (started) {
           setTransition(kind === "tunnel" ? "tunnel-out" : "core-out");
-          return;
+          return "3d";
         }
       }
       setTransition("dematerialize");
@@ -121,13 +137,22 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
       );
       timers.current.push(setTimeout(() => setTransition("materialize"), 1000));
       timers.current.push(setTimeout(() => setTransition("idle"), 1850));
+      return "css";
     },
     [transition, pathname, router, can3d],
   );
 
+  const menu3d = useCallback(() => (can3d ? (layer.current?.menu() ?? null) : null), [can3d]);
+
   return (
     <TransitionCtx.Provider
-      value={{ transition, isTransitioning: transition !== "idle", startTransition, pageTiming }}
+      value={{
+        transition,
+        isTransitioning: transition !== "idle",
+        startTransition,
+        menu3d,
+        pageTiming,
+      }}
     >
       {children}
       <ModuleTransitionLayer ref={layer} enabled={can3d} />

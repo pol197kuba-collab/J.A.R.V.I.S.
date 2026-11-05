@@ -69,6 +69,29 @@ import {
   tunnelOverlay,
   type TransitionKind,
 } from "./transitionMath";
+import {
+  MENU_ELEV,
+  MENU_FOV,
+  MENU_NODE_SCALE,
+  MENU_PICK_MS,
+  MENU_RING,
+  menuCameraDistance,
+  menuCloseK,
+  menuOpenCam,
+  menuOpenFade,
+  menuOpenK,
+  menuPickFlash,
+  menuPickHighlight,
+  menuPickOthers,
+  menuPickTravel,
+  menuSlotAngle,
+  menuSwitchDone,
+  menuSwitchK,
+  spinToFront,
+  stepSpin,
+  MENU_CLOSE_MS,
+  MENU_OPEN_MS,
+} from "./orbitMenuMath";
 
 export interface Rect {
   left: number;
@@ -96,16 +119,50 @@ export interface PlayOptions {
   agentName: string | null;
   /** Rect of the /jarvis canvas (null when it is not on screen). */
   getTargetRect: () => Rect | null;
+  /** Started from the orbit menu: the overlay already covers the screen. */
+  coverStart?: boolean;
   /** The route should change now (the overlay still covers the screen). */
   onSwap: () => void;
   onDone: () => void;
 }
 
+/** Screen position of one menu node (px), its radius on screen and its label opacity. */
+export interface MenuNodeFrame {
+  x: number;
+  y: number;
+  r: number;
+  alpha: number;
+  depth: number;
+}
+export interface MenuFrame {
+  nodes: MenuNodeFrame[];
+  core: { x: number; y: number; r: number };
+}
+/** The mobile "Orbita" menu: entries as nodes on an orbit around the Arc Core. */
+export interface MenuControl {
+  /** false when the menu cannot open now (a transition is playing). */
+  open(o: { count: number; active: number | null; onFrame: (f: MenuFrame) => void }): boolean;
+  /** Switch to another level (sections ↔ modules): old nodes fall in, new ones burst out. */
+  setLevel(count: number, active: number | null): void;
+  /** Finger drag: turn the orbit by `dSpin` rad. */
+  drag(dSpin: number): void;
+  /** Finger up: keep turning at `velocity` rad/s, then settle on a slot. */
+  release(velocity: number): void;
+  /** Dive into node `index`; `onReady` fires at the end (start the module transition there). */
+  pick(index: number, onReady: () => void): void;
+  close(onClosed?: () => void): void;
+  readonly isOpen: boolean;
+}
+
 export interface TransitionScene {
   play(o: PlayOptions): void;
   readonly playing: boolean;
+  readonly menu: MenuControl;
   dispose(): void;
 }
+
+/** Most entries one menu level can hold. */
+export const MENU_MAX_NODES = 8;
 
 const RING_KINDS: RingKind[] = ["fine", "bold", "claw"];
 
@@ -308,6 +365,58 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
     boardMat.needsUpdate = true;
   }
 
+  function agentsVisible(v: boolean) {
+    nodes.forEach((n) => (n.visible = v));
+    spokes.visible = v;
+    if (extras) {
+      extras.orbits.forEach((l) => (l.visible = v));
+      extras.floor.visible = v;
+    }
+  }
+
+  // ---- orbit menu: entries as nodes on one orbit around the core ----
+  const menuGroup = new THREE.Group();
+  menuGroup.visible = false;
+  scene.add(menuGroup);
+  const ringR = MENU_RING * SCALE;
+  const menuNodes = Array.from({ length: MENU_MAX_NODES }, () => {
+    const n = buildNode(C);
+    menuGroup.add(n);
+    return n;
+  });
+  const menuOrbit = new THREE.LineLoop(
+    new THREE.BufferGeometry().setFromPoints(
+      Array.from({ length: 256 }, (_, i) => {
+        const a = (i / 256) * Math.PI * 2;
+        return new THREE.Vector3(Math.cos(a) * ringR, 0, Math.sin(a) * ringR);
+      }),
+    ),
+    new THREE.LineBasicMaterial({
+      color: C.primary,
+      transparent: true,
+      opacity: 0.35,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  );
+  menuGroup.add(menuOrbit);
+  const menuSpokeGeo = new THREE.BufferGeometry();
+  menuSpokeGeo.setAttribute(
+    "position",
+    new THREE.BufferAttribute(new Float32Array(MENU_MAX_NODES * 6), 3),
+  );
+  const menuSpokes = new THREE.LineSegments(
+    menuSpokeGeo,
+    new THREE.LineBasicMaterial({
+      color: C.spoke,
+      transparent: true,
+      opacity: 0.35,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  );
+  menuGroup.add(menuSpokes);
+
   // ---- post ----
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
@@ -336,6 +445,7 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
 
   function applyCoreLook() {
     coreGroup.visible = true;
+    agentsVisible(true);
     tunnel.visible = false;
     const f = scene.fog as THREE.Fog;
     f.near = 1500;
@@ -494,8 +604,19 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
 
   function loop(now: number) {
     raf = 0;
+    if (disposed) return;
+    if (!current && menu) {
+      const dt = Math.min(0.05, (now - menu.last) / 1000);
+      stepMenu(menu, now, dt);
+      // the pick handed over to a module transition: it renders from the next frame
+      if (current || menu) {
+        if (!current) composer.render(dt);
+        raf = requestAnimationFrame(loop);
+      }
+      return;
+    }
     const c = current;
-    if (!c || disposed) return;
+    if (!c) return;
     const dt = Math.min(0.05, (now - c.last) / 1000);
     c.last = now;
     c.ownTime += dt;
@@ -503,6 +624,12 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
     if (c.kind === "tunnel") stepTunnel(t, dt);
     else if (c.kind === "core-enter") stepEnter(c, t, dt);
     else stepLeave(c, t, dt);
+    if (c.coverStart) {
+      // the menu's dive already covers the screen: no fade-in, a flash hides the cut
+      if (t < 0.5) canvas.style.opacity = "1";
+      if (t < 0.12)
+        setFlash(0.5 * (1 - t / 0.12), "color-mix(in oklab, var(--primary) 25%, white)");
+    }
     composer.render(dt);
     if (!c.swapped && t >= SWAP_AT[c.kind]) {
       c.swapped = true;
@@ -520,19 +647,313 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
     raf = requestAnimationFrame(loop);
   }
 
+  // ---- orbit menu playback ----
+  type MenuPhase = "open" | "idle" | "switch" | "pick" | "close";
+  interface MenuState {
+    phase: MenuPhase;
+    t0: number;
+    last: number;
+    time: number;
+    count: number;
+    active: number | null;
+    spin: number;
+    prev: { count: number; active: number | null; spin: number };
+    vel: number;
+    dragging: boolean;
+    pickIndex: number;
+    onReady: (() => void) | null;
+    onClosed?: () => void;
+    onFrame: (f: MenuFrame) => void;
+  }
+  let menu: MenuState | null = null;
+  const proj = new THREE.Vector3();
+  const pickPos = new THREE.Vector3();
+  const frameNodes: MenuNodeFrame[] = Array.from({ length: MENU_MAX_NODES }, () => ({
+    x: 0,
+    y: 0,
+    r: 0,
+    alpha: 0,
+    depth: 0,
+  }));
+
+  function endMenu() {
+    menu = null;
+    menuGroup.visible = false;
+    agentsVisible(true);
+  }
+
+  function stepMenu(m: MenuState, now: number, dt: number) {
+    m.last = now;
+    m.time += dt;
+    const e = now - m.t0;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const aspect = vw / vh;
+    const dist = menuCameraDistance(ringR, MENU_FOV, aspect);
+    const elev = (MENU_ELEV * Math.PI) / 180;
+
+    if (m.phase === "idle" && !m.dragging) {
+      const s = stepSpin(m.spin, m.vel, m.count, dt);
+      m.spin = s.spin;
+      m.vel = s.vel;
+    }
+
+    // camera: pulls back out of the core on open, falls back in on close, dives on pick
+    let camK = 1;
+    let fade = 1;
+    if (m.phase === "open") {
+      camK = menuOpenCam(e);
+      fade = menuOpenFade(e);
+      if (e >= MENU_OPEN_MS + MENU_MAX_NODES * 35) m.phase = "idle";
+    } else if (m.phase === "close") {
+      camK = menuCloseK(e);
+      fade = camK;
+    }
+    const d = dist * (0.42 + 0.58 * camK);
+    camera.fov = MENU_FOV;
+    frameOn(0, null);
+    camera.position.set(0, Math.sin(elev) * d, Math.cos(elev) * d);
+    camera.lookAt(0, 0, 0);
+
+    // nodes
+    const switching = m.phase === "switch";
+    let anyIncoming = false;
+    const arr = menuSpokeGeo.attributes.position.array as Float32Array;
+    const focal = vh / 2 / Math.tan((MENU_FOV * Math.PI) / 360);
+    let pickHl = 0;
+    let others = 1;
+    if (m.phase === "pick") {
+      pickHl = menuPickHighlight(e);
+      others = menuPickOthers(e);
+    }
+    for (let i = 0; i < MENU_MAX_NODES; i++) {
+      const n = menuNodes[i];
+      const f = frameNodes[i];
+      let k = 1;
+      let alpha = 1;
+      let count = m.count;
+      let active = m.active;
+      let spin = m.spin;
+      if (m.phase === "open") k = menuOpenK(e, i);
+      else if (m.phase === "close") {
+        k = menuCloseK(e);
+        alpha = 0;
+      } else if (switching) {
+        const sk = menuSwitchK(e, i);
+        k = sk.k;
+        anyIncoming ||= sk.incoming;
+        if (!sk.incoming) {
+          count = m.prev.count;
+          active = m.prev.active;
+          spin = m.prev.spin;
+          alpha = 0;
+        }
+      } else if (m.phase === "pick") alpha = 0;
+      if (i >= count || k <= 0.001) {
+        n.visible = false;
+        f.alpha = 0;
+        f.r = 0;
+        arr.fill(0, i * 6, i * 6 + 6);
+        continue;
+      }
+      n.visible = true;
+      const a = menuSlotAngle(i, count, spin);
+      const r = ringR * k;
+      n.position.set(Math.cos(a) * r, Math.sin(m.time * 1.3 + i * 1.7) * 4 * k, Math.sin(a) * r);
+      const isPick = m.phase === "pick" && i === m.pickIndex;
+      const on = isPick ? pickHl : 0;
+      const sc =
+        MENU_NODE_SCALE *
+        (0.15 + 0.85 * k) *
+        (i === active ? 1.18 : 1) *
+        (isPick ? 1 + 0.35 * pickHl : m.phase === "pick" ? 0.4 + 0.6 * others : 1);
+      n.scale.setScalar(sc);
+      n.userData.body.rotation.x += dt * (on ? 0.9 : 0.2);
+      n.userData.body.rotation.y += dt * (on ? 0.6 : 0.14);
+      const mt = n.userData.body.material;
+      mt.color.copy(cCyan).lerp(cAmber, on);
+      mt.emissive.copy(mt.color);
+      mt.emissiveIntensity = (i === active ? 0.75 : 0.35) + 0.9 * on;
+      mt.opacity = m.phase === "pick" && !isPick ? 0.55 * others : 0.55;
+      const wm = (n.userData.body.children[0] as THREE.LineSegments)
+        .material as THREE.LineBasicMaterial;
+      wm.color.copy(wCyan).lerp(wAmber, on);
+      arr[i * 6 + 3] = n.position.x;
+      arr[i * 6 + 4] = n.position.y;
+      arr[i * 6 + 5] = n.position.z;
+      if (isPick) pickPos.copy(n.position);
+      f.alpha = alpha * k;
+    }
+    menuSpokeGeo.attributes.position.needsUpdate = true;
+    if (switching && anyIncoming && menuSwitchDone(e, m.count)) m.phase = "idle";
+
+    if (m.phase === "pick") {
+      // dive into the picked node, like leaving /jarvis through an agent
+      const tr = menuPickTravel(e);
+      dir.copy(pickPos).sub(camera.position).normalize();
+      endPos.copy(pickPos).addScaledVector(dir, -0.38 * SCALE * MENU_NODE_SCALE * 2.6);
+      camera.position.lerp(endPos, tr);
+      look.set(0, 0, 0).lerp(pickPos, ease01(Math.min(1, e / (MENU_PICK_MS * 0.6))));
+      camera.fov = MENU_FOV - 10 * tr;
+      camera.updateProjectionMatrix();
+      camera.lookAt(look);
+      setFlash(menuPickFlash(e), "color-mix(in oklab, var(--primary) 25%, white)");
+      if (e >= MENU_PICK_MS && m.onReady) {
+        const cb = m.onReady;
+        m.onReady = null;
+        updateCore(dt, m.time, null, 0);
+        composer.render(dt);
+        cb();
+        return;
+      }
+    }
+
+    menuOrbit.material.opacity = 0.35 * (m.phase === "pick" ? others : 1) * Math.min(1, camK + 0.2);
+    updateCore(dt, m.time, null, 0);
+    canvas.style.opacity = fade.toFixed(3);
+
+    // screen positions for the HTML labels / tap targets
+    camera.updateMatrixWorld();
+    for (let i = 0; i < MENU_MAX_NODES; i++) {
+      const n = menuNodes[i];
+      const f = frameNodes[i];
+      if (!n.visible) continue;
+      proj.copy(n.position).project(camera);
+      f.x = ((proj.x + 1) / 2) * vw;
+      f.y = ((1 - proj.y) / 2) * vh;
+      f.depth = camera.position.distanceTo(n.position);
+      f.r = (focal * 0.38 * SCALE * n.scale.x) / f.depth;
+    }
+    proj.set(0, 0, 0).project(camera);
+    m.onFrame({
+      nodes: frameNodes,
+      core: {
+        x: ((proj.x + 1) / 2) * vw,
+        y: ((1 - proj.y) / 2) * vh,
+        r: (focal * SCALE) / camera.position.length(),
+      },
+    });
+
+    if (m.phase === "close" && e >= MENU_CLOSE_MS) {
+      const cb = m.onClosed;
+      endMenu();
+      canvas.style.opacity = "0";
+      canvas.style.visibility = "hidden";
+      setFlash(0, "transparent");
+      cb?.();
+    }
+  }
+
+  const ease01 = (x: number) => x * x * (3 - 2 * x);
+
+  const menuControl: MenuControl = {
+    open({ count, active, onFrame }) {
+      // a menu that is still closing can be reopened (e.g. a quick second tap)
+      if (disposed || current || (menu && menu.phase !== "close")) return false;
+      const now = performance.now();
+      const n = Math.min(count, MENU_MAX_NODES);
+      const spin = active !== null ? spinToFront(active, n) : 0;
+      menu = {
+        phase: "open",
+        t0: now,
+        last: now,
+        time: arcCoreLive.time,
+        count: n,
+        active,
+        spin,
+        prev: { count: n, active, spin },
+        vel: 0,
+        dragging: false,
+        pickIndex: -1,
+        onReady: null,
+        onFrame,
+      };
+      applyCoreLook();
+      agentsVisible(false);
+      menuGroup.visible = true;
+      canvas.style.opacity = "0";
+      canvas.style.visibility = "visible";
+      if (!raf) raf = requestAnimationFrame(loop);
+      return true;
+    },
+    setLevel(count, active) {
+      const m = menu;
+      if (!m || m.phase === "pick" || m.phase === "close") return;
+      const n = Math.min(count, MENU_MAX_NODES);
+      m.prev = { count: m.count, active: m.active, spin: m.spin };
+      m.count = n;
+      m.active = active;
+      m.spin = active !== null ? spinToFront(active, n) : 0;
+      m.vel = 0;
+      m.dragging = false;
+      m.phase = "switch";
+      m.t0 = performance.now();
+    },
+    drag(dSpin) {
+      const m = menu;
+      if (!m || m.phase !== "idle") return;
+      m.dragging = true;
+      m.vel = 0;
+      m.spin += dSpin;
+    },
+    release(velocity) {
+      const m = menu;
+      if (!m) return;
+      m.dragging = false;
+      m.vel = Math.max(-12, Math.min(12, velocity));
+    },
+    pick(index, onReady) {
+      const m = menu;
+      if (!m || m.phase === "pick" || m.phase === "close" || index >= m.count) return;
+      m.phase = "pick";
+      m.pickIndex = index;
+      m.onReady = onReady;
+      m.t0 = performance.now();
+    },
+    close(onClosed) {
+      const m = menu;
+      if (!m) {
+        onClosed?.();
+        return;
+      }
+      if (m.phase === "close") {
+        m.onClosed = onClosed ?? m.onClosed;
+        return;
+      }
+      if (m.phase === "pick") {
+        // the module transition did not take over: just drop the overlay
+        endMenu();
+        canvas.style.opacity = "0";
+        canvas.style.visibility = "hidden";
+        setFlash(0, "transparent");
+        onClosed?.();
+        return;
+      }
+      m.phase = "close";
+      m.onClosed = onClosed;
+      m.t0 = performance.now();
+    },
+    get isOpen() {
+      return menu !== null;
+    },
+  };
+
   // warm-up: compile every material once, invisibly
   canvas.style.opacity = "0";
   coreGroup.visible = true;
   tunnel.visible = true;
+  menuGroup.visible = true;
   setBoard({ index: 1, title: "J.A.R.V.I.S.", sub: "" });
   camera.position.set(0, 0, 900);
   camera.lookAt(0, 0, 0);
   composer.render(0);
+  menuGroup.visible = false;
   canvas.style.visibility = "hidden";
 
   return {
     play(p) {
       if (disposed || current) return;
+      if (menu) endMenu();
       if (p.agentCount > 0 && p.agentCount !== nodes.length) buildAgents(p.agentCount);
       const now = performance.now();
       current = { ...p, t0: now, last: now, swapped: false, ownTime: 0, liveT0: arcCoreLive.time };
@@ -560,14 +981,16 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
         }
       }
       canvas.style.visibility = "visible";
-      raf = requestAnimationFrame(loop);
+      if (!raf) raf = requestAnimationFrame(loop);
     },
     get playing() {
       return current !== null;
     },
+    menu: menuControl,
     dispose() {
       if (disposed) return;
       disposed = true;
+      menu = null;
       if (raf) cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
       boardMat.map?.dispose();

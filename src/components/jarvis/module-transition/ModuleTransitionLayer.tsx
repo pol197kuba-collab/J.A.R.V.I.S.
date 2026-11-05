@@ -4,7 +4,7 @@ import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { LANDING_AGENTS } from "@/components/jarvis/login-scene/landingData";
 import { resolveSceneColors } from "@/components/jarvis/login-scene/sceneColors";
 // Type-only: erased at build, so three.js never reaches the main bundle.
-import type { Rect, TransitionScene } from "./createTransitionScene";
+import type { MenuControl, Rect, TransitionScene } from "./createTransitionScene";
 import { JARVIS_PATH, MODULE_AGENT, moduleBoard, type TransitionKind } from "./transitionMath";
 
 export interface ModuleTransitionHandle {
@@ -16,9 +16,13 @@ export interface ModuleTransitionHandle {
     from: string;
     to: string;
     durationMs: number;
+    /** Started from the orbit menu (its dive already covers the screen). */
+    coverStart?: boolean;
     onSwap: () => void;
     onDone: () => void;
   }): boolean;
+  /** The orbit menu of the loaded scene (null until it is loaded). */
+  menu(): MenuControl | null;
 }
 
 type AgentRow = { slug: string; name: string };
@@ -78,7 +82,8 @@ export const ModuleTransitionLayer = forwardRef<ModuleTransitionHandle, { enable
       ref,
       () => ({
         ready: () => !!sceneRef.current && !sceneRef.current.playing,
-        play({ kind, from, to, durationMs, onSwap, onDone }) {
+        menu: () => sceneRef.current?.menu ?? null,
+        play({ kind, from, to, durationMs, coverStart, onSwap, onDone }) {
           const scene = sceneRef.current;
           if (!scene || scene.playing) return false;
           // nodes in the same order as the /jarvis matrix (teammates from the agents cache)
@@ -97,6 +102,7 @@ export const ModuleTransitionLayer = forwardRef<ModuleTransitionHandle, { enable
             agentIndex: idx >= 0 ? idx : null,
             agentName: idx >= 0 ? team[idx].name : null,
             getTargetRect: () => (from === JARVIS_PATH || to === JARVIS_PATH ? jarvisRect() : null),
+            coverStart,
             onSwap,
             onDone,
           });

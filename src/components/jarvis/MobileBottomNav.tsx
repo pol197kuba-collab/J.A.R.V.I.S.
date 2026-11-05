@@ -1,72 +1,238 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouterState } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 
 import { cn } from "@/lib/utils";
-import { useHudNavigate } from "./TransitionContext";
+import { useHudNavigate, useRouteTransition } from "./TransitionContext";
 import { useArkReboot } from "./ArkRebootContext";
 import { useShowcase } from "./ShowcaseContext";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 import { GlobalVoiceCommand } from "./GlobalVoiceCommand";
 import { MiniArcReactor } from "./MiniArcReactor";
+import { OrbitMenu } from "./OrbitMenu";
 import { MENU_GROUPS, MODULE_ITEMS, type ModuleEntry, type ModuleGroup } from "./modules";
+import { agentDots, dockLine, reactorState, type AgentDot } from "./dockWidgets";
+import { listAgents } from "@/lib/agents/runtime.functions";
+import { listTasks } from "@/lib/tasks/tasks.functions";
+import { getFund } from "@/lib/fund/fund.functions";
+import { townFund } from "@/components/town/townFund";
+// Type-only: erased at build, so three.js never reaches the main bundle.
+import type { MenuControl } from "./module-transition/createTransitionScene";
 
 /**
- * Mobile-only navigation bar pinned to the bottom of the viewport.
+ * Mobile-only dock pinned to the bottom of the viewport.
  *
- * Three cells: the module you're on, the reactor that opens the menu, and the
- * mic. The menu itself is radial — four group nodes around the reactor, then
- * the group's modules around it — so every module is two taps away and none
- * hides behind a horizontal scroll. Uses the same HUD transition navigation
- * as the desktop sidebar.
+ * Glass belt with the Arc Core raised in a socket in the middle (it opens the
+ * menu and spins up / turns red with the agents' real state), the module you're
+ * on with one live number on the left, the agents' status dots and the mic on
+ * the right. It slides away while you scroll down and comes back on the way up.
+ *
+ * The menu is the 3D "Orbita" (sections and modules as nodes around the Arc
+ * Core, flowing straight into the module tunnel) when the 3D layer is on;
+ * otherwise the flat radial menu below.
  */
 export function MobileBottomNav({ showVoice = true }: { showVoice?: boolean }) {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState<null | { menu: MenuControl | null }>(null);
+  const { menu3d } = useRouteTransition();
   const current = MODULE_ITEMS.find((m) => m.url === pathname);
+  const hidden = useHideOnScroll(open !== null, pathname);
+  const { dots, line } = useDockData(pathname);
+  const state = reactorState(dots);
 
   const toggle = () => {
     audio.playClick();
-    setOpen((v) => !v);
+    setOpen((v) => (v ? null : { menu: menu3d() }));
   };
+  const close = () => setOpen(null);
 
   return (
     <nav
       aria-label="Modules"
-      className="hud-chrome relative z-20 shrink-0 border-t border-primary/20 shadow-[0_-8px_28px_-18px_color-mix(in_oklab,var(--primary)_70%,transparent)]"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      className="relative z-20 shrink-0 transition-[margin,transform] duration-300 ease-out motion-reduce:transition-none"
+      style={{
+        paddingBottom: "env(safe-area-inset-bottom)",
+        // slides below the screen edge; <main> (flex-1) takes the room back
+        marginBottom: hidden ? "calc(-1 * (64px + env(safe-area-inset-bottom)))" : 0,
+        transform: hidden ? "translateY(20px)" : undefined,
+      }}
     >
-      {/* Mikrofon NALEŻY do paska (nie unosi się nad nim), więc nie zasłania
-          niczego w treści strony — wcześniej lądował na polu wysyłki czatu. */}
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 py-1.5">
-        <button
-          type="button"
-          onClick={toggle}
-          className="flex min-w-0 items-center gap-2 justify-self-start rounded-xl px-2 py-1 text-primary"
-        >
-          {current && <current.icon className="icon-neon h-4 w-4 shrink-0" strokeWidth={1.5} />}
-          <span className="font-display min-w-0 truncate text-[9px] uppercase tracking-[0.22em]">
-            {current?.shortTitle ?? "Menu"}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={toggle}
-          aria-label="Menu modułów"
-          aria-expanded={open}
-          className="relative flex h-12 w-12 items-center justify-center rounded-full border border-primary/40 bg-primary/[0.06] shadow-[0_0_18px_-6px_var(--primary)]"
-        >
-          <MiniArcReactor size={34} />
-        </button>
-
-        <div className="flex justify-self-end">{showVoice && <GlobalVoiceCommand />}</div>
+      {/* the belt: glass, a lit top edge that dips into the reactor's socket */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-background/80 backdrop-blur-xl"
+      />
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 flex h-10">
+        <span className="mt-0 h-px flex-1 bg-gradient-to-r from-transparent via-primary/35 to-primary/60" />
+        <svg viewBox="0 0 96 40" className="h-10 w-24 shrink-0 overflow-visible">
+          <path
+            d="M0 0.5 H10 A38 38 0 0 0 86 0.5 H96"
+            fill="none"
+            strokeWidth="1"
+            style={{
+              stroke: "color-mix(in oklab, var(--primary) 60%, transparent)",
+              filter: "drop-shadow(0 0 4px var(--primary))",
+            }}
+          />
+        </svg>
+        <span className="h-px flex-1 bg-gradient-to-l from-transparent via-primary/35 to-primary/60" />
       </div>
 
-      {open && <ReactorMenu pathname={pathname} onClose={() => setOpen(false)} />}
+      {/* Mikrofon NALEŻY do paska (nie unosi się nad nim), więc nie zasłania
+          niczego w treści strony — wcześniej lądował na polu wysyłki czatu. */}
+      <div className="relative grid h-16 grid-cols-[1fr_96px_1fr] items-center px-3">
+        <button
+          type="button"
+          onClick={toggle}
+          className="flex min-w-0 flex-col items-start justify-self-stretch rounded-xl px-1 py-1 text-left"
+        >
+          <span className="flex min-w-0 max-w-full items-center gap-1.5 text-primary">
+            {current && (
+              <current.icon className="icon-neon h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
+            )}
+            <span className="font-display min-w-0 truncate text-[10px] uppercase tracking-[0.22em]">
+              {current?.shortTitle ?? "Menu"}
+            </span>
+          </span>
+          {line && (
+            <span className="mt-0.5 min-w-0 max-w-full truncate font-mono text-[10px] text-muted-foreground">
+              {line}
+            </span>
+          )}
+        </button>
+
+        {/* the Arc Core in its socket, raised above the belt */}
+        <div className="relative h-full">
+          <button
+            type="button"
+            onClick={toggle}
+            aria-label="Menu modułów"
+            aria-expanded={open !== null}
+            className="absolute top-[-14px] left-1/2 flex h-[60px] w-[60px] -translate-x-1/2 items-center justify-center rounded-full border border-primary/50 bg-background shadow-[0_0_22px_-6px_var(--primary)]"
+          >
+            <span
+              aria-hidden
+              className={cn(
+                "pointer-events-none absolute -inset-[5px] rounded-full border border-dashed",
+                state === "error"
+                  ? "border-destructive/80 motion-safe:animate-[spin_6s_linear_infinite]"
+                  : state === "busy"
+                    ? "border-reactor/80 motion-safe:animate-[spin_3s_linear_infinite]"
+                    : "border-primary/25 motion-safe:animate-[spin_24s_linear_infinite]",
+              )}
+            />
+            {state === "busy" && (
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-0 rounded-full shadow-[0_0_24px_-2px_var(--reactor)] motion-safe:animate-pulse"
+              />
+            )}
+            <MiniArcReactor size={38} />
+          </button>
+        </div>
+
+        <div className="flex min-w-0 items-center justify-end gap-3">
+          <AgentDots dots={dots} />
+          {showVoice && <GlobalVoiceCommand />}
+        </div>
+      </div>
+
+      {open &&
+        (open.menu ? (
+          <OrbitMenu pathname={pathname} menu={open.menu} onClose={close} />
+        ) : (
+          <ReactorMenu pathname={pathname} onClose={close} />
+        ))}
     </nav>
   );
+}
+
+/** Status dots of the enabled agents: amber pulse = working, red = error. */
+function AgentDots({ dots }: { dots: AgentDot[] }) {
+  if (!dots.length) return null;
+  const shown = dots.slice(0, 8);
+  return (
+    <div
+      className="grid shrink-0 grid-cols-4 gap-1"
+      role="img"
+      aria-label={`Agenci: ${dots
+        .map(
+          (d) =>
+            `${d.name} ${d.state === "busy" ? "pracuje" : d.state === "error" ? "błąd" : "wolny"}`,
+        )
+        .join(", ")}`}
+    >
+      {shown.map((d) => (
+        <span
+          key={d.slug}
+          title={d.name}
+          className={cn(
+            "h-1.5 w-1.5 rounded-full",
+            d.state === "busy" &&
+              "bg-reactor shadow-[0_0_6px_var(--reactor)] motion-safe:animate-pulse",
+            d.state === "error" && "bg-destructive shadow-[0_0_6px_var(--destructive)]",
+            d.state === "idle" && "bg-primary/35",
+          )}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Real data for the dock: the same query keys the modules use, so it is shared cache. */
+function useDockData(pathname: string) {
+  const fetchAgents = useServerFn(listAgents);
+  const { data: agents } = useQuery({
+    queryKey: ["agents", "list"],
+    queryFn: () => fetchAgents(),
+    refetchInterval: 15_000,
+  });
+  const fetchTasks = useServerFn(listTasks);
+  const { data: tasks } = useQuery({
+    queryKey: ["tasks", "open"],
+    queryFn: () => fetchTasks({ data: { scope: "open" } }),
+    refetchInterval: 60_000,
+  });
+  const fetchFund = useServerFn(getFund);
+  const { data: fund } = useQuery({
+    queryKey: ["fund"],
+    queryFn: () => fetchFund(),
+    staleTime: 5 * 60_000,
+    enabled: pathname === "/rynki",
+  });
+  const dots = agentDots(agents);
+  const line = dockLine(pathname, {
+    fundDayPct: pathname === "/rynki" ? (townFund(fund)?.dayAvg ?? null) : null,
+    openTasks: Array.isArray(tasks) ? tasks.length : null,
+    dots,
+  });
+  return { dots, line };
+}
+
+/** true while the page is being scrolled down (the dock slides away), false on the way up. */
+function useHideOnScroll(pinned: boolean, pathname: string): boolean {
+  const [hidden, setHidden] = useState(false);
+  // a new module starts at the top: show the dock again
+  useEffect(() => setHidden(false), [pathname]);
+  const last = useRef(new WeakMap<EventTarget, number>());
+  useEffect(() => {
+    const onScroll = (e: Event) => {
+      const el = e.target;
+      if (!(el instanceof HTMLElement) || el.tagName !== "MAIN") return;
+      const prev = last.current.get(el) ?? el.scrollTop;
+      const y = el.scrollTop;
+      last.current.set(el, y);
+      if (y < 48) setHidden(false);
+      else if (y - prev > 6) setHidden(true);
+      else if (prev - y > 6) setHidden(false);
+    };
+    document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    return () => document.removeEventListener("scroll", onScroll, { capture: true });
+  }, []);
+  return hidden && !pinned;
 }
 
 type RingNode = {
@@ -179,6 +345,19 @@ function ReactorMenu({ pathname, onClose }: { pathname: string; onClose: () => v
             fill="none"
             strokeWidth="0.2"
             style={{ stroke: "color-mix(in oklab, var(--primary) 20%, transparent)" }}
+          />
+          {/* the intro's triangular gates, so the flat menu speaks the same language */}
+          <polygon
+            points="50,8 86.4,71 13.6,71"
+            fill="none"
+            strokeWidth="0.35"
+            style={{ stroke: "color-mix(in oklab, var(--primary) 35%, transparent)" }}
+          />
+          <polygon
+            points="50,92 13.6,29 86.4,29"
+            fill="none"
+            strokeWidth="0.2"
+            style={{ stroke: "color-mix(in oklab, var(--primary) 18%, transparent)" }}
           />
         </svg>
 

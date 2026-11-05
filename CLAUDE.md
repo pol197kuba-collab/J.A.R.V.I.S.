@@ -229,6 +229,25 @@ switch off or layer not loaded yet → the old CSS dematerialize transition.
 New modules need a `MODULE_ITEMS` entry (board title) and, if an agent owns
 them, a `MODULE_AGENT` entry.
 
+## Mobile dock and the Orbita menu
+
+`MobileBottomNav` is a glass dock: the Arc Core raised in a socket (opens the
+menu; spins up / turns red from the real agent states), the current module
+with one live line on the left (`dockWidgets.ts`, pure and tested — real data
+from shared query keys only, no data → no line), agent status dots and the
+mic on the right. It slides away while `<main>` scrolls down and returns on
+the way up or on a new route.
+
+The menu is `OrbitMenu`: sections, then a section's modules, as nodes on one
+orbit around the Arc Core, drawn by the transition scene's menu mode
+(`MenuControl` in `createTransitionScene.ts`, math in `orbitMenuMath.ts`).
+The component only overlays tap targets and labels at the positions the scene
+reports each frame. Picking a module dives into its node and calls
+`startTransition(path, { fromMenu: true })`, so the tunnel (or the core, for
+`/jarvis`) follows without a cut. One level holds at most
+`MENU_MAX_NODES` (8) entries. Without the 3D layer (Town, no WebGL, reduced
+motion, switch off, not loaded) the flat radial `ReactorMenu` is used.
+
 ## Design skills: project rules win
 
 `.claude/skills/` holds third-party design skills (`design-taste-frontend`,
