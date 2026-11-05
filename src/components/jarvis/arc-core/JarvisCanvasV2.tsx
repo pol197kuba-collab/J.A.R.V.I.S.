@@ -12,6 +12,7 @@ import {
 import { useThemeColors } from "@/lib/theme/themeColor";
 import { AgentNode3DV2 } from "./AgentNode3DV2";
 import { BloomComposer } from "./BloomComposer";
+import { arcCoreLive } from "./arcCoreLive";
 import { Core3DV2 } from "./Core3DV2";
 import {
   CORE_CLIP,
@@ -297,6 +298,25 @@ function CameraRig() {
   return null;
 }
 
+/** Publishes the live camera and clock for the module transitions (arcCoreLive). */
+function LiveReporter() {
+  const camera = useThree((s) => s.camera);
+  useEffect(() => {
+    arcCoreLive.active = true;
+    return () => {
+      arcCoreLive.active = false;
+    };
+  }, []);
+  useFrame((state) => {
+    arcCoreLive.cam.x = camera.position.x;
+    arcCoreLive.cam.y = camera.position.y;
+    arcCoreLive.cam.z = camera.position.z;
+    arcCoreLive.time = state.clock.elapsedTime;
+    arcCoreLive.stamp = performance.now();
+  });
+  return null;
+}
+
 /** OrbitControls limits proportional to the composition and the canvas proportions. */
 function Controls() {
   const size = useThree((s) => s.size);
@@ -367,6 +387,7 @@ export function JarvisCanvasV2({ agents }: { agents: AgentNodeData[] }) {
 
       <CoreScreenTracker core={core} />
       <CameraRig />
+      <LiveReporter />
       <BloomComposer />
 
       <Controls />

@@ -12,7 +12,8 @@ export interface TunnelModule {
   sub: string;
 }
 
-function triOutline(r: number, w: number) {
+/** Triangle outline of a tunnel gate (shared with the module transitions). */
+export function triOutline(r: number, w: number) {
   const s = new THREE.Shape();
   const h = new THREE.Path();
   for (let i = 0; i < 3; i++) {
@@ -27,7 +28,8 @@ function triOutline(r: number, w: number) {
   return new THREE.ShapeGeometry(s);
 }
 
-function boardTexture(C: SceneColors, name: string, sub: string, i: number) {
+/** Canvas texture of a module board (shared with the module transitions). */
+export function boardTexture(C: SceneColors, name: string, sub: string, i: number) {
   const c = document.createElement("canvas");
   c.width = 1024;
   c.height = 400;

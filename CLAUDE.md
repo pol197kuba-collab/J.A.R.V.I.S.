@@ -208,6 +208,27 @@ the older one it replaces) — keep them that way:
   only in DEV; `scripts/capture-intro-scene.mjs` screenshots the scene against
   `docs/jarvis-3d-v2/reference/`.
 
+## 3D module transitions
+
+Every module change goes through `TransitionContext.startTransition` (never
+`router.navigate` directly from UI). With the 3D switch on, HUD skin, WebGL
+and motion allowed, `ModuleTransitionLayer` (lazy `createTransitionScene.ts`,
+same chunk rules as the login scene) plays:
+
+- **tunnel** between ordinary modules (950 ms): triangular gates, the target
+  module's board at the end;
+- **core-enter** into `/jarvis` (1500 ms): camera flies onto the Arc Core and
+  hands off to the live R3F canvas (`data-jarvis-canvas-rect`);
+- **core-leave** out of `/jarvis` (1350 ms): starts from the live camera
+  (`arcCoreLive.ts`, written by `JarvisCanvasV2`) and dives into the agent
+  that owns the target module (`MODULE_AGENT` in `transitionMath.ts`).
+
+Repeated jumps within 2.5 s run at ×0.55 duration. Timings and curves live in
+`transitionMath.ts` (pure, tested). Town skin, no WebGL, reduced motion,
+switch off or layer not loaded yet → the old CSS dematerialize transition.
+New modules need a `MODULE_ITEMS` entry (board title) and, if an agent owns
+them, a `MODULE_AGENT` entry.
+
 ## Design skills: project rules win
 
 `.claude/skills/` holds third-party design skills (`design-taste-frontend`,

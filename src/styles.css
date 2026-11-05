@@ -1293,6 +1293,49 @@
     transform: scale(0.98);
   }
 }
+/* 3D module transitions (module-transition/): the page leaves into the depth while
+   the overlay flies, and enters out of it after the route swap. Durations come from
+   the transition (CSS vars set on <main>). */
+.mt-leave-tunnel {
+  animation: mt-leave-tunnel var(--mt-out, 240ms) ease-in forwards;
+}
+@keyframes mt-leave-tunnel {
+  to {
+    opacity: 0;
+    transform: perspective(900px) translateZ(-260px) scale(0.92);
+    filter: blur(3px) brightness(1.6);
+  }
+}
+.mt-leave-core {
+  animation: mt-leave-core var(--mt-out, 450ms) ease-in forwards;
+}
+@keyframes mt-leave-core {
+  60% {
+    opacity: 0.9;
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.18);
+    filter: brightness(2.4) blur(2px);
+  }
+}
+.mt-enter {
+  animation: mt-enter var(--mt-in, 300ms) ease-out both;
+}
+@keyframes mt-enter {
+  from {
+    opacity: 0;
+    transform: perspective(900px) translateZ(180px) scale(1.04);
+    filter: blur(4px) brightness(1.8);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mt-leave-tunnel,
+  .mt-leave-core,
+  .mt-enter {
+    animation: none;
+  }
+}
 .animate-hud-dematerialize {
   animation: hud-dematerialize 0.55s ease-in forwards;
   pointer-events: none;

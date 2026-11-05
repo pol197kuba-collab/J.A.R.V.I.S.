@@ -47,7 +47,7 @@ export function DashboardShell({ phase, onShutdown }: { phase: AppPhase; onShutd
 }
 
 function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdown: () => void }) {
-  const { transition } = useRouteTransition();
+  const { transition, pageTiming } = useRouteTransition();
   const { setOpen, setOpenMobile, isMobile } = useSidebar();
   // Moduł /jarvis ma własny mikrofon w konsoli czatu, tuż obok przycisku
   // wysyłki. Globalny przycisk jest tam nie tylko zbędny — w wersji
@@ -81,6 +81,12 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
       <div className="relative z-10 flex min-h-screen min-w-0 flex-1 flex-col portrait:min-h-0 landscape:max-md:min-h-0 short:min-h-0">
         <HudHeader onShutdown={onShutdown} />
         <main
+          style={
+            {
+              "--mt-out": `${pageTiming.out}ms`,
+              "--mt-in": `${pageTiming.in}ms`,
+            } as React.CSSProperties
+          }
           className={
             // @container: the page-level container context — route content
             // outside any HudPanel (hero rows, page wrappers) sizes off this
@@ -94,6 +100,9 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
             // of scrollable in landscape/short orientations.
             "@container relative min-h-0 flex-1 overflow-y-auto" +
             (transition === "dematerialize" ? " animate-hud-dematerialize" : "") +
+            (transition === "tunnel-out" ? " mt-leave-tunnel" : "") +
+            (transition === "core-out" && pageTiming.out > 0 ? " mt-leave-core" : "") +
+            (transition === "enter-3d" ? " mt-enter" : "") +
             (isDiagnosticRunning ? " ark-dimmed" : "")
           }
         >
