@@ -25,6 +25,8 @@ import {
   seg,
   startTransition,
   stepTransition,
+  viewBlend,
+  viewOffsetFor,
 } from "./loginSceneMath";
 
 const base = {
@@ -279,5 +281,42 @@ describe("helpers", () => {
     expect(ease(1)).toBe(1);
     expect(seg(-1, 0, 1)).toBe(0);
     expect(seg(2, 0, 1)).toBe(1);
+  });
+});
+
+describe("end-frame alignment with the /jarvis canvas", () => {
+  const vp = { width: 1440, height: 810 };
+  const rect = { left: 40, top: 48, width: 1400, height: 440 };
+
+  it("blend is 0 until P_LIVE and 1 at the end, monotonic", () => {
+    expect(viewBlend(0)).toBe(0);
+    expect(viewBlend(P_LIVE)).toBe(0);
+    expect(viewBlend(1)).toBe(1);
+    let prev = 0;
+    for (let i = 0; i <= 100; i++) {
+      expect(viewBlend(i / 100)).toBeGreaterThanOrEqual(prev);
+      prev = viewBlend(i / 100);
+    }
+  });
+
+  it("no offset before the blend starts or without a rect", () => {
+    expect(viewOffsetFor(0, vp, rect)).toBeNull();
+    expect(viewOffsetFor(1, vp, null)).toBeNull();
+  });
+
+  it("at w = 1 the frustum maps exactly onto the rect", () => {
+    const o = viewOffsetFor(1, vp, rect)!;
+    expect(o.aspect).toBeCloseTo(rect.width / rect.height);
+    expect(o.fullWidth).toBe(rect.width);
+    expect(o.fullHeight).toBe(rect.height);
+    expect(o.x).toBe(-rect.left);
+    expect(o.y).toBe(-rect.top);
+    expect(o.width).toBe(vp.width);
+  });
+
+  it("w = 0.5 sits halfway between the full frame and the rect", () => {
+    const o = viewOffsetFor(0.5, vp, rect)!;
+    expect(o.fullWidth).toBeCloseTo((vp.width + rect.width) / 2);
+    expect(o.x).toBeCloseTo(-rect.left / 2);
   });
 });

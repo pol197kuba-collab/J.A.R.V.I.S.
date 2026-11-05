@@ -53,7 +53,7 @@ function AgentMatrix() {
       {/* Matrix zone — 60% of the view. Sized so the whole route (matrix +
           chat) fits a typical desktop viewport (~900-1000px) without page
           scroll: see AgentChatPanel below for the other 40%. */}
-      <div className="relative h-[60%] min-h-0 w-full overflow-hidden">
+      <div data-jarvis-canvas-rect="" className="relative h-[60%] min-h-0 w-full overflow-hidden">
         <JarvisCanvas
           agents={teammates.map((a) => ({
             slug: a.slug,

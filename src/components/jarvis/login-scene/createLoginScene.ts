@@ -45,6 +45,8 @@ import {
   pickMotionVariant,
   type MotionVariant,
   type Transition,
+  viewBlend,
+  viewOffsetFor,
   type Vec3,
 } from "./loginSceneMath";
 import {
@@ -80,6 +82,9 @@ export interface LoginSceneOptions {
   agentCount: number;
   /** Where the reactor sits on the login screen (the StarkLogin slot). */
   getSlotRect: () => SlotRect | null;
+  /** Rect of the /jarvis canvas, once the dashboard is mounted (null before). The
+   *  closing frame is aligned onto it so the overlay hands over to the real core. */
+  getTargetRect?: () => SlotRect | null;
   /** p reached P_LIVE: the dashboard may mount. */
   onLive?: () => void;
   /** p reached 1: the overlay is fully gone, the scene has stopped rendering. */
@@ -339,6 +344,19 @@ export function createLoginScene(opts: LoginSceneOptions): LoginScene {
     });
     camera.position.set(cam.position.x, cam.position.y, cam.position.z);
     camera.fov = cam.fov;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const vo =
+      p > 0.5
+        ? viewOffsetFor(viewBlend(p), { width: vw, height: vh }, opts.getTargetRect?.() ?? null)
+        : null;
+    if (vo) {
+      camera.aspect = vo.aspect;
+      camera.setViewOffset(vo.fullWidth, vo.fullHeight, vo.x, vo.y, vo.width, vo.height);
+    } else {
+      camera.aspect = vw / vh;
+      camera.clearViewOffset();
+    }
     camera.updateProjectionMatrix();
     camera.lookAt(cam.lookAt.x, cam.lookAt.y, cam.lookAt.z);
 

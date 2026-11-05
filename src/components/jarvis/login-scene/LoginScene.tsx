@@ -31,6 +31,14 @@ declare global {
   }
 }
 
+/** Rect of the /jarvis canvas zone (marked in routes/jarvis.tsx) once it exists. */
+function readTarget(): SlotRect | null {
+  const el = document.querySelector("[data-jarvis-canvas-rect]");
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return { left: r.left, top: r.top, width: r.width, height: r.height };
+}
+
 function readSlot(): SlotRect | null {
   const el = document.querySelector(`[${LOGIN_REACTOR_SLOT_ATTR}]`);
   if (!el) return null;
@@ -90,6 +98,7 @@ export function LoginScene({ ignite, onLive, onDone, onUnavailable }: Props) {
           reducedMotion: mq.matches,
           agentCount: DEFAULT_AGENT_COUNT,
           getSlotRect: readSlot,
+          getTargetRect: readTarget,
           onLive: () => live.current.onLive(),
           onDone: () => live.current.onDone(),
           preserveDrawingBuffer: import.meta.env.DEV,

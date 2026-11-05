@@ -261,3 +261,40 @@ export function qualityVerdict(
 /** Initial render DPR: capped at 1.75, or 1.5 on narrow screens. */
 export const initialDpr = (deviceDpr: number, viewportWidth: number) =>
   Math.min(deviceDpr, viewportWidth < 760 ? 1.5 : 1.75);
+
+// ---- end-frame alignment with the /jarvis canvas ----------------------------
+/** 0 until P_LIVE (the dashboard mounts), then eases to 1 at p = 1. */
+export const viewBlend = (p: number) => ease(seg(p, P_LIVE, 1));
+
+export interface ViewOffset {
+  aspect: number;
+  fullWidth: number;
+  fullHeight: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Camera view mapping that blends the full-screen frame (w = 0) into the exact
+ * frame JarvisCanvas renders into its own rect (w = 1): the camera's frustum
+ * (aspect of the rect) fills `rect`, the rest of the screen shows its surroundings.
+ * Uses three's setViewOffset(fullWidth, fullHeight, x, y, width, height).
+ */
+export function viewOffsetFor(
+  w: number,
+  viewport: { width: number; height: number },
+  rect: { left: number; top: number; width: number; height: number } | null,
+): ViewOffset | null {
+  if (!rect || rect.width <= 0 || rect.height <= 0 || w <= 0) return null;
+  return {
+    aspect: lerp(viewport.width / viewport.height, rect.width / rect.height, w),
+    fullWidth: lerp(viewport.width, rect.width, w),
+    fullHeight: lerp(viewport.height, rect.height, w),
+    x: lerp(0, -rect.left, w),
+    y: lerp(0, -rect.top, w),
+    width: viewport.width,
+    height: viewport.height,
+  };
+}
