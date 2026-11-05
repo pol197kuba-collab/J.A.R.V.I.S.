@@ -142,40 +142,60 @@ roster, never talkable, and they state nothing about agent work; traders
 only shout real ticker lines from the fund. A room that stops being "w
 remoncie" takes its builders out of `NPCS`.
 
-## 3D login scene (`src/components/jarvis/login-scene/`)
+## 3D intro and Arc Core v2
 
-One three.js scene runs from the login screen through the Arc Core ignition
-(`p` ∈ [0,1], 0 = login, 1 = core). It is a **faithful port** of
-`docs/login-scene-prototype/` — keep it that way:
+One three.js scene runs landing page → 3D login → ignition → Arc Core, and the
+`/jarvis` canvas (R3F) shows the same Arc Core. Both are **faithful ports** of
+the approved prototype `docs/jarvis-3d-v2/` (`docs/login-scene-prototype/` is
+the older one it replaces) — keep them that way:
 
 - **Fidelity contract:** geometry, segment counts, textures, the simplex core
-  shader, bloom/fog/fov numbers, DPR caps and time curves match the prototype.
-  Don't rewrite it as R3F/drei, don't add/remove post-processing, don't "simplify
-  for performance" or retune colours/pacing. The only allowed quality drop is
-  DPR (after 120 frames with >50% frames over 34 ms, floor
-  `min(devicePixelRatio, 1.25)`) — never geometry, shader or bloom.
-- **Switch:** `isLoginSceneEnabled()` in `src/lib/theme/loginScene.ts`; default
-  is `LOGIN_SCENE_DEFAULT_ENABLED = false` (the one line to flip). Opt in with
-  `?loginScene=1` or `localStorage["jarvis.loginScene"]="1"` (`"0"` opts out).
-  Used only on the HUD skin with WebGL; Town, no WebGL or switch off keep the
-  SVG `ArcReactorTriangle` + `BootSequence init`.
+  shader, bloom/fog/fov numbers, DPR caps, orbit tables (`orbits.ts`) and time
+  curves match the prototype. Don't use `MeshDistortMaterial` for the core,
+  don't add/remove post-processing, don't "simplify for performance" or retune
+  colours/pacing. The only allowed quality drop is DPR (after 120 frames with
+  >50% frames over 34 ms, floor `min(devicePixelRatio, 1.25)`) — never
+  geometry, shader or bloom. Bloom is three's `UnrealBloomPass` in both
+  renderers (`BloomComposer.tsx` inside R3F), not `@react-three/postprocessing`.
+- **Switch:** `isLoginSceneEnabled()` in `src/lib/theme/loginScene.ts`
+  (`LOGIN_SCENE_DEFAULT_ENABLED` is the one rollout line; `?loginScene=1|0`
+  is read once per page load, `localStorage["jarvis.loginScene"]` also works).
+  On: 3D landing page, 3D login, ignition, `/jarvis` v2. Off, Town skin or no
+  WebGL: the SVG `ArcReactorTriangle` + `BootSequence` + legacy
+  `JarvisCanvas`/`Core3D`/`AgentNode3D`. `prefers-reduced-motion: reduce` keeps
+  the classic Engage screen but gets the 3D login and a "min" ignition (fade
+  to black, no flashes). `pickIntroMode()` decides.
 - **Lazy import:** `LoginScene.tsx` loads `createLoginScene.ts` (and with it
-  three) via dynamic `import()` in an effect. Never import `three`,
-  `createLoginScene`, `reactor` from anything the main bundle or SSR reaches
-  (type-only imports are fine). `loginSceneMath.ts` and `sceneColors.ts` stay
-  three-free and pure.
+  three) via dynamic `import()`; `JarvisCanvas.tsx` loads `arc-core/` via
+  `React.lazy`. Never import `three`, `createLoginScene`, `reactor`, `core2`,
+  `tunnel` or `arc-core/*` from anything the main bundle or SSR reaches
+  (type-only imports are fine). `loginSceneMath.ts`, `orbits.ts`,
+  `coreShader.ts`, `sceneColors.ts`, `landingData.ts` stay three-free.
+- **Units:** the demo runs in world units (SCALE 72); the app in
+  `MATRIX_SCALE` 0.72. For the R3F canvas **every length from the demo is
+  multiplied by 0.01** (radii, tubes, ticks, node size, point sizes, camera,
+  fog, light distance); light intensity is multiplied by `0.01^decay` so the
+  illumination is identical (`arcCoreMath.ts`: `U`, `lightToApp`).
 - **Colours:** tokens only, resolved through `themeColor.ts`
-  (`sceneColors.ts`). In the default theme primary/accent/reactor/hot are
-  bit-exact with the prototype; helper tints are token `color-mix` fits.
-- **Lifecycle:** mounted once in `PhaseController` (stable key) across
-  login_screen → initializing → transition_to_dashboard; the dashboard mounts
-  at `P_LIVE`, the overlay turns `pointer-events:none` and fades to p = 1.
-  `prefers-reduced-motion` selects the "min" variant (fade to black, no flash).
-  Everything must be disposed on unmount (rAF, geometry, materials, textures,
-  composer, renderer + forced context loss, listeners).
-- **Proof harness:** `window.__loginScene` (`set(p)`, `frame()`) exists only in
-  DEV; `scripts/capture-login-scene.mjs` screenshots it against
-  `docs/login-scene-prototype/reference/`.
+  (`sceneColors.ts`, shared by the imperative scene and R3F). In the default
+  theme primary/accent/reactor/hot are bit-exact with the prototype; helper
+  tints are token `color-mix` fits (max error noted per entry).
+- **Lifecycle:** `PhaseController` mounts one `<LoginScene>` (stable key)
+  from `booting` (landing) through login_screen, initializing and
+  transition_to_dashboard; its modes follow the `phase` prop and it never
+  remounts. The dashboard mounts at `P_LIVE`, the overlay turns
+  `pointer-events:none` and fades to p = 1, its final frame is aligned onto
+  the `/jarvis` canvas (`data-jarvis-canvas-rect`). Everything must be
+  disposed on unmount (rAF, geometry, materials, textures, composer,
+  renderer + forced context loss, listeners).
+- **Landing page:** scrolls its own `fixed` container (`no-scrollbar`), never
+  `window`; button jumps run on their own rAF clock (`scrollJump.ts`, constants
+  in `loginSceneMath.ts`); Engage must keep doing exactly what
+  `BootSequence`'s button does. Copy and the static agent registry live in
+  `landingData.ts` (hard-coded: there is no data before login).
+- **Proof harness:** `window.__loginScene` and `window.__queryClient` exist
+  only in DEV; `scripts/capture-intro-scene.mjs` screenshots the scene against
+  `docs/jarvis-3d-v2/reference/`.
 
 ## Design skills: project rules win
 

@@ -2027,7 +2027,6 @@
   }
 }
 
-
 /* ===========================================================================
    Town skin — structural restyle for data-theme="town".
 
@@ -2133,7 +2132,6 @@
   }
 }
 
-
 /* ── 3D intro: landing page, login columns, ignition labels ───────────────────
  * Port of docs/jarvis-3d-v2/src/index.html. Everything is token-driven (no
  * literal hues); this layer is a full-bleed immersive shell, so viewport
@@ -2164,10 +2162,26 @@
   z-index: 5;
   pointer-events: none;
 }
-.lp-tick.tl { left: max(16px, env(safe-area-inset-left, 0px)); top: 16px; border-width: 2px 0 0 2px; }
-.lp-tick.tr { right: max(16px, env(safe-area-inset-right, 0px)); top: 16px; border-width: 2px 2px 0 0; }
-.lp-tick.bl { left: max(16px, env(safe-area-inset-left, 0px)); bottom: 16px; border-width: 0 0 2px 2px; }
-.lp-tick.br { right: max(16px, env(safe-area-inset-right, 0px)); bottom: 16px; border-width: 0 2px 2px 0; }
+.lp-tick.tl {
+  left: max(16px, env(safe-area-inset-left, 0px));
+  top: 16px;
+  border-width: 2px 0 0 2px;
+}
+.lp-tick.tr {
+  right: max(16px, env(safe-area-inset-right, 0px));
+  top: 16px;
+  border-width: 2px 2px 0 0;
+}
+.lp-tick.bl {
+  left: max(16px, env(safe-area-inset-left, 0px));
+  bottom: 16px;
+  border-width: 0 0 2px 2px;
+}
+.lp-tick.br {
+  right: max(16px, env(safe-area-inset-right, 0px));
+  bottom: 16px;
+  border-width: 0 2px 2px 0;
+}
 .lp-bar {
   position: fixed;
   z-index: 8;
@@ -2177,7 +2191,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 30px max(44px, env(safe-area-inset-right, 0px)) 0 max(44px, env(safe-area-inset-left, 0px));
+  padding: 30px max(44px, env(safe-area-inset-right, 0px)) 0
+    max(44px, env(safe-area-inset-left, 0px));
   pointer-events: none;
   transition: opacity 0.3s;
 }
@@ -2300,7 +2315,9 @@
   padding: 15px 22px;
   cursor: pointer;
   box-shadow: var(--glow-primary);
-  transition: background 0.2s, color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s;
 }
 .lp-btn:hover {
   background: color-mix(in oklab, var(--primary) 22%, transparent);
@@ -2314,8 +2331,16 @@
   height: 8px;
   border: 0 solid var(--primary);
 }
-.lp-btn::before { left: -1px; top: -1px; border-width: 1px 0 0 1px; }
-.lp-btn::after { right: -1px; bottom: -1px; border-width: 0 1px 1px 0; }
+.lp-btn::before {
+  left: -1px;
+  top: -1px;
+  border-width: 1px 0 0 1px;
+}
+.lp-btn::after {
+  right: -1px;
+  bottom: -1px;
+  border-width: 0 1px 1px 0;
+}
 .lp-btn.quiet {
   box-shadow: none;
   border-color: color-mix(in oklab, var(--primary) 40%, transparent);
@@ -2461,22 +2486,59 @@
   clip-path: inset(50%);
 }
 @media (max-width: 760px) {
-  .lp-root { font-size: 14.5px; }
-  .lp-bar { padding: 26px 34px 0; }
-  .lp-brand span { display: none; }
-  .lp-stop { height: 190vh; }
-  .lp-pin { align-items: flex-end; padding-block: 80px 44px; }
-  .lp-right .lp-pin { justify-content: flex-start; }
-  .lp-card { padding: 18px; width: 100%; }
-  .lp-hero-stop .lp-pin { padding-bottom: 50px; }
-  .lp-hero h1 { font-size: clamp(44px, 13vw, 72px); letter-spacing: 0.05em; }
-  .lp-hero p.kick { letter-spacing: 0.24em; font-size: 10.5px; }
-  .lp-scan { right: 34px; bottom: 26px; font-size: 10px; letter-spacing: 0.2em; }
-  .lp-btn { padding: 14px 16px; letter-spacing: 0.22em; font-size: 12.5px; }
-  .lp-ghost { letter-spacing: 0.1em; }
+  .lp-root {
+    font-size: 14.5px;
+  }
+  .lp-bar {
+    padding: 26px 34px 0;
+  }
+  .lp-brand span {
+    display: none;
+  }
+  .lp-stop {
+    height: 190vh;
+  }
+  .lp-pin {
+    align-items: flex-end;
+    padding-block: 80px 44px;
+  }
+  .lp-right .lp-pin {
+    justify-content: flex-start;
+  }
+  .lp-card {
+    padding: 18px;
+    width: 100%;
+  }
+  .lp-hero-stop .lp-pin {
+    padding-bottom: 50px;
+  }
+  .lp-hero h1 {
+    font-size: clamp(44px, 13vw, 72px);
+    letter-spacing: 0.05em;
+  }
+  .lp-hero p.kick {
+    letter-spacing: 0.24em;
+    font-size: 10.5px;
+  }
+  .lp-scan {
+    right: 34px;
+    bottom: 26px;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+  }
+  .lp-btn {
+    padding: 14px 16px;
+    letter-spacing: 0.22em;
+    font-size: 12.5px;
+  }
+  .lp-ghost {
+    letter-spacing: 0.1em;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lp-root * { scroll-behavior: auto; }
+  .lp-root * {
+    scroll-behavior: auto;
+  }
 }
 
 /* Ignition labels (agent names beside their nodes) */
@@ -2510,8 +2572,14 @@
   color: var(--muted-foreground);
   margin-top: 2px;
 }
-.intro-nl small.busy { color: var(--reactor-hot); }
-.intro-nl.core b { color: var(--reactor-hot); }
+.intro-nl small.busy {
+  color: var(--reactor-hot);
+}
+.intro-nl.core b {
+  color: var(--reactor-hot);
+}
 @media (max-width: 760px) {
-  .intro-nl span { display: none; }
+  .intro-nl span {
+    display: none;
+  }
 }
