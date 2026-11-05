@@ -80,6 +80,9 @@ const MODULE_BLURBS: Record<string, string> = {
   "Situation Room": "Centrum dowodzenia zespołem",
 };
 
+/** Approved one-line description of a module (modules.ts title), if it has one. */
+export const moduleBlurb = (title: string): string | null => MODULE_BLURBS[title] ?? null;
+
 export interface LandingModule {
   title: string;
   sub: string;

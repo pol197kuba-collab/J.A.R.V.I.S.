@@ -18,7 +18,9 @@ export function HudRouteTransition() {
     }
   }, [transition]);
 
-  if (transition === "idle") return null;
+  // only the classic CSS transition draws here; the 3D one has its own overlay
+  if (transition !== "dematerialize" && transition !== "scan" && transition !== "materialize")
+    return null;
 
   return (
     <div className="pointer-events-none absolute inset-0 z-[40] overflow-hidden" aria-hidden>
