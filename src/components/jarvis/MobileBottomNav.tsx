@@ -12,10 +12,11 @@ import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 import { GlobalVoiceCommand } from "./GlobalVoiceCommand";
 import { MiniArcReactor } from "./MiniArcReactor";
-import { MiniArcCore } from "./MiniArcCore";
+import { DockCore } from "./DockCore";
 import { OrbitMenu } from "./OrbitMenu";
 import { MENU_GROUPS, MODULE_ITEMS, type ModuleEntry, type ModuleGroup } from "./modules";
 import { agentDots, dockLine, reactorState, type AgentDot } from "./dockWidgets";
+import { JARVIS_HOLD_MS } from "./module-transition/miniCoreMath";
 import { listAgents } from "@/lib/agents/runtime.functions";
 import { listTasks } from "@/lib/tasks/tasks.functions";
 import { getFund } from "@/lib/fund/fund.functions";
@@ -108,9 +109,9 @@ export function MobileBottomNav({ showVoice = true }: { showVoice?: boolean }) {
             {...hold}
             aria-label="Menu modułów (przytrzymaj 2 s: J.A.R.V.I.S.)"
             aria-expanded={open !== null}
-            className="absolute top-[-12px] left-1/2 flex h-[64px] w-[64px] -translate-x-1/2 touch-manipulation select-none items-center justify-center rounded-full [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none]"
+            className="absolute top-[-20px] left-1/2 flex h-[76px] w-[76px] -translate-x-1/2 touch-manipulation select-none items-center justify-center rounded-full [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none]"
           >
-            <MiniArcCore size={60} state={state} charging={holding} />
+            <DockCore state={state} charging={holding} />
           </button>
         </div>
 
@@ -129,9 +130,6 @@ export function MobileBottomNav({ showVoice = true }: { showVoice?: boolean }) {
     </nav>
   );
 }
-
-/** Holding the core this long flies to /jarvis; a shorter tap opens the menu. */
-const JARVIS_HOLD_MS = 2000;
 
 /**
  * Tap vs long press on one button. A hold of `ms` fires `onHold` (the click that

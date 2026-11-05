@@ -27,11 +27,7 @@ import {
   buildNode,
   type AgentNode,
 } from "@/components/jarvis/login-scene/reactor";
-import {
-  buildCoreExtras,
-  decorateRing,
-  type RingKind,
-} from "@/components/jarvis/login-scene/core2";
+import { buildCoreExtras } from "@/components/jarvis/login-scene/core2";
 import {
   orbitAngle,
   orbitAt,
@@ -100,6 +96,7 @@ import {
   backdropFade,
   smooth,
 } from "./backdropMath";
+import { buildCoreRings, stepCoreRings } from "./coreRig";
 
 export interface Rect {
   left: number;
@@ -183,8 +180,6 @@ export interface TransitionScene {
 /** Most entries one menu level can hold. */
 export const MENU_MAX_NODES = 8;
 
-const RING_KINDS: RingKind[] = ["fine", "bold", "claw"];
-
 export function createTransitionScene(o: TransitionOverlays, C: SceneColors): TransitionScene {
   const { canvas, flash, handoff, handoffName } = o;
   const renderer = new THREE.WebGLRenderer({
@@ -212,52 +207,7 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
   core.material.uniforms.op.value = 1;
   coreGroup.add(core);
   coreGroup.add(new THREE.PointLight(C.reactor, 70000, 1400, 1.7));
-  const ringDefs = [
-    {
-      r: 1.55,
-      tube: 1.1,
-      color: C.reactor,
-      op: 0.75,
-      rot: [Math.PI / 2.3, 0, 0],
-      v: [0.25, 0, 0],
-      deco: C.hot,
-    },
-    {
-      r: 1.85,
-      tube: 0.8,
-      color: C.primary,
-      op: 0.55,
-      rot: [Math.PI / 3.1, Math.PI / 5, 0],
-      v: [0, 0.18, 0],
-      deco: C.primary,
-    },
-    {
-      r: 2.1,
-      tube: 0.7,
-      color: C.reactor,
-      op: 0.45,
-      rot: [0, Math.PI / 2.4, Math.PI / 6],
-      v: [0, 0, 0.32],
-      deco: C.reactor,
-    },
-  ];
-  const rings = ringDefs.map((d, i) => {
-    const m = new THREE.Mesh(
-      new THREE.TorusGeometry(d.r * SCALE, d.tube, 10, 180),
-      new THREE.MeshBasicMaterial({
-        color: d.color,
-        transparent: true,
-        opacity: d.op,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      }),
-    );
-    coreGroup.add(m);
-    const deco = decorateRing(m, RING_KINDS[i], d.deco);
-    deco.inst.material.opacity = 0.85;
-    deco.bead.visible = true;
-    return { m, deco, d, spin: [0, 0, 0] };
-  });
+  const rings = buildCoreRings(C, coreGroup);
 
   // agents (rebuilt when the count changes)
   let nodes: AgentNode[] = [];
@@ -494,14 +444,7 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
       extras.corona.scale.setScalar(5.6 * SCALE * (1 + Math.sin(nodeTime * 1.4) * 0.03));
       extras.corona.material.opacity = 0.55 * (1 + Math.sin(nodeTime * 1.4) * 0.08);
     }
-    rings.forEach((r, i) => {
-      r.spin[0] += r.d.v[0] * dt;
-      r.spin[1] += r.d.v[1] * dt;
-      r.spin[2] += r.d.v[2] * dt;
-      r.m.rotation.set(r.d.rot[0] + r.spin[0], r.d.rot[1] + r.spin[1], r.d.rot[2] + r.spin[2]);
-      const a = nodeTime * (i % 2 ? -0.9 : 0.7) + i * 2;
-      r.deco.bead.position.set(Math.cos(a) * r.deco.r, Math.sin(a) * r.deco.r, 0);
-    });
+    stepCoreRings(rings, dt, nodeTime);
     const arr = spokeArr();
     nodes.forEach((n, i) => {
       orbitAt(specs[i], orbitAngle(specs[i], nodeTime), tmp);
