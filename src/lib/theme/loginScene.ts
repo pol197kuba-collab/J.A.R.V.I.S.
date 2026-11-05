@@ -17,6 +17,8 @@ export const LOGIN_SCENE_PARAM = "loginScene";
 
 /** StarkLogin marks the empty box where the 3D reactor goes. */
 export const LOGIN_REACTOR_SLOT_ATTR = "data-login-reactor-slot";
+/** The boot splash image (a render of the scene's first frame) — the scene fits its camera to it. */
+export const BOOT_SPLASH_IMG_ATTR = "data-boot-splash-img";
 /** Dispatched on window by StarkLogin.deny() on a wrong key; the scene shakes the reactor. */
 export const LOGIN_DENIED_EVENT = "jarvis:login-denied";
 

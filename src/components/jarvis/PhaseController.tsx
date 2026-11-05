@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 
 import { AppSidebar } from "@/components/jarvis/AppSidebar";
 import { BootSequence } from "@/components/jarvis/BootSequence";
+import { BootSplash } from "@/components/jarvis/login-scene/BootSplash";
 import { LandingPage } from "@/components/jarvis/login-scene/LandingPage";
 import { createIntroBridge } from "@/components/jarvis/login-scene/introBridge";
 import { LoginScene } from "@/components/jarvis/login-scene/LoginScene";
@@ -38,6 +39,9 @@ export function PhaseController() {
   const [intro, setIntro] = useState<IntroMode | null>(null);
   // The landing page lingers 450 ms into the login screen so it can fade out.
   const [landingGone, setLandingGone] = useState(false);
+  // Boot splash (the app's first frame, also server-rendered): "on" until the
+  // intro is ready to take over, then it cross-fades out.
+  const [splash, setSplash] = useState<"on" | "fading" | "off">("on");
   // The scene reported p = 1 (overlay gone, rendering stopped) — safe to unmount.
   const [sceneDone, setSceneDone] = useState(false);
   const introBridge = useRef(createIntroBridge());
@@ -93,10 +97,30 @@ export function PhaseController() {
 
   useEffect(() => {
     if (phase !== "booting") return;
+    setSplash("on");
     setIntro(shouldUseIntro());
     setSceneDone(false);
     setLandingGone(false);
   }, [phase]);
+
+  // Classic paths have nothing to wait for: fade the splash as soon as the mode is
+  // known. The 3D landing fades it from LoginScene's onReady (first 3D frame on
+  // screen); the 10 s cap covers a three.js chunk that never arrives.
+  useEffect(() => {
+    if (phase !== "booting" || intro === null) return;
+    if (intro !== "landing") {
+      setSplash((s) => (s === "on" ? "fading" : s));
+      return;
+    }
+    const t = setTimeout(() => setSplash((s) => (s === "on" ? "fading" : s)), 10000);
+    return () => clearTimeout(t);
+  }, [phase, intro]);
+
+  useEffect(() => {
+    if (splash !== "fading") return;
+    const t = setTimeout(() => setSplash("off"), 600);
+    return () => clearTimeout(t);
+  }, [splash]);
 
   useEffect(() => {
     if (phase !== "login_screen") return;
@@ -165,7 +189,8 @@ export function PhaseController() {
 
   return (
     <PhaseContext.Provider value={{ phase, setPhase }}>
-      {phase === "booting" && intro !== "landing" && (
+      {phase === "booting" && splash !== "off" && <BootSplash fading={splash === "fading"} />}
+      {phase === "booting" && intro !== null && intro !== "landing" && (
         <BootSequence key="engage" mode="engage" onEngage={engage} />
       )}
       {showScene && (
@@ -178,6 +203,7 @@ export function PhaseController() {
             setPhase((cur) => (cur === "initializing" ? "transition_to_dashboard" : cur))
           }
           onDone={() => setSceneDone(true)}
+          onReady={() => setSplash((s) => (s === "on" ? "fading" : s))}
           onUnavailable={() => setIntro("off")}
         />
       )}

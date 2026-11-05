@@ -21,6 +21,8 @@ import {
   LOGIN_SPAN,
   QUALITY_WINDOW,
   SHAKE_SECONDS,
+  SPLASH_SPAN,
+  splashProgress,
   SLOW_FRAME_S,
   arkFlash,
   boardOpacity,
@@ -146,6 +148,12 @@ export interface IntroSceneOptions {
   /** Live agents (react-query cache) — polled while ignition has not placed the nodes yet. */
   getAgents?: () => IntroAgent[] | null;
   onHud?: (h: LandingHud) => void;
+  /**
+   * App start: rect of the boot splash image. When given, the scroll mode opens
+   * on the splash frame (reactor front-on exactly on the image, which is a render
+   * of this frame) and flies to the landing page once startSplash() is called.
+   */
+  getSplashRect?: () => SlotRect | null;
   /** p reached P_LIVE: the dashboard may mount. */
   onLive?: () => void;
   /** p reached 1: the overlay is fully gone, the scene has stopped rendering. */
@@ -159,6 +167,8 @@ export type SceneMode = "scroll" | "login" | "ignite" | "done";
 export interface IntroScene {
   /** Re-measure viewport, landing sections and the slots. */
   layout(): void;
+  /** Leave the splash frame: the camera flies to the landing page (SPLASH_MS). */
+  startSplash(): void;
   /** Re-read the login slot rect only (cheap: on scroll / keyboard, no renderer resize). */
   refreshSlot(): void;
   /** Camera flight Engage → login pose (LOGIN_ENTER_MS); the 3D reactor takes over the frame. */
@@ -181,6 +191,7 @@ export interface IntroScene {
     setScroll(y: number): void;
     setIgnite(p: number): void;
     setEnergy(e: number): void;
+    setSplash(k: number): void;
   };
   dispose(): void;
 }
@@ -443,6 +454,10 @@ export function createLoginScene(opts: IntroSceneOptions): IntroScene {
   let energy = 0;
   let energyBase = 0;
   let shake = 0;
+  let splashK = opts.getSplashRect ? 0 : 1;
+  let splashStart = -1;
+  let splashPinned = false;
+  let splashRect: SlotRect | null = null;
   let sy = -1; // first scroll frame jumps straight to the container's position
   let lastHud = "";
   let frames = 0;
@@ -572,8 +587,27 @@ export function createLoginScene(opts: IntroSceneOptions): IntroScene {
     if (Math.abs(sy - target) < 0.3) sy = target;
     const S = scrollState(sy, stops);
 
-    cam.set(S.cam.x, S.cam.y, S.cam.z);
-    look.set(S.look.x, S.look.y, S.look.z);
+    // app start: from the splash frame (reactor front-on on the splash image) to the landing
+    if (splashK < 1 || splashPinned) {
+      splashRect = opts.getSplashRect?.() ?? splashRect;
+    }
+    if (splashK < 1 && !splashPinned) {
+      splashK = splashStart < 0 ? 0 : splashProgress(performance.now() - splashStart, st.reduced);
+    }
+    const k = splashK;
+    if (k < 1 && splashRect && splashRect.width > 0) {
+      const f = fitCamera(
+        splashRect,
+        { width: window.innerWidth, height: window.innerHeight },
+        32,
+        SPLASH_SPAN,
+      );
+      cam.set(lerp(f.x, S.cam.x, k), lerp(f.y, S.cam.y, k), lerp(f.z, S.cam.z, k));
+      look.set(lerp(f.x, S.look.x, k), lerp(f.y, S.look.y, k), lerp(0, S.look.z, k));
+    } else {
+      cam.set(S.cam.x, S.cam.y, S.cam.z);
+      look.set(S.look.x, S.look.y, S.look.z);
+    }
     camera.position.copy(cam);
     camera.fov = 32;
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -581,7 +615,7 @@ export function createLoginScene(opts: IntroSceneOptions): IntroScene {
     camera.updateProjectionMatrix();
     camera.lookAt(look);
 
-    applyReactor(S.align, S.hull);
+    applyReactor(lerp(1, S.align, k), lerp(0, S.hull, k));
     R.root.visible = S.reactorVisible;
     R.root.position.x = 0;
     R.root.rotation.z = 0;
@@ -611,7 +645,8 @@ export function createLoginScene(opts: IntroSceneOptions): IntroScene {
       n.visible = S.nodesVisible;
       spokes[i].visible = S.nodesVisible;
       n.position.copy(n.userData.home);
-      n.scale.setScalar(1);
+      n.scale.setScalar(k); // agents grow in as the camera leaves the splash frame
+      (spokes[i].material as THREE.LineBasicMaterial).opacity = 0.45 * k;
       n.userData.body.rotation.x += dt * 0.15;
       n.userData.body.rotation.y += dt * 0.1;
       const pos = spokes[i].geometry.attributes.position as THREE.BufferAttribute;
@@ -620,11 +655,11 @@ export function createLoginScene(opts: IntroSceneOptions): IntroScene {
     });
     hideCore();
     dust.visible = S.dustVisible;
-    dustMat.opacity = 0.55;
+    dustMat.opacity = 0.55 * k;
     if (!st.reduced) dust.rotation.y += dt * 0.01;
 
     overlays.flash.style.opacity = S.flash.toFixed(3);
-    overlays.grid.style.opacity = S.grid.toFixed(3);
+    overlays.grid.style.opacity = (S.grid * k).toFixed(3);
     overlays.vignette.style.opacity = "1";
     overlays.ark.style.opacity = "0";
     if (opts.onHud) {
@@ -1029,6 +1064,9 @@ export function createLoginScene(opts: IntroSceneOptions): IntroScene {
 
   const api: IntroScene = {
     layout,
+    startSplash() {
+      if (splashStart < 0) splashStart = performance.now();
+    },
     refreshSlot() {
       if (st.mode === "login") calcLoginPose();
     },
@@ -1100,6 +1138,10 @@ export function createLoginScene(opts: IntroSceneOptions): IntroScene {
       },
       setEnergy(e) {
         energy = e;
+      },
+      setSplash(k) {
+        splashPinned = true;
+        splashK = clamp(k);
       },
     },
     dispose() {

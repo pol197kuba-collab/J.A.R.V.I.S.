@@ -1,7 +1,11 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
-import { LOGIN_DENIED_EVENT, LOGIN_REACTOR_SLOT_ATTR } from "@/lib/theme/loginScene";
+import {
+  BOOT_SPLASH_IMG_ATTR,
+  LOGIN_DENIED_EVENT,
+  LOGIN_REACTOR_SLOT_ATTR,
+} from "@/lib/theme/loginScene";
 import type { AppPhase } from "@/components/jarvis/PhaseContext";
 import type { IntroBridge } from "./introBridge";
 import { landingIntroAgents, landingModules } from "./landingData";
@@ -19,6 +23,8 @@ interface Props {
   onLive: () => void;
   /** p reached 1: the overlay is gone and rendering has stopped. */
   onDone: () => void;
+  /** First frame is on screen (landing: the splash frame) — the boot splash may fade. */
+  onReady?: () => void;
   /** three.js chunk or WebGL failed: fall back to the SVG + BootSequence path. */
   onUnavailable: () => void;
 }
@@ -31,6 +37,7 @@ declare global {
       enterLogin: () => void;
       setIgnite: (p: number) => void;
       setEnergy: (e: number) => void;
+      setSplash: (k: number) => void;
       setAgents: (list: IntroAgent[]) => void;
       shake: () => void;
       frame: (n?: number) => void;
@@ -81,7 +88,7 @@ function rectOf(sel: string): SlotRect | null {
  * and keep it mounted across booting → login_screen → initializing →
  * transition_to_dashboard (the phase prop drives its modes, never a remount).
  */
-export function LoginScene({ mode, phase, bridge, onLive, onDone, onUnavailable }: Props) {
+export function LoginScene({ mode, phase, bridge, onLive, onDone, onReady, onUnavailable }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -93,8 +100,8 @@ export function LoginScene({ mode, phase, bridge, onLive, onDone, onUnavailable 
   const queryClient = useQueryClient();
 
   // latest props without re-running the mount effect (the scene must never remount)
-  const live = useRef({ phase, onLive, onDone, onUnavailable });
-  live.current = { phase, onLive, onDone, onUnavailable };
+  const live = useRef({ phase, onLive, onDone, onReady, onUnavailable });
+  live.current = { phase, onLive, onDone, onReady, onUnavailable };
 
   const syncPhase = (scene: IntroScene) => {
     const ph = live.current.phase;
@@ -150,6 +157,7 @@ export function LoginScene({ mode, phase, bridge, onLive, onDone, onUnavailable 
                 }
               : undefined,
           getSlotRect: () => rectOf(`[${LOGIN_REACTOR_SLOT_ATTR}]`),
+          getSplashRect: mode === "landing" ? () => rectOf(`[${BOOT_SPLASH_IMG_ATTR}]`) : undefined,
           getTargetRect: () => rectOf("[data-jarvis-canvas-rect]"),
           getAgents: () => cachedAgents(getCache),
           onHud: (h) => bridge.current.onHud?.(h),
@@ -158,6 +166,9 @@ export function LoginScene({ mode, phase, bridge, onLive, onDone, onUnavailable 
           preserveDrawingBuffer: import.meta.env.DEV,
         });
         sceneRef.current = scene;
+        // the splash frame is drawn: let the boot splash cross-fade into it and fly to the landing
+        if (mode === "landing") scene.startSplash();
+        live.current.onReady?.();
 
         const onMq = () => scene.setReducedMotion(mq.matches);
         mq.addEventListener("change", onMq);
@@ -186,6 +197,10 @@ export function LoginScene({ mode, phase, bridge, onLive, onDone, onUnavailable 
               scene.debug.setIgnite(p);
             },
             setEnergy: (e) => scene.debug.setEnergy(e),
+            setSplash: (k) => {
+              scene.setManual(true);
+              scene.debug.setSplash(k);
+            },
             setAgents: (list) => scene.setAgents(list, true),
             shake: () => scene.shake(),
             frame: (n = 1) => {
