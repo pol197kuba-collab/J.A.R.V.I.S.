@@ -1,11 +1,13 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRouterState } from "@tanstack/react-router";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { LANDING_AGENTS } from "@/components/jarvis/login-scene/landingData";
 import { resolveSceneColors } from "@/components/jarvis/login-scene/sceneColors";
 // Type-only: erased at build, so three.js never reaches the main bundle.
 import type { MenuControl, Rect, TransitionScene } from "./createTransitionScene";
 import { JARVIS_PATH, MODULE_AGENT, moduleBoard, type TransitionKind } from "./transitionMath";
+import { backdropSeed, hasBackdrop, tiltFromOrientation } from "./backdropMath";
 
 export interface ModuleTransitionHandle {
   /** The 3D overlay is loaded and warmed up. */
@@ -46,7 +48,9 @@ export const ModuleTransitionLayer = forwardRef<ModuleTransitionHandle, { enable
     const handoffRef = useRef<HTMLDivElement>(null);
     const nameRef = useRef<HTMLElement>(null);
     const sceneRef = useRef<TransitionScene | null>(null);
+    const [loaded, setLoaded] = useState(false);
     const queryClient = useQueryClient();
+    const pathname = useRouterState({ select: (r) => r.location.pathname });
 
     useEffect(() => {
       if (!enabled) return;
@@ -66,6 +70,7 @@ export const ModuleTransitionLayer = forwardRef<ModuleTransitionHandle, { enable
             resolveSceneColors(),
           );
           sceneRef.current = scene;
+          setLoaded(true);
         } catch (err) {
           console.warn("[module-transition] 3D unavailable, keeping the CSS transition", err);
         }
@@ -74,9 +79,58 @@ export const ModuleTransitionLayer = forwardRef<ModuleTransitionHandle, { enable
         cancelled = true;
         window.clearTimeout(id);
         sceneRef.current = null;
+        setLoaded(false);
         scene?.dispose();
       };
     }, [enabled]);
+
+    // the 3D world under the panels: on for every module without its own canvas
+    useEffect(() => {
+      const root = document.documentElement;
+      root.toggleAttribute("data-depth3d", enabled);
+      const scene = sceneRef.current;
+      const on = enabled && loaded && hasBackdrop(pathname);
+      root.toggleAttribute("data-backdrop3d", on);
+      if (!scene) return;
+      scene.backdrop.set({ enabled: on, seed: backdropSeed(pathname) });
+      scene.backdrop.scroll(0, window.innerHeight); // a new module starts at the top
+    }, [enabled, loaded, pathname]);
+    useEffect(
+      () => () => {
+        document.documentElement.removeAttribute("data-depth3d");
+        document.documentElement.removeAttribute("data-backdrop3d");
+      },
+      [],
+    );
+
+    // parallax inputs: the module's scroll, the phone's tilt, the mouse on desktop
+    useEffect(() => {
+      if (!enabled || !loaded) return;
+      const onScroll = (e: Event) => {
+        const el = e.target;
+        if (!(el instanceof HTMLElement) || el.tagName !== "MAIN") return;
+        sceneRef.current?.backdrop.scroll(el.scrollTop, el.clientHeight);
+      };
+      const onTilt = (e: DeviceOrientationEvent) => {
+        const t = tiltFromOrientation(e.beta, e.gamma);
+        sceneRef.current?.backdrop.tilt(t.x, t.y);
+      };
+      const onPointer = (e: PointerEvent) => {
+        if (e.pointerType !== "mouse") return;
+        sceneRef.current?.backdrop.tilt(
+          (e.clientX / window.innerWidth) * 2 - 1,
+          (e.clientY / window.innerHeight) * 2 - 1,
+        );
+      };
+      document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+      window.addEventListener("deviceorientation", onTilt, { passive: true });
+      window.addEventListener("pointermove", onPointer, { passive: true });
+      return () => {
+        document.removeEventListener("scroll", onScroll, { capture: true });
+        window.removeEventListener("deviceorientation", onTilt);
+        window.removeEventListener("pointermove", onPointer);
+      };
+    }, [enabled, loaded]);
 
     useImperativeHandle(
       ref,

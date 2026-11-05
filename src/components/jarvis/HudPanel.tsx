@@ -1,8 +1,19 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { HudTag } from "./HudTag";
 import { useRouteTransition } from "./TransitionContext";
 import { usePhase } from "./PhaseContext";
+
+// Panels mounting together (one module's page) assemble from the depth one
+// after another; a gap of 400 ms starts a new sequence.
+let depthSeq = 0;
+let depthLast = 0;
+function nextDepthDelay(): number {
+  const now = typeof performance === "undefined" ? 0 : performance.now();
+  if (now - depthLast > 400) depthSeq = 0;
+  depthLast = now;
+  return Math.min(depthSeq++, 8) * 60;
+}
 
 export function HudPanel({
   children,
@@ -49,6 +60,9 @@ export function HudPanel({
   const dematerializing = phase === "shutdown";
 
   const seed = tagSeed ?? index * 9173 + 31;
+  // 3D mode only (html[data-depth3d], set by the module transition layer): CSS
+  // ignores the class otherwise, so Town / reduced motion stay as they were
+  const [depthDelay] = useState(nextDepthDelay);
   const elevated = tone === "elevated";
 
   return (
@@ -61,10 +75,12 @@ export function HudPanel({
         "@container relative",
         elevated && materializing && "animate-hud-shell-in",
         elevated && dematerializing && "animate-hud-shell-out",
+        !materializing && !dematerializing && "hud-depth-in",
         wrapperClassName,
       )}
       style={{
         animationDelay: elevated && materializing ? `${index * 110}ms` : undefined,
+        ["--depth-delay" as string]: `${depthDelay}ms`,
       }}
     >
       <div

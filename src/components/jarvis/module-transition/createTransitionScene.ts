@@ -92,6 +92,14 @@ import {
   MENU_CLOSE_MS,
   MENU_OPEN_MS,
 } from "./orbitMenuMath";
+import {
+  BACKDROP_FPS,
+  approachAngle,
+  backdropAzimuth,
+  backdropCamera,
+  backdropFade,
+  smooth,
+} from "./backdropMath";
 
 export interface Rect {
   left: number;
@@ -154,10 +162,21 @@ export interface MenuControl {
   readonly isOpen: boolean;
 }
 
+/** The world under the panels while nothing plays (see backdropMath.ts). */
+export interface BackdropControl {
+  /** On for this route or not, and the route's view angle seed. */
+  set(o: { enabled: boolean; seed: number }): void;
+  /** Page scroll (px) of the module's scroll container, and the viewport height. */
+  scroll(px: number, viewportH: number): void;
+  /** Phone tilt / pointer, each -1…1. */
+  tilt(x: number, y: number): void;
+}
+
 export interface TransitionScene {
   play(o: PlayOptions): void;
   readonly playing: boolean;
   readonly menu: MenuControl;
+  readonly backdrop: BackdropControl;
   dispose(): void;
 }
 
@@ -616,7 +635,13 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
       return;
     }
     const c = current;
-    if (!c) return;
+    if (!c) {
+      if (bd.on) {
+        stepBackdrop(now);
+        raf = requestAnimationFrame(loop);
+      }
+      return;
+    }
     const dt = Math.min(0.05, (now - c.last) / 1000);
     c.last = now;
     c.ownTime += dt;
@@ -637,10 +662,7 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
     }
     if (t >= 1) {
       current = null;
-      canvas.style.opacity = "0";
-      canvas.style.visibility = "hidden";
-      setFlash(0, "transparent");
-      handoff.style.opacity = "0";
+      rest();
       c.onDone();
       return;
     }
@@ -837,9 +859,7 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
     if (m.phase === "close" && e >= MENU_CLOSE_MS) {
       const cb = m.onClosed;
       endMenu();
-      canvas.style.opacity = "0";
-      canvas.style.visibility = "hidden";
-      setFlash(0, "transparent");
+      rest();
       cb?.();
     }
   }
@@ -868,6 +888,8 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
         onReady: null,
         onFrame,
       };
+      bd.on = false;
+      canvas.style.zIndex = TOP_Z;
       applyCoreLook();
       agentsVisible(false);
       menuGroup.visible = true;
@@ -923,9 +945,7 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
       if (m.phase === "pick") {
         // the module transition did not take over: just drop the overlay
         endMenu();
-        canvas.style.opacity = "0";
-        canvas.style.visibility = "hidden";
-        setFlash(0, "transparent");
+        rest();
         onClosed?.();
         return;
       }
@@ -935,6 +955,101 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
     },
     get isOpen() {
       return menu !== null;
+    },
+  };
+
+  // ---- backdrop: the same world under the panels while nothing plays ----
+  const TOP_Z = "70";
+  const BACK_Z = "5";
+  const bd = {
+    enabled: false,
+    on: false,
+    az: 0,
+    targetAz: 0,
+    time: 0,
+    scrollPx: 0,
+    viewH: 1,
+    tilt: { x: 0, y: 0 },
+    tx: 0,
+    ty: 0,
+    t0: 0,
+    lastRender: 0,
+  };
+
+  /** A transition / the menu ended: back to the backdrop, or hide. */
+  function rest() {
+    setFlash(0, "transparent");
+    handoff.style.opacity = "0";
+    if (bd.enabled) enterBackdrop();
+    else {
+      canvas.style.opacity = "0";
+      canvas.style.visibility = "hidden";
+    }
+  }
+
+  function enterBackdrop() {
+    bd.on = true;
+    bd.az = bd.targetAz;
+    bd.t0 = performance.now();
+    bd.lastRender = 0;
+    canvas.style.zIndex = BACK_Z;
+    canvas.style.opacity = "0";
+    canvas.style.visibility = "visible";
+    applyCoreLook();
+    menuGroup.visible = false;
+    camera.fov = 45;
+    frameOn(0, null);
+    if (!raf) raf = requestAnimationFrame(loop);
+  }
+
+  function stepBackdrop(now: number) {
+    // the world moves slowly: half the frame rate is plenty, and half the GPU cost
+    if (bd.lastRender && now - bd.lastRender < 1000 / BACKDROP_FPS - 2) return;
+    const dt = bd.lastRender ? Math.min(0.1, (now - bd.lastRender) / 1000) : 1 / BACKDROP_FPS;
+    bd.lastRender = now;
+    bd.time += dt;
+    bd.az = approachAngle(bd.az, bd.targetAz, dt);
+    bd.tx = smooth(bd.tx, bd.tilt.x, dt, 3);
+    bd.ty = smooth(bd.ty, bd.tilt.y, dt, 3);
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const { cam, look: lk } = backdropCamera({
+      az: bd.az,
+      time: bd.time,
+      scrollPx: bd.scrollPx,
+      viewportH: bd.viewH || vh,
+      aspect: vw / vh,
+      tiltX: bd.tx,
+      tiltY: bd.ty,
+    });
+    camera.fov = 45;
+    frameOn(0, null);
+    camera.position.set(cam.x, cam.y, cam.z);
+    camera.lookAt(lk.x, lk.y, lk.z);
+    updateCore(dt, bd.time, null, 0);
+    canvas.style.opacity = backdropFade(now - bd.t0).toFixed(3);
+    composer.render(dt);
+  }
+
+  const backdropControl: BackdropControl = {
+    set({ enabled, seed }) {
+      bd.enabled = enabled;
+      bd.targetAz = backdropAzimuth(seed);
+      if (disposed || current || menu) return; // applied when they end
+      if (enabled && !bd.on) enterBackdrop();
+      else if (!enabled && bd.on) {
+        bd.on = false;
+        canvas.style.opacity = "0";
+        canvas.style.visibility = "hidden";
+      }
+    },
+    scroll(px, viewportH) {
+      bd.scrollPx = px;
+      bd.viewH = viewportH;
+    },
+    tilt(x, y) {
+      bd.tilt.x = x;
+      bd.tilt.y = y;
     },
   };
 
@@ -954,6 +1069,8 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
     play(p) {
       if (disposed || current) return;
       if (menu) endMenu();
+      bd.on = false;
+      canvas.style.zIndex = TOP_Z;
       if (p.agentCount > 0 && p.agentCount !== nodes.length) buildAgents(p.agentCount);
       const now = performance.now();
       current = { ...p, t0: now, last: now, swapped: false, ownTime: 0, liveT0: arcCoreLive.time };
@@ -987,6 +1104,7 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
       return current !== null;
     },
     menu: menuControl,
+    backdrop: backdropControl,
     dispose() {
       if (disposed) return;
       disposed = true;

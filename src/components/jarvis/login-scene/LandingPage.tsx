@@ -6,6 +6,7 @@ import { landingStartsAtEngage, markLandingSeen } from "@/lib/theme/loginScene";
 import type { LandingHud } from "./createLoginScene";
 import { JARVIS_CORE, LANDING_AGENTS, LANDING_AGENT_TOTAL, landingModules } from "./landingData";
 import { createScrollJump } from "./scrollJump";
+import { LANDING_CUT_MS } from "./loginSceneMath";
 import type { IntroBridge } from "./introBridge";
 
 /**
@@ -33,6 +34,8 @@ export function LandingPage({
   const engageRef = useRef<HTMLDivElement>(null);
   const homeRef = useRef<HTMLDivElement>(null);
   const jumpRef = useRef<ReturnType<typeof createScrollJump> | null>(null);
+  const cutRef = useRef<HTMLDivElement>(null);
+  const cutTimer = useRef(0);
   const modules = landingModules();
 
   // Register the scroll host and the HUD sink for the scene (no React renders per frame).
@@ -78,6 +81,7 @@ export function LandingPage({
     return () => {
       jump.dispose();
       jumpRef.current = null;
+      window.clearTimeout(cutTimer.current);
       b.host = null;
       b.onHud = null;
     };
@@ -98,12 +102,41 @@ export function LandingPage({
     markLandingSeen();
     onEngage();
   };
+  // The very end of the story (Engage fully in). Re-read every frame of the jump:
+  // the first tap also enters fullscreen, which stretches every `vh` section.
+  const endTop = () => {
+    const el = scrollRef.current;
+    return el ? el.scrollHeight - el.clientHeight : 0;
+  };
+  // "Przejdź do logowania" / "Zaloguj": only the ending — from the module tunnel to
+  // the reactor. From above the tunnel the agent pages are skipped behind a short
+  // fade to black, then the usual jump flies on at the usual pace.
+  const toLogin = () => {
+    const el = scrollRef.current;
+    const jump = jumpRef.current;
+    const cut = cutRef.current;
+    if (!el || !jump) return;
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduced || !cut || el.scrollTop >= stopTop("modules") - 8) {
+      jump.to(endTop);
+      return;
+    }
+    jump.stop();
+    window.clearTimeout(cutTimer.current);
+    cut.classList.add("on");
+    cutTimer.current = window.setTimeout(() => {
+      el.scrollTop = stopTop("modules");
+      jump.to(endTop);
+      cut.classList.remove("on");
+    }, LANDING_CUT_MS);
+  };
   const go = (id: string) => (e: React.MouseEvent) => {
     e.preventDefault();
     const el = scrollRef.current;
-    // Already parked on the Engage section: "Zaloguj" means log in now, not "scroll 0 px".
-    if (id === "engage" && el && el.scrollTop >= stopTop("engage") - 8) {
-      engage();
+    if (id === "engage") {
+      // Already parked on the Engage section: "Zaloguj" means log in now, not "scroll 0 px".
+      if (el && el.scrollTop >= stopTop("engage") - 8) engage();
+      else toLogin();
       return;
     }
     jumpRef.current?.to(stopTop(id));
@@ -239,6 +272,8 @@ export function LandingPage({
 
         <section data-stop="engage" className="lp-stop lp-engage-stop" />
       </main>
+
+      <div ref={cutRef} className="lp-cut" aria-hidden="true" />
 
       <div ref={hudModRef} className="lp-hudmod" aria-hidden="true">
         <small>

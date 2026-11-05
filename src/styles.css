@@ -1056,6 +1056,48 @@
   transform: translateY(-2px);
 }
 
+/* 3D mode (html[data-depth3d], set by ModuleTransitionLayer): panels assemble
+   from the depth when a module opens, like the boards in the module tunnel.
+   html[data-backdrop3d]: the 3D world renders under the panels, so the CSS
+   backdrop rests and the quiet panels let a little more of it through. */
+@keyframes hud-depth-in {
+  from {
+    opacity: 0;
+    transform: perspective(1100px) translate3d(0, 26px, -170px) rotateX(9deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+html[data-depth3d] .hud-depth-in {
+  animation: hud-depth-in 640ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: var(--depth-delay, 0ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-depth3d] .hud-depth-in {
+    animation: none;
+  }
+}
+html[data-backdrop3d] .jarvis-bg-root {
+  display: none;
+}
+html[data-backdrop3d] .hud-panel--quiet {
+  background: color-mix(in oklab, var(--surface-1) 72%, transparent);
+  backdrop-filter: blur(3px);
+}
+html[data-backdrop3d] .hud-panel--elevated {
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--primary) 4%, transparent), transparent 40%),
+    var(--gradient-panel),
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--surface-3) 70%, transparent),
+      color-mix(in oklab, var(--base-panel-floor) 76%, transparent)
+    );
+  backdrop-filter: blur(7px) saturate(140%);
+}
+
 /* Quiet — secondary telemetry/widget panels. Recessed into the HUD
    surface rather than reading as an equal-weight floating window: no
    corner brackets, thin border, barely-there lift. */
@@ -2453,6 +2495,18 @@
 }
 .lp-modules {
   height: 520vh;
+}
+.lp-cut {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: black;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+.lp-cut.on {
+  opacity: 1;
 }
 .lp-hudmod {
   position: fixed;
