@@ -229,6 +229,20 @@ switch off or layer not loaded yet → the old CSS dematerialize transition.
 New modules need a `MODULE_ITEMS` entry (board title) and, if an agent owns
 them, a `MODULE_AGENT` entry.
 
+## 3D depth inside modules
+
+With the 3D layer on (same conditions as the transitions), the transition
+scene's canvas rests **under** the panels (z-index 5; 70 while a transition or
+the menu plays) and shows the same world: the Arc Core with its agents, dimmed
+(`BACKDROP_OPACITY`), 30 fps. Every module sees it from its own angle
+(`backdropSeed`), the page scroll and the phone tilt / mouse move it slower
+than the panels (`backdropMath.ts`, pure and tested). Not under `/jarvis`,
+`/mozg`, `/town` (their own canvases: `NO_BACKDROP_PATHS`). The layer sets
+`html[data-depth3d]` (panels assemble from the depth on mount, `HudPanel`'s
+`hud-depth-in`) and `html[data-backdrop3d]` (the CSS `JarvisBackdrop` rests,
+panel glass lets more through). New modules get both for free by using
+`HudPanel`; keep panel backgrounds as glass, not opaque fills.
+
 ## Mobile dock and the Orbita menu
 
 `MobileBottomNav` is a glass dock: the Arc Core raised in a socket (opens the
