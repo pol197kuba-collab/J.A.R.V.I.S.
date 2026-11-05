@@ -105,7 +105,8 @@ export interface SceneOverlays {
 
 /** The landing page the scroll mode reads its camera stops from. */
 export interface LandingHost {
-  scrollEl: HTMLElement;
+  /** The scroll container (null once the landing page has unmounted). */
+  scrollEl: () => HTMLElement | null;
   /** Stop sections in document order (data-stop ids: hero, jarvis, a0…, modules, engage). */
   sections: () => { id: string; el: HTMLElement }[];
   /** Rect of the engage reactor placeholder (fixed layer, viewport coordinates). */
@@ -439,7 +440,7 @@ export function createLoginScene(opts: IntroSceneOptions): IntroScene {
   let energy = 0;
   let energyBase = 0;
   let shake = 0;
-  let sy = 0;
+  let sy = -1; // first scroll frame jumps straight to the container's position
   let lastHud = "";
   let frames = 0;
   let slow = 0;
@@ -478,11 +479,12 @@ export function createLoginScene(opts: IntroSceneOptions): IntroScene {
     portrait = w / h < 1;
     T.place(portrait);
     const host = opts.landing;
-    if (host) {
-      const hostRect = host.scrollEl.getBoundingClientRect();
+    const hostEl = host?.scrollEl() ?? null;
+    if (host && hostEl) {
+      const hostRect = hostEl.getBoundingClientRect();
       const sections = host.sections().map(({ id, el }) => {
         const r = el.getBoundingClientRect();
-        return { id, top: r.top - hostRect.top + host.scrollEl.scrollTop, height: r.height };
+        return { id, top: r.top - hostRect.top + hostEl.scrollTop, height: r.height };
       });
       const home = host.engageHome();
       stops = buildStops({
@@ -559,8 +561,10 @@ export function createLoginScene(opts: IntroSceneOptions): IntroScene {
   // ---- scroll mode ----
   function scrollFrame(dt: number) {
     const host = opts.landing;
-    if (!host || !stops.length) return;
-    const target = host.scrollEl.scrollTop;
+    const hostEl = host?.scrollEl() ?? null;
+    if (!host || !hostEl || !stops.length) return;
+    const target = hostEl.scrollTop;
+    if (sy < 0) sy = target;
     sy = st.reduced || host.isJumping() ? target : lerp(sy, target, 1 - Math.exp(-dt * 6));
     if (Math.abs(sy - target) < 0.3) sy = target;
     const S = scrollState(sy, stops);
@@ -621,7 +625,7 @@ export function createLoginScene(opts: IntroSceneOptions): IntroScene {
     overlays.vignette.style.opacity = "1";
     overlays.ark.style.opacity = "0";
     if (opts.onHud) {
-      const scan = scanPercent(sy, host.scrollEl.scrollHeight, host.scrollEl.clientHeight);
+      const scan = scanPercent(sy, hostEl.scrollHeight, hostEl.clientHeight);
       const key = `${scan}|${S.hudMod}|${moduleIndex}|${S.engaged.toFixed(2)}`;
       if (key !== lastHud) {
         lastHud = key;
@@ -1006,7 +1010,8 @@ export function createLoginScene(opts: IntroSceneOptions): IntroScene {
   const onContextLost = (e: Event) => e.preventDefault();
   canvas.addEventListener("webglcontextlost", onContextLost);
   const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => layout()) : null;
-  if (opts.landing) ro?.observe(opts.landing.scrollEl);
+  const landingEl = opts.landing?.scrollEl() ?? null;
+  if (landingEl) ro?.observe(landingEl);
   void document.fonts?.ready.then(() => {
     if (disposed) return;
     T.retexture();
@@ -1079,7 +1084,7 @@ export function createLoginScene(opts: IntroSceneOptions): IntroScene {
     debug: {
       stops: () => stops,
       setScroll(y) {
-        opts.landing?.scrollEl.scrollTo({ top: y, behavior: "instant" as ScrollBehavior });
+        opts.landing?.scrollEl()?.scrollTo({ top: y, behavior: "instant" as ScrollBehavior });
         sy = y;
       },
       setIgnite(p) {

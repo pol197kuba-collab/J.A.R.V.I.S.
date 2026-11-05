@@ -151,9 +151,7 @@ export function LoginScene({ mode, phase, bridge, onLive, onDone, onUnavailable 
           landing:
             mode === "landing" && b.host
               ? {
-                  get scrollEl() {
-                    return bridge.current.host!.scrollEl;
-                  },
+                  scrollEl: () => bridge.current.host?.scrollEl() ?? null,
                   sections: () => bridge.current.host?.sections() ?? [],
                   engageHome: () => bridge.current.host?.engageHome() ?? null,
                   isJumping: () => bridge.current.host?.isJumping() ?? false,
