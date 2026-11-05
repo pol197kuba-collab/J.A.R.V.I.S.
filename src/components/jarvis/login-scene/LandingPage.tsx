@@ -6,7 +6,7 @@ import { landingStartsAtEngage, markLandingSeen } from "@/lib/theme/loginScene";
 import type { LandingHud } from "./createLoginScene";
 import { JARVIS_CORE, LANDING_AGENTS, LANDING_AGENT_TOTAL, landingModules } from "./landingData";
 import { createScrollJump } from "./scrollJump";
-import type { IntroBridge } from "./LoginScene";
+import type { IntroBridge } from "./introBridge";
 
 /**
  * 3D landing page: the DOM half (copy, buttons, readouts) of the intro. The
@@ -39,9 +39,10 @@ export function LandingPage({
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
+    const b = bridge.current; // a plain object that lives as long as PhaseController
     const jump = createScrollJump(el);
     jumpRef.current = jump;
-    bridge.current.host = {
+    b.host = {
       scrollEl: () => el,
       sections: () =>
         Array.from(el.querySelectorAll<HTMLElement>("[data-stop]")).map((s) => ({
@@ -54,7 +55,7 @@ export function LandingPage({
       },
       isJumping: () => jump.active(),
     };
-    bridge.current.onHud = (h: LandingHud) => {
+    b.onHud = (h: LandingHud) => {
       if (scanRef.current) {
         scanRef.current.textContent = `SYSTEM SCAN ${String(h.scan).padStart(3, "0")}%`;
       }
@@ -77,8 +78,8 @@ export function LandingPage({
     return () => {
       jump.dispose();
       jumpRef.current = null;
-      bridge.current.host = null;
-      bridge.current.onHud = null;
+      b.host = null;
+      b.onHud = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

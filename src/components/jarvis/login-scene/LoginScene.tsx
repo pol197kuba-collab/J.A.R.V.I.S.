@@ -3,20 +3,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { LOGIN_DENIED_EVENT, LOGIN_REACTOR_SLOT_ATTR } from "@/lib/theme/loginScene";
 import type { AppPhase } from "@/components/jarvis/PhaseContext";
+import type { IntroBridge } from "./introBridge";
 import { landingIntroAgents, landingModules } from "./landingData";
 import { resolveSceneColors } from "./sceneColors";
 // Type-only: erased at build, so three.js never reaches the main bundle.
 import type { IntroAgent, IntroScene, LandingHost, LandingHud, SlotRect } from "./createLoginScene";
-
-/** Shared between PhaseController, LandingPage and the scene (no React renders per frame). */
-export interface IntroBridge {
-  /** Filled by LandingPage: the scroll container and its stop sections. */
-  host: LandingHost | null;
-  /** Filled by LandingPage: receives the per-frame HUD readout. */
-  onHud: ((h: LandingHud) => void) | null;
-}
-
-export const createIntroBridge = (): IntroBridge => ({ host: null, onHud: null });
 
 interface Props {
   /** "landing": starts in scroll mode (landing page); "login": straight to the 3D login. */
@@ -40,6 +31,7 @@ declare global {
       enterLogin: () => void;
       setIgnite: (p: number) => void;
       setEnergy: (e: number) => void;
+      setAgents: (list: IntroAgent[]) => void;
       shake: () => void;
       frame: (n?: number) => void;
       layout: () => void;
@@ -189,6 +181,7 @@ export function LoginScene({ mode, phase, bridge, onLive, onDone, onUnavailable 
               scene.debug.setIgnite(p);
             },
             setEnergy: (e) => scene.debug.setEnergy(e),
+            setAgents: (list) => scene.setAgents(list, true),
             shake: () => scene.shake(),
             frame: (n = 1) => {
               for (let i = 0; i < n; i++) scene.frame();
@@ -226,7 +219,6 @@ export function LoginScene({ mode, phase, bridge, onLive, onDone, onUnavailable 
   useEffect(() => {
     const scene = sceneRef.current;
     if (scene) syncPhase(scene);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
   return (
