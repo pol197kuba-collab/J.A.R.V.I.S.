@@ -245,8 +245,10 @@ panel glass lets more through). New modules get both for free by using
 
 ## Mobile dock and the Orbita menu
 
-`MobileBottomNav` is a glass dock: the Arc Core raised in a socket (opens the
-menu; spins up / turns red from the real agent states), the current module
+`MobileBottomNav` is a glass dock: the Arc Core itself in the middle, no frame
+(`MiniArcCore`, CSS 3D: pulsing golden core and three golden rings; tap opens
+the menu, a 2 s hold flies to `/jarvis`; spins up / turns red from the real
+agent states), the current module
 with one live line on the left (`dockWidgets.ts`, pure and tested — real data
 from shared query keys only, no data → no line), agent status dots and the
 mic on the right. It slides away while `<main>` scrolls down and returns on
