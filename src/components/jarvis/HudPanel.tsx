@@ -98,12 +98,12 @@ export function HudPanel({
         {(title || rightSlot) && (
           <div
             className={cn(
-              "flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2 @max-[420px]:px-3",
+              "hud-panel-head flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2 @max-[420px]:px-3",
               elevated ? "border-b border-primary/25" : "border-b border-primary/10",
             )}
           >
             {title && (
-              <span className="font-display min-w-0 truncate text-[10px] uppercase tracking-[0.35em] text-primary/90 @max-[420px]:text-[9px] @max-[420px]:tracking-[0.22em]">
+              <span className="hud-panel-title font-display min-w-0 truncate text-[10px] uppercase tracking-[0.35em] text-primary/90 @max-[420px]:text-[9px] @max-[420px]:tracking-[0.22em]">
                 {title}
               </span>
             )}
