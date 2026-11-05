@@ -8,8 +8,8 @@ import {
 } from "./miniCoreMath";
 
 describe("dock mini core", () => {
-  it("is 25% bigger than the old 60 px button", () => {
-    expect(MINI_CORE_BUTTON_PX).toBe(75);
+  it("is 64 px (15% smaller than the first 3D version)", () => {
+    expect(MINI_CORE_BUTTON_PX).toBe(64);
   });
 
   it("frames the rings inside the view", () => {
@@ -17,8 +17,8 @@ describe("dock mini core", () => {
     expect(100 / d).toBeCloseTo(Math.tan((15 * Math.PI) / 180));
   });
 
-  it("charges over the 1.5 s hold and spins up for busy agents", () => {
-    expect(JARVIS_HOLD_MS).toBe(1500);
+  it("charges over the 1 s hold and spins up for busy agents", () => {
+    expect(JARVIS_HOLD_MS).toBe(1000);
     expect(holdCharge(0)).toBe(0);
     expect(holdCharge(JARVIS_HOLD_MS / 2)).toBeCloseTo(0.25);
     expect(holdCharge(JARVIS_HOLD_MS * 3)).toBe(1);

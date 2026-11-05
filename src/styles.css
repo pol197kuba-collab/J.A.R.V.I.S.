@@ -1147,14 +1147,11 @@ html[data-depth3d] .hud-panel::after {
   mix-blend-mode: normal;
 }
 
-/* headers: no rule under the title — a lit dot and a fading sheen instead */
-html[data-depth3d] .hud-panel-head {
+/* headers: no rule under the title — a lit dot instead */
+html[data-depth3d] .hud-panel .hud-panel-head {
   border-bottom-color: transparent;
-  background: linear-gradient(
-    90deg,
-    color-mix(in oklab, var(--primary) 8%, transparent),
-    transparent 65%
-  );
+  border-image: none;
+  background: none;
 }
 html[data-depth3d] .hud-panel-title {
   display: inline-flex;
@@ -1271,6 +1268,107 @@ html[data-depth3d] main [role="tab"]:is([aria-selected="true"], [data-state="act
   color: var(--primary-foreground);
   box-shadow:
     0 0 18px -4px var(--primary),
+    inset 0 1px 0 color-mix(in oklab, white 45%, transparent);
+}
+
+/* Hologram, inside the panels: the modules' own cyan frames turn into light
+   too. Matched by the utilities they already carry, so the classic look (Town,
+   no 3D) is untouched and new modules get it without extra classes. Only cyan
+   (border-primary*) frames change; status colours (destructive, warning,
+   success accents) keep their lines. */
+html[data-depth3d]
+  main
+  .hud-panel
+  :is(
+    div,
+    section,
+    article,
+    li,
+    ul,
+    ol,
+    label,
+    details,
+    figure,
+    aside,
+    header,
+    footer
+  )[class~="border"][class*="border-primary"]:not(
+    [class~="border-dashed"],
+    [role="group"],
+    [role="tablist"]
+  ) {
+  border-color: transparent;
+  background-color: color-mix(in oklab, var(--primary) 5%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, var(--primary) 22%, transparent),
+    0 12px 26px -20px oklch(0 0 0 / 0.9);
+}
+/* one-sided rules → a line of light fading out at both ends */
+html[data-depth3d]
+  main
+  .hud-panel
+  :is([class~="border-b"], [class~="border-t"]):not(
+    [class~="border"],
+    .hud-panel-head,
+    button,
+    input,
+    textarea,
+    select
+  )[class*="border-primary"] {
+  border-image: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in oklab, var(--primary) 30%, transparent) 22%,
+      color-mix(in oklab, var(--primary) 30%, transparent) 78%,
+      transparent
+    )
+    1;
+}
+html[data-depth3d]
+  main
+  .hud-panel
+  :is([class~="border-l"], [class~="border-l-2"], [class~="border-r"]):not(
+    [class~="border"],
+    .hud-panel-head,
+    button,
+    input,
+    textarea,
+    select
+  )[class*="border-primary"] {
+  border-image: linear-gradient(
+      180deg,
+      transparent,
+      color-mix(in oklab, var(--primary) 42%, transparent) 25%,
+      color-mix(in oklab, var(--primary) 42%, transparent) 75%,
+      transparent
+    )
+    1;
+}
+/* toggle rows (aria-pressed buttons in a group): a recessed track and a puck */
+html[data-depth3d] main [role="group"]:has(> button[aria-pressed]) {
+  gap: 2px;
+  padding: 2px;
+  border-color: transparent;
+  border-radius: 0.7rem;
+  background-color: color-mix(in oklab, var(--background) 60%, transparent);
+  box-shadow: inset 0 2px 8px oklch(0 0 0 / 0.55);
+}
+html[data-depth3d] main [role="group"] > button[aria-pressed] {
+  border-radius: 0.55rem;
+  transition:
+    background 0.25s ease,
+    box-shadow 0.25s ease,
+    color 0.25s ease;
+}
+html[data-depth3d] main [role="group"] > button[aria-pressed="true"] {
+  background: radial-gradient(
+    120% 140% at 50% 0%,
+    color-mix(in oklab, var(--primary) 88%, white),
+    var(--primary) 75%
+  );
+  color: var(--primary-foreground);
+  box-shadow:
+    0 0 16px -4px var(--primary),
     inset 0 1px 0 color-mix(in oklab, white 45%, transparent);
 }
 
@@ -1398,15 +1496,15 @@ html[data-depth3d] main [role="tab"]:is([aria-selected="true"], [data-state="act
     transparent 70%
   );
 }
-/* long press: the core charges up over the 1.5 s hold */
+/* long press: the core charges up over the 1 s hold */
 .mini-arc-core.is-charging {
   --mac-spin: 4;
 }
 .mini-arc-core.is-charging .mac-core {
-  animation: mac-charge 1.5s ease-in forwards;
+  animation: mac-charge 1s ease-in forwards;
 }
 .mini-arc-core.is-charging .mac-glow {
-  animation: mac-charge-glow 1.5s ease-in forwards;
+  animation: mac-charge-glow 1s ease-in forwards;
 }
 @keyframes mac-charge {
   from {
@@ -1469,22 +1567,6 @@ html[data-depth3d] .hud-depth-in {
 html[data-backdrop3d] .jarvis-bg-root {
   display: none;
 }
-html[data-backdrop3d] .hud-panel--quiet {
-  background: color-mix(in oklab, var(--surface-1) 72%, transparent);
-  backdrop-filter: blur(3px);
-}
-html[data-backdrop3d] .hud-panel--elevated {
-  background:
-    linear-gradient(180deg, color-mix(in oklab, var(--primary) 4%, transparent), transparent 40%),
-    var(--gradient-panel),
-    linear-gradient(
-      180deg,
-      color-mix(in oklab, var(--surface-3) 70%, transparent),
-      color-mix(in oklab, var(--base-panel-floor) 76%, transparent)
-    );
-  backdrop-filter: blur(7px) saturate(140%);
-}
-
 /* Quiet — secondary telemetry/widget panels. Recessed into the HUD
    surface rather than reading as an equal-weight floating window: no
    corner brackets, thin border, barely-there lift. */
