@@ -50,6 +50,8 @@ type Ctx = {
   startTransition: (path: string, opts?: { fromMenu?: boolean }) => TransitionStart;
   /** The 3D orbit menu, when the 3D layer is on and loaded (else the flat menu is used). */
   menu3d: () => MenuControl | null;
+  /** 3D is on for this browser: intro switch, HUD skin, WebGL, motion allowed. */
+  can3d: boolean;
   /** CSS durations of the page leaving / entering during a 3D transition, ms. */
   pageTiming: { out: number; in: number };
 };
@@ -59,6 +61,7 @@ const TransitionCtx = createContext<Ctx>({
   isTransitioning: false,
   startTransition: () => false,
   menu3d: () => null,
+  can3d: false,
   pageTiming: { out: 0, in: 0 },
 });
 
@@ -151,6 +154,7 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
         isTransitioning: transition !== "idle",
         startTransition,
         menu3d,
+        can3d,
         pageTiming,
       }}
     >
