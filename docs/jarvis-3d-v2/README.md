@@ -22,7 +22,7 @@ między ekranami. Pozycja reaktora na ekranach DOM pochodzi z prostokątów elem
 przez `fitCamera`, dzięki czemu układ HTML i scena zawsze się zgadzają.
 
 ## Stałe do strojenia (jedno miejsce)
-- Skok do logowania: `JUMP_PX_PER_MS = 5.5`, `JUMP_MIN_MS = 900`, `JUMP_MAX_MS = 3000`, easing sześcienny in-out,
+- Skok do logowania: `JUMP_PX_PER_MS = 5.5`, `JUMP_MIN_MS = 900`, `JUMP_MAX_MS = 3000` (w aplikacji spowolnione 2x na prośbę właściciela: 2.75 / 1800 / 6000), easing sześcienny in-out,
   przerywany przez wheel / touchstart / keydown, natychmiastowy przy prefers-reduced-motion.
 - Ignition: 2600 ms (`igStart`, mianownik w `igniteFrame`).
 - Login: wejście kamery 1100 ms; `fitCamera(slot, 32, 380)` (span 380 jednostek obejmuje kadłub i żyroskop).
