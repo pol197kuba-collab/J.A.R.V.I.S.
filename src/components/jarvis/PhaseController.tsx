@@ -86,6 +86,11 @@ export function PhaseController() {
     return () => clearTimeout(t);
   }, [phase]);
 
+  // DEV-only proof harness: lets the verification scripts seed the agents cache.
+  useEffect(() => {
+    if (import.meta.env.DEV) Reflect.set(window, "__queryClient", queryClient);
+  }, [queryClient]);
+
   useEffect(() => {
     if (phase !== "booting") return;
     setIntro(shouldUseIntro());

@@ -32,6 +32,7 @@ import {
   fitCamera,
   igniteLook,
   initialDpr,
+  labelPlacement,
   lerp,
   loginCamera,
   loginLook,
@@ -733,17 +734,12 @@ export function createLoginScene(opts: IntroSceneOptions): IntroScene {
       let sx = (lv.x * 0.5 + 0.5) * W;
       let sy2 = (-lv.y * 0.5 + 0.5) * H;
       let ax = "-50%";
-      if (!narrow && l.node) {
-        // labels sit beside their node, on the side facing away from the core,
-        // so they never cover the node or the core
-        const dx = sx - cx;
-        const dy = sy2 - cy;
-        const d = Math.hypot(dx, dy) || 1;
-        const side = Math.abs(dx) > 40 ? Math.sign(dx) : 0;
-        sx += side * 46 + (dx / d) * 10;
-        sy2 += side ? (dy / d) * 8 : dy > 0 ? 40 : -40;
-        ax = side > 0 ? "0%" : side < 0 ? "-100%" : "-50%";
-        l.root.style.textAlign = side > 0 ? "left" : side < 0 ? "right" : "center";
+      if (l.node) {
+        const pl = labelPlacement(sx - cx, sy2 - cy, narrow);
+        sx += pl.ox;
+        sy2 += pl.oy;
+        ax = pl.ax;
+        l.root.style.textAlign = pl.align;
       }
       l.root.style.transform = `translate(${ax},-50%) translate(${sx}px,${sy2}px)`;
     });

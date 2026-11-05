@@ -25,6 +25,7 @@ import {
   initialDpr,
   jumpMs,
   jumpPosition,
+  labelPlacement,
   loginCamera,
   loginLook,
   loginProgress,
@@ -555,5 +556,27 @@ describe("helpers", () => {
     expect(ease(1)).toBe(1);
     expect(seg(-1, 0, 1)).toBe(0);
     expect(seg(2, 0, 1)).toBe(1);
+  });
+});
+
+describe("label placement", () => {
+  it("right-hand nodes get left-aligned labels pushed outward", () => {
+    const p = labelPlacement(300, 10, false);
+    expect(p.align).toBe("left");
+    expect(p.ax).toBe("0%");
+    expect(p.ox).toBeGreaterThan(46);
+  });
+  it("left-hand nodes get right-aligned labels pushed left", () => {
+    const p = labelPlacement(-300, -10, false);
+    expect(p.align).toBe("right");
+    expect(p.ax).toBe("-100%");
+    expect(p.ox).toBeLessThan(-46);
+  });
+  it("nodes above/below the core put the label further up/down, centred", () => {
+    expect(labelPlacement(0, -200, false)).toMatchObject({ align: "center", oy: -40 });
+    expect(labelPlacement(10, 200, false)).toMatchObject({ align: "center", oy: 40 });
+  });
+  it("narrow screens: centred, no offset", () => {
+    expect(labelPlacement(300, 50, true)).toEqual({ ox: 0, oy: 0, ax: "-50%", align: "center" });
   });
 });

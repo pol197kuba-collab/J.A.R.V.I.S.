@@ -1,4 +1,4 @@
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, lazy, useLayoutEffect, useMemo, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import { Line, OrbitControls, Points, PointMaterial } from "@react-three/drei";
@@ -6,6 +6,7 @@ import { Core3D } from "./Core3D";
 import { AgentNode3D, type AgentNodeData } from "./AgentNode3D";
 import { MATRIX_SCALE as SCALE } from "./matrixScale";
 import { useThemeColors } from "@/lib/theme/themeColor";
+import { isLoginSceneEnabled } from "@/lib/theme/loginScene";
 
 // three.js needs concrete colors — resolved from the theme tokens (see
 // src/lib/theme/themeColor.ts). Fallbacks match the default JARVIS theme.
@@ -88,7 +89,36 @@ function ConnectionLines({
   );
 }
 
+// Arc Core v2 (docs/jarvis-3d-v2) is its own lazy chunk: with the switch off
+// (isLoginSceneEnabled) this file renders the legacy canvas below and the v2
+// code is never downloaded.
+const JarvisCanvasV2 = lazy(() =>
+  import("./arc-core/JarvisCanvasV2").then((m) => ({ default: m.JarvisCanvasV2 })),
+);
+
+/**
+ * The /jarvis matrix. Same props as ever; the variant (legacy vs Arc Core v2)
+ * is picked once on the client by the intro switch. The variant is decided in
+ * a layout effect so the server markup and the first client render match
+ * (an empty box), and no canvas is created for the wrong variant.
+ */
 export function JarvisCanvas({ agents }: { agents: AgentNodeData[] }) {
+  const [variant, setVariant] = useState<"v2" | "legacy" | null>(null);
+  useLayoutEffect(() => {
+    setVariant(isLoginSceneEnabled() ? "v2" : "legacy");
+  }, []);
+  if (variant === "v2") {
+    return (
+      <Suspense fallback={null}>
+        <JarvisCanvasV2 agents={agents} />
+      </Suspense>
+    );
+  }
+  if (variant === "legacy") return <JarvisCanvasLegacy agents={agents} />;
+  return null;
+}
+
+function JarvisCanvasLegacy({ agents }: { agents: AgentNodeData[] }) {
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const colors = useThemeColors(SCENE_COLORS, SCENE_FALLBACKS);
 

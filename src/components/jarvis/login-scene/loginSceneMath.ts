@@ -519,6 +519,25 @@ export const overlayOpacity = (p: number) => 1 - ease(seg(p, P_LIVE, 1));
 /** The overlay stops catching input the moment the dashboard may mount. */
 export const overlayInteractive = (p: number) => p < P_LIVE;
 
+// ---- agent labels ---------------------------------------------------------------
+/**
+ * Label placement beside a node, on the side facing away from the core (so it
+ * never covers the node or the core). dx/dy = node screen position minus the
+ * core's, in px. Returns the offset from the node's screen position, the CSS
+ * horizontal anchor and the text alignment. Narrow screens: no offset (centred).
+ */
+export function labelPlacement(dx: number, dy: number, narrow: boolean) {
+  if (narrow) return { ox: 0, oy: 0, ax: "-50%" as const, align: "center" as const };
+  const d = Math.hypot(dx, dy) || 1;
+  const side = Math.abs(dx) > 40 ? Math.sign(dx) : 0;
+  return {
+    ox: side * 46 + (dx / d) * 10,
+    oy: side ? (dy / d) * 8 : dy > 0 ? 40 : -40,
+    ax: (side > 0 ? "0%" : side < 0 ? "-100%" : "-50%") as "0%" | "-100%" | "-50%",
+    align: (side > 0 ? "left" : side < 0 ? "right" : "center") as "left" | "right" | "center",
+  };
+}
+
 // ---- adaptive quality ------------------------------------------------------------
 export const QUALITY_WINDOW = 120;
 export const SLOW_FRAME_S = 0.034;

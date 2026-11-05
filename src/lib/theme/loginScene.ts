@@ -27,6 +27,11 @@ export interface LoginSceneEnv {
   stored: string | null;
 }
 
+// The URL override is read once, when the page loads: in-app navigation (e.g. the
+// redirect to /jarvis after login) drops the query string, and the switch must
+// not flip half-way through one session.
+const initialSearch = typeof window === "undefined" ? "" : window.location.search;
+
 function readEnv(): LoginSceneEnv {
   if (typeof window === "undefined") return { search: "", stored: null };
   let stored: string | null = null;
@@ -35,7 +40,7 @@ function readEnv(): LoginSceneEnv {
   } catch {
     /* storage unavailable — fall through to URL / default */
   }
-  return { search: window.location.search, stored };
+  return { search: initialSearch, stored };
 }
 
 function flag(v: string | null | undefined): boolean | null {
