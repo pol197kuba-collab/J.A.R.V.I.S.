@@ -73,16 +73,18 @@ describe("constants match the v2 prototype", () => {
     expect(P_LIVE * DUR.full).toBeCloseTo(1.51, 2);
   });
   it("jump constants and tunnel layout", () => {
-    expect([JUMP_PX_PER_MS, JUMP_MIN_MS, JUMP_MAX_MS]).toEqual([5.5, 900, 3000]);
+    expect([JUMP_PX_PER_MS, JUMP_MIN_MS, JUMP_MAX_MS]).toEqual([2.75, 1800, 6000]); // 2x the prototype's time
     expect(TUNNEL).toEqual({ start: 420, end: -2880, first: -300, step: 205 });
   });
 });
 
 describe("jump time and easing", () => {
-  it("clamps px / 5.5 to 900..3000 ms", () => {
+  it("clamps px / 2.75 to 1800..6000 ms (twice the prototype's duration)", () => {
     expect(jumpMs(100)).toBe(JUMP_MIN_MS);
-    expect(jumpMs(5.5 * 2000)).toBeCloseTo(2000);
-    expect(jumpMs(-5.5 * 2000)).toBeCloseTo(2000);
+    expect(jumpMs(2.75 * 2000)).toBeCloseTo(2000);
+    expect(jumpMs(-2.75 * 2000)).toBeCloseTo(2000);
+    // a full landing (~16 000 px on a phone) used to take 3 s, now ~5.8 s
+    expect(jumpMs(16000) / Math.min(3000, Math.max(900, 16000 / 5.5))).toBeGreaterThanOrEqual(1.5);
     expect(jumpMs(1e6)).toBe(JUMP_MAX_MS);
   });
   it("cubic in-out: endpoints, midpoint, monotonic", () => {
@@ -235,6 +237,33 @@ describe("scroll → camera state", () => {
     expect(scanPercent(0, 10000, 800)).toBe(0);
     expect(scanPercent(9200, 10000, 800)).toBe(100);
     expect(scanPercent(0, 100, 100)).toBe(0); // no scrollable height: prototype clamps the divisor to 1
+  });
+});
+
+describe("portrait agent stops keep the scene visible", () => {
+  const portrait = () =>
+    buildStops({ sections, viewport: { width: 390, height: 844 }, engageFit, homes });
+  it("S.H.I.E.L.D. (a0) parks the camera far out on portrait, but reactor and nodes stay", () => {
+    const s = portrait();
+    const a0 = s[2];
+    expect(a0.cam.z).toBeLessThan(-700); // the case that used to blank the screen
+    const st = scrollState(a0.a + 5, s);
+    expect(st.reactorVisible).toBe(true);
+    expect(st.nodesVisible).toBe(true);
+  });
+  it("every agent stop shows reactor and nodes, on both orientations", () => {
+    for (const s of [stops(), portrait()]) {
+      for (const stop of s.filter((x) => /^a\d$/.test(x.id))) {
+        const st = scrollState(stop.a + 5, s);
+        expect(st.reactorVisible && st.nodesVisible).toBe(true);
+      }
+    }
+  });
+  it("deep in the tunnel they are still hidden, as in the prototype", () => {
+    const s = stops();
+    const st = scrollState(s[7].b - 5, s);
+    expect(st.reactorVisible).toBe(false);
+    expect(st.nodesVisible).toBe(false);
   });
 });
 

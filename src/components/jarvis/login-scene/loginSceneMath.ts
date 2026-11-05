@@ -27,9 +27,11 @@ export const LOGIN_ENTER_MS = 1100;
 export const LOGIN_SPAN = 380;
 
 /** Landing buttons: jump to a stop on their own rAF clock, not native smooth scroll. */
-export const JUMP_PX_PER_MS = 5.5;
-export const JUMP_MIN_MS = 900;
-export const JUMP_MAX_MS = 3000;
+// Half the prototype's speed (5.5 px/ms, 900–3000 ms): the owner asked for the
+// flight to the login to be at least 50% slower, so every jump takes twice as long.
+export const JUMP_PX_PER_MS = 2.75;
+export const JUMP_MIN_MS = 1800;
+export const JUMP_MAX_MS = 6000;
 
 /** Module tunnel layout (world units). */
 export const TUNNEL = { start: 420, end: -2880, first: -300, step: 205 } as const;
@@ -296,6 +298,7 @@ export function scrollState(sy: number, stops: Stop[]): ScrollState {
   }
   if (B.id === "engage" && same) align = 1;
 
+  const inTunnel = A.id === "modules" || B.id === "modules";
   let bloom = align ? lerp(0.4, B.bloom ?? 0.26, seg(t, 0.28, 0.6)) : lerp(A.bloom, B.bloom, e);
   if (same && A.id === "engage") bloom = 0.26;
 
@@ -312,8 +315,12 @@ export function scrollState(sy: number, stops: Stop[]): ScrollState {
     fogFar: tunVis ? 1250 : 2600,
     engaged: B.id === "engage" ? (same ? 1 : seg(t, 0.85, 1)) : 0,
     hudMod: tunVis && same ? 1 : 0,
-    nodesVisible: cam.z > -500 && !align,
-    reactorVisible: cam.z > -700,
+    // The z cut-offs only exist to hide the reactor and the agents while the camera
+    // is deep inside the module tunnel. Outside it they must not apply: on portrait
+    // screens the S.H.I.E.L.D. stop parks the camera ~2.4x further out (z ≈ -910)
+    // and the whole scene used to vanish there, leaving an empty background.
+    nodesVisible: (!inTunnel || cam.z > -500) && !align,
+    reactorVisible: !inTunnel || cam.z > -700,
     dustVisible: !align,
   };
 }
