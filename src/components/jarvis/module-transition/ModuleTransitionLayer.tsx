@@ -111,22 +111,35 @@ export const ModuleTransitionLayer = forwardRef<ModuleTransitionHandle, { enable
         if (!(el instanceof HTMLElement) || el.tagName !== "MAIN") return;
         sceneRef.current?.backdrop.scroll(el.scrollTop, el.clientHeight);
       };
+      // the panels' rim light follows the tilt too (html --tilt-x); quantized and
+      // throttled, because a custom property on <html> restyles the whole page
+      let lastTiltCss = "";
+      let lastTiltAt = 0;
+      const tiltCss = (x: number) => {
+        const v = (Math.round(x * 20) / 20).toFixed(2);
+        const now = performance.now();
+        if (v === lastTiltCss || now - lastTiltAt < 100) return;
+        lastTiltCss = v;
+        lastTiltAt = now;
+        document.documentElement.style.setProperty("--tilt-x", v);
+      };
       const onTilt = (e: DeviceOrientationEvent) => {
         const t = tiltFromOrientation(e.beta, e.gamma);
         sceneRef.current?.backdrop.tilt(t.x, t.y);
+        tiltCss(t.x);
       };
       const onPointer = (e: PointerEvent) => {
         if (e.pointerType !== "mouse") return;
-        sceneRef.current?.backdrop.tilt(
-          (e.clientX / window.innerWidth) * 2 - 1,
-          (e.clientY / window.innerHeight) * 2 - 1,
-        );
+        const x = (e.clientX / window.innerWidth) * 2 - 1;
+        sceneRef.current?.backdrop.tilt(x, (e.clientY / window.innerHeight) * 2 - 1);
+        tiltCss(x);
       };
       document.addEventListener("scroll", onScroll, { capture: true, passive: true });
       window.addEventListener("deviceorientation", onTilt, { passive: true });
       window.addEventListener("pointermove", onPointer, { passive: true });
       return () => {
         document.removeEventListener("scroll", onScroll, { capture: true });
+        document.documentElement.style.removeProperty("--tilt-x");
         window.removeEventListener("deviceorientation", onTilt);
         window.removeEventListener("pointermove", onPointer);
       };
