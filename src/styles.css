@@ -2454,6 +2454,18 @@
 .lp-modules {
   height: 520vh;
 }
+.lp-cut {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: black;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+.lp-cut.on {
+  opacity: 1;
+}
 .lp-hudmod {
   position: fixed;
   z-index: 4;

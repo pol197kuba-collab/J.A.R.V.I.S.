@@ -18,27 +18,32 @@ export function createScrollJump(el: HTMLElement) {
   events.forEach((ev) => window.addEventListener(ev, stop, { passive: true }));
 
   return {
-    /** Fly the container to `top`; instant when reduced motion is on. */
-    to(top: number) {
+    /**
+     * Fly the container to `top`; instant when reduced motion is on. A function
+     * target is re-read every frame: the layout can change mid-flight (entering
+     * fullscreen on the same tap resizes every `vh` section).
+     */
+    to(top: number | (() => number)) {
       stop();
+      const target = typeof top === "function" ? top : () => top;
       if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
-        el.scrollTo({ top, behavior: "instant" as ScrollBehavior });
+        el.scrollTo({ top: target(), behavior: "instant" as ScrollBehavior });
         return;
       }
       const from = el.scrollTop;
-      const total = jumpMs(top - from);
+      const total = jumpMs(target() - from);
       const t0 = performance.now();
       running = true;
       const step = (now: number) => {
         if (!running) return;
         const elapsed = now - t0;
         if (elapsed >= total) {
-          el.scrollTop = top; // the last frame lands exactly on the target
+          el.scrollTop = target(); // the last frame lands exactly on the target
           running = false;
           raf = 0;
           return;
         }
-        el.scrollTop = jumpPosition(from, top, elapsed);
+        el.scrollTop = jumpPosition(from, target(), elapsed);
         raf = requestAnimationFrame(step);
       };
       raf = requestAnimationFrame(step);

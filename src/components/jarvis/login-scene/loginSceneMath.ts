@@ -32,6 +32,8 @@ export const LOGIN_SPAN = 380;
 export const JUMP_PX_PER_MS = 2.75;
 export const JUMP_MIN_MS = 1800;
 export const JUMP_MAX_MS = 6000;
+/** "Przejdź do logowania" skips straight to the module tunnel behind a fade to black this long. */
+export const LANDING_CUT_MS = 200;
 
 /**
  * App start: the first frame shows the reactor front-on exactly where the boot
