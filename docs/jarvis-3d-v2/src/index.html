@@ -1,0 +1,250 @@
+<title>JARVIS Landing 3D v2</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/*FONTS*/
+/* Layout: one fixed WebGL scene; pinned HUD panels ride over it, the page ends on the app's real engage screen. */
+:root{
+  color-scheme:dark;
+  /* Tokens copied from the app's src/styles.css (jarvis theme), resolved to sRGB */
+  --background:#030a13;--foreground:#e3f6f9;--muted-foreground:#76c7cc;
+  --primary:#00e6f9;--accent:#73bdff;--reactor:#ffad00;--reactor-hot:#ffcd42;--warning:#f5ae39;
+  --radius:1.25rem;
+  --font-display:"Share Tech Mono","JetBrains Mono",ui-monospace,monospace;
+  --font-body:"JetBrains Mono","Share Tech Mono",ui-monospace,monospace;
+  --glow-primary:0 0 12px color-mix(in oklab,var(--primary) 80%,transparent),0 0 36px color-mix(in oklab,var(--primary) 35%,transparent);
+  --grid-bg:linear-gradient(color-mix(in oklab,var(--primary) 5%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in oklab,var(--primary) 5%,transparent) 1px,transparent 1px);
+}
+*{box-sizing:border-box}
+html{background:#000;scrollbar-width:none;overflow-x:clip}
+html::-webkit-scrollbar{display:none}
+body{margin:0;background:#000;color:var(--foreground);font:400 15px/1.65 var(--font-body);overflow-x:clip}
+.login body,html.login{overflow:hidden}
+#scene{position:fixed;inset:0;width:100vw;height:100lvh;display:block}
+:focus-visible{outline:2px solid var(--reactor-hot);outline-offset:3px}
+a{color:inherit}
+
+/* the app's boot/login backdrop */
+#grid{position:fixed;inset:0;pointer-events:none;background-image:var(--grid-bg);background-size:40px 40px;animation:grid-pan 20s linear infinite;opacity:.55;mix-blend-mode:screen;z-index:1}
+#vig{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 40%,rgba(0,0,0,.95) 100%);z-index:1;transition:opacity .8s}
+.core #vig{opacity:.35}
+@keyframes grid-pan{to{background-position:40px 40px,40px 40px}}
+#flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:6}
+
+/* chrome */
+.tick{position:fixed;width:24px;height:24px;border:0 solid color-mix(in oklab,var(--primary) 70%,transparent);z-index:5;pointer-events:none}
+.tick.tl{left:max(16px,env(safe-area-inset-left,0px));top:16px;border-width:2px 0 0 2px}.tick.tr{right:max(16px,env(safe-area-inset-right,0px));top:16px;border-width:2px 2px 0 0}
+.tick.bl{left:max(16px,env(safe-area-inset-left,0px));bottom:16px;border-width:0 0 2px 2px}.tick.br{right:max(16px,env(safe-area-inset-right,0px));bottom:16px;border-width:0 2px 2px 0}
+.bar{position:fixed;z-index:8;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:30px max(44px,env(safe-area-inset-right,0px)) 0 max(44px,env(safe-area-inset-left,0px));pointer-events:none}
+.brand{display:flex;gap:10px;align-items:center;font:400 13px/1 var(--font-display);letter-spacing:.34em;color:var(--primary)}
+.link{pointer-events:auto;font:400 12px/1 var(--font-display);letter-spacing:.26em;text-transform:uppercase;color:var(--primary);text-decoration:none;border:1px solid color-mix(in oklab,var(--primary) 50%,transparent);background:color-mix(in oklab,var(--primary) 6%,transparent);padding:10px 14px}
+.link:hover{background:color-mix(in oklab,var(--primary) 20%,transparent);color:var(--foreground)}
+#scan{position:fixed;z-index:5;bottom:26px;right:max(48px,env(safe-area-inset-right,0px));font:400 11px/1 var(--font-display);letter-spacing:.28em;color:color-mix(in oklab,var(--primary) 80%,transparent)}
+.login .bar,.login #scan{opacity:0;pointer-events:none}.login .bar *{pointer-events:none}
+
+main{position:relative;z-index:3}
+.login main{visibility:hidden}
+.stop{height:210vh;pointer-events:none}
+.pin{position:sticky;top:0;height:100vh;height:100svh;display:flex;align-items:center;padding-block:84px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+@media (min-width:761px){.pin{padding-left:max(64px,env(safe-area-inset-left,0px));padding-right:max(64px,env(safe-area-inset-right,0px))}}
+.right .pin{justify-content:flex-end}
+
+/* hero */
+#hero{height:160vh}
+#hero .pin{align-items:flex-end;padding-bottom:64px}
+.hero{max-width:680px;pointer-events:auto}
+.hero p.kick{font:400 12px/1.4 var(--font-display);letter-spacing:.5em;text-transform:uppercase;color:color-mix(in oklab,var(--primary) 85%,transparent);margin:0 0 14px}
+.hero h1{font:700 clamp(46px,8.6vw,118px)/1 var(--font-display);letter-spacing:.09em;margin:0;color:var(--foreground);text-shadow:0 0 24px color-mix(in oklab,var(--primary) 70%,transparent)}
+.hero .lead{max-width:46ch;margin:18px 0 24px;color:var(--foreground)}
+.cta{display:flex;flex-wrap:wrap;gap:12px}
+
+/* the app's bracketed button */
+.btn{position:relative;display:inline-block;font:400 13px/1 var(--font-display);letter-spacing:.34em;text-transform:uppercase;color:var(--primary);border:1px solid color-mix(in oklab,var(--primary) 70%,transparent);background:color-mix(in oklab,var(--primary) 10%,transparent);padding:15px 22px;cursor:pointer;text-decoration:none;box-shadow:var(--glow-primary);transition:background .2s,color .2s}
+.btn:hover{background:color-mix(in oklab,var(--primary) 22%,transparent);color:var(--foreground)}
+.btn::before,.btn::after{content:"";position:absolute;width:8px;height:8px;border:0 solid var(--primary)}
+.btn::before{left:-1px;top:-1px;border-width:1px 0 0 1px}.btn::after{right:-1px;bottom:-1px;border-width:0 1px 1px 0}
+.btn.quiet{box-shadow:none;border-color:color-mix(in oklab,var(--primary) 40%,transparent);background:color-mix(in oklab,var(--background) 40%,transparent);color:var(--foreground)}
+
+/* hud panel */
+.hud{position:relative;overflow:hidden;width:min(430px,100%);border-radius:var(--radius);padding:24px;pointer-events:auto;
+  background:linear-gradient(180deg,color-mix(in oklab,var(--primary) 7%,#0a1420 88%),rgba(4,10,19,.86));
+  border:1px solid color-mix(in oklab,var(--primary) 32%,transparent);
+  box-shadow:0 0 34px -12px color-mix(in oklab,var(--primary) 60%,transparent);backdrop-filter:blur(10px)}
+.hud::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 60% at 50% -20%,color-mix(in oklab,var(--primary) 18%,transparent),transparent 60%);pointer-events:none}
+.hud>*{position:relative}
+.hud .tag{display:flex;justify-content:space-between;gap:12px;font:400 11px/1.3 var(--font-display);letter-spacing:.24em;text-transform:uppercase;color:color-mix(in oklab,var(--primary) 85%,transparent)}
+.hud .tag i{font-style:normal;color:var(--muted-foreground)}
+.hud h2{font:400 clamp(27px,3vw,36px)/1.08 var(--font-display);letter-spacing:.09em;margin:12px 0 10px;color:var(--foreground);text-wrap:balance;text-shadow:0 0 16px color-mix(in oklab,var(--primary) 50%,transparent)}
+.hud p{margin:0;max-width:60ch}
+
+/* tunnel readout */
+#modules{height:520vh}
+#hud-mod{position:fixed;z-index:4;left:50%;bottom:54px;transform:translateX(-50%);opacity:0;transition:opacity .3s;text-align:center;width:calc(100vw - 40px);pointer-events:none}
+#hud-mod small{display:block;font:400 11px/1.4 var(--font-display);letter-spacing:.4em;color:color-mix(in oklab,var(--primary) 85%,transparent);text-transform:uppercase}
+#mod-now{display:block;font:400 clamp(26px,3.6vw,40px)/1.2 var(--font-display);letter-spacing:.14em;text-transform:uppercase;text-shadow:0 0 18px color-mix(in oklab,var(--primary) 70%,transparent)}
+
+/* engage: same stack as BootSequence step 3 */
+#engage{height:160vh}
+#engage-ui{position:fixed;inset:0;z-index:7;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding-inline:16px;opacity:0;pointer-events:none;text-align:center}
+#engage-ui.live{pointer-events:auto}
+.login #engage-ui{opacity:0!important;pointer-events:none;transition:opacity .3s}
+.ghost{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;pointer-events:none;font:700 18vw/1 var(--font-display);letter-spacing:.3em;color:color-mix(in oklab,var(--primary) 4%,transparent);user-select:none}
+.mini{font:400 10px/1.3 var(--font-display);letter-spacing:.6em;text-transform:uppercase;color:color-mix(in oklab,var(--primary) 80%,transparent);margin:0}
+.warn{font:400 10px/1.3 var(--font-display);letter-spacing:.4em;text-transform:uppercase;color:var(--warning);margin:0}
+#arc-home{aspect-ratio:1;width:min(48vmin,360px);max-width:100%}
+#engage-btn{padding:16px 46px;font-size:14px;letter-spacing:.4em}
+
+/* the real ArcReactorTriangle svg */
+#arc{position:fixed;z-index:8;aspect-ratio:1;opacity:0;pointer-events:none;color:var(--primary);transition:left .7s ease-out,top .7s ease-out,width .7s ease-out}
+#arc svg{display:block;width:100%;height:100%;animation:triangle-pulse 3s ease-in-out infinite}
+@keyframes triangle-pulse{0%,100%{filter:drop-shadow(0 0 12px color-mix(in oklab,var(--primary) 70%,transparent)) brightness(1)}50%{filter:drop-shadow(0 0 28px color-mix(in oklab,var(--primary) 95%,transparent)) brightness(1.25)}}
+.login #arc{opacity:0!important;transition:opacity .3s}
+.leaving #arc{opacity:0!important;transition:opacity .35s .2s}
+
+/* 3D login: reactor parked in the scene on the left, form and readouts on the right */
+#login{position:fixed;inset:0;z-index:7;display:none;padding:16px;overflow-y:auto;scrollbar-width:none;pointer-events:none}
+#login::-webkit-scrollbar{display:none}
+.login #login{display:flex}
+#login-grid{margin:auto;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);align-items:center;gap:clamp(8px,3vw,48px);width:min(1220px,100%)}
+#login-slot{justify-self:center;aspect-ratio:1;width:min(100%,600px,80vh);pointer-events:none}
+.lcol{display:grid;gap:14px;justify-items:center}
+.lstat{list-style:none;margin:0;padding:0;display:grid;gap:7px;width:min(420px,92vw);font:400 10px/1.3 var(--font-display);letter-spacing:.2em;text-transform:uppercase;color:var(--muted-foreground)}
+.lstat li{display:flex;align-items:center;gap:10px;animation:fade-up .6s .35s ease-out both}
+.lstat i{width:6px;height:6px;border-radius:50%;background:var(--primary);box-shadow:0 0 8px var(--primary);animation:blink 2.4s ease-in-out infinite}
+.lstat .wait i{background:var(--reactor-hot);box-shadow:0 0 8px var(--reactor-hot)}
+@keyframes blink{50%{opacity:.35}}
+.lform{width:min(420px,92vw);flex:none;display:grid;gap:14px;pointer-events:auto;animation:fade-up .6s .5s ease-out both}
+@keyframes fade-up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.lhead{text-align:center}
+.lhead p{font:400 10px/1.3 var(--font-display);letter-spacing:.5em;text-transform:uppercase;color:color-mix(in oklab,var(--primary) 80%,transparent);margin:0}
+.lhead h2{font:400 20px/1.2 var(--font-display);letter-spacing:.3em;margin:8px 0 0;text-shadow:none}
+.lform label{display:grid;gap:3px;font:400 10px/1.3 var(--font-display);letter-spacing:.14em;text-transform:uppercase;color:var(--muted-foreground)}
+.lform input{width:100%;border:1px solid color-mix(in oklab,var(--primary) 40%,transparent);background:color-mix(in oklab,var(--background) 60%,transparent);padding:9px 12px;font:400 14px/1.4 var(--font-body);color:var(--foreground);border-radius:0}
+.lnote{font:400 10px/1.5 var(--font-display);letter-spacing:.14em;text-transform:uppercase;text-align:center;color:var(--muted-foreground);margin:0}
+.lform .btn{width:100%;letter-spacing:.4em}
+#lmsg{min-height:1.3em;margin:0;text-align:center;font:400 11px/1.4 var(--font-display);letter-spacing:.14em;text-transform:uppercase;color:var(--destructive)}
+.lform.err{border-color:var(--destructive);animation:err-flash .5s ease-out}
+@keyframes err-flash{0%{box-shadow:0 0 40px -4px var(--destructive)}100%{box-shadow:0 0 34px -12px color-mix(in oklab,var(--primary) 60%,transparent)}}
+.leaving .lform{animation:screen-fracture .6s ease-in forwards;pointer-events:none}
+.leaving .lstat{opacity:0;transition:opacity .3s}
+@keyframes screen-fracture{0%{opacity:1;clip-path:inset(0 0 0 0);transform:none}100%{opacity:0;clip-path:inset(0 50% 0 50%);transform:scale(1.05)}}
+.leaving #login{pointer-events:none}
+.nl .st{display:block;font:400 9.5px/1.4 var(--font-display);letter-spacing:.16em;color:var(--muted-foreground);margin-top:2px}
+.nl .st.busy{color:var(--reactor-hot)}
+
+/* ignition flash, the app's ark-flash */
+#ark{position:fixed;inset:0;z-index:6;pointer-events:none;opacity:0}
+.leaving #ark{animation:ark-flash 1.5s .4s ease-out both}
+@keyframes ark-flash{0%{background:rgba(255,255,255,.55);opacity:1}40%{background:color-mix(in oklab,var(--reactor-hot) 35%,transparent);opacity:.7}100%{background:transparent;opacity:0}}
+
+/* Arc Core chrome: same title bar as HudOverlay */
+#core-ui{position:fixed;inset:0;z-index:7;display:none;flex-direction:column;justify-content:space-between;padding:28px max(44px,env(safe-area-inset-right,0px)) 30px max(44px,env(safe-area-inset-left,0px));pointer-events:none}
+#core-hit{position:fixed;inset:0;z-index:6;display:none;touch-action:none;cursor:grab}
+.core #core-ui{display:flex;animation:fade-up .8s ease-out both}.core #core-hit{display:block}
+.core #login{display:none}
+.mtitle{font:700 clamp(14px,1.7vw,18px)/1.3 var(--font-display);letter-spacing:.3em;margin:0;color:color-mix(in oklab,var(--primary) 90%,transparent);text-shadow:0 0 16px color-mix(in oklab,var(--primary) 60%,transparent)}
+.msub{font:400 10px/1.4 var(--font-body);letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.55);margin:6px 0 0}
+.mfoot{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap}
+.mfoot .btn{pointer-events:auto}
+.hint{font:400 11px/1.4 var(--font-display);letter-spacing:.2em;text-transform:uppercase;color:var(--muted-foreground);margin:0}
+
+.nl{position:fixed;left:0;top:0;z-index:5;opacity:0;text-align:center;pointer-events:none;white-space:nowrap;will-change:transform}
+.nl b{display:block;font:400 13px/1.3 var(--font-display);letter-spacing:.2em;color:var(--foreground)}
+.nl span{display:block;font:400 10px/1.4 var(--font-display);letter-spacing:.18em;text-transform:uppercase;color:var(--muted-foreground)}
+#l-core b{color:var(--reactor-hot)}
+
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.no-webgl #scene{display:none}.no-webgl #engage-ui{opacity:1;position:relative;min-height:100vh;pointer-events:auto}.no-webgl #arc{display:none}
+
+@media (max-width:760px){
+  body{font-size:14.5px}
+  .bar{padding:26px 34px 0}
+  .brand span{display:none}
+  .stop{height:190vh}
+  .pin{align-items:flex-end;padding-block:80px 44px}
+  .right .pin{justify-content:flex-start}
+  .hud{padding:18px;width:100%}
+  #hero .pin{padding-bottom:50px}
+  .hero h1{font-size:clamp(44px,13vw,72px);letter-spacing:.05em}
+  .hero p.kick{letter-spacing:.24em;font-size:10.5px}
+  #scan{right:34px;bottom:26px;font-size:10px;letter-spacing:.2em}
+  .btn{padding:14px 16px;letter-spacing:.22em;font-size:12.5px}
+  #core-ui{padding:26px 34px 30px}
+  .nl span{display:none}
+  .ghost{letter-spacing:.1em}
+}
+@media (max-width:860px){#login-grid{grid-template-columns:1fr;gap:4px;justify-items:center}#login-slot{width:min(66vmin,300px)}.lstat{display:none}}
+@media (max-height:640px){#login-slot{width:min(34vmin,150px)}.lform{gap:8px;padding:14px}.lhead h2{font-size:16px;margin-top:4px}}
+@media (prefers-reduced-motion:reduce){#grid,#arc svg{animation:none}.leaving #ark{animation:none}}
+</style>
+
+<canvas id="scene" aria-hidden="true"></canvas>
+<div id="grid"></div><div id="vig"></div>
+<div class="tick tl"></div><div class="tick tr"></div><div class="tick bl"></div><div class="tick br"></div>
+<div id="flash"></div><div id="ark"></div>
+
+<header class="bar">
+  <div class="brand"><svg width="22" height="22" viewBox="0 0 100 100" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="50" cy="50" r="46" opacity=".4"/><g stroke-width="2"><polygon points="50,18 70,55 30,55"/><polygon points="50,18 70,55 30,55" transform="rotate(120 50 50)"/><polygon points="50,18 70,55 30,55" transform="rotate(240 50 50)"/></g></svg><span>J.A.R.V.I.S.</span></div>
+  <a class="link" href="#engage" data-go="engage">Zaloguj</a>
+</header>
+<div id="scan">SYSTEM SCAN 000%</div>
+
+<main>
+  <section id="hero" class="stop" data-stop="hero"><div class="pin"><div class="hero">
+    <p class="kick">Just A Rather Very Intelligent System</p>
+    <h1>J.A.R.V.I.S.</h1>
+    <p class="lead">Osobisty system operacyjny z zespołem agentów AI. Mówisz, czego potrzebujesz, a rdzeń rozdziela pracę.</p>
+    <div class="cta"><a class="btn" id="go" href="#jarvis">▸ Rozpocznij skan</a><a class="btn quiet" href="#engage" data-go="engage">Przejdź do logowania</a></div>
+  </div></div></section>
+
+  <section id="jarvis" class="stop left" data-stop="jarvis"><div class="pin"><article class="hud">
+    <div class="tag"><span>Agent 1 z 6</span><i>Primary Brain / Core</i></div>
+    <h2>J.A.R.V.I.S.</h2>
+    <p>Rozmawiasz z jednym rdzeniem. On ocenia zadanie i deleguje je do właściwego specjalisty.</p>
+  </article></div></section>
+
+  <!--AGENTS-->
+
+  <section id="modules" class="stop" data-stop="modules"><h2 class="sr">Moduły</h2><ul class="sr"><!--MODLIST--></ul></section>
+
+  <section id="engage" class="stop" data-stop="engage"></section>
+</main>
+
+<div id="hud-mod" aria-hidden="true"><small><span id="mod-count">00 / 12</span></small><span id="mod-now">Wejście do rdzenia</span></div>
+
+<div id="engage-ui">
+  <div class="ghost" aria-hidden="true">JARVIS</div>
+  <p class="mini">Arc Reactor // Online</p>
+  <div id="arc-home"></div>
+  <p class="warn">⚠ Authorization required</p>
+  <button class="btn" id="engage-btn" type="button" style="pointer-events:inherit">▸ Engage JARVIS</button>
+</div>
+
+<div id="arc" aria-hidden="true"><!--ARC--></div>
+
+<div id="login">
+  <div id="login-grid">
+    <div id="login-slot" aria-hidden="true"></div>
+    <div class="lcol">
+      <ul class="lstat" aria-hidden="true"><li><i></i>Kanał szyfrowany · TLS 1.3</li><li><i></i>Macierz agentów · 5 węzłów w gotowości</li><li class="wait"><i></i>Biometria · oczekuje na klucz</li></ul>
+      <form class="hud lform" id="login-form" autocomplete="off">
+        <div class="lhead"><p>Stark Industries // Mark VII</p><h2>SECURE LOGIN</h2></div>
+        <label for="op">Operator Email<input id="op" type="email" value="demo@jarvis.local"></label>
+        <label for="key">Cipher Key<input id="key" type="password" value="demo"></label>
+        <p id="lmsg" role="alert"></p>
+        <button class="btn" type="submit">▸ Request Access</button>
+        <p class="lnote">Prototyp: wpisz „zle”, żeby zobaczyć odmowę dostępu</p>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div id="core-hit"></div>
+<div id="core-ui">
+  <div><p class="mtitle">J.A.R.V.I.S. // STARK AGENT MATRIX</p><p class="msub">5 / 5 nodes online · live delegation network</p></div>
+  <div class="mfoot"><p class="hint">Przeciągnij, żeby obrócić. Widok pokazowy.</p><button class="btn quiet" id="replay" type="button">↺ Od początku</button></div>
+</div>
+
+<div class="nl" id="l-core"><b>J.A.R.V.I.S.</b><span>Primary Brain / Core</span></div>
+<!--LABELS-->
+
+<script>/*BUNDLE*/</script>
