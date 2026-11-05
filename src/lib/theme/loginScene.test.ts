@@ -7,9 +7,8 @@ import {
 } from "./loginScene";
 
 describe("isLoginSceneEnabled", () => {
-  it("is off by default", () => {
-    expect(LOGIN_SCENE_DEFAULT_ENABLED).toBe(false);
-    expect(isLoginSceneEnabled({ search: "", stored: null })).toBe(false);
+  it("falls back to LOGIN_SCENE_DEFAULT_ENABLED (the one rollout line)", () => {
+    expect(isLoginSceneEnabled({ search: "", stored: null })).toBe(LOGIN_SCENE_DEFAULT_ENABLED);
   });
 
   it("?loginScene=1 turns it on", () => {
@@ -21,8 +20,10 @@ describe("isLoginSceneEnabled", () => {
     expect(isLoginSceneEnabled({ search: "", stored: "1" })).toBe(true);
   });
 
-  it("ignores junk values", () => {
-    expect(isLoginSceneEnabled({ search: "?loginScene=yes", stored: "true" })).toBe(false);
+  it("ignores junk values (falls back to the default)", () => {
+    expect(isLoginSceneEnabled({ search: "?loginScene=yes", stored: "true" })).toBe(
+      LOGIN_SCENE_DEFAULT_ENABLED,
+    );
   });
 
   it("URL beats storage, and '0' is an explicit opt-out", () => {

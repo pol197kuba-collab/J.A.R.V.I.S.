@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 
 import { AppSidebar } from "@/components/jarvis/AppSidebar";
 import { BootSequence } from "@/components/jarvis/BootSequence";
-import { LoginScene } from "@/components/jarvis/login-scene/LoginScene";
+import { LoginScene, createIntroBridge } from "@/components/jarvis/login-scene/LoginScene";
 import { StarkLogin } from "@/components/jarvis/StarkLogin";
 import { DashboardShell } from "@/components/jarvis/DashboardShell";
 import { PhaseContext, type AppPhase } from "@/components/jarvis/PhaseContext";
@@ -31,6 +31,7 @@ export function PhaseController() {
   const [sceneOn, setSceneOn] = useState(false);
   // The scene reported p = 1 (overlay gone, rendering stopped) — safe to unmount.
   const [sceneDone, setSceneDone] = useState(false);
+  const introBridge = useRef(createIntroBridge());
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isPublicRoute = pathname === "/reset-password" || pathname.startsWith("/.lovable/oauth/");
 
@@ -141,7 +142,9 @@ export function PhaseController() {
       {showScene && (
         <LoginScene
           key="login-scene"
-          ignite={phase !== "login_screen"}
+          mode="login"
+          phase={phase}
+          bridge={introBridge}
           onLive={() =>
             setPhase((cur) => (cur === "initializing" ? "transition_to_dashboard" : cur))
           }
