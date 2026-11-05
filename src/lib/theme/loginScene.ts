@@ -10,7 +10,7 @@
 import { getUiMode, type UiMode } from "@/lib/theme/uiMode";
 
 /** THE ONE LINE to change to roll the scene out to everyone. */
-export const LOGIN_SCENE_DEFAULT_ENABLED = false;
+export const LOGIN_SCENE_DEFAULT_ENABLED = true;
 
 export const LOGIN_SCENE_KEY = "jarvis.loginScene";
 export const LOGIN_SCENE_PARAM = "loginScene";
