@@ -159,6 +159,8 @@ export type SceneMode = "scroll" | "login" | "ignite" | "done";
 export interface IntroScene {
   /** Re-measure viewport, landing sections and the slots. */
   layout(): void;
+  /** Re-read the login slot rect only (cheap: on scroll / keyboard, no renderer resize). */
+  refreshSlot(): void;
   /** Camera flight Engage → login pose (LOGIN_ENTER_MS); the 3D reactor takes over the frame. */
   enterLogin(): void;
   /** Play the ignition (p 0 → 1). */
@@ -1027,6 +1029,9 @@ export function createLoginScene(opts: IntroSceneOptions): IntroScene {
 
   const api: IntroScene = {
     layout,
+    refreshSlot() {
+      if (st.mode === "login") calcLoginPose();
+    },
     enterLogin() {
       if (st.mode !== "scroll") return;
       lgFrom.cam = { x: camera.position.x, y: camera.position.y, z: camera.position.z };

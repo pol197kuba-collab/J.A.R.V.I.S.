@@ -103,9 +103,8 @@ describe("landing seen flag", () => {
     expect(hasSeenLanding(null)).toBe(false);
     expect(hasSeenLanding("true")).toBe(false);
   });
-  it("returning users start at Engage while the constant is on", () => {
-    expect(LANDING_SKIP_IF_SEEN).toBe(true);
-    expect(landingStartsAtEngage("1")).toBe(true);
+  it("returning users start at Engage only while the constant is on", () => {
+    expect(landingStartsAtEngage("1")).toBe(LANDING_SKIP_IF_SEEN);
     expect(landingStartsAtEngage(null)).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ArcReactorTriangle } from "./ArcReactorTriangle";
 import { audio } from "@/lib/audio/AudioEngine";
@@ -6,6 +6,7 @@ import { speakJarvis } from "@/lib/ai/jarvisBrain";
 import { supabase } from "@/integrations/supabase/client";
 import { LOGIN_DENIED_EVENT, LOGIN_REACTOR_SLOT_ATTR } from "@/lib/theme/loginScene";
 import { LoginStatus } from "./login-scene/LoginStatus";
+import { useKeyboardSafeViewport } from "./login-scene/useKeyboardSafeViewport";
 
 type Mode = "signin" | "forgot";
 
@@ -28,9 +29,20 @@ export function StarkLogin({
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
 
-  // 3D login: the cipher key gets focus right away when the email is already
-  // known (browser autofill / remembered), so typing starts without a click.
-  useEffect(() => {
+  const rootRef = useRef<HTMLDivElement>(null);
+  // The on-screen keyboard: keep the screen sized to what is actually visible
+  // above it, and the focused field in view.
+  const safe = useKeyboardSafeViewport(rootRef);
+
+  // Initial focus. With a mouse/keyboard it is there from the first frame
+  // (the cipher key when the email is already known). On touch screens nothing
+  // is focused: focusing would pop the keyboard over half of the screen before
+  // the user has even seen it — they tap the field when ready.
+  useLayoutEffect(() => {
+    const fine =
+      typeof window.matchMedia !== "function" || window.matchMedia("(pointer: fine)").matches;
+    if (!fine) return;
+    emailRef.current?.focus({ preventScroll: true });
     if (!sceneActive) return;
     const id = requestAnimationFrame(() => {
       if (emailRef.current?.value) passwordRef.current?.focus({ preventScroll: true });
@@ -136,7 +148,6 @@ export function StarkLogin({
         </span>
         <input
           ref={emailRef}
-          autoFocus
           type="email"
           autoComplete="email"
           required
@@ -248,8 +259,10 @@ export function StarkLogin({
 
   return (
     <div
+      ref={rootRef}
+      style={safe ? { top: safe.top, height: safe.height } : undefined}
       className={cn(
-        "fixed inset-0 z-[100] flex h-[100dvh] w-full items-center justify-center overflow-y-auto text-primary",
+        "no-scrollbar fixed inset-0 z-[100] flex h-[100dvh] w-full items-center justify-center overflow-y-auto overflow-x-hidden text-primary",
         sceneActive ? "bg-transparent" : "bg-black",
       )}
     >

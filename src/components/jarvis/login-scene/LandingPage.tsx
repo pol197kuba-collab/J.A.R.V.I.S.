@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from "react";
 import { ArcReactorTriangle } from "@/components/jarvis/ArcReactorTriangle";
 import { audio } from "@/lib/audio/AudioEngine";
-import { requestAppFullscreen } from "@/lib/fullscreen";
+import { ensureAppFullscreen } from "@/lib/fullscreen";
 import { landingStartsAtEngage, markLandingSeen } from "@/lib/theme/loginScene";
 import type { LandingHud } from "./createLoginScene";
 import { JARVIS_CORE, LANDING_AGENTS, LANDING_AGENT_TOTAL, landingModules } from "./landingData";
@@ -91,10 +91,42 @@ export function LandingPage({
     if (!el || !sec) return 0;
     return sec.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop + 2;
   };
+  // Engage: exactly what BootSequence's Engage button does (fullscreen only if not already on)
+  const engage = () => {
+    audio.playEngage();
+    void ensureAppFullscreen();
+    markLandingSeen();
+    onEngage();
+  };
   const go = (id: string) => (e: React.MouseEvent) => {
     e.preventDefault();
+    const el = scrollRef.current;
+    // Already parked on the Engage section: "Zaloguj" means log in now, not "scroll 0 px".
+    if (id === "engage" && el && el.scrollTop >= stopTop("engage") - 8) {
+      engage();
+      return;
+    }
     jumpRef.current?.to(stopTop(id));
   };
+
+  // Fullscreen on the FIRST tap/click/key on the landing page (a user gesture is
+  // required), so mobile Chrome's "swipe from the top to exit fullscreen" notice
+  // shows once, over the hero, and is gone long before the login form.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const once = () => {
+      void ensureAppFullscreen();
+      el.removeEventListener("pointerup", once);
+      el.removeEventListener("keydown", once);
+    };
+    el.addEventListener("pointerup", once);
+    el.addEventListener("keydown", once);
+    return () => {
+      el.removeEventListener("pointerup", once);
+      el.removeEventListener("keydown", once);
+    };
+  }, []);
 
   useEffect(() => {
     if (leaving) jumpRef.current?.stop();
@@ -231,13 +263,7 @@ export function LandingPage({
           type="button"
           className="lp-btn lp-engage-btn"
           style={{ pointerEvents: "inherit" }}
-          onClick={() => {
-            // exactly what BootSequence's Engage button does today
-            audio.playEngage();
-            void requestAppFullscreen();
-            markLandingSeen();
-            onEngage();
-          }}
+          onClick={engage}
         >
           ▸ Engage JARVIS
         </button>
