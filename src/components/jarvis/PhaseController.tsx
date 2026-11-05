@@ -29,6 +29,8 @@ export function PhaseController() {
   // 3D login scene: decided once per login (switch on + HUD skin + WebGL) and
   // dropped for good if the scene fails to start — then the SVG screen is used.
   const [sceneOn, setSceneOn] = useState(false);
+  // The scene reported p = 1 (overlay gone, rendering stopped) — safe to unmount.
+  const [sceneDone, setSceneDone] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isPublicRoute = pathname === "/reset-password" || pathname.startsWith("/.lovable/oauth/");
 
@@ -73,6 +75,20 @@ export function PhaseController() {
     return () => clearTimeout(t);
   }, [phase]);
 
+  // Arc Core ignition replaces the 10 s BootSequence "init": its boot chirp is
+  // 2.4 s, the same length as the scene's transition, so it stays.
+  useEffect(() => {
+    if (phase === "initializing" && sceneOn) audio.playBoot();
+  }, [phase, sceneOn]);
+
+  // Safety net: the scene normally reports P_LIVE itself (~1.4 s). If it never
+  // does (hidden tab, stalled rAF), don't leave the user on a black screen.
+  useEffect(() => {
+    if (phase !== "initializing" || !sceneOn) return;
+    const t = setTimeout(() => setPhase("transition_to_dashboard"), 8000);
+    return () => clearTimeout(t);
+  }, [phase, sceneOn]);
+
   // transition_to_dashboard → dashboard_active
   useEffect(() => {
     if (phase !== "transition_to_dashboard") return;
@@ -99,6 +115,16 @@ export function PhaseController() {
   const showDashboardShell =
     phase === "transition_to_dashboard" || phase === "dashboard_active" || phase === "shutdown";
 
+  // One stable <LoginScene> from the login screen through the ignition; it
+  // outlives the phase change until it reports p = 1 (never remounts).
+  const showScene =
+    sceneOn &&
+    !sceneDone &&
+    (phase === "login_screen" ||
+      phase === "initializing" ||
+      phase === "transition_to_dashboard" ||
+      phase === "dashboard_active");
+
   return (
     <PhaseContext.Provider value={{ phase, setPhase }}>
       {phase === "booting" && (
@@ -107,16 +133,19 @@ export function PhaseController() {
           mode="engage"
           onEngage={() => {
             setSceneOn(shouldUseLoginScene());
+            setSceneDone(false);
             setPhase("login_screen");
           }}
         />
       )}
-      {phase === "login_screen" && sceneOn && (
+      {showScene && (
         <LoginScene
           key="login-scene"
-          ignite={false}
-          onLive={() => {}}
-          onDone={() => {}}
+          ignite={phase !== "login_screen"}
+          onLive={() =>
+            setPhase((cur) => (cur === "initializing" ? "transition_to_dashboard" : cur))
+          }
+          onDone={() => setSceneDone(true)}
           onUnavailable={() => setSceneOn(false)}
         />
       )}
@@ -129,7 +158,7 @@ export function PhaseController() {
           }}
         />
       )}
-      {phase === "initializing" && (
+      {phase === "initializing" && !sceneOn && (
         <BootSequence
           key="init"
           mode="init"
