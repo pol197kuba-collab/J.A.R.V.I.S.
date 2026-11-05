@@ -142,6 +142,41 @@ roster, never talkable, and they state nothing about agent work; traders
 only shout real ticker lines from the fund. A room that stops being "w
 remoncie" takes its builders out of `NPCS`.
 
+## 3D login scene (`src/components/jarvis/login-scene/`)
+
+One three.js scene runs from the login screen through the Arc Core ignition
+(`p` ∈ [0,1], 0 = login, 1 = core). It is a **faithful port** of
+`docs/login-scene-prototype/` — keep it that way:
+
+- **Fidelity contract:** geometry, segment counts, textures, the simplex core
+  shader, bloom/fog/fov numbers, DPR caps and time curves match the prototype.
+  Don't rewrite it as R3F/drei, don't add/remove post-processing, don't "simplify
+  for performance" or retune colours/pacing. The only allowed quality drop is
+  DPR (after 120 frames with >50% frames over 34 ms, floor
+  `min(devicePixelRatio, 1.25)`) — never geometry, shader or bloom.
+- **Switch:** `isLoginSceneEnabled()` in `src/lib/theme/loginScene.ts`; default
+  is `LOGIN_SCENE_DEFAULT_ENABLED = false` (the one line to flip). Opt in with
+  `?loginScene=1` or `localStorage["jarvis.loginScene"]="1"` (`"0"` opts out).
+  Used only on the HUD skin with WebGL; Town, no WebGL or switch off keep the
+  SVG `ArcReactorTriangle` + `BootSequence init`.
+- **Lazy import:** `LoginScene.tsx` loads `createLoginScene.ts` (and with it
+  three) via dynamic `import()` in an effect. Never import `three`,
+  `createLoginScene`, `reactor` from anything the main bundle or SSR reaches
+  (type-only imports are fine). `loginSceneMath.ts` and `sceneColors.ts` stay
+  three-free and pure.
+- **Colours:** tokens only, resolved through `themeColor.ts`
+  (`sceneColors.ts`). In the default theme primary/accent/reactor/hot are
+  bit-exact with the prototype; helper tints are token `color-mix` fits.
+- **Lifecycle:** mounted once in `PhaseController` (stable key) across
+  login_screen → initializing → transition_to_dashboard; the dashboard mounts
+  at `P_LIVE`, the overlay turns `pointer-events:none` and fades to p = 1.
+  `prefers-reduced-motion` selects the "min" variant (fade to black, no flash).
+  Everything must be disposed on unmount (rAF, geometry, materials, textures,
+  composer, renderer + forced context loss, listeners).
+- **Proof harness:** `window.__loginScene` (`set(p)`, `frame()`) exists only in
+  DEV; `scripts/capture-login-scene.mjs` screenshots it against
+  `docs/login-scene-prototype/reference/`.
+
 ## Design skills: project rules win
 
 `.claude/skills/` holds third-party design skills (`design-taste-frontend`,
