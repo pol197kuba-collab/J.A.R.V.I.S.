@@ -1056,6 +1056,175 @@
   transform: translateY(-2px);
 }
 
+/* MiniArcCore — the mobile dock's menu button: the Arc Core in miniature, no
+   frame. A pulsing golden core and three golden rings turning in 3D. */
+.mini-arc-core {
+  --mac-spin: 1;
+  position: relative;
+  display: block;
+  perspective: 260px;
+  transform-style: preserve-3d;
+}
+.mini-arc-core > span {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  border-radius: 9999px;
+  pointer-events: none;
+}
+.mac-glow {
+  width: 78%;
+  height: 78%;
+  background: radial-gradient(
+    circle,
+    color-mix(in oklab, var(--reactor) 55%, transparent) 0%,
+    color-mix(in oklab, var(--reactor) 18%, transparent) 45%,
+    transparent 70%
+  );
+  animation: mac-pulse 1.8s ease-in-out infinite;
+}
+.mac-core {
+  width: 36%;
+  height: 36%;
+  background: radial-gradient(
+    circle at 42% 38%,
+    var(--reactor-hot) 0%,
+    color-mix(in oklab, var(--reactor-hot) 60%, var(--reactor)) 35%,
+    var(--reactor) 70%,
+    color-mix(in oklab, var(--reactor) 60%, black) 100%
+  );
+  box-shadow:
+    0 0 10px 2px color-mix(in oklab, var(--reactor) 80%, transparent),
+    0 0 22px 6px color-mix(in oklab, var(--reactor) 35%, transparent);
+  animation: mac-pulse 1.8s ease-in-out infinite;
+}
+.mac-ring {
+  width: 92%;
+  height: 92%;
+  border: 1.5px solid color-mix(in oklab, var(--reactor) 85%, transparent);
+  box-shadow: 0 0 6px color-mix(in oklab, var(--reactor) 60%, transparent);
+  transform-style: preserve-3d;
+}
+.mac-ring i {
+  position: absolute;
+  top: -2.5px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 9999px;
+  background: var(--reactor-hot);
+  box-shadow: 0 0 5px var(--reactor-hot);
+}
+.mac-ring-1 {
+  animation: mac-ring-1 calc(5.5s / var(--mac-spin)) linear infinite;
+}
+.mac-ring-2 {
+  width: 80%;
+  height: 80%;
+  animation: mac-ring-2 calc(7s / var(--mac-spin)) linear infinite;
+}
+.mac-ring-3 {
+  width: 68%;
+  height: 68%;
+  border-width: 1px;
+  animation: mac-ring-3 calc(4.5s / var(--mac-spin)) linear infinite;
+}
+@keyframes mac-pulse {
+  0%,
+  100% {
+    transform: scale(0.94);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+@keyframes mac-ring-1 {
+  from {
+    transform: rotateX(68deg) rotateY(0deg) rotateZ(0deg);
+  }
+  to {
+    transform: rotateX(68deg) rotateY(0deg) rotateZ(360deg);
+  }
+}
+@keyframes mac-ring-2 {
+  from {
+    transform: rotateX(58deg) rotateY(42deg) rotateZ(0deg);
+  }
+  to {
+    transform: rotateX(58deg) rotateY(42deg) rotateZ(-360deg);
+  }
+}
+@keyframes mac-ring-3 {
+  from {
+    transform: rotateY(72deg) rotateX(18deg) rotateZ(0deg);
+  }
+  to {
+    transform: rotateY(72deg) rotateX(18deg) rotateZ(360deg);
+  }
+}
+.mini-arc-core.is-busy {
+  --mac-spin: 2.2;
+}
+.mini-arc-core.is-busy .mac-glow,
+.mini-arc-core.is-busy .mac-core {
+  animation-duration: 1s;
+}
+.mini-arc-core.is-error .mac-glow {
+  background: radial-gradient(
+    circle,
+    color-mix(in oklab, var(--destructive) 55%, transparent) 0%,
+    color-mix(in oklab, var(--destructive) 18%, transparent) 45%,
+    transparent 70%
+  );
+}
+/* long press: the core charges up over the 2 s hold */
+.mini-arc-core.is-charging {
+  --mac-spin: 4;
+}
+.mini-arc-core.is-charging .mac-core {
+  animation: mac-charge 2s ease-in forwards;
+}
+.mini-arc-core.is-charging .mac-glow {
+  animation: mac-charge-glow 2s ease-in forwards;
+}
+@keyframes mac-charge {
+  from {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  to {
+    transform: scale(1.35);
+    filter: brightness(1.8);
+  }
+}
+@keyframes mac-charge-glow {
+  from {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.5);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mini-arc-core * {
+    animation: none !important;
+  }
+  .mac-ring-1 {
+    transform: rotateX(68deg);
+  }
+  .mac-ring-2 {
+    transform: rotateX(58deg) rotateY(42deg);
+  }
+  .mac-ring-3 {
+    transform: rotateY(72deg) rotateX(18deg);
+  }
+}
+
 /* 3D mode (html[data-depth3d], set by ModuleTransitionLayer): panels assemble
    from the depth when a module opens, like the boards in the module tunnel.
    html[data-backdrop3d]: the 3D world renders under the panels, so the CSS

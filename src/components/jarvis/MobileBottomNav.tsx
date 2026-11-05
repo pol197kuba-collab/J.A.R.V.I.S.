@@ -12,6 +12,7 @@ import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 import { GlobalVoiceCommand } from "./GlobalVoiceCommand";
 import { MiniArcReactor } from "./MiniArcReactor";
+import { MiniArcCore } from "./MiniArcCore";
 import { OrbitMenu } from "./OrbitMenu";
 import { MENU_GROUPS, MODULE_ITEMS, type ModuleEntry, type ModuleGroup } from "./modules";
 import { agentDots, dockLine, reactorState, type AgentDot } from "./dockWidgets";
@@ -47,6 +48,13 @@ export function MobileBottomNav({ showVoice = true }: { showVoice?: boolean }) {
     audio.playClick();
     setOpen((v) => (v ? null : { menu: menu3d() }));
   };
+  const { go } = useHudNavigate();
+  const { holding, handlers: hold } = useLongPress(JARVIS_HOLD_MS, toggle, () => {
+    navigator.vibrate?.(35);
+    audio.playEngage();
+    setOpen(null);
+    if (pathname !== "/jarvis") go("/jarvis");
+  });
   const close = () => setOpen(null);
 
   return (
@@ -60,26 +68,15 @@ export function MobileBottomNav({ showVoice = true }: { showVoice?: boolean }) {
         transform: hidden ? "translateY(20px)" : undefined,
       }}
     >
-      {/* the belt: glass, a lit top edge that dips into the reactor's socket */}
+      {/* the belt: glass with a lit top edge, brightest under the core */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-background/80 backdrop-blur-xl"
       />
-      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 flex h-10">
-        <span className="mt-0 h-px flex-1 bg-gradient-to-r from-transparent via-primary/35 to-primary/60" />
-        <svg viewBox="0 0 96 40" className="h-10 w-24 shrink-0 overflow-visible">
-          <path
-            d="M0 0.5 H10 A38 38 0 0 0 86 0.5 H96"
-            fill="none"
-            strokeWidth="1"
-            style={{
-              stroke: "color-mix(in oklab, var(--primary) 60%, transparent)",
-              filter: "drop-shadow(0 0 4px var(--primary))",
-            }}
-          />
-        </svg>
-        <span className="h-px flex-1 bg-gradient-to-l from-transparent via-primary/35 to-primary/60" />
-      </div>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent"
+      />
 
       {/* Mikrofon NALEŻY do paska (nie unosi się nad nim), więc nie zasłania
           niczego w treści strony — wcześniej lądował na polu wysyłki czatu. */}
@@ -104,33 +101,16 @@ export function MobileBottomNav({ showVoice = true }: { showVoice?: boolean }) {
           )}
         </button>
 
-        {/* the Arc Core in its socket, raised above the belt */}
+        {/* the Arc Core itself — no frame: tap opens the menu, a 2 s hold flies to /jarvis */}
         <div className="relative h-full">
           <button
             type="button"
-            onClick={toggle}
-            aria-label="Menu modułów"
+            {...hold}
+            aria-label="Menu modułów (przytrzymaj 2 s: J.A.R.V.I.S.)"
             aria-expanded={open !== null}
-            className="absolute top-[-14px] left-1/2 flex h-[60px] w-[60px] -translate-x-1/2 items-center justify-center rounded-full border border-primary/50 bg-background shadow-[0_0_22px_-6px_var(--primary)]"
+            className="absolute top-[-12px] left-1/2 flex h-[64px] w-[64px] -translate-x-1/2 touch-manipulation select-none items-center justify-center rounded-full [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none]"
           >
-            <span
-              aria-hidden
-              className={cn(
-                "pointer-events-none absolute -inset-[5px] rounded-full border border-dashed",
-                state === "error"
-                  ? "border-destructive/80 motion-safe:animate-[spin_6s_linear_infinite]"
-                  : state === "busy"
-                    ? "border-reactor/80 motion-safe:animate-[spin_3s_linear_infinite]"
-                    : "border-primary/25 motion-safe:animate-[spin_24s_linear_infinite]",
-              )}
-            />
-            {state === "busy" && (
-              <span
-                aria-hidden
-                className="pointer-events-none absolute inset-0 rounded-full shadow-[0_0_24px_-2px_var(--reactor)] motion-safe:animate-pulse"
-              />
-            )}
-            <MiniArcReactor size={38} />
+            <MiniArcCore size={60} state={state} charging={holding} />
           </button>
         </div>
 
@@ -148,6 +128,63 @@ export function MobileBottomNav({ showVoice = true }: { showVoice?: boolean }) {
         ))}
     </nav>
   );
+}
+
+/** Holding the core this long flies to /jarvis; a shorter tap opens the menu. */
+const JARVIS_HOLD_MS = 2000;
+
+/**
+ * Tap vs long press on one button. A hold of `ms` fires `onHold` (the click that
+ * follows is swallowed); releasing earlier — without sliding away — is a tap.
+ */
+function useLongPress(ms: number, onTap: () => void, onHold: () => void) {
+  const [holding, setHolding] = useState(false);
+  const timer = useRef(0);
+  const fired = useRef(false);
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const cancel = () => {
+    window.clearTimeout(timer.current);
+    start.current = null;
+    setHolding(false);
+  };
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  return {
+    holding,
+    handlers: {
+      onPointerDown: (e: React.PointerEvent) => {
+        if (e.button !== 0) return;
+        fired.current = false;
+        start.current = { x: e.clientX, y: e.clientY };
+        setHolding(true);
+        window.clearTimeout(timer.current);
+        timer.current = window.setTimeout(() => {
+          fired.current = true;
+          start.current = null;
+          setHolding(false);
+          onHold();
+        }, ms);
+      },
+      onPointerMove: (e: React.PointerEvent) => {
+        const s = start.current;
+        if (s && Math.hypot(e.clientX - s.x, e.clientY - s.y) > 14) cancel();
+      },
+      onPointerUp: () => {
+        if (start.current) cancel();
+      },
+      onPointerCancel: cancel,
+      onPointerLeave: () => {
+        if (start.current) cancel();
+      },
+      onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+      onClick: () => {
+        if (fired.current) {
+          fired.current = false;
+          return;
+        }
+        onTap();
+      },
+    },
+  };
 }
 
 /** Status dots of the enabled agents: amber pulse = working, red = error. */
