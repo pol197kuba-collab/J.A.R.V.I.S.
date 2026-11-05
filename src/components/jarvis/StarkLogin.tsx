@@ -4,10 +4,19 @@ import { ArcReactorTriangle } from "./ArcReactorTriangle";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speakJarvis } from "@/lib/ai/jarvisBrain";
 import { supabase } from "@/integrations/supabase/client";
+import { LOGIN_DENIED_EVENT } from "@/lib/theme/loginScene";
 
 type Mode = "signin" | "forgot";
 
-export function StarkLogin({ onGranted }: { onGranted: () => void }) {
+export function StarkLogin({
+  onGranted,
+  sceneActive = false,
+}: {
+  onGranted: () => void;
+  /** The 3D login scene sits behind this screen: render an empty reactor slot
+   *  instead of the SVG, and let the scene show through (no own backdrop). */
+  sceneActive?: boolean;
+}) {
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -46,6 +55,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
 
   function deny(msg: string) {
     audio.playAccessDenied();
+    window.dispatchEvent(new CustomEvent(LOGIN_DENIED_EVENT));
     setError(msg);
   }
 
@@ -90,17 +100,27 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
   const title = mode === "forgot" ? "RECOVER CIPHER" : "SECURE LOGIN";
 
   return (
-    <div className="fixed inset-0 z-[100] flex h-[100dvh] w-full items-center justify-center overflow-y-auto bg-black text-primary">
-      <div
-        className="animate-grid-pan pointer-events-none absolute inset-0 opacity-30"
-        style={{ backgroundImage: "var(--grid-bg)", backgroundSize: "40px 40px" }}
-      />
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background: "radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.95) 100%)",
-        }}
-      />
+    <div
+      className={cn(
+        "fixed inset-0 z-[100] flex h-[100dvh] w-full items-center justify-center overflow-y-auto text-primary",
+        sceneActive ? "bg-transparent" : "bg-black",
+      )}
+    >
+      {!sceneActive && (
+        <>
+          <div
+            className="animate-grid-pan pointer-events-none absolute inset-0 opacity-30"
+            style={{ backgroundImage: "var(--grid-bg)", backgroundSize: "40px 40px" }}
+          />
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.95) 100%)",
+            }}
+          />
+        </>
+      )}
 
       <div
         className={cn(
@@ -110,7 +130,7 @@ export function StarkLogin({ onGranted }: { onGranted: () => void }) {
       >
         {/* Raised reactor */}
         <div className="-mb-10 max-md:-mb-6 landscape:max-md:-mb-6 short:mb-0 short:shrink-0">
-          <ArcReactorTriangle raised />
+          <ArcReactorTriangle raised slot={sceneActive} />
         </div>
 
         <form

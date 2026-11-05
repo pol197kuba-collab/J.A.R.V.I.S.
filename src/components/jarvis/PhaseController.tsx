@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 
 import { AppSidebar } from "@/components/jarvis/AppSidebar";
 import { BootSequence } from "@/components/jarvis/BootSequence";
+import { LoginScene } from "@/components/jarvis/login-scene/LoginScene";
 import { StarkLogin } from "@/components/jarvis/StarkLogin";
 import { DashboardShell } from "@/components/jarvis/DashboardShell";
 import { PhaseContext, type AppPhase } from "@/components/jarvis/PhaseContext";
@@ -12,6 +13,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { audio } from "@/lib/audio/AudioEngine";
 import { supabase } from "@/integrations/supabase/client";
 import { MODE_HOME, getUiMode } from "@/lib/theme/uiMode";
+import { shouldUseLoginScene } from "@/lib/theme/loginScene";
 
 // Suppress unused-import warning — kept so refactors don't drop the dep.
 void AppSidebar;
@@ -24,6 +26,11 @@ void AppSidebar;
 export function PhaseController() {
   const navigate = useNavigate();
   const [phase, setPhase] = useState<AppPhase>("booting");
+  // 3D login scene: decided once per login (switch on + HUD skin + WebGL) and
+  // dropped for good if the scene fails to start — then the SVG screen is used.
+  const [sceneOn, setSceneOn] = useState(false);
+  // The scene reported p = 1 (overlay gone, rendering stopped) — safe to unmount.
+  const [sceneDone, setSceneDone] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isPublicRoute = pathname === "/reset-password" || pathname.startsWith("/.lovable/oauth/");
 
@@ -68,6 +75,20 @@ export function PhaseController() {
     return () => clearTimeout(t);
   }, [phase]);
 
+  // Arc Core ignition replaces the 10 s BootSequence "init": its boot chirp is
+  // 2.4 s, the same length as the scene's transition, so it stays.
+  useEffect(() => {
+    if (phase === "initializing" && sceneOn) audio.playBoot();
+  }, [phase, sceneOn]);
+
+  // Safety net: the scene normally reports P_LIVE itself (~1.4 s). If it never
+  // does (hidden tab, stalled rAF), don't leave the user on a black screen.
+  useEffect(() => {
+    if (phase !== "initializing" || !sceneOn) return;
+    const t = setTimeout(() => setPhase("transition_to_dashboard"), 8000);
+    return () => clearTimeout(t);
+  }, [phase, sceneOn]);
+
   // transition_to_dashboard → dashboard_active
   useEffect(() => {
     if (phase !== "transition_to_dashboard") return;
@@ -94,20 +115,50 @@ export function PhaseController() {
   const showDashboardShell =
     phase === "transition_to_dashboard" || phase === "dashboard_active" || phase === "shutdown";
 
+  // One stable <LoginScene> from the login screen through the ignition; it
+  // outlives the phase change until it reports p = 1 (never remounts).
+  const showScene =
+    sceneOn &&
+    !sceneDone &&
+    (phase === "login_screen" ||
+      phase === "initializing" ||
+      phase === "transition_to_dashboard" ||
+      phase === "dashboard_active");
+
   return (
     <PhaseContext.Provider value={{ phase, setPhase }}>
       {phase === "booting" && (
-        <BootSequence key="engage" mode="engage" onEngage={() => setPhase("login_screen")} />
+        <BootSequence
+          key="engage"
+          mode="engage"
+          onEngage={() => {
+            setSceneOn(shouldUseLoginScene());
+            setSceneDone(false);
+            setPhase("login_screen");
+          }}
+        />
+      )}
+      {showScene && (
+        <LoginScene
+          key="login-scene"
+          ignite={phase !== "login_screen"}
+          onLive={() =>
+            setPhase((cur) => (cur === "initializing" ? "transition_to_dashboard" : cur))
+          }
+          onDone={() => setSceneDone(true)}
+          onUnavailable={() => setSceneOn(false)}
+        />
       )}
       {phase === "login_screen" && (
         <StarkLogin
+          sceneActive={sceneOn}
           onGranted={() => {
             void navigate({ to: MODE_HOME[getUiMode()] });
             setPhase("initializing");
           }}
         />
       )}
-      {phase === "initializing" && (
+      {phase === "initializing" && !sceneOn && (
         <BootSequence
           key="init"
           mode="init"

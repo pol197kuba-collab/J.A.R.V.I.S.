@@ -1,14 +1,20 @@
 import { cn } from "@/lib/utils";
+import { LOGIN_REACTOR_SLOT_ATTR } from "@/lib/theme/loginScene";
 
 export function ArcReactorTriangle({
   className,
   raised,
+  slot,
 }: {
   className?: string;
   raised?: boolean;
+  /** Render only the empty box (same size and placement) — the 3D login scene
+   *  draws the reactor there and reads this element's rect. */
+  slot?: boolean;
 }) {
   return (
     <div
+      {...(slot ? { [LOGIN_REACTOR_SLOT_ATTR]: "" } : {})}
       className={cn(
         "relative aspect-square w-[min(48vmin,360px)] max-md:w-[min(38vmin,220px)] transition-all duration-700 ease-out landscape:max-md:w-[45vh] short:w-[min(32vh,180px)]",
         raised &&
@@ -16,75 +22,77 @@ export function ArcReactorTriangle({
         className,
       )}
     >
-      <svg
-        viewBox="0 0 200 200"
-        className="absolute inset-0 h-full w-full text-primary animate-triangle-pulse"
-      >
-        <defs>
-          <radialGradient id="arc-core" cx="50%" cy="50%" r="50%">
-            <stop
-              offset="0%"
-              style={{ stopColor: "color-mix(in oklab, var(--primary) 12%, white)" }}
-              stopOpacity="1"
-            />
-            <stop offset="35%" style={{ stopColor: "var(--primary)" }} stopOpacity="0.95" />
-            <stop
-              offset="70%"
-              style={{ stopColor: "color-mix(in oklab, var(--primary) 70%, black)" }}
-              stopOpacity="0.5"
-            />
-            <stop
-              offset="100%"
-              style={{ stopColor: "color-mix(in oklab, var(--primary) 35%, black)" }}
-              stopOpacity="0"
-            />
-          </radialGradient>
-        </defs>
-        <circle
-          cx="100"
-          cy="100"
-          r="96"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="0.6"
-          opacity="0.4"
-        />
-        <circle
-          cx="100"
-          cy="100"
-          r="82"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="0.6"
-          strokeDasharray="3 4"
-          opacity="0.6"
-        />
-        <circle cx="100" cy="100" r="68" fill="url(#arc-core)" />
-        {/* Triangular reactor segments */}
-        <g
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          style={{ filter: "drop-shadow(0 0 6px currentColor)" }}
+      {!slot && (
+        <svg
+          viewBox="0 0 200 200"
+          className="absolute inset-0 h-full w-full text-primary animate-triangle-pulse"
         >
-          {[0, 120, 240].map((rot) => (
-            <g key={rot} transform={`rotate(${rot} 100 100)`}>
-              <polygon points="100,46 130,98 70,98" />
-              <polygon points="100,58 122,96 78,96" opacity="0.6" />
-              <line x1="100" y1="46" x2="100" y2="30" />
-            </g>
-          ))}
-        </g>
-        <circle
-          cx="100"
-          cy="100"
-          r="14"
-          style={{ fill: "color-mix(in oklab, var(--primary) 10%, white)" }}
-        />
-        <circle cx="100" cy="100" r="6" fill="white" />
-      </svg>
+          <defs>
+            <radialGradient id="arc-core" cx="50%" cy="50%" r="50%">
+              <stop
+                offset="0%"
+                style={{ stopColor: "color-mix(in oklab, var(--primary) 12%, white)" }}
+                stopOpacity="1"
+              />
+              <stop offset="35%" style={{ stopColor: "var(--primary)" }} stopOpacity="0.95" />
+              <stop
+                offset="70%"
+                style={{ stopColor: "color-mix(in oklab, var(--primary) 70%, black)" }}
+                stopOpacity="0.5"
+              />
+              <stop
+                offset="100%"
+                style={{ stopColor: "color-mix(in oklab, var(--primary) 35%, black)" }}
+                stopOpacity="0"
+              />
+            </radialGradient>
+          </defs>
+          <circle
+            cx="100"
+            cy="100"
+            r="96"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="0.6"
+            opacity="0.4"
+          />
+          <circle
+            cx="100"
+            cy="100"
+            r="82"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="0.6"
+            strokeDasharray="3 4"
+            opacity="0.6"
+          />
+          <circle cx="100" cy="100" r="68" fill="url(#arc-core)" />
+          {/* Triangular reactor segments */}
+          <g
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ filter: "drop-shadow(0 0 6px currentColor)" }}
+          >
+            {[0, 120, 240].map((rot) => (
+              <g key={rot} transform={`rotate(${rot} 100 100)`}>
+                <polygon points="100,46 130,98 70,98" />
+                <polygon points="100,58 122,96 78,96" opacity="0.6" />
+                <line x1="100" y1="46" x2="100" y2="30" />
+              </g>
+            ))}
+          </g>
+          <circle
+            cx="100"
+            cy="100"
+            r="14"
+            style={{ fill: "color-mix(in oklab, var(--primary) 10%, white)" }}
+          />
+          <circle cx="100" cy="100" r="6" fill="white" />
+        </svg>
+      )}
     </div>
   );
 }
