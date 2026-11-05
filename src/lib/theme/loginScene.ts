@@ -27,6 +27,11 @@ export interface LoginSceneEnv {
   stored: string | null;
 }
 
+// The URL override is read once, when the page loads: in-app navigation (e.g. the
+// redirect to /jarvis after login) drops the query string, and the switch must
+// not flip half-way through one session.
+const initialSearch = typeof window === "undefined" ? "" : window.location.search;
+
 function readEnv(): LoginSceneEnv {
   if (typeof window === "undefined") return { search: "", stored: null };
   let stored: string | null = null;
@@ -35,7 +40,7 @@ function readEnv(): LoginSceneEnv {
   } catch {
     /* storage unavailable — fall through to URL / default */
   }
-  return { search: window.location.search, stored };
+  return { search: initialSearch, stored };
 }
 
 function flag(v: string | null | undefined): boolean | null {
@@ -90,3 +95,66 @@ export function shouldUseLoginScene(): boolean {
     webgl: hasWebGl(),
   });
 }
+
+// ---- 3D landing page (replaces the Engage screen) -------------------------------
+
+/** Returning users open the landing page straight on the Engage section. One constant turns it off. */
+export const LANDING_SKIP_IF_SEEN = true;
+export const LANDING_SEEN_KEY = "jarvis.landingSeen";
+
+export type IntroMode = "off" | "landing" | "login";
+
+/**
+ * Which intro the browser gets (client only):
+ *  - "landing": 3D landing page → 3D login → ignition (switch on, HUD skin, WebGL, motion allowed)
+ *  - "login":   classic Engage screen, then 3D login → ignition ("min" variant) — reduced motion
+ *  - "off":     today's SVG + BootSequence path (switch off, Town skin, no WebGL)
+ */
+export function pickIntroMode(o: {
+  enabled: boolean;
+  mode: UiMode;
+  webgl: boolean;
+  reducedMotion: boolean;
+}): IntroMode {
+  if (!canUseLoginScene(o)) return "off";
+  return o.reducedMotion ? "login" : "landing";
+}
+
+export function shouldUseIntro(): IntroMode {
+  const reduced =
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  return pickIntroMode({
+    enabled: isLoginSceneEnabled(),
+    mode: getUiMode(),
+    webgl: hasWebGl(),
+    reducedMotion: reduced,
+  });
+}
+
+/** Has this browser already clicked Engage once? (localStorage, "1") */
+export function hasSeenLanding(stored: string | null | undefined = readSeen()): boolean {
+  return stored === "1";
+}
+
+function readSeen(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(LANDING_SEEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function markLandingSeen() {
+  try {
+    window.localStorage.setItem(LANDING_SEEN_KEY, "1");
+  } catch {
+    /* storage unavailable — the landing page just opens from the top next time */
+  }
+}
+
+/** Should the landing page open on the Engage section right away? */
+export const landingStartsAtEngage = (stored: string | null | undefined = readSeen()) =>
+  LANDING_SKIP_IF_SEEN && hasSeenLanding(stored);

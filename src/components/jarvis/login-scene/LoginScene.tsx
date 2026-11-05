@@ -1,16 +1,20 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type MutableRefObject } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { LOGIN_DENIED_EVENT, LOGIN_REACTOR_SLOT_ATTR } from "@/lib/theme/loginScene";
+import type { AppPhase } from "@/components/jarvis/PhaseContext";
+import type { IntroBridge } from "./introBridge";
+import { landingIntroAgents, landingModules } from "./landingData";
 import { resolveSceneColors } from "./sceneColors";
 // Type-only: erased at build, so three.js never reaches the main bundle.
-import type { LoginScene as SceneHandle, SlotRect } from "./createLoginScene";
-
-const DEFAULT_AGENT_COUNT = 5;
+import type { IntroAgent, IntroScene, LandingHost, LandingHud, SlotRect } from "./createLoginScene";
 
 interface Props {
-  /** true once access is granted: plays login → Arc Core (p 0 → 1). */
-  ignite: boolean;
+  /** "landing": starts in scroll mode (landing page); "login": straight to the 3D login. */
+  mode: "landing" | "login";
+  /** App phase: login_screen → enters the login pose, initializing → ignition. */
+  phase: AppPhase;
+  bridge: MutableRefObject<IntroBridge>;
   /** p reached P_LIVE: mount the dashboard. */
   onLive: () => void;
   /** p reached 1: the overlay is gone and rendering has stopped. */
@@ -23,56 +27,88 @@ declare global {
   interface Window {
     /** DEV-only proof harness (stripped from production builds). */
     __loginScene?: {
-      set: (p: number) => void;
-      frame: (dt?: number) => void;
-      layout: () => void;
+      setScroll: (y: number) => void;
+      enterLogin: () => void;
+      setIgnite: (p: number) => void;
+      setEnergy: (e: number) => void;
+      setAgents: (list: IntroAgent[]) => void;
       shake: () => void;
+      frame: (n?: number) => void;
+      layout: () => void;
+      stops: () => { id: string; a: number; b: number }[];
+      mode: () => string;
     };
   }
 }
 
-/** Rect of the /jarvis canvas zone (marked in routes/jarvis.tsx) once it exists. */
-function readTarget(): SlotRect | null {
-  const el = document.querySelector("[data-jarvis-canvas-rect]");
-  if (!el) return null;
-  const r = el.getBoundingClientRect();
-  return { left: r.left, top: r.top, width: r.width, height: r.height };
+type AgentRow = {
+  slug: string;
+  name: string;
+  role: string | null;
+  status: string;
+  isEnabled: boolean;
+  busySince: string | null;
+};
+
+/** Live agents from the react-query cache, as scene agents (core excluded). */
+function cachedAgents(get: (key: readonly unknown[]) => unknown): IntroAgent[] | null {
+  const rows = get(["agents", "list"]) as AgentRow[] | undefined;
+  if (!rows) return null;
+  const list = rows
+    .filter((a) => a.slug !== AGENT_SLUGS.JARVIS)
+    .map((a) => ({
+      slug: a.slug,
+      name: a.name,
+      role: a.role,
+      busy: a.isEnabled && a.status === "busy",
+      error: a.status === "error",
+      busySince: a.busySince,
+    }));
+  return list.length ? list : null;
 }
 
-function readSlot(): SlotRect | null {
-  const el = document.querySelector(`[${LOGIN_REACTOR_SLOT_ATTR}]`);
+function rectOf(sel: string): SlotRect | null {
+  const el = document.querySelector(sel);
   if (!el) return null;
   const r = el.getBoundingClientRect();
   return { left: r.left, top: r.top, width: r.width, height: r.height };
 }
 
 /**
- * Full-screen 3D scene under the login form and, after login, the Arc Core
- * ignition overlay above the dashboard. three.js is imported dynamically in
- * the effect (SSR-safe, separate chunk). Mount it once and keep it mounted
- * across login_screen → initializing → transition_to_dashboard.
+ * Full-screen 3D intro scene: landing page backdrop, the 3D login behind the
+ * form, and the Arc Core ignition overlay above the dashboard. three.js is
+ * imported dynamically in the effect (SSR-safe, separate chunk). Mount it once
+ * and keep it mounted across booting → login_screen → initializing →
+ * transition_to_dashboard (the phase prop drives its modes, never a remount).
  */
-export function LoginScene({ ignite, onLive, onDone, onUnavailable }: Props) {
+export function LoginScene({ mode, phase, bridge, onLive, onDone, onUnavailable }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const vigRef = useRef<HTMLDivElement>(null);
   const flashRef = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<SceneHandle | null>(null);
+  const arkRef = useRef<HTMLDivElement>(null);
+  const labelsRef = useRef<HTMLDivElement>(null);
+  const sceneRef = useRef<IntroScene | null>(null);
   const queryClient = useQueryClient();
 
   // latest props without re-running the mount effect (the scene must never remount)
-  const live = useRef({ ignite, onLive, onDone, onUnavailable });
-  live.current = { ignite, onLive, onDone, onUnavailable };
+  const live = useRef({ phase, onLive, onDone, onUnavailable });
+  live.current = { phase, onLive, onDone, onUnavailable };
 
-  const igniteScene = () => {
-    const scene = sceneRef.current;
-    if (!scene) return;
-    const cached = queryClient.getQueryData<{ slug: string }[]>(["agents", "list"]);
-    const n = cached ? cached.filter((a) => a.slug !== AGENT_SLUGS.JARVIS).length : 0;
-    scene.setAgentCount(n > 0 ? n : DEFAULT_AGENT_COUNT);
-    scene.layout();
-    scene.ignite();
+  const syncPhase = (scene: IntroScene) => {
+    const ph = live.current.phase;
+    if (ph === "login_screen") {
+      scene.layout();
+      scene.enterLogin();
+    } else if (
+      ph === "initializing" ||
+      ph === "transition_to_dashboard" ||
+      ph === "dashboard_active"
+    ) {
+      scene.layout();
+      scene.ignite();
+    }
   };
 
   useEffect(() => {
@@ -88,17 +124,35 @@ export function LoginScene({ ignite, onLive, onDone, onUnavailable }: Props) {
         const grid = gridRef.current;
         const vignette = vigRef.current;
         const flash = flashRef.current;
-        if (!canvas || !root || !grid || !vignette || !flash) return;
+        const ark = arkRef.current;
+        const labels = labelsRef.current;
+        if (!canvas || !root || !grid || !vignette || !flash || !ark || !labels) return;
 
         const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+        const getCache = (k: readonly unknown[]) => queryClient.getQueryData(k);
+        const cached = cachedAgents(getCache);
+        const b = bridge.current;
         const scene = createLoginScene({
           canvas,
-          overlays: { root, grid, vignette, flash },
+          overlays: { root, grid, vignette, flash, ark, labels },
           colors: resolveSceneColors(),
           reducedMotion: mq.matches,
-          agentCount: DEFAULT_AGENT_COUNT,
-          getSlotRect: readSlot,
-          getTargetRect: readTarget,
+          initialMode: mode === "landing" ? "scroll" : "login",
+          agents: mode === "landing" ? landingIntroAgents() : (cached ?? landingIntroAgents()),
+          modules: landingModules(),
+          landing:
+            mode === "landing" && b.host
+              ? {
+                  scrollEl: () => bridge.current.host?.scrollEl() ?? null,
+                  sections: () => bridge.current.host?.sections() ?? [],
+                  engageHome: () => bridge.current.host?.engageHome() ?? null,
+                  isJumping: () => bridge.current.host?.isJumping() ?? false,
+                }
+              : undefined,
+          getSlotRect: () => rectOf(`[${LOGIN_REACTOR_SLOT_ATTR}]`),
+          getTargetRect: () => rectOf("[data-jarvis-canvas-rect]"),
+          getAgents: () => cachedAgents(getCache),
+          onHud: (h) => bridge.current.onHud?.(h),
           onLive: () => live.current.onLive(),
           onDone: () => live.current.onDone(),
           preserveDrawingBuffer: import.meta.env.DEV,
@@ -111,41 +165,45 @@ export function LoginScene({ ignite, onLive, onDone, onUnavailable }: Props) {
         window.addEventListener(LOGIN_DENIED_EVENT, onDenied);
         const onContextLost = () => live.current.onUnavailable();
         canvas.addEventListener("webglcontextlost", onContextLost);
-
-        // keep the 3D reactor glued to the slot (fonts, rotation, resize)
         const relayout = () => scene.layout();
-        const slot = document.querySelector(`[${LOGIN_REACTOR_SLOT_ATTR}]`);
-        const ro =
-          slot && typeof ResizeObserver !== "undefined" ? new ResizeObserver(relayout) : null;
-        if (slot) ro?.observe(slot);
         void document.fonts?.ready.then(() => !cancelled && relayout());
         requestAnimationFrame(() => !cancelled && relayout());
 
         if (import.meta.env.DEV) {
           window.__loginScene = {
-            set: (p) => {
-              scene.setPhase(p);
+            setScroll: (y) => {
               scene.setManual(true);
+              scene.debug.setScroll(y);
             },
-            frame: (dt) => scene.frame(dt),
-            layout: relayout,
+            enterLogin: () => scene.enterLogin(),
+            setIgnite: (p) => {
+              scene.setManual(true);
+              scene.debug.setIgnite(p);
+            },
+            setEnergy: (e) => scene.debug.setEnergy(e),
+            setAgents: (list) => scene.setAgents(list, true),
             shake: () => scene.shake(),
+            frame: (n = 1) => {
+              for (let i = 0; i < n; i++) scene.frame();
+            },
+            layout: relayout,
+            stops: () => scene.debug.stops(),
+            mode: () => scene.mode,
           };
         }
 
-        if (live.current.ignite) igniteScene();
+        syncPhase(scene);
 
         cleanup = () => {
           mq.removeEventListener("change", onMq);
           window.removeEventListener(LOGIN_DENIED_EVENT, onDenied);
           canvas.removeEventListener("webglcontextlost", onContextLost);
-          ro?.disconnect();
           if (import.meta.env.DEV) delete window.__loginScene;
           sceneRef.current = null;
           scene.dispose();
         };
       } catch (err) {
-        console.warn("[login-scene] unavailable, falling back to the SVG reactor", err);
+        console.warn("[intro-scene] unavailable, falling back to the classic screens", err);
         if (!cancelled) live.current.onUnavailable();
       }
     })();
@@ -159,9 +217,9 @@ export function LoginScene({ ignite, onLive, onDone, onUnavailable }: Props) {
   }, []);
 
   useEffect(() => {
-    if (ignite) igniteScene();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ignite]);
+    const scene = sceneRef.current;
+    if (scene) syncPhase(scene);
+  }, [phase]);
 
   return (
     <div
@@ -188,7 +246,13 @@ export function LoginScene({ ignite, onLive, onDone, onUnavailable }: Props) {
           background: "radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.95) 100%)",
         }}
       />
-      <div ref={flashRef} className="pointer-events-none absolute inset-0" style={{ opacity: 0 }} />
+      <div ref={labelsRef} className="pointer-events-none absolute inset-0" />
+      <div
+        ref={flashRef}
+        className="pointer-events-none absolute inset-0 bg-white"
+        style={{ opacity: 0 }}
+      />
+      <div ref={arkRef} className="pointer-events-none absolute inset-0" style={{ opacity: 0 }} />
     </div>
   );
 }

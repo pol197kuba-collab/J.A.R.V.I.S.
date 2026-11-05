@@ -4,12 +4,15 @@ import {
   canUseLoginScene,
   hasWebGl,
   isLoginSceneEnabled,
+  LANDING_SKIP_IF_SEEN,
+  hasSeenLanding,
+  landingStartsAtEngage,
+  pickIntroMode,
 } from "./loginScene";
 
 describe("isLoginSceneEnabled", () => {
-  it("is off by default", () => {
-    expect(LOGIN_SCENE_DEFAULT_ENABLED).toBe(false);
-    expect(isLoginSceneEnabled({ search: "", stored: null })).toBe(false);
+  it("falls back to LOGIN_SCENE_DEFAULT_ENABLED (the one rollout line)", () => {
+    expect(isLoginSceneEnabled({ search: "", stored: null })).toBe(LOGIN_SCENE_DEFAULT_ENABLED);
   });
 
   it("?loginScene=1 turns it on", () => {
@@ -21,8 +24,10 @@ describe("isLoginSceneEnabled", () => {
     expect(isLoginSceneEnabled({ search: "", stored: "1" })).toBe(true);
   });
 
-  it("ignores junk values", () => {
-    expect(isLoginSceneEnabled({ search: "?loginScene=yes", stored: "true" })).toBe(false);
+  it("ignores junk values (falls back to the default)", () => {
+    expect(isLoginSceneEnabled({ search: "?loginScene=yes", stored: "true" })).toBe(
+      LOGIN_SCENE_DEFAULT_ENABLED,
+    );
   });
 
   it("URL beats storage, and '0' is an explicit opt-out", () => {
@@ -72,5 +77,35 @@ describe("hasWebGl (smoke: no WebGL → old SVG path)", () => {
     const gl = { getExtension: () => ({ loseContext: () => lost++ }) };
     expect(hasWebGl(docWith(() => gl))).toBe(true);
     expect(lost).toBe(1);
+  });
+});
+
+describe("pickIntroMode", () => {
+  const on = { enabled: true, mode: "hud" as const, webgl: true, reducedMotion: false };
+  it("landing page when everything allows it", () => {
+    expect(pickIntroMode(on)).toBe("landing");
+  });
+  it("reduced motion keeps the classic Engage screen but still gets the 3D login", () => {
+    expect(pickIntroMode({ ...on, reducedMotion: true })).toBe("login");
+  });
+  it("switch off, Town skin or no WebGL: today's path", () => {
+    expect(pickIntroMode({ ...on, enabled: false })).toBe("off");
+    expect(pickIntroMode({ ...on, mode: "town" })).toBe("off");
+    expect(pickIntroMode({ ...on, webgl: false })).toBe("off");
+    expect(pickIntroMode({ ...on, webgl: false, reducedMotion: true })).toBe("off");
+  });
+});
+
+describe("landing seen flag", () => {
+  it("only the exact value '1' counts", () => {
+    expect(hasSeenLanding("1")).toBe(true);
+    expect(hasSeenLanding("0")).toBe(false);
+    expect(hasSeenLanding(null)).toBe(false);
+    expect(hasSeenLanding("true")).toBe(false);
+  });
+  it("returning users start at Engage while the constant is on", () => {
+    expect(LANDING_SKIP_IF_SEEN).toBe(true);
+    expect(landingStartsAtEngage("1")).toBe(true);
+    expect(landingStartsAtEngage(null)).toBe(false);
   });
 });

@@ -26,7 +26,16 @@ export const SCENE_COLOR_EXPR = {
   spoke: "color-mix(in oklab, var(--primary) 77%, black)", // 0x0aa6b8, ±10
   glowMid: "color-mix(in oklab, var(--primary) 62%, black)", // gradient 0,120,132, ±1
   glowEdge: "color-mix(in oklab, var(--primary) 34%, black)", // gradient 0,50,56, ±2
-  steel: "color-mix(in oklab, var(--background) 91%, white)", // 0x0c1b2a, ±6 (hull is never visible)
+  steel: "color-mix(in oklab, var(--background) 91%, white)", // 0x0c1b2a, ±6
+  // v2 (core2.js, main.js)
+  foreground: "var(--foreground)", // board title, proto #e3f6f9 — exact
+  muted: "var(--muted-foreground)", // board subtitle, proto #76c7cc — exact
+  boardFill: "color-mix(in oklab, var(--primary) 87%, black)", // rgb(0,190,210), ±3
+  packetCyan: "color-mix(in oklab, var(--primary) 70%, white)", // 0x7ff4ff, ±5
+  packetAmber: "color-mix(in oklab, var(--reactor-hot) 85%, white)", // 0xffd36a, ±2
+  nodeWireAmber: "color-mix(in oklab, var(--reactor-hot) 58%, white)", // 0xffe1a0, ±2
+  coronaMid: "color-mix(in oklab, var(--reactor) 78%, var(--destructive))", // rgb(255,120,0), alpha .12
+  coronaEdge: "color-mix(in oklab, var(--reactor) 65%, var(--destructive))", // rgb(255,100,0), alpha 0
 } as const;
 
 export type SceneColorKey = keyof typeof SCENE_COLOR_EXPR;
@@ -46,6 +55,14 @@ export const SCENE_COLOR_FALLBACKS: SceneColors = {
   glowMid: "#007884",
   glowEdge: "#003238",
   steel: "#0c1b2a",
+  foreground: "#e3f6f9",
+  muted: "#76c7cc",
+  boardFill: "#00bfcf",
+  packetCyan: "#83effb",
+  packetAmber: "#ffd56a",
+  nodeWireAmber: "#ffe39f",
+  coronaMid: "#ff9d25",
+  coronaEdge: "#ff932f",
 };
 
 /** Resolve every scene colour against the live document / active theme. */
