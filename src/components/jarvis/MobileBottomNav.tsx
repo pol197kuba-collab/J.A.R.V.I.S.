@@ -102,12 +102,12 @@ export function MobileBottomNav({ showVoice = true }: { showVoice?: boolean }) {
           )}
         </button>
 
-        {/* the Arc Core itself — no frame: tap opens the menu, a 2 s hold flies to /jarvis */}
+        {/* the Arc Core itself — no frame: tap opens the menu, a 1.5 s hold flies to /jarvis */}
         <div className="relative h-full">
           <button
             type="button"
             {...hold}
-            aria-label="Menu modułów (przytrzymaj 2 s: J.A.R.V.I.S.)"
+            aria-label="Menu modułów (przytrzymaj 1,5 s: J.A.R.V.I.S.)"
             aria-expanded={open !== null}
             className="absolute top-[-20px] left-1/2 flex h-[76px] w-[76px] -translate-x-1/2 touch-manipulation select-none items-center justify-center rounded-full [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none]"
           >

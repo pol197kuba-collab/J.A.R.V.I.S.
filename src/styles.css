@@ -1180,15 +1180,15 @@
     transparent 70%
   );
 }
-/* long press: the core charges up over the 2 s hold */
+/* long press: the core charges up over the 1.5 s hold */
 .mini-arc-core.is-charging {
   --mac-spin: 4;
 }
 .mini-arc-core.is-charging .mac-core {
-  animation: mac-charge 2s ease-in forwards;
+  animation: mac-charge 1.5s ease-in forwards;
 }
 .mini-arc-core.is-charging .mac-glow {
-  animation: mac-charge-glow 2s ease-in forwards;
+  animation: mac-charge-glow 1.5s ease-in forwards;
 }
 @keyframes mac-charge {
   from {

@@ -17,7 +17,8 @@ describe("dock mini core", () => {
     expect(100 / d).toBeCloseTo(Math.tan((15 * Math.PI) / 180));
   });
 
-  it("charges over the 2 s hold and spins up for busy agents", () => {
+  it("charges over the 1.5 s hold and spins up for busy agents", () => {
+    expect(JARVIS_HOLD_MS).toBe(1500);
     expect(holdCharge(0)).toBe(0);
     expect(holdCharge(JARVIS_HOLD_MS / 2)).toBeCloseTo(0.25);
     expect(holdCharge(JARVIS_HOLD_MS * 3)).toBe(1);

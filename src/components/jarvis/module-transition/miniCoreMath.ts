@@ -8,7 +8,7 @@ export const MINI_CORE_BUTTON_PX = 75;
 /** The canvas is larger than the button so the bloom never gets clipped. */
 export const MINI_CORE_CANVAS_PX = 96;
 /** Holding the core this long flies to /jarvis. */
-export const JARVIS_HOLD_MS = 2000;
+export const JARVIS_HOLD_MS = 1500;
 
 /** Camera distance that frames a sphere of `radius` in a square view of `fovDeg`. */
 export const miniCoreDistance = (radius: number, fovDeg: number) =>
