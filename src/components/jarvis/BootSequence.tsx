@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { ArcReactorTriangle } from "./ArcReactorTriangle";
 import { bootLogs } from "@/data/mock";
 import { audio } from "@/lib/audio/AudioEngine";
-import { requestAppFullscreen } from "@/lib/fullscreen";
+import { ensureAppFullscreen } from "@/lib/fullscreen";
 
 type Step = 1 | 2 | 3;
 
@@ -251,7 +251,7 @@ export function BootSequence({
               type="button"
               onClick={() => {
                 audio.playEngage();
-                void requestAppFullscreen();
+                void ensureAppFullscreen();
                 onEngage?.();
               }}
               className="group relative font-display cursor-pointer border border-primary/70 bg-primary/10 px-12 py-4 text-sm uppercase tracking-[0.4em] text-primary transition hover:bg-primary/20 hover:text-foreground"

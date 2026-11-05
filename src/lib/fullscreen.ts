@@ -36,6 +36,23 @@ export async function requestAppFullscreen(): Promise<void> {
   }
 }
 
+/** Running as an installed app whose manifest already gives a fullscreen window. */
+export function isInstalledFullscreen(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  return window.matchMedia("(display-mode: fullscreen)").matches;
+}
+
+/**
+ * Enter fullscreen only when we are not there already. Every requestFullscreen()
+ * makes mobile Chrome show its "swipe from the top to exit" notice, so calling
+ * this repeatedly (each Engage, each re-login) re-shows that notice for nothing.
+ * The installed app (manifest display: fullscreen) never needs it.
+ */
+export async function ensureAppFullscreen(): Promise<void> {
+  if (isFullscreen() || isInstalledFullscreen()) return;
+  await requestAppFullscreen();
+}
+
 export async function exitAppFullscreen(): Promise<void> {
   if (typeof document === "undefined") return;
   const d = document as FsDocument;

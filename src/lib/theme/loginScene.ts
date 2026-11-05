@@ -99,7 +99,7 @@ export function shouldUseLoginScene(): boolean {
 // ---- 3D landing page (replaces the Engage screen) -------------------------------
 
 /** Returning users open the landing page straight on the Engage section. One constant turns it off. */
-export const LANDING_SKIP_IF_SEEN = true;
+export const LANDING_SKIP_IF_SEEN = false;
 export const LANDING_SEEN_KEY = "jarvis.landingSeen";
 
 export type IntroMode = "off" | "landing" | "login";

@@ -166,6 +166,11 @@ export function LoginScene({ mode, phase, bridge, onLive, onDone, onUnavailable 
         const onContextLost = () => live.current.onUnavailable();
         canvas.addEventListener("webglcontextlost", onContextLost);
         const relayout = () => scene.layout();
+        // The login form scrolls inside its own container (e.g. above the phone
+        // keyboard): keep the 3D reactor glued to its slot while that happens.
+        const onSlotMove = () => scene.refreshSlot();
+        document.addEventListener("scroll", onSlotMove, { capture: true, passive: true });
+        window.visualViewport?.addEventListener("resize", onSlotMove);
         void document.fonts?.ready.then(() => !cancelled && relayout());
         requestAnimationFrame(() => !cancelled && relayout());
 
@@ -198,6 +203,8 @@ export function LoginScene({ mode, phase, bridge, onLive, onDone, onUnavailable 
           mq.removeEventListener("change", onMq);
           window.removeEventListener(LOGIN_DENIED_EVENT, onDenied);
           canvas.removeEventListener("webglcontextlost", onContextLost);
+          document.removeEventListener("scroll", onSlotMove, { capture: true });
+          window.visualViewport?.removeEventListener("resize", onSlotMove);
           if (import.meta.env.DEV) delete window.__loginScene;
           sceneRef.current = null;
           scene.dispose();
