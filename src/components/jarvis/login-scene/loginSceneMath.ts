@@ -33,6 +33,24 @@ export const JUMP_PX_PER_MS = 2.75;
 export const JUMP_MIN_MS = 1800;
 export const JUMP_MAX_MS = 6000;
 
+/**
+ * App start: the first frame shows the reactor front-on exactly where the boot
+ * splash image sits (the image IS a render of this frame), then the camera
+ * flies to the landing page's hero stop in SPLASH_MS. SPLASH_SPAN world units
+ * fit across the splash image (the reactor's r96 ring at 80% of its width, the
+ * safe zone of a maskable icon).
+ */
+export const SPLASH_SPAN = 240;
+export const SPLASH_MS = 1800;
+/** Pause after the scene is ready before the camera leaves, so the splash cross-fade lands first. */
+export const SPLASH_DELAY_MS = 250;
+
+/** 0 = splash frame, 1 = landing; eased, clamped, instant when motion is reduced. */
+export function splashProgress(elapsedMs: number, reduced: boolean): number {
+  if (reduced) return 1;
+  return easeInOut(clamp((elapsedMs - SPLASH_DELAY_MS) / SPLASH_MS));
+}
+
 /** Module tunnel layout (world units). */
 export const TUNNEL = { start: 420, end: -2880, first: -300, step: 205 } as const;
 
@@ -220,6 +238,8 @@ export interface StopAt {
   same: boolean;
   t: number;
   raw: number;
+  /** The stop after A when parked on A (the camera drifts toward it), else null. */
+  next: Stop | null;
 }
 
 /** Port of at(): which stop(s) a scroll position falls on. */
@@ -234,10 +254,48 @@ export function stopAt(stops: Stop[], y: number): StopAt {
       same: true,
       t: 0,
       raw: S.b === Infinity ? 1 : clamp((y - S.a) / (S.b - S.a)),
+      next: stops[i + 1] ?? null,
     };
   }
   const P = stops[i - 1];
-  return { A: P, B: S, same: false, t: clamp((y - P.b) / (S.a - P.b)), raw: 0 };
+  return { A: P, B: S, same: false, t: clamp((y - P.b) / (S.a - P.b)), raw: 0, next: null };
+}
+
+// ---- camera never stands still ---------------------------------------------------
+/**
+ * While a panel is pinned (the stop's dwell range), the camera keeps drifting
+ * toward the next stop by this share of the way — enough that scrolling always
+ * moves the scene, small enough that the agent stays framed while you read.
+ * (The prototype held the camera completely still for the whole dwell, which on
+ * scroll and on the button jump read as a stall between panels.)
+ */
+export const DWELL_DRIFT = 0.12;
+
+/** Stops whose dwell has its own motion (or none): no drift out of them. */
+const driftsOut = (s: Stop) => s.id !== "modules" && s.id !== "engage";
+
+/** Cubic Hermite on t ∈ [0,1]: values p0 → p1, slopes m0 → m1 (in t units). */
+export function hermite(t: number, p0: number, p1: number, m0: number, m1: number): number {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return (
+    (2 * t3 - 3 * t2 + 1) * p0 + (t3 - 2 * t2 + t) * m0 + (-2 * t3 + 3 * t2) * p1 + (t3 - t2) * m1
+  );
+}
+
+/**
+ * Share of the way A → B for a scroll position in the gap between two stops.
+ * Starts where A's dwell drift ended (DWELL_DRIFT) with the same speed, and
+ * arrives on B at the speed B's own dwell drift will continue with — so the
+ * camera's speed never drops to zero at the panel boundaries.
+ */
+export function gapProgress(t: number, A: Stop, B: Stop): number {
+  const gap = Math.max(1, B.a - A.b);
+  const dA = driftsOut(A) ? DWELL_DRIFT : 0;
+  const m0 = dA ? (dA * gap) / Math.max(1, A.b - A.a) : 0;
+  const m1 =
+    driftsOut(B) && Number.isFinite(B.b) ? (DWELL_DRIFT * gap) / Math.max(1, B.b - B.a) : 0;
+  return hermite(clamp(t), dA, 1, m0, m1);
 }
 
 export interface ScrollState {
@@ -263,7 +321,7 @@ export interface ScrollState {
 
 /** Port of the camera/visibility half of scrollFrame(): scroll position → scene state. */
 export function scrollState(sy: number, stops: Stop[]): ScrollState {
-  const { A, B, same, t, raw } = stopAt(stops, sy);
+  const { A, B, same, t, raw, next: stopAtNext } = stopAt(stops, sy);
   const e = ease(t);
   let align = 0;
   let fl = 0;
@@ -291,9 +349,17 @@ export function scrollState(sy: number, stops: Stop[]): ScrollState {
       look = v3(B.look.x * k, B.look.y * k, 0);
       tunVis = 0;
     }
+  } else if (same) {
+    // parked on a pinned panel: drift slowly toward the next stop
+    const N = stopAtNext;
+    const f = N && driftsOut(A) ? DWELL_DRIFT * raw : 0;
+    cam = N ? lerp3(A.cam, N.cam, f) : { ...A.cam };
+    look = N ? lerp3(A.look, N.look, f) : { ...A.look };
+    if (A.id === "engage") align = 1;
   } else {
-    cam = lerp3(A.cam, B.cam, e);
-    look = lerp3(A.look, B.look, e);
+    const f = gapProgress(t, A, B);
+    cam = lerp3(A.cam, B.cam, f);
+    look = lerp3(A.look, B.look, f);
     if (A.id === "engage") align = 1;
   }
   if (B.id === "engage" && same) align = 1;

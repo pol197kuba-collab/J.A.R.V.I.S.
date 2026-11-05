@@ -2229,6 +2229,22 @@
   color: color-mix(in oklab, var(--primary) 80%, transparent);
   transition: opacity 0.3s;
 }
+/* app start: the copy fades in once the camera has left the splash frame */
+@keyframes lp-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.lp-main,
+.lp-bar,
+.lp-scan {
+  animation: lp-in 0.9s ease-out 1.2s both;
+}
 .lp-leaving .lp-bar,
 .lp-leaving .lp-scan {
   opacity: 0;

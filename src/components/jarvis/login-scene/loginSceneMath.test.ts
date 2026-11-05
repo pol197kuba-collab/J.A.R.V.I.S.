@@ -20,6 +20,12 @@ import {
   easeInOut,
   energyDecay,
   energyKick,
+  SPLASH_DELAY_MS,
+  SPLASH_MS,
+  splashProgress,
+  gapProgress,
+  hermite,
+  DWELL_DRIFT,
   fitCamera,
   igniteLook,
   initialDpr,
@@ -237,6 +243,67 @@ describe("scroll → camera state", () => {
     expect(scanPercent(0, 10000, 800)).toBe(0);
     expect(scanPercent(9200, 10000, 800)).toBe(100);
     expect(scanPercent(0, 100, 100)).toBe(0); // no scrollable height: prototype clamps the divisor to 1
+  });
+});
+
+describe("camera never stands still between hero and the tunnel", () => {
+  const dist = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) =>
+    Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+  for (const [label, vp] of [
+    ["desktop", VP],
+    ["phone", { width: 390, height: 844 }],
+  ] as const) {
+    it(`${label}: every scroll step moves the camera, with no jumps`, () => {
+      const s = buildStops({ sections, viewport: vp, engageFit, homes });
+      const end = s[7].a; // up to the tunnel entrance
+      let prev = scrollState(0, s).cam;
+      let minStep = Infinity;
+      let maxStep = 0;
+      for (let y = 4; y <= end; y += 4) {
+        const c = scrollState(y, s).cam;
+        const d = dist(c, prev);
+        minStep = Math.min(minStep, d);
+        maxStep = Math.max(maxStep, d);
+        prev = c;
+      }
+      expect(minStep).toBeGreaterThan(0); // the old dwell gave exactly 0 here
+      expect(maxStep).toBeLessThan(40); // continuous: no snap at panel boundaries
+    });
+  }
+  it("a pinned panel keeps its agent framed: the drift is a small share of the way", () => {
+    const s = stops();
+    const a1 = s[3];
+    const start = scrollState(a1.a, s).cam;
+    const end = scrollState(a1.b, s).cam;
+    expect(dist(start, a1.cam)).toBeCloseTo(0);
+    expect(dist(end, a1.cam) / dist(a1.cam, s[4].cam)).toBeCloseTo(DWELL_DRIFT, 5);
+  });
+  it("gap curve starts at the drift, ends on the next stop, monotonic, speeds matched", () => {
+    const s = stops();
+    const A = s[3];
+    const B = s[4];
+    expect(gapProgress(0, A, B)).toBeCloseTo(DWELL_DRIFT);
+    expect(gapProgress(1, A, B)).toBeCloseTo(1);
+    let prev = -1;
+    for (let i = 0; i <= 100; i++) {
+      const f = gapProgress(i / 100, A, B);
+      expect(f).toBeGreaterThan(prev);
+      prev = f;
+    }
+    // speed per scroll px at the panel boundary equals the dwell drift speed
+    const gap = B.a - A.b;
+    const dwellSpeed = DWELL_DRIFT / (A.b - A.a);
+    const gapStartSpeed = (gapProgress(0.001, A, B) - gapProgress(0, A, B)) / (0.001 * gap);
+    expect(gapStartSpeed / dwellSpeed).toBeCloseTo(1, 1);
+  });
+  it("engage and the tunnel keep their own motion (no drift out of them)", () => {
+    const s = stops();
+    expect(scrollState(s[8].a + 500, s).cam).toEqual(engageFit);
+    expect(gapProgress(0, s[7], s[8])).toBe(0);
+  });
+  it("hermite basics", () => {
+    expect(hermite(0, 2, 5, 1, 1)).toBe(2);
+    expect(hermite(1, 2, 5, 1, 1)).toBe(5);
   });
 });
 
@@ -607,5 +674,23 @@ describe("label placement", () => {
   });
   it("narrow screens: centred, no offset", () => {
     expect(labelPlacement(300, 50, true)).toEqual({ ox: 0, oy: 0, ax: "-50%", align: "center" });
+  });
+});
+
+describe("app start: splash frame → landing", () => {
+  it("holds the splash frame until the delay, lands at 1 after SPLASH_MS", () => {
+    expect(splashProgress(0, false)).toBe(0);
+    expect(splashProgress(SPLASH_DELAY_MS, false)).toBe(0);
+    expect(splashProgress(SPLASH_DELAY_MS + SPLASH_MS, false)).toBe(1);
+    expect(splashProgress(SPLASH_DELAY_MS + SPLASH_MS / 2, false)).toBeCloseTo(0.5);
+  });
+  it("is monotonic and instant under reduced motion", () => {
+    let prev = 0;
+    for (let ms = 0; ms <= 3000; ms += 25) {
+      const k = splashProgress(ms, false);
+      expect(k).toBeGreaterThanOrEqual(prev);
+      prev = k;
+    }
+    expect(splashProgress(0, true)).toBe(1);
   });
 });

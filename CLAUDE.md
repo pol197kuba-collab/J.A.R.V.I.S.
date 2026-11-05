@@ -193,6 +193,17 @@ the older one it replaces) — keep them that way:
   in `loginSceneMath.ts`); Engage must keep doing exactly what
   `BootSequence`'s button does. Copy and the static agent registry live in
   `landingData.ts` (hard-coded: there is no data before login).
+- **App start:** `BootSplash` (server-rendered) shows `/icon-512.png` centred on
+  black — the same picture Android's system splash draws from the manifest —
+  and the scene's first frame is that exact image (the icon is rendered from
+  the scene by `scripts/render-app-icon.mjs`; re-run it if the reactor's look
+  changes). The splash cross-fades into the scene, which then flies to the
+  hero stop (`SPLASH_MS`). Never show another screen before the intro mode is
+  known.
+- **Scrolling never stalls:** while a panel is pinned the camera drifts
+  `DWELL_DRIFT` of the way to the next stop, and gaps use a Hermite curve that
+  matches that speed (`gapProgress`), so neither scrolling nor the button jump
+  has a dead moment at a panel.
 - **Proof harness:** `window.__loginScene` and `window.__queryClient` exist
   only in DEV; `scripts/capture-intro-scene.mjs` screenshots the scene against
   `docs/jarvis-3d-v2/reference/`.
