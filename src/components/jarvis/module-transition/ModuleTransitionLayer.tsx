@@ -25,6 +25,8 @@ export interface ModuleTransitionHandle {
   }): boolean;
   /** The orbit menu of the loaded scene (null until it is loaded). */
   menu(): MenuControl | null;
+  /** The desktop menu is open: the backdrop settles on the core, agents fade. */
+  focus(on: boolean): void;
 }
 
 type AgentRow = { slug: string; name: string };
@@ -169,6 +171,7 @@ export const ModuleTransitionLayer = forwardRef<ModuleTransitionHandle, { enable
       () => ({
         ready: () => !!sceneRef.current && !sceneRef.current.playing,
         menu: () => sceneRef.current?.menu ?? null,
+        focus: (on) => sceneRef.current?.backdrop.focus(on),
         play({ kind, from, to, durationMs, coverStart, onSwap, onDone }) {
           const scene = sceneRef.current;
           if (!scene || scene.playing) return false;

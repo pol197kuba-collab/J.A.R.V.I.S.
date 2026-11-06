@@ -294,6 +294,25 @@ reports each frame. Picking a module dives into its node and calls
 `MENU_MAX_NODES` (8) entries. Without the 3D layer (Town, no WebGL, reduced
 motion, switch off, not loaded) the flat radial `ReactorMenu` is used.
 
+## Desktop navigation: the Arc Core and the "Kokpit" menu (3D mode)
+
+On desktop in the 3D mode there is **no sidebar** (`DashboardShell` renders
+`DesktopNav` instead of `AppSidebar`): the Arc Core sits in the bottom-left
+corner (the same `DockCore` mini core as the phone dock; tap opens the menu,
+a 1 s hold flies to `/jarvis`, `useLongPress.ts` shared with the dock) and
+`CockpitMenu` is the menu: four holographic columns (the module groups)
+standing in an arc around the core in CSS 3D, every module with its one-line
+description (`cockpitBlurb`) and one click away; typing filters and picks the
+best match (name first, then keywords / description), arrows walk the
+columns, Enter opens, Esc / the core / the background close. Logic lives in
+`cockpitMenu.ts` (pure, tested), styles in the "Kokpit" block of `styles.css`.
+Ctrl/⌘K, the header's MENU // SYS button (`OPEN_COCKPIT_EVENT`) and the voice
+"open menu" command open it; `CommandPalette` steps aside while
+`html[data-cockpit-nav]` is set. While it is open (`html[data-cockpit]`) the
+page and the header step back and the 3D backdrop settles on the core with the
+agents faded (`BackdropControl.focus`). Without the 3D layer the classic
+sidebar and ⌘K palette stay.
+
 ## Design skills: project rules win
 
 `.claude/skills/` holds third-party design skills (`design-taste-frontend`,

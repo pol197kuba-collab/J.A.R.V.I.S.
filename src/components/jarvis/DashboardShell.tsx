@@ -21,6 +21,7 @@ import { ShowcaseButton } from "@/components/jarvis/ShowcaseButton";
 import { MobileBottomNav } from "@/components/jarvis/MobileBottomNav";
 import { useRouterState } from "@tanstack/react-router";
 import { CommandPalette } from "@/components/jarvis/CommandPalette";
+import { DesktopNav, OPEN_COCKPIT_EVENT } from "@/components/jarvis/DesktopNav";
 import { moduleTitleFor } from "@/components/jarvis/modules";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -47,7 +48,7 @@ export function DashboardShell({ phase, onShutdown }: { phase: AppPhase; onShutd
 }
 
 function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdown: () => void }) {
-  const { transition, pageTiming } = useRouteTransition();
+  const { transition, pageTiming, can3d } = useRouteTransition();
   const { setOpen, setOpenMobile, isMobile } = useSidebar();
   // Moduł /jarvis ma własny mikrofon w konsoli czatu, tuż obok przycisku
   // wysyłki. Globalny przycisk jest tam nie tylko zbędny — w wersji
@@ -73,11 +74,13 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
   return (
     <div className="relative flex min-h-screen w-full bg-background text-foreground portrait:h-[100dvh] portrait:min-h-0 portrait:overflow-hidden landscape:max-md:h-[100dvh] landscape:max-md:min-h-0 landscape:max-md:overflow-hidden short:h-[100dvh] short:min-h-0 short:overflow-hidden">
       <JarvisBackdrop />
-      {!isMobile && (
+      {/* desktop: the sidebar, or in the 3D mode the Arc Core + the "Kokpit" menu */}
+      {!isMobile && !can3d && (
         <div className="relative z-10 contents">
           <AppSidebar />
         </div>
       )}
+      {!isMobile && can3d && <DesktopNav />}
       <div className="relative z-10 flex min-h-screen min-w-0 flex-1 flex-col portrait:min-h-0 landscape:max-md:min-h-0 short:min-h-0">
         <HudHeader onShutdown={onShutdown} />
         <main
@@ -171,7 +174,7 @@ function HudHeader({ onShutdown }: { onShutdown: () => void }) {
   return (
     <header
       ref={ref}
-      className="hud-chrome sticky top-0 z-20 flex h-12 min-w-0 items-center gap-3 px-4 shadow-[0_8px_24px_-16px_color-mix(in_oklab,var(--primary)_60%,transparent)] portrait:h-11 portrait:gap-2 portrait:px-2.5 landscape:max-md:h-9 landscape:max-md:gap-2 landscape:max-md:px-2 short:h-9 short:gap-2 short:px-2"
+      className="hud-chrome cockpit-dim sticky top-0 z-20 flex h-12 min-w-0 items-center gap-3 px-4 shadow-[0_8px_24px_-16px_color-mix(in_oklab,var(--primary)_60%,transparent)] portrait:h-11 portrait:gap-2 portrait:px-2.5 landscape:max-md:h-9 landscape:max-md:gap-2 landscape:max-md:px-2 short:h-9 short:gap-2 short:px-2"
     >
       <span className="hud-chrome-rule" aria-hidden />
 
@@ -287,12 +290,14 @@ function SysMenu({
 
 function HudMenuTrigger() {
   const { isMobile, setOpenMobile, toggleSidebar } = useSidebar();
+  const { can3d } = useRouteTransition();
   return (
     <button
       type="button"
       onClick={() => {
         audio.playClick();
         if (isMobile) setOpenMobile(true);
+        else if (can3d) window.dispatchEvent(new Event(OPEN_COCKPIT_EVENT));
         else toggleSidebar();
       }}
       aria-label="Open menu"
