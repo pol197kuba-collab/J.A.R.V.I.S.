@@ -7,11 +7,14 @@
 // modelu AI — tylko odczyt prognoz i notowań z bazy, więc nic nie kosztuje.
 
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { Json } from "@/integrations/supabase/types";
 import { fetchAllPages } from "@/lib/db/paginate";
 import { logServerError } from "@/lib/system/logServerError";
 import type { FundMetrics } from "./metrics";
 import { PLAYERS, type PlayerKind } from "./players";
+import { DEFAULT_FUND_SETTINGS, parseFundSettings, type FundSettings } from "./settings";
 import { summarizePlayer, type PlayerSummary, type SummaryOrder } from "./summary";
 
 /** Ile ostatnich transakcji na gracza trafia do panelu. */
@@ -269,4 +272,190 @@ export const recomputeFundNow = createServerFn({ method: "POST" })
       await logServerError(supabase, userId, "fund.recompute", err);
       throw err instanceof Error ? err : new Error(String(err));
     }
+  });
+
+// ------------------------------------------------------------ ustawienia ----
+
+export type FundSettingsView = {
+  settings: FundSettings;
+  /** Kiedy ostatnio zapisane (null = jeszcze nigdy, gra na domyślnych). */
+  updatedAt: string | null;
+};
+
+export const getFundSettings = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<FundSettingsView> => {
+    const { supabase, userId } = context;
+    const { data, error } = await supabase
+      .from("fund_settings")
+      .select("settings, updated_at")
+      .eq("owner_id", userId)
+      .maybeSingle();
+    if (error) {
+      // brak tabeli (migracja jeszcze nie weszła) = domyślne, nie błąd panelu
+      await logServerError(supabase, userId, "fund.settings.get", error);
+      return { settings: DEFAULT_FUND_SETTINGS, updatedAt: null };
+    }
+    return {
+      settings: parseFundSettings(data?.settings ?? null),
+      updatedAt: data?.updated_at ?? null,
+    };
+  });
+
+/** Zapis ustawień = przeliczenie całej gry od dnia startu na nowych regułach. */
+export const saveFundSettings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ settings: z.unknown() }).parse(input))
+  .handler(async ({ context, data }) => {
+    const { supabase, userId } = context;
+    const settings = parseFundSettings(data.settings);
+    const { error } = await supabase.from("fund_settings").upsert(
+      {
+        owner_id: userId,
+        settings: settings as unknown as Json,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "owner_id" },
+    );
+    if (error) {
+      await logServerError(supabase, userId, "fund.settings.save", error);
+      throw new Error(error.message);
+    }
+    const { recomputeFund } = await import("./fund.server");
+    try {
+      const summary = await recomputeFund(supabase, userId);
+      return { settings, summary };
+    } catch (err) {
+      await logServerError(supabase, userId, "fund.recompute", err);
+      throw err instanceof Error ? err : new Error(String(err));
+    }
+  });
+
+// ---------------------------------------------------------- karta gracza ----
+
+export type FundTrade = {
+  executedOn: string;
+  signalOn: string;
+  symbol: string;
+  side: "buy" | "sell";
+  units: number;
+  /** Cena w walucie instrumentu (ze spreadem). */
+  price: number;
+  notionalPln: number;
+  feePln: number;
+  realizedPln: number | null;
+  direction: string;
+  confidence: number;
+  reason: string | null;
+};
+
+export type FundHolding = {
+  symbol: string;
+  units: number;
+  valuePln: number;
+  costPln: number;
+  /** Ostatnie zamknięcie i zmiana dnia instrumentu (%), gdy są notowania. */
+  last: number | null;
+  change1d: number | null;
+};
+
+export type FundPlayerDetail = {
+  key: string;
+  holdings: FundHolding[];
+  /** Wszystkie transakcje gracza, od najnowszej. */
+  trades: FundTrade[];
+};
+
+export const getFundPlayer = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ player: z.string().min(1).max(40) }).parse(input))
+  .handler(async ({ context, data }): Promise<FundPlayerDetail> => {
+    const { supabase, userId } = context;
+    const { data: portfolio, error } = await supabase
+      .from("fund_portfolios")
+      .select("id")
+      .eq("owner_id", userId)
+      .eq("player", data.player)
+      .maybeSingle();
+    if (error) {
+      await logServerError(supabase, userId, "fund.player", error);
+      throw new Error(error.message);
+    }
+    if (!portfolio) return { key: data.player, holdings: [], trades: [] };
+
+    const rows = await fetchAllPages<{
+      executed_on: string;
+      signal_on: string;
+      symbol: string;
+      side: string;
+      units: number;
+      price: number;
+      notional_pln: number;
+      fee_pln: number;
+      realized_pln: number | null;
+      direction: string;
+      confidence: number;
+      reason: string | null;
+    }>((from, to) =>
+      supabase
+        .from("fund_orders")
+        .select(
+          "executed_on, signal_on, symbol, side, units, price, notional_pln, fee_pln, realized_pln, direction, confidence, reason, id",
+        )
+        .eq("portfolio_id", portfolio.id)
+        .order("executed_on", { ascending: false })
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    const trades: FundTrade[] = rows.map((o) => ({
+      executedOn: o.executed_on,
+      signalOn: o.signal_on,
+      symbol: o.symbol,
+      side: o.side === "sell" ? "sell" : "buy",
+      units: Number(o.units),
+      price: Number(o.price),
+      notionalPln: Number(o.notional_pln),
+      feePln: Number(o.fee_pln),
+      realizedPln: o.realized_pln === null ? null : Number(o.realized_pln),
+      direction: o.direction,
+      confidence: o.confidence,
+      reason: o.reason,
+    }));
+
+    const { data: posRows } = await supabase
+      .from("fund_positions")
+      .select("symbol, units, value_pln, cost_pln")
+      .eq("portfolio_id", portfolio.id);
+    const symbols = (posRows ?? []).map((p) => p.symbol);
+    // dwa ostatnie zamknięcia każdego instrumentu → strzałka trendu dnia
+    const closes = new Map<string, number[]>();
+    if (symbols.length > 0) {
+      const since = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
+      const { data: q } = await supabase
+        .from("market_quotes")
+        .select("symbol, quote_date, close")
+        .in("symbol", symbols)
+        .gte("quote_date", since)
+        .order("quote_date", { ascending: false });
+      for (const r of q ?? []) {
+        const list = closes.get(r.symbol) ?? [];
+        if (list.length < 2) list.push(Number(r.close));
+        closes.set(r.symbol, list);
+      }
+    }
+    const holdings: FundHolding[] = (posRows ?? [])
+      .map((p) => {
+        const c = closes.get(p.symbol) ?? [];
+        return {
+          symbol: p.symbol,
+          units: Number(p.units),
+          valuePln: Number(p.value_pln),
+          costPln: Number(p.cost_pln),
+          last: c[0] ?? null,
+          change1d: c.length === 2 && c[1] !== 0 ? ((c[0] - c[1]) / c[1]) * 100 : null,
+        };
+      })
+      .sort((a, b) => Math.abs(b.valuePln) - Math.abs(a.valuePln));
+
+    return { key: data.player, holdings, trades };
   });

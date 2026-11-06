@@ -10,6 +10,7 @@ import {
   DEFAULT_RULES,
   simulate,
   type Direction,
+  type FundRules,
   type FundSignal,
   type Instrument,
   type LiveEvent,
@@ -68,6 +69,8 @@ export function buildFund(
   end: string,
   /** Zdarzenia z przebiegu na żywo, per gracz (klucz = PLAYERS.key). */
   events: Map<string, LiveEvent[]> = new Map(),
+  /** Reguły gracza (ustawienia funduszu, settings.ts); brak = domyślne. */
+  rulesFor: (player: PlayerDef) => Partial<FundRules> = () => ({}),
 ): FundRun | null {
   const valid = predictions.filter((p) => assetBySymbol(p.symbol) && isDirection(p.direction));
   if (valid.length === 0) return null;
@@ -103,12 +106,22 @@ export function buildFund(
     end,
     players: PLAYERS.map((player) => {
       const signals = signalsFor(player);
-      const result = simulate(signals, book, { start, end, events: events.get(player.key) });
+      const rules = rulesFor(player);
+      const result = simulate(signals, book, {
+        start,
+        end,
+        rules,
+        events: events.get(player.key),
+      });
       return {
         ...player,
         result,
         metrics: {
-          ...computeMetrics(result.nav, result.trades, DEFAULT_RULES.startCashPln),
+          ...computeMetrics(
+            result.nav,
+            result.trades,
+            rules.startCashPln ?? DEFAULT_RULES.startCashPln,
+          ),
           financingPln: result.financingPln,
           exits: result.exits,
           horizonDays: player.horizonDays,

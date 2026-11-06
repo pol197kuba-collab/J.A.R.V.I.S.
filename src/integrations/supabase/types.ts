@@ -1098,6 +1098,24 @@ export type Database = {
         }
         Relationships: []
       }
+      fund_settings: {
+        Row: {
+          owner_id: string
+          settings: Json
+          updated_at: string
+        }
+        Insert: {
+          owner_id: string
+          settings?: Json
+          updated_at?: string
+        }
+        Update: {
+          owner_id?: string
+          settings?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       generated_files: {
         Row: {
           created_at: string

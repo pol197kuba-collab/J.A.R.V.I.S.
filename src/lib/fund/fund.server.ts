@@ -12,6 +12,7 @@ import type { PricePoint } from "@/lib/markets/series";
 import { addDays, DEFAULT_RULES, type LiveEvent } from "./engine";
 import { buildFund, type FundRun, type PredictionRow } from "./fund";
 import { CONTROL_HORIZON, MAIN_HORIZON } from "./players";
+import { parseFundSettings, rulesForPlayer, type FundSettings } from "./settings";
 
 type Db = SupabaseClient<Database>;
 
@@ -97,11 +98,24 @@ export type FundSummary = {
 export const PREDICTION_COLUMNS =
   "id, symbol, source, made_on, made_at, direction, confidence, rationale_pl, stale, horizon_days";
 
+/** Ustawienia funduszu właściciela (brak wiersza = domyślne). */
+export async function loadFundSettings(db: Db, ownerId: string): Promise<FundSettings> {
+  const { data, error } = await db
+    .from("fund_settings")
+    .select("settings")
+    .eq("owner_id", ownerId)
+    .maybeSingle();
+  if (error) throw new Error(`fund_settings: ${error.message}`);
+  return parseFundSettings(data?.settings ?? null);
+}
+
 export async function computeFund(
   db: Db,
   ownerId: string,
   today = new Date().toISOString().slice(0, 10),
+  preloaded?: FundSettings,
 ): Promise<FundRun | null> {
+  const settings = preloaded ?? (await loadFundSettings(db, ownerId));
   type Row = Omit<PredictionRow, "made_on"> & { made_on: string | null; stale: boolean };
   const predictions = await fetchAllPages<Row>((from, to) =>
     db
@@ -109,6 +123,7 @@ export async function computeFund(
       .select(PREDICTION_COLUMNS)
       .eq("owner_id", ownerId)
       .in("horizon_days", HORIZONS)
+      .gte("made_on", settings.startOn)
       .order("made_at", { ascending: true })
       .order("id", { ascending: true })
       .range(from, to),
@@ -177,7 +192,7 @@ export async function computeFund(
     events.set(e.player, list);
   }
 
-  return buildFund(live, closes, today, events);
+  return buildFund(live, closes, today, events, (player) => rulesForPlayer(settings, player));
 }
 
 export async function recomputeFund(
