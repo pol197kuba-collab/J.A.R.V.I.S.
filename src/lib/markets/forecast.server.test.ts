@@ -202,7 +202,7 @@ describe("forecastWithModel", () => {
       anthropicApiKey: "sk-test",
       geminiApiKey: null,
     });
-    expect(result.model).toBe("claude-opus-5");
+    expect(result.model).toBe("claude-opus-5-5");
   });
 
   it("falls back to Gemini and names it when Claude fails", async () => {

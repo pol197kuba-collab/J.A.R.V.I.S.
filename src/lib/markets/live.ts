@@ -144,3 +144,60 @@ export function parseAlarmReply(text: string | null): {
     return { action: "hold", reasonPl: null };
   }
 }
+
+// ------------------------------------------------- wspólny takt rynku ----
+
+/** Źródło notowań zapisanych z przebiegu na żywo (market_quotes.source). */
+export const LIVE_QUOTE_SOURCE = "live";
+
+export type LiveQuoteRow = {
+  symbol: string;
+  quote_date: string;
+  close: number;
+  currency: string;
+  source: typeof LIVE_QUOTE_SOURCE;
+};
+
+/**
+ * Ceny z przebiegu na żywo → dzisiejsze wiersze notowań (ostatnia cena jako
+ * „zamknięcie” bieżącego dnia). Dzięki temu wykres, sygnały i wycena funduszu
+ * widzą te same ceny co stopy. Wieczorny Market Grid nadpisuje je prawdziwym
+ * zamknięciem ze źródła.
+ *
+ * Nigdy nie nadpisuje prawdziwego zamknięcia (`realDays`: klucze
+ * `symbol|data` wierszy z innym źródłem niż „live”) i nie zapisuje cen
+ * starszych niż `maxAgeDays` (np. piątkowa cena akcji odczytana w niedzielę
+ * ma już swoje prawdziwe zamknięcie). Data = dzień UTC chwili ceny — tak
+ * datują dzienne źródła (krypto: doba UTC; giełdy: ich dzień sesji).
+ */
+export function liveQuoteRows(
+  prices: ReadonlyMap<string, LivePrice>,
+  currencyOf: (symbol: string) => string | null,
+  realDays: ReadonlySet<string>,
+  now: Date,
+  maxAgeDays = 4,
+): LiveQuoteRow[] {
+  const rows: LiveQuoteRow[] = [];
+  for (const [symbol, p] of prices) {
+    const t = Date.parse(p.at);
+    if (!Number.isFinite(p.price) || p.price <= 0 || !Number.isFinite(t)) continue;
+    if (now.getTime() - t > maxAgeDays * 86_400_000) continue;
+    const currency = currencyOf(symbol);
+    if (!currency) continue;
+    const quote_date = new Date(t).toISOString().slice(0, 10);
+    if (realDays.has(`${symbol}|${quote_date}`)) continue;
+    rows.push({ symbol, quote_date, close: p.price, currency, source: LIVE_QUOTE_SOURCE });
+  }
+  return rows;
+}
+
+/**
+ * Czy zapisać fundusz mimo braku zdarzeń: ceny się zmieniły, a wycena w
+ * bazie (wykres kapitału, ranking) ma być świeża — ale nie przepisujemy
+ * całej historii co 15 minut. Raz na `everyMin` wystarcza.
+ */
+export function fundRefreshDue(computedAt: string | null, now: Date, everyMin = 60): boolean {
+  if (!computedAt) return true;
+  const t = Date.parse(computedAt);
+  return !Number.isFinite(t) || now.getTime() - t >= (everyMin - 2) * 60_000;
+}

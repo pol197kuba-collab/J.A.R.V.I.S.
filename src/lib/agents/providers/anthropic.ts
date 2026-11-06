@@ -18,11 +18,11 @@ const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 
 // Sampling parameters were removed from the Claude 4.6+ reasoning models —
-// sending `temperature` to Opus 5 / Sonnet 5 is a hard 400, not a warning.
-// Haiku 4.5 and older models still accept it. Matching on the family name
-// rather than an allowlist of exact IDs means a future dated snapshot of the
-// same family keeps behaving correctly.
-const TEMPERATURE_MODEL_RE = /haiku|claude-3|sonnet-4-5|opus-4-5/i;
+// sending `temperature` to Opus 5 / Sonnet 5 / Haiku 5.5 is a hard 400, not a
+// warning. Haiku 4.5 and older models still accept it. Matching on the family
+// name rather than an allowlist of exact IDs means a future dated snapshot of
+// the same family keeps behaving correctly.
+const TEMPERATURE_MODEL_RE = /haiku-4|claude-3|sonnet-4-5|opus-4-5/i;
 
 export const supportsTemperature = (modelId: string): boolean => TEMPERATURE_MODEL_RE.test(modelId);
 
@@ -123,6 +123,18 @@ export type CallAnthropicOptions = {
   temperature?: number;
   maxOutputTokens?: number;
   timeoutMs?: number;
+  /**
+   * Głębokość myślenia (output_config.effort). Modele 5.x myślą domyślnie,
+   * a myślenie liczy się do max_tokens — przy małym limicie potrafi zjeść
+   * całą odpowiedź (pusty tekst). Proste zadania: "low".
+   */
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  /**
+   * true = bez myślenia (thinking: disabled). Tylko modele, które na to
+   * pozwalają (Haiku 5.5 / Opus 5 do effort high); Opus 5.5 i Sonnet 5.5
+   * odrzucają to 400 — tam steruje się samym `effort`.
+   */
+  noThinking?: boolean;
 };
 
 export async function callAnthropic(opts: CallAnthropicOptions): Promise<ModelTurnResult> {
@@ -149,6 +161,8 @@ export async function callAnthropic(opts: CallAnthropicOptions): Promise<ModelTu
         max_tokens: opts.maxOutputTokens ?? 4096,
         system: opts.systemPrompt,
         messages: toAnthropicMessages(opts.contents),
+        ...(opts.effort ? { output_config: { effort: opts.effort } } : {}),
+        ...(opts.noThinking ? { thinking: { type: "disabled" } } : {}),
         ...(opts.temperature !== undefined && supportsTemperature(opts.model)
           ? { temperature: opts.temperature }
           : {}),

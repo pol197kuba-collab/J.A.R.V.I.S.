@@ -7,21 +7,20 @@ name: Market Grid
 # prognozy W JEJ TERMINIE, a nie przy następnej wizycie; i regularną,
 # codzienną próbkę prognoz zamiast zlepka dni, w które ktoś akurat zajrzał.
 #
-# O CZASIE: od 20.10.2026 job uruchamia baza (pg_cron → workflow_dispatch,
-# supabase/migrations/20261020120000_market_grid_dispatch.sql) o 20:00 czasu
-# PL — cron poniżej GitHub realizował z opóźnieniem 2–4 h. Cron zostaje jako
-# zapas; gdy przyjdzie po przebiegu z bazy, skrypt kończy się bez pracy
-# (src/lib/markets/schedule.ts).
+# O CZASIE: job uruchamia baza (pg_cron → workflow_dispatch,
+# supabase/migrations/20261106130000_market_grid_sessions.sql) dwa razy:
+# o 8:30 czasu PL w dni robocze (akcje, ETF-y, indeksy — decyzja przed
+# sesją) i o 20:00 codziennie (krypto, surowce, waluty + domknięcie dnia
+# wszystkich notowań). Cron GitHuba spóźnia się 2–4 h, więc poniżej jest
+# tylko zapasem; gdy przyjdzie po przebiegu tej samej sesji albo poza
+# sesjami, skrypt kończy się bez pracy (src/lib/markets/schedule.ts).
 on:
   schedule:
-    # Po zamknięciu sesji w Warszawie i przed otwarciem w USA — wtedy dzień
-    # giełdowy w Europie jest domknięty, a notowania z USA są z poprzedniej
-    # sesji. Jeden przebieg dziennie: horyzont prognoz to tydzień, a
-    # notowania dzienne nie zmieniają się częściej niż raz na sesję.
-    - cron: "0 18 * * 1-5" # 20:00 CEST
-    # Weekendowy przebieg wyłącznie dla krypto (chodzi 24/7) i rozliczeń,
-    # którym termin wypadł w sobotę lub niedzielę.
-    - cron: "0 18 * * 0,6"
+    # Zapas porannej sesji (dni robocze).
+    - cron: "40 6 * * 1-5"
+    # Zapas wieczornej sesji (codziennie — krypto chodzi 24/7, a rozliczenia
+    # potrafią wypaść w weekend).
+    - cron: "0 18 * * *"
   workflow_dispatch:
     inputs:
       dry_run:

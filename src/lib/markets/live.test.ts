@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { liveDecisions, parseAlarmReply, type LivePrice } from "./live";
+import {
+  fundRefreshDue,
+  liveDecisions,
+  liveQuoteRows,
+  parseAlarmReply,
+  type LivePrice,
+} from "./live";
 import type { LivePosition } from "@/lib/fund/engine";
 
 const NOW = new Date("2026-11-02T10:00:00Z");
@@ -106,5 +112,31 @@ describe("parseAlarmReply", () => {
     });
     expect(parseAlarmReply("nie wiem").action).toBe("hold");
     expect(parseAlarmReply(null).action).toBe("hold");
+  });
+});
+
+describe("wspólny takt rynku", () => {
+  const now = new Date("2026-11-06T10:00:00Z");
+  const cur = (s: string) => (s === "UNKNOWN" ? null : s.endsWith(".WA") ? "PLN" : "USD");
+
+  it("zapisuje świeże ceny jako dzisiejsze notowanie, nie rusza prawdziwych zamknięć", () => {
+    const prices = new Map([
+      ["BTC", { price: 70_100, at: "2026-11-06T09:55:00Z", source: "coingecko" }],
+      ["CDR.WA", { price: 262.4, at: "2026-11-06T09:50:00Z", source: "yahoo" }],
+      ["AAPL", { price: 231, at: "2026-11-05T21:00:00Z", source: "yahoo" }],
+      ["OLD", { price: 10, at: "2026-10-20T15:00:00Z", source: "yahoo" }],
+      ["UNKNOWN", { price: 1, at: "2026-11-06T09:00:00Z", source: "yahoo" }],
+    ]);
+    const rows = liveQuoteRows(prices, cur, new Set(["AAPL|2026-11-05"]), now);
+    expect(rows).toEqual([
+      { symbol: "BTC", quote_date: "2026-11-06", close: 70_100, currency: "USD", source: "live" },
+      { symbol: "CDR.WA", quote_date: "2026-11-06", close: 262.4, currency: "PLN", source: "live" },
+    ]);
+  });
+
+  it("fundusz bez zdarzeń zapisuje się najwyżej raz na godzinę", () => {
+    expect(fundRefreshDue(null, now)).toBe(true);
+    expect(fundRefreshDue("2026-11-06T09:30:00Z", now)).toBe(false);
+    expect(fundRefreshDue("2026-11-06T08:59:00Z", now)).toBe(true);
   });
 });

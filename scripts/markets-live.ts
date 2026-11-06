@@ -22,11 +22,17 @@ import { assetBySymbol, type MarketAsset } from "../src/lib/markets/assets";
 import { computeFund, loadFundSettings, persistFund } from "../src/lib/fund/fund.server";
 import { liveRunDue } from "../src/lib/fund/settings";
 import { fetchLivePrices } from "../src/lib/markets/liveQuotes.server";
-import { liveDecisions, type PlayerEvent } from "../src/lib/markets/live";
+import {
+  fundRefreshDue,
+  liveDecisions,
+  liveQuoteRows,
+  LIVE_QUOTE_SOURCE,
+  type PlayerEvent,
+} from "../src/lib/markets/live";
 import { askAlarm } from "../src/lib/markets/alarm.server";
 import { createModelBudget, DAILY_TOKEN_BUDGET, warsawDay } from "../src/lib/markets/budget";
 import { computeSignals } from "../src/lib/markets/signals";
-import type { Db } from "../src/lib/markets/ingest.server";
+import { loadWatchlist, type Db } from "../src/lib/markets/ingest.server";
 
 const notice = (m: string) => console.log(`::notice::${m}`);
 const warn = (m: string) => console.log(`::warning::${m}`);
@@ -71,17 +77,23 @@ async function auth(): Promise<{ db: Db; ownerId: string }> {
   process.exit(1);
 }
 
-/** 20:00–20:44 w Warszawie: okno wieczornego Market Grid. */
+/**
+ * Okna Market Grid w Warszawie: 20:00–20:44 (wieczór) i 8:30–9:14 w dni
+ * robocze (poranek) — wtedy fundusz przelicza job sesji.
+ */
 function inDailyWindow(now: Date): boolean {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Europe/Warsaw",
     hour: "2-digit",
     minute: "2-digit",
+    weekday: "short",
     hourCycle: "h23",
   }).formatToParts(now);
   const h = Number(parts.find((p) => p.type === "hour")?.value);
   const m = Number(parts.find((p) => p.type === "minute")?.value);
-  return h === 20 && m < 45;
+  const weekend = ["Sat", "Sun"].includes(parts.find((p) => p.type === "weekday")?.value ?? "");
+  const minutes = h * 60 + m;
+  return (h === 20 && m < 45) || (!weekend && minutes >= 8 * 60 + 30 && minutes < 9 * 60 + 15);
 }
 
 async function main() {
@@ -132,22 +144,23 @@ async function main() {
 
   // ---------- 1. stan funduszu ----------
   const run = await computeFund(db, ownerId, undefined, settings);
-  if (!run) {
-    notice("Fundusz bez prognoz — nic do pilnowania.");
-    await finish(0);
-    return;
-  }
-  const players = run.players.map((p) => ({
+  const players = (run?.players ?? []).map((p) => ({
     key: p.key,
     pending: p.result.pending,
     live: p.result.live,
   }));
+  // Wspólny takt rynku: ceny WSZYSTKICH obserwowanych instrumentów (wykres,
+  // sygnały) plus tych, na których gracze mają pozycje albo zlecenia.
+  const watch = await loadWatchlist(db, ownerId).catch(() => [] as string[]);
   const symbols = [
-    ...new Set(players.flatMap((p) => [...p.pending, ...p.live].map((x) => x.symbol))),
+    ...new Set([
+      ...watch,
+      ...players.flatMap((p) => [...p.pending, ...p.live].map((x) => x.symbol)),
+    ]),
   ];
   const assets = symbols.map(assetBySymbol).filter((a): a is MarketAsset => Boolean(a));
   if (assets.length === 0) {
-    notice("Brak otwartych pozycji i czekających zleceń.");
+    notice("Nic do pilnowania: brak obserwowanych instrumentów, pozycji i zleceń.");
     await finish(0);
     return;
   }
@@ -156,6 +169,31 @@ async function main() {
   const { prices, errors } = await fetchLivePrices(assets);
   for (const e of errors) warn(`ceny: ${e}`);
   notice(`ceny na żywo: ${prices.size} z ${assets.length} instrumentów`);
+
+  // Zapis jako dzisiejsze notowanie (wieczorny Market Grid nadpisze je
+  // prawdziwym zamknięciem). Prawdziwych zamknięć nie ruszamy.
+  {
+    const nowQ = new Date();
+    const since = new Date(nowQ.getTime() - 5 * 86_400_000).toISOString().slice(0, 10);
+    const { data: existing } = await db
+      .from("market_quotes")
+      .select("symbol, quote_date, source")
+      .in("symbol", [...prices.keys()])
+      .gte("quote_date", since);
+    const realDays = new Set(
+      (existing ?? [])
+        .filter((r) => r.source !== LIVE_QUOTE_SOURCE)
+        .map((r) => `${r.symbol}|${r.quote_date}`),
+    );
+    const rows = liveQuoteRows(prices, (s) => assetBySymbol(s)?.currency ?? null, realDays, nowQ);
+    if (rows.length > 0) {
+      const { error } = await db
+        .from("market_quotes")
+        .upsert(rows, { onConflict: "symbol,quote_date" });
+      if (error) warn(`zapis notowań na żywo: ${error.message}`);
+      else notice(`notowania na żywo zapisane: ${rows.length}`);
+    }
+  }
 
   // ---------- 3. decyzje ----------
   const now = new Date();
@@ -279,10 +317,24 @@ async function main() {
   }
 
   // ---------- 5. zapis funduszu ----------
-  if (written > 0) {
+  // Po zdarzeniach od razu; bez zdarzeń najwyżej raz na godzinę, żeby
+  // wycena i wykres kapitału szły za cenami z taktu rynku.
+  const { data: lastFund } = await db
+    .from("fund_portfolios")
+    .select("computed_at")
+    .eq("owner_id", ownerId)
+    .order("computed_at", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+  const refresh = run !== null && fundRefreshDue(lastFund?.computed_at ?? null, new Date());
+  if (written > 0 || refresh) {
     const fresh = await computeFund(db, ownerId, undefined, settings);
     if (fresh) await persistFund(db, ownerId, fresh);
-    notice(`fundusz przeliczony (${written} nowych zdarzeń, ${closed} zamknięć z alarmu)`);
+    notice(
+      written > 0
+        ? `fundusz przeliczony (${written} nowych zdarzeń, ${closed} zamknięć z alarmu)`
+        : "fundusz przeliczony (odświeżenie wyceny po nowych cenach)",
+    );
   }
 
   const { data: usage } = await db

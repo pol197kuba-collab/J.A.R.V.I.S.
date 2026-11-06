@@ -20,8 +20,14 @@ import type { SignalDirection, TechnicalOutlook } from "./signals";
 import { REGIME_LABEL_PL, isMarketRegime } from "./regime";
 import { estimateTokens, UNLIMITED_BUDGET, type ModelBudget } from "./budget";
 
-const MODEL_TIMEOUT_MS = 60_000;
-const ANTHROPIC_FORECAST_MODEL = "claude-opus-5";
+const MODEL_TIMEOUT_MS = 120_000;
+/**
+ * Opus 5.5 myśli zawsze (nie da się wyłączyć) — effort "low" trzyma myślenie
+ * krótkie, a limit wyjścia ma zapas na myślenie + odpowiedź. Do 6.11.2026
+ * było Opus 5 z limitem ~2 600 tokenów: myślenie zjadało cały limit, tekst
+ * wracał pusty i prognozy po cichu szły przez Gemini.
+ */
+const ANTHROPIC_FORECAST_MODEL = "claude-opus-5-5";
 
 export type ForecastInput = {
   asset: MarketAsset;
@@ -335,6 +341,8 @@ export async function forecastWithModel(
   if (denied) return { ...fallback, failure: `budżet tokenów — ${denied}` };
   // Odpowiedź z dwoma horyzontami jest dłuższa — limit wyjścia z zapasem.
   const maxOutputTokens = Math.min(8192, 400 + inputs.length * 160);
+  // Claude: myślenie wlicza się do max_tokens — osobny, większy limit.
+  const claudeMaxTokens = Math.min(16_000, 3_000 + inputs.length * 250);
   let text: string | null = null;
   let model: string | null = null;
   const failures: string[] = [];
@@ -347,7 +355,8 @@ export async function forecastWithModel(
         model: ANTHROPIC_FORECAST_MODEL,
         systemPrompt: system,
         contents,
-        maxOutputTokens,
+        maxOutputTokens: claudeMaxTokens,
+        effort: "low",
         timeoutMs: MODEL_TIMEOUT_MS,
       });
       text = result.text || null;
@@ -365,6 +374,9 @@ export async function forecastWithModel(
     }
   }
   if (!text && keys.geminiApiKey) {
+    // Widoczne w logu joba — bez tego zapas na Gemini działał niezauważony.
+    if (failures.length > 0)
+      console.warn(`[prognozy] Claude zawiódł, zapas Gemini: ${failures.join(" · ")}`);
     const gemini = await callGeminiText({
       apiKey: keys.geminiApiKey,
       model: DEFAULT_GEMINI_MODEL,

@@ -14,6 +14,7 @@ import { assetBySymbol } from "@/lib/markets/assets";
 import { getFundSettings, type FundPlayer, type FundView } from "@/lib/fund/fund.functions";
 import { DEFAULT_FUND_SETTINGS, describeSettings, LIVE_OPTIONS } from "@/lib/fund/settings";
 import { fundVerdict, isWaiting, startingWith, waitingFor } from "@/lib/fund/verdict";
+import { SESSION_LABEL } from "@/lib/markets/schedule";
 import { Fold } from "./Fold";
 import { FundNavChart } from "./FundNavChart";
 import { FundPlayerSheet } from "./FundPlayerSheet";
@@ -202,8 +203,8 @@ export function FundPanel({
     liveAgeMin < Math.max(40, settings.liveEveryMin * 2.5);
   const liveLabel =
     settings.liveEveryMin === 0
-      ? "pilnowanie na żywo wyłączone"
-      : `na żywo co ${settings.liveEveryMin} min${
+      ? "takt rynku wyłączony (ceny tylko wieczorem)"
+      : `takt rynku co ${settings.liveEveryMin} min${
           lastLive
             ? ` · ostatnio ${lastLive.toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" })}`
             : ""
@@ -372,17 +373,20 @@ export function FundPanel({
 
       <Fold title="Zasady gry">
         <PanelHint>
-          Realizacja po pierwszej cenie z ciągu dnia PO postawieniu prognozy (przebieg na żywo, w
-          ustawieniach: {LIVE_OPTIONS.filter((v) => v > 0).join(" / ")} min albo wyłączony), a bez
-          niej — po kolejnym zamknięciu; nigdy po cenie, którą prognoza już znała. Prowizja 0,1% +
-          spread. „Wzrost” = kupno, „spadek” = krótka sprzedaż (jeśli włączona), „bez zmian” = nic
-          nowego. Pozycja = limit na pozycję × pewność × dźwignia; limit, dźwignia i progi stop-loss
-          / take-profit wynikają z agresywności w ustawieniach. Pożyczona gotówka kosztuje 7%
-          rocznie, pożyczone papiery 1–10% rocznie. Margin call: gdy kapitał spadnie poniżej połowy
-          wymaganego depozytu, wszystko jest zamykane. Pozycja żyje tyle, ile horyzont prognozy (2
-          dni; gracz kontrolny — 7 dni). Koszyk kupuje wszystko po równo w dniu startu i trzyma bez
-          dźwigni; małpa rzuca losowo — oba zawsze na zasadach domyślnych, żeby było z czym
-          porównać. Zmiana ustawień przelicza całą grę od dnia startu.
+          Decyzje AI: raz dziennie na instrument — {SESSION_LABEL.morning} (dni robocze, przed
+          sesją) i {SESSION_LABEL.evening}. Takt rynku (w ustawieniach:{" "}
+          {LIVE_OPTIONS.filter((v) => v > 0).join(" / ")} min albo wyłączony) odświeża ceny
+          obserwowanych instrumentów i pilnuje pozycji. Realizacja po pierwszej cenie z ciągu dnia
+          PO postawieniu prognozy, a bez niej — po kolejnym zamknięciu; nigdy po cenie, którą
+          prognoza już znała. Prowizja 0,1% + spread. „Wzrost” = kupno, „spadek” = krótka sprzedaż
+          (jeśli włączona), „bez zmian” = nic nowego. Pozycja = limit na pozycję × pewność ×
+          dźwignia; limit, dźwignia i progi stop-loss / take-profit wynikają z agresywności w
+          ustawieniach. Pożyczona gotówka kosztuje 7% rocznie, pożyczone papiery 1–10% rocznie.
+          Margin call: gdy kapitał spadnie poniżej połowy wymaganego depozytu, wszystko jest
+          zamykane. Pozycja żyje tyle, ile horyzont prognozy (2 dni; gracz kontrolny — 7 dni).
+          Koszyk kupuje wszystko po równo w dniu startu i trzyma bez dźwigni; małpa rzuca losowo —
+          oba zawsze na zasadach domyślnych, żeby było z czym porównać. Zmiana ustawień przelicza
+          całą grę od dnia startu.
         </PanelHint>
       </Fold>
 

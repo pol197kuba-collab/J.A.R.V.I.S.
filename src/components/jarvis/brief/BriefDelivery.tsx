@@ -4,7 +4,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getBriefDelivery } from "@/lib/notifications/push.functions";
-import { MARKET_HOUR } from "@/lib/markets/schedule";
+import { MARKET_HOUR, MORNING_HOUR, MORNING_MINUTE } from "@/lib/markets/schedule";
 
 const fmt = (iso: string) =>
   new Date(iso).toLocaleString("pl-PL", {
@@ -61,7 +61,8 @@ export function BriefDelivery() {
           : "jeszcze żaden"}
       </p>
       <p className="min-w-0 break-words">
-        Market Grid (codziennie o {MARKET_HOUR}:00):{" "}
+        Market Grid ({MORNING_HOUR}:{String(MORNING_MINUTE).padStart(2, "0")} w dni robocze i{" "}
+        {MARKET_HOUR}:00 codziennie):{" "}
         {d.lastMarketRun
           ? `ostatni zaciąg ${fmt(d.lastMarketRun.finishedAt)}` +
             (d.lastMarketRun.trigger
