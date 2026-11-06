@@ -16,7 +16,6 @@ import { speak } from "@/lib/audio/speak";
 import { MODULE_GROUPS, type ModuleEntry } from "./modules";
 import { useHudNavigate } from "./TransitionContext";
 import { useArkReboot } from "./ArkRebootContext";
-import { useShowcase } from "./ShowcaseContext";
 import { onOpenCommandPalette } from "./commandPaletteBus";
 
 /**
@@ -32,12 +31,11 @@ export function CommandPalette() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const { go, isTransitioning } = useHudNavigate();
   const { isDiagnosticRunning } = useArkReboot();
-  const { isRunning: isShowcaseRunning } = useShowcase();
 
-  // While a HUD transition, diagnostic or showcase is running the rail
+  // While a HUD transition, or diagnostic is running the rail
   // disables navigation; the palette has to honour the same lock, or ⌘K
   // becomes a way to route straight through a running overlay.
-  const navLocked = isTransitioning || isDiagnosticRunning || isShowcaseRunning;
+  const navLocked = isTransitioning || isDiagnosticRunning;
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {

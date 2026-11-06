@@ -6,7 +6,6 @@ import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 import { useHudNavigate } from "./TransitionContext";
 import { useArkReboot } from "./ArkRebootContext";
-import { useShowcase } from "./ShowcaseContext";
 import { MENU_GROUPS, type ModuleEntry, type ModuleGroup } from "./modules";
 import { dragToSpin } from "./module-transition/orbitMenuMath";
 // Type-only: erased at build, so three.js never reaches the main bundle.
@@ -37,8 +36,7 @@ export function OrbitMenu({
 }) {
   const { go, isTransitioning } = useHudNavigate();
   const { isDiagnosticRunning } = useArkReboot();
-  const { isRunning: isShowcaseRunning } = useShowcase();
-  const locked = isTransitioning || isDiagnosticRunning || isShowcaseRunning;
+  const locked = isTransitioning || isDiagnosticRunning;
 
   const [group, setGroup] = useState<ModuleGroup | null>(null);
   const [leaving, setLeaving] = useState(false);

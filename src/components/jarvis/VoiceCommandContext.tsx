@@ -288,8 +288,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
         action === "shutdown" ||
         action === "system_check" ||
         action === "sleep" ||
-        action === "vision_scan" ||
-        action === "demo_showcase"
+        action === "vision_scan"
           ? 2000
           : 500;
       const last = lastFireMapRef.current.get(action) ?? 0;
@@ -371,13 +370,6 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
           go("/vision");
           break;
         }
-        case "demo_showcase":
-          // Bridge to ShowcaseProvider (mounted below this provider). It
-          // speaks its own cold-open line — don't ALSO speak cmd.confirmation
-          // here, or the two lines would queue back to back (see "reboot").
-          window.dispatchEvent(new CustomEvent("jarvis:showcase"));
-          if (spokenLine) speak(spokenLine);
-          break;
         default:
           // Every "route"/"module" kind returned above; every remaining
           // "special" id must have an explicit case here. Adding a new

@@ -22,7 +22,6 @@ import { useAgentStatus } from "./useAgentStatus";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 import { useArkReboot } from "./ArkRebootContext";
-import { useShowcase } from "./ShowcaseContext";
 import { MENU_GROUPS, type ModuleEntry } from "./modules";
 import { openCommandPalette } from "./commandPaletteBus";
 
@@ -52,10 +51,9 @@ export function AppSidebar() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const { go, isTransitioning } = useHudNavigate();
   const { isDiagnosticRunning } = useArkReboot();
-  const { isRunning: isShowcaseRunning } = useShowcase();
   const [collapsedGroups, setCollapsedGroups] = useState<string[]>(readCollapsedGroups);
 
-  const navLocked = isTransitioning || isDiagnosticRunning || isShowcaseRunning;
+  const navLocked = isTransitioning || isDiagnosticRunning;
 
   const toggleGroup = useCallback((id: string) => {
     setCollapsedGroups((prev) => {

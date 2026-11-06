@@ -15,9 +15,6 @@ import { Toaster } from "@/components/ui/sonner";
 import { ArkRebootProvider, useArkReboot } from "@/components/jarvis/ArkRebootContext";
 import { ArkRebootOverlay } from "@/components/jarvis/ArkRebootOverlay";
 import { RebootButton } from "@/components/jarvis/RebootButton";
-import { ShowcaseProvider } from "@/components/jarvis/ShowcaseContext";
-import { ShowcaseOverlay } from "@/components/jarvis/ShowcaseOverlay";
-import { ShowcaseButton } from "@/components/jarvis/ShowcaseButton";
 import { MobileBottomNav } from "@/components/jarvis/MobileBottomNav";
 import { useRouterState } from "@tanstack/react-router";
 import { CommandPalette } from "@/components/jarvis/CommandPalette";
@@ -40,9 +37,7 @@ import type { AppPhase } from "@/components/jarvis/PhaseContext";
 export function DashboardShell({ phase, onShutdown }: { phase: AppPhase; onShutdown: () => void }) {
   return (
     <ArkRebootProvider>
-      <ShowcaseProvider>
-        <DashboardShellInner phase={phase} onShutdown={onShutdown} />
-      </ShowcaseProvider>
+      <DashboardShellInner phase={phase} onShutdown={onShutdown} />
     </ArkRebootProvider>
   );
 }
@@ -137,7 +132,6 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
         )}
         <CommandPalette />
         <ArkRebootOverlay />
-        <ShowcaseOverlay />
         <Toaster theme="dark" position="top-right" richColors />
         {phase === "shutdown" && (
           <div
@@ -235,7 +229,6 @@ function HudHeader({ onShutdown }: { onShutdown: () => void }) {
             <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-primary/12 bg-primary/[0.04] px-1.5 py-1 landscape:max-md:gap-1 landscape:max-md:px-1 landscape:max-md:py-0.5 short:gap-1 short:px-1 short:py-0.5">
               <HeaderVoiceToggle />
               <NotificationBell />
-              <ShowcaseButton />
               <RebootButton />
               <FullscreenToggle />
             </span>
@@ -280,7 +273,6 @@ function SysMenu({
         onClick={() => setOpen(false)}
       >
         <div className="flex items-center gap-2">
-          <ShowcaseButton />
           <RebootButton />
           {showFullscreen && <FullscreenToggle />}
           <DeactivateButton onClick={onShutdown} />
