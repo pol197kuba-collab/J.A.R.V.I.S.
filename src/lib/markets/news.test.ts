@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import { MARKET_ASSETS, assetBySymbol } from "./assets";
 import {
   aggregateSentiment,
+  balanceByFeed,
+  feedHealth,
   heuristicImpact,
   heuristicVerdict,
+  MARKET_FEEDS,
   matchSymbols,
+  newsClasses,
   type MarketNewsItem,
 } from "./news";
 
@@ -148,5 +152,52 @@ describe("aggregateSentiment", () => {
       item({ symbols: ["ETH"], impact: "bearish", impactScore: 80 }),
     ]);
     expect(rows[0].symbol).toBe("ETH");
+  });
+});
+
+describe("etap 3: klasy newsów i podział limitu", () => {
+  it("klasy z instrumentów, a bez instrumentów — z kanału", () => {
+    expect(newsClasses({ symbols: ["BTC"], feedTag: "macro" })).toEqual(["crypto"]);
+    expect(newsClasses({ symbols: [], feedTag: "gpw" })).toEqual(["equity", "index"]);
+    expect(newsClasses({ symbols: [], feedTag: "nieznany" })).toEqual([]);
+  });
+
+  it("każdy kanał z unikalnym tagiem i co najmniej jedną klasą", () => {
+    expect(new Set(MARKET_FEEDS.map((f) => f.tag)).size).toBe(MARKET_FEEDS.length);
+    expect(MARKET_FEEDS.every((f) => f.classes.length > 0)).toBe(true);
+  });
+
+  it("szybki kanał nie wypycha wolnego z limitu", () => {
+    const at = (h: number) => `2026-11-06T${String(h).padStart(2, "0")}:00:00Z`;
+    const fast = Array.from({ length: 10 }, (_, i) => ({
+      id: `f${i}`,
+      feedTag: "fast",
+      publishedAt: at(20 - i),
+    }));
+    const slow = [{ id: "s0", feedTag: "slow", publishedAt: at(1) }];
+    const picked = balanceByFeed([...fast, ...slow], 4).map((x) => x.id);
+    expect(picked).toContain("s0");
+    expect(picked).toEqual(["f0", "f1", "f2", "s0"]);
+    expect(balanceByFeed(slow, 5)).toHaveLength(1);
+  });
+});
+
+describe("feedHealth", () => {
+  it("liczy newsy kanałów z 7 dni i ocenia ich świeżość", () => {
+    const now = new Date("2026-11-06T12:00:00Z");
+    const h = feedHealth(
+      [
+        { feed_tag: "gpw", published_at: "2026-11-06T09:00:00Z" },
+        { feed_tag: "gpw", published_at: "2026-11-05T09:00:00Z" },
+        { feed_tag: "fed", published_at: "2026-11-02T18:00:00Z" },
+        { feed_tag: "ecb", published_at: "2026-10-01T10:00:00Z" },
+      ],
+      now,
+    );
+    const by = Object.fromEntries(h.map((x) => [x.tag, x]));
+    expect(by.gpw).toMatchObject({ count7d: 2, status: "ok", lastAt: "2026-11-06T09:00:00Z" });
+    expect(by.fed).toMatchObject({ count7d: 1, status: "quiet" });
+    expect(by.ecb).toMatchObject({ count7d: 0, status: "none", lastAt: null });
+    expect(h).toHaveLength(MARKET_FEEDS.length);
   });
 });

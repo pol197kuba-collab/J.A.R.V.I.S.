@@ -9,7 +9,7 @@
 // „bullish" znaczyło jedno (droższe paliwo), bo instrument był jeden. Tutaj
 // ten sam nagłówek bywa bullish dla złota i bearish dla akcji, więc kierunek
 // jest zawsze WZGLĘDEM KONKRETNEGO INSTRUMENTU, nigdy globalny.
-import { MARKET_ASSETS, type MarketAsset } from "./assets";
+import { assetBySymbol, MARKET_ASSETS, type AssetClass, type MarketAsset } from "./assets";
 import type { FeedSource } from "@/lib/rss/parse";
 
 // ŹRÓDŁA WYDAWCÓW, NIE GOOGLE NEWS — i to jest istota tej listy.
@@ -25,21 +25,149 @@ import type { FeedSource } from "@/lib/rss/parse";
 // akcje, krypto (dwa źródła, bo to najbardziej ruchliwa klasa), surowce i
 // energia, oraz polski rynek — GPW i waluty, których anglojęzyczne serwisy
 // nie opisują.
-export const MARKET_FEEDS: readonly FeedSource[] = [
-  { tag: "macro", label: "Makro", url: "https://www.investing.com/rss/news_1.rss" },
-  { tag: "equities", label: "Spółki", url: "https://www.investing.com/rss/news_285.rss" },
-  { tag: "crypto", label: "Krypto", url: "https://www.investing.com/rss/news_301.rss" },
-  { tag: "crypto-alt", label: "Krypto (Cointelegraph)", url: "https://cointelegraph.com/rss" },
+//
+// 6.11.2026 (etap 3): +5 kanałów tam, gdzie pokrycie było najsłabsze — akcje
+// USA i ETF-y (MarketWatch), waluty (FXStreet), banki centralne (Fed, EBC —
+// stopy ruszają wszystkim) i drugie źródło krypto (CoinDesk). Tych pięciu nie
+// dało się sprawdzić z sandboxa (sieć zablokowana) — czy żyją na produkcji,
+// pokazuje panel „Źródła newsów” (licznik z ostatnich 7 dni); padnięty kanał
+// niczego nie psuje, tylko trafia do listy błędów zaciągu.
+//
+// `classes` = czego kanał dotyczy, gdy nagłówek nie wskazuje instrumentu
+// (filtr klas w panelu newsów).
+export type MarketFeed = FeedSource & { classes: readonly AssetClass[] };
+
+export const MARKET_FEEDS: readonly MarketFeed[] = [
+  {
+    tag: "macro",
+    label: "Makro",
+    url: "https://www.investing.com/rss/news_1.rss",
+    classes: ["fx", "index"],
+  },
+  {
+    tag: "equities",
+    label: "Spółki",
+    url: "https://www.investing.com/rss/news_285.rss",
+    classes: ["equity", "index", "etf"],
+  },
+  {
+    tag: "crypto",
+    label: "Krypto",
+    url: "https://www.investing.com/rss/news_301.rss",
+    classes: ["crypto"],
+  },
+  {
+    tag: "crypto-alt",
+    label: "Krypto (Cointelegraph)",
+    url: "https://cointelegraph.com/rss",
+    classes: ["crypto"],
+  },
   {
     tag: "commodities",
     label: "Surowce",
     url: "https://www.investing.com/rss/commodities.rss",
+    classes: ["commodity"],
   },
   // Ten sam kanał, z którego korzysta moduł paliwowy — ropa i gaz.
-  { tag: "energy", label: "Energia", url: "https://oilprice.com/rss/main" },
-  { tag: "gpw", label: "GPW", url: "https://www.bankier.pl/rss/gielda.xml" },
-  { tag: "pl-fx", label: "Waluty", url: "https://www.bankier.pl/rss/waluty.xml" },
+  {
+    tag: "energy",
+    label: "Energia",
+    url: "https://oilprice.com/rss/main",
+    classes: ["commodity"],
+  },
+  {
+    tag: "gpw",
+    label: "GPW",
+    url: "https://www.bankier.pl/rss/gielda.xml",
+    classes: ["equity", "index"],
+  },
+  {
+    tag: "pl-fx",
+    label: "Waluty",
+    url: "https://www.bankier.pl/rss/waluty.xml",
+    classes: ["fx"],
+  },
+  {
+    tag: "us-markets",
+    label: "Rynki USA (MarketWatch)",
+    url: "https://feeds.content.dowjones.io/public/rss/mw_topstories",
+    classes: ["equity", "index", "etf"],
+  },
+  {
+    tag: "fx-street",
+    label: "Waluty (FXStreet)",
+    url: "https://www.fxstreet.com/rss/news",
+    classes: ["fx"],
+  },
+  {
+    tag: "fed",
+    label: "Fed",
+    url: "https://www.federalreserve.gov/feeds/press_all.xml",
+    classes: ["fx", "index"],
+  },
+  {
+    tag: "ecb",
+    label: "EBC",
+    url: "https://www.ecb.europa.eu/rss/press.html",
+    classes: ["fx", "index"],
+  },
+  {
+    tag: "crypto-coindesk",
+    label: "Krypto (CoinDesk)",
+    url: "https://www.coindesk.com/arc/outboundfeeds/rss/",
+    classes: ["crypto"],
+  },
 ] as const;
+
+const FEED_BY_TAG = new Map(MARKET_FEEDS.map((f) => [f.tag, f]));
+
+/** Etykieta kanału po jego tagu (panel źródeł). */
+export const feedLabel = (tag: string): string => FEED_BY_TAG.get(tag)?.label ?? tag;
+
+/**
+ * Klasy aktywów, których dotyczy news: klasy wskazanych instrumentów, a gdy
+ * nagłówek żadnego nie wskazuje — klasy kanału, z którego przyszedł.
+ */
+export function newsClasses(item: Pick<MarketNewsItem, "symbols" | "feedTag">): AssetClass[] {
+  const fromSymbols = item.symbols
+    .map((s) => assetBySymbol(s)?.assetClass)
+    .filter((c): c is AssetClass => Boolean(c));
+  if (fromSymbols.length > 0) return [...new Set(fromSymbols)];
+  return [...(FEED_BY_TAG.get(item.feedTag)?.classes ?? [])];
+}
+
+/**
+ * Wybór `limit` nagłówków do oceny po równo z każdego kanału (od
+ * najnowszych), a nie po prostu najnowszych w ogóle — szybkie kanały
+ * (FXStreet, Cointelegraph) wypychałyby inaczej wolne, a ważne (Bankier,
+ * komunikaty Fed / EBC). Wynik od najnowszego.
+ */
+export function balanceByFeed<T extends { feedTag: string; publishedAt: string | null }>(
+  items: readonly T[],
+  limit: number,
+): T[] {
+  const queues = new Map<string, T[]>();
+  for (const it of [...items].sort((a, b) =>
+    (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""),
+  )) {
+    const q = queues.get(it.feedTag) ?? [];
+    q.push(it);
+    queues.set(it.feedTag, q);
+  }
+  const out: T[] = [];
+  while (out.length < limit) {
+    let took = false;
+    for (const q of queues.values()) {
+      const next = q.shift();
+      if (!next) continue;
+      out.push(next);
+      took = true;
+      if (out.length >= limit) break;
+    }
+    if (!took) break;
+  }
+  return out.sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""));
+}
 
 export type MarketImpact = "bullish" | "bearish" | "neutral";
 
@@ -313,4 +441,40 @@ export function aggregateSentiment(items: MarketNewsItem[]): SymbolSentiment[] {
       items: row.items,
     }))
     .sort((a, b) => Math.abs(b.score) - Math.abs(a.score));
+}
+
+// ------------------------------------------------------- zdrowie kanałów ----
+
+export type FeedHealth = {
+  tag: string;
+  label: string;
+  /** Ile newsów z kanału trafiło do bazy w ostatnich 7 dniach. */
+  count7d: number;
+  /** Najnowszy news z kanału (ISO) albo null. */
+  lastAt: string | null;
+  /** ok: coś w ostatnich 48 h; quiet: tylko starsze (np. komunikaty banków); none: nic. */
+  status: "ok" | "quiet" | "none";
+};
+
+/** Wiersze newsów z ostatnich dni → stan każdego kanału z MARKET_FEEDS. */
+export function feedHealth(
+  rows: ReadonlyArray<{ feed_tag: string | null; published_at: string | null }>,
+  now: Date,
+): FeedHealth[] {
+  const since = now.getTime() - 7 * 86_400_000;
+  const fresh = now.getTime() - 48 * 3_600_000;
+  return MARKET_FEEDS.map((f) => {
+    let count7d = 0;
+    let lastAt: string | null = null;
+    for (const r of rows) {
+      if (r.feed_tag !== f.tag || !r.published_at) continue;
+      const t = Date.parse(r.published_at);
+      if (!Number.isFinite(t) || t < since) continue;
+      count7d += 1;
+      if (!lastAt || r.published_at > lastAt) lastAt = r.published_at;
+    }
+    const status: FeedHealth["status"] =
+      count7d === 0 ? "none" : lastAt && Date.parse(lastAt) >= fresh ? "ok" : "quiet";
+    return { tag: f.tag, label: f.label, count7d, lastAt, status };
+  });
 }

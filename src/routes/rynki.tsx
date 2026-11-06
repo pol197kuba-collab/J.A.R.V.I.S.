@@ -571,6 +571,7 @@ function MarketsPage() {
               errors={news.data?.errors ?? []}
               filterSymbol={newsSymbol}
               onClearFilter={() => setNewsSymbol(null)}
+              feeds={news.data?.feeds ?? []}
             />
           )}
         </Fold>

@@ -23,6 +23,8 @@ import {
 } from "./series";
 import {
   aggregateSentiment,
+  feedHealth,
+  type FeedHealth,
   type MarketImpact,
   type MarketNewsItem,
   type SymbolSentiment,
@@ -274,6 +276,8 @@ export type MarketNews = {
   /** Czemu zaciąg nic nie przyniósł — puste, gdy wszystko poszło dobrze. */
   errors: string[];
   refreshedAt: string;
+  /** Stan każdego kanału RSS z ostatnich 7 dni (panel „Źródła newsów”). */
+  feeds: FeedHealth[];
 };
 
 const NewsInput = z
@@ -345,6 +349,21 @@ export const getMarketNews = createServerFn({ method: "GET" })
       classifiedBy: r.classified_by === "ai" ? "ai" : "heuristic",
     }));
 
+    // Zdrowie kanałów z bazy (to, co naprawdę wjechało na produkcji), nie
+    // z ostatniego zaciągu — ten bywa pominięty przez próg odświeżania.
+    const healthRows = await fetchAllPages<{
+      feed_tag: string | null;
+      published_at: string | null;
+    }>((from, to) =>
+      supabase
+        .from("market_news_items")
+        .select("feed_tag, published_at, guid")
+        .gte("published_at", new Date(Date.now() - 7 * 86_400_000).toISOString())
+        .order("published_at", { ascending: false })
+        .order("guid", { ascending: true })
+        .range(from, to),
+    );
+
     const wanted = data?.symbol?.trim().toUpperCase();
     const items = wanted ? all.filter((i) => i.symbols.includes(wanted)) : all;
     const page = items.slice(0, limit);
@@ -358,6 +377,7 @@ export const getMarketNews = createServerFn({ method: "GET" })
       // działającym strumieniu pojedynczy padnięty kanał to szum.
       errors: all.length === 0 ? ingestErrors : [],
       refreshedAt: new Date().toISOString(),
+      feeds: feedHealth(healthRows, new Date()),
     };
   });
 
