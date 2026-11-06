@@ -10,6 +10,7 @@ import {
   formatBusy,
   lightToApp,
   nodeStatus,
+  resolveLabels,
   orbitLimits,
   packetT,
   statusLine,
@@ -92,5 +93,52 @@ describe("animation curves shared with the demo", () => {
     }
     expect(packetT(1, true, 0, 3, 0)).toBeCloseTo(0.55);
     expect(packetT(1, false, 0, 3, 0)).toBeCloseTo(0.22);
+  });
+});
+
+describe("resolveLabels", () => {
+  const box = (id: string, left: number, top: number, depth: number) => ({
+    id,
+    left,
+    top,
+    w: 120,
+    h: 40,
+    depth,
+  });
+
+  it("leaves labels that don't touch alone", () => {
+    const r = resolveLabels([box("a", 0, 0, 0.1), box("b", 300, 0, 0.2)]);
+    expect(r.get("a")).toEqual({ dy: 0, dim: false });
+    expect(r.get("b")).toEqual({ dy: 0, dim: false });
+  });
+
+  it("the nearer label keeps its spot, the farther one slides the shorter way", () => {
+    // b is nearer (depth 0.1); a overlaps it from slightly below
+    const r = resolveLabels([box("a", 10, 10, 0.5), box("b", 0, 0, 0.1)]);
+    expect(r.get("b")).toEqual({ dy: 0, dim: false });
+    expect(r.get("a")).toEqual({ dy: 34, dim: false }); // below b: 0 + 40 + 4 − 10
+  });
+
+  it("dims a label when there is no free spot within the shift limit", () => {
+    const r = resolveLabels(
+      [
+        box("near", 0, 0, 0.1),
+        box("above", 0, -44, 0.2),
+        box("below", 0, 44, 0.3),
+        box("far", 0, 5, 0.9),
+      ],
+      4,
+      60,
+    );
+    expect(r.get("far")).toEqual({ dy: 0, dim: true });
+    expect(r.get("near")?.dim).toBe(false);
+  });
+
+  it("keeps a label on the side it already took", () => {
+    const boxes = [box("a", 10, 20, 0.5), box("b", 0, 0, 0.1)];
+    // without history: below b (+24 beats −64)
+    expect(resolveLabels(boxes).get("a")?.dy).toBe(24);
+    // it went above last frame: stays above
+    expect(resolveLabels(boxes, 4, 90, new Map([["a", -60]])).get("a")?.dy).toBe(-64);
   });
 });

@@ -1,4 +1,12 @@
-import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
@@ -10,7 +18,7 @@ import {
   type SceneColors,
 } from "@/components/jarvis/login-scene/sceneColors";
 import { useThemeColors } from "@/lib/theme/themeColor";
-import { AgentNode3DV2 } from "./AgentNode3DV2";
+import { AgentNode3DV2, type LabelSlot } from "./AgentNode3DV2";
 import { BloomComposer } from "./BloomComposer";
 import { arcCoreLive } from "./arcCoreLive";
 import { Core3DV2 } from "./Core3DV2";
@@ -24,6 +32,8 @@ import {
   nodeStatus,
   orbitLimits,
   packetT,
+  resolveLabels,
+  type LabelBox,
 } from "./arcCoreMath";
 
 // JarvisCanvas v2 — the /jarvis Arc Core. Port of the final frame of
@@ -317,6 +327,45 @@ function LiveReporter() {
   return null;
 }
 
+/**
+ * Places every agent label at once: each node reports where its label wants
+ * to be (beside the node, away from the core); here overlapping labels are
+ * moved apart — the nearer agent keeps its spot, the farther label slides
+ * above / below it or dims when there is no room (resolveLabels). Shifts and
+ * opacity ease in, so labels glide instead of jumping as the orbit turns.
+ */
+function LabelResolver({ labels }: { labels: MutableRefObject<Map<string, LabelSlot>> }) {
+  const prevShift = useRef(new Map<string, number>());
+  useFrame((_, dt) => {
+    const slots = labels.current;
+    if (slots.size === 0) return;
+    const boxes: LabelBox[] = [];
+    for (const [id, l] of slots) {
+      const w = l.el.offsetWidth;
+      const h = l.el.offsetHeight;
+      const left = l.ax === "0%" ? l.x : l.ax === "-100%" ? l.x - w : l.x - w / 2;
+      boxes.push({ id, left, top: l.y - h / 2, w, h, depth: l.depth });
+    }
+    const fixes = resolveLabels(boxes, 4, 90, prevShift.current);
+    for (const [id, f] of fixes) prevShift.current.set(id, f.dy);
+    const k = 1 - Math.exp(-Math.min(dt, 0.1) * 22);
+    for (const [id, l] of slots) {
+      const fix = fixes.get(id) ?? { dy: 0, dim: false };
+      l.dy += (fix.dy - l.dy) * k;
+      l.alpha += ((fix.dim ? 0.2 : 1) - l.alpha) * k;
+      const style = `translate(${l.ax},-50%) translate(${Math.round(l.ox)}px,${Math.round(
+        l.oy + l.dy,
+      )}px)|${l.alpha.toFixed(2)}|${l.align}`;
+      if (style === l.style) continue;
+      l.style = style;
+      l.el.style.transform = style.split("|")[0];
+      l.el.style.opacity = l.alpha.toFixed(2);
+      l.el.style.textAlign = l.align;
+    }
+  });
+  return null;
+}
+
 /** OrbitControls limits proportional to the composition and the canvas proportions. */
 function Controls() {
   const size = useThree((s) => s.size);
@@ -339,6 +388,7 @@ export function JarvisCanvasV2({ agents }: { agents: AgentNodeData[] }) {
   const C = useThemeColors(SCENE_COLOR_EXPR, SCENE_COLOR_FALLBACKS);
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const core = useRef({ x: 0, y: 0 });
+  const labels = useRef(new Map<string, LabelSlot>());
   const n = Math.max(agents.length, 1);
 
   const specs = useMemo(() => Array.from({ length: n }, (_, i) => orbitSpec(i, n, S)), [n]);
@@ -378,6 +428,7 @@ export function JarvisCanvasV2({ agents }: { agents: AgentNodeData[] }) {
             spec={specs[i]}
             positions={positions}
             core={core}
+            labels={labels}
             selected={selectedSlug === a.slug}
             onSelect={setSelectedSlug}
           />
@@ -386,6 +437,7 @@ export function JarvisCanvasV2({ agents }: { agents: AgentNodeData[] }) {
       </Suspense>
 
       <CoreScreenTracker core={core} />
+      <LabelResolver labels={labels} />
       <CameraRig />
       <LiveReporter />
       <BloomComposer />
