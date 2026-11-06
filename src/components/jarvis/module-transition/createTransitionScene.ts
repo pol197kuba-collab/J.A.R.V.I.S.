@@ -170,6 +170,8 @@ export interface BackdropControl {
   tilt(x: number, y: number): void;
   /** The content area (the module's `<main>`), to centre the world on it. */
   content(rect: { left: number; width: number } | null): void;
+  /** The desktop menu is open: settle the camera on the core and fade the agents. */
+  focus(on: boolean): void;
 }
 
 export interface TransitionScene {
@@ -917,6 +919,9 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
     viewH: 1,
     tilt: { x: 0, y: 0 },
     content: null as { left: number; width: number } | null,
+    /** The desktop menu is open: the camera settles on the core, agents fade (0…1). */
+    focus: 0,
+    focusK: 0,
     tx: 0,
     ty: 0,
     t0: 0,
@@ -976,10 +981,36 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
     if (Math.abs(dx) > 0.5) camera.setViewOffset(vw, vh, -dx, 0, vw, vh);
     else camera.clearViewOffset();
     camera.updateProjectionMatrix();
+    // menu focus: the core in the middle of the screen, a little closer, the
+    // agents (and their spokes and orbits) gone, the world at full brightness
+    bd.focusK = smooth(bd.focusK, bd.focus, dt, 4);
+    const fk = bd.focusK * bd.focusK * (3 - 2 * bd.focusK);
+    if (fk > 0.001) {
+      const fd = vw / vh < 1 ? 1750 : 1300;
+      const fe = 0.22 + bd.ty * 0.05;
+      const fa = bd.az + bd.time * 0.012;
+      cam.x = lerp(cam.x, Math.sin(fa) * Math.cos(fe) * fd, fk);
+      cam.y = lerp(cam.y, Math.sin(fe) * fd, fk);
+      cam.z = lerp(cam.z, Math.cos(fa) * Math.cos(fe) * fd, fk);
+      lk.x = lerp(lk.x, 0, fk);
+      lk.y = lerp(lk.y, -30, fk);
+      lk.z = lerp(lk.z, 0, fk);
+      if (Math.abs(dx) > 0.5) {
+        camera.setViewOffset(vw, vh, -dx * (1 - fk), 0, vw, vh);
+        camera.updateProjectionMatrix();
+      }
+    }
     camera.position.set(cam.x, cam.y, cam.z);
     camera.lookAt(lk.x, lk.y, lk.z);
     updateCore(dt, bd.time, null, 0);
-    canvas.style.opacity = backdropFade(now - bd.t0).toFixed(3);
+    const agentsK = 1 - fk;
+    nodes.forEach((n) => {
+      n.visible = agentsK > 0.02;
+      n.scale.multiplyScalar(Math.max(0.001, agentsK));
+    });
+    spokes.material.opacity = 0.4 * agentsK;
+    extras?.orbits.forEach((l) => (l.material.opacity = 0.22 * agentsK));
+    canvas.style.opacity = lerp(backdropFade(now - bd.t0), 1, fk).toFixed(3);
     composer.render(dt);
   }
 
@@ -1006,6 +1037,9 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
     content(rect) {
       bd.content = rect;
     },
+    focus(on) {
+      bd.focus = on ? 1 : 0;
+    },
   };
 
   // warm-up: compile every material once, invisibly
@@ -1025,6 +1059,11 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
       if (disposed || current) return;
       if (menu) endMenu();
       bd.on = false;
+      // a pick from the desktop menu: the world returns to its normal self
+      bd.focus = 0;
+      bd.focusK = 0;
+      spokes.material.opacity = 0.4;
+      extras?.orbits.forEach((l) => (l.material.opacity = 0.22));
       canvas.style.zIndex = TOP_Z;
       if (p.agentCount > 0 && p.agentCount !== nodes.length) buildAgents(p.agentCount);
       const now = performance.now();

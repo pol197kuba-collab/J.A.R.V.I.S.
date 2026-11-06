@@ -42,6 +42,8 @@ export function CommandPalette() {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
+        // the desktop 3D navigation owns ⌘K: it opens the "Kokpit" menu instead
+        if (document.documentElement.hasAttribute("data-cockpit-nav")) return;
         event.preventDefault();
         setOpen((prev) => !prev);
       }

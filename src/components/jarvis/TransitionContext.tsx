@@ -53,6 +53,8 @@ type Ctx = {
   menu3d: () => MenuControl | null;
   /** 3D is on for this browser: intro switch, HUD skin, WebGL, motion allowed. */
   can3d: boolean;
+  /** The desktop menu is open (the 3D world settles on the core). */
+  menuFocus: (on: boolean) => void;
   /** CSS durations of the page leaving / entering during a 3D transition, ms. */
   pageTiming: { out: number; in: number };
 };
@@ -63,6 +65,7 @@ const TransitionCtx = createContext<Ctx>({
   startTransition: () => false,
   menu3d: () => null,
   can3d: false,
+  menuFocus: () => {},
   pageTiming: { out: 0, in: 0 },
 });
 
@@ -174,6 +177,7 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
   );
 
   const menu3d = useCallback(() => (can3d ? (layer.current?.menu() ?? null) : null), [can3d]);
+  const menuFocus = useCallback((on: boolean) => layer.current?.focus(on), []);
 
   return (
     <TransitionCtx.Provider
@@ -183,6 +187,7 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
         startTransition,
         menu3d,
         can3d,
+        menuFocus,
         pageTiming,
       }}
     >

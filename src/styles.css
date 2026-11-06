@@ -1383,6 +1383,355 @@ html[data-depth3d]
   }
 }
 
+/* ---------------------------------------------------------------------------
+   "Kokpit" — the desktop menu in the 3D mode (CockpitMenu.tsx).
+   Four holographic columns standing in an arc around the Arc Core: the outer
+   ones turned further into depth, the whole deck leaning toward the pointer
+   (--rx / --ry), the focused module stepping forward with a beam from the
+   core. While it is open (html[data-cockpit]) the page steps back and the 3D
+   world settles on the core.
+   --------------------------------------------------------------------------- */
+html[data-cockpit] main,
+html[data-cockpit] .cockpit-dim {
+  opacity: 0.05;
+  transition: opacity 0.35s ease;
+}
+html[data-cockpit] .space-mist {
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.cockpit-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 74;
+  user-select: none;
+  -webkit-user-select: none;
+  background: radial-gradient(
+    ellipse 70% 60% at 50% 48%,
+    transparent 30%,
+    color-mix(in oklab, var(--background) 55%, transparent) 100%
+  );
+}
+/* routes without the 3D world under them: a dark field instead */
+html:not([data-backdrop3d]) .cockpit-overlay {
+  background: radial-gradient(
+    ellipse 70% 60% at 50% 48%,
+    color-mix(in oklab, var(--background) 82%, transparent),
+    color-mix(in oklab, var(--background) 96%, transparent)
+  );
+}
+.cockpit-search {
+  position: absolute;
+  left: 50%;
+  top: 76px;
+  z-index: 3;
+  width: min(460px, calc(100vw - 48px));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 2px 10px;
+  cursor: text;
+  opacity: 0;
+  transition: opacity 0.35s 0.1s;
+}
+.cockpit-search::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--primary) 30%,
+    var(--primary) 70%,
+    transparent
+  );
+  box-shadow: 0 0 10px var(--primary);
+}
+.cockpit-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--foreground);
+  font: 400 15px/1.4 var(--font-display);
+  letter-spacing: 0.14em;
+  caret-color: var(--primary);
+}
+.cockpit-search input::placeholder {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+.cockpit-search kbd {
+  font: 400 10px/1 var(--font-display);
+  letter-spacing: 0.15em;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+.cockpit-overlay.ready .cockpit-search {
+  opacity: 1;
+}
+.cockpit-beam {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.cockpit-beam line {
+  stroke: var(--reactor-hot);
+  stroke-width: 1.4;
+  filter: drop-shadow(0 0 6px var(--reactor));
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.cockpit-beam line.on {
+  opacity: 0.9;
+}
+.cockpit-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  perspective: 1300px;
+  perspective-origin: 50% 46%;
+}
+.cockpit-deck {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transition: transform 0.35s ease-out;
+}
+.cockpit-col {
+  --x: 0vw;
+  --z: 0px;
+  --ang: 0deg;
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  width: clamp(200px, 15.5vw, 250px);
+  pointer-events: auto;
+  transform-style: preserve-3d;
+  transform: translate(-50%, -50%) translateX(var(--x)) translateZ(var(--z)) rotateY(var(--ang));
+  opacity: 0;
+  transition:
+    opacity 0.45s ease,
+    transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.cockpit-col.c0 {
+  --x: -34vw;
+  --z: 70px;
+  --ang: 26deg;
+}
+.cockpit-col.c1 {
+  --x: -17.5vw;
+  --z: -30px;
+  --ang: 11deg;
+}
+.cockpit-col.c2 {
+  --x: 17.5vw;
+  --z: -30px;
+  --ang: -11deg;
+}
+.cockpit-col.c3 {
+  --x: 34vw;
+  --z: 70px;
+  --ang: -26deg;
+}
+.cockpit-overlay:not(.ready) .cockpit-col {
+  transform: translate(-50%, -50%) translateX(calc(var(--x) * 0.55)) translateZ(-520px)
+    rotateY(var(--ang));
+}
+.cockpit-overlay.ready .cockpit-col {
+  opacity: 1;
+}
+.cockpit-col h3 {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0 0 6px;
+  padding-bottom: 12px;
+  font: 400 11px/1 var(--font-display);
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: var(--primary);
+  text-shadow: 0 0 12px color-mix(in oklab, var(--primary) 70%, transparent);
+}
+.cockpit-col h3 small {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--muted-foreground);
+  text-shadow: none;
+}
+.cockpit-col h3::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    var(--primary),
+    color-mix(in oklab, var(--primary) 15%, transparent) 70%,
+    transparent
+  );
+  box-shadow: 0 0 8px color-mix(in oklab, var(--primary) 60%, transparent);
+}
+.cockpit-col.c2 h3::after,
+.cockpit-col.c3 h3::after {
+  background: linear-gradient(
+    270deg,
+    var(--primary),
+    color-mix(in oklab, var(--primary) 15%, transparent) 70%,
+    transparent
+  );
+}
+.cockpit-item {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 10px 12px 10px 16px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  text-align: left;
+  color: var(--foreground);
+  cursor: pointer;
+  transform-style: preserve-3d;
+  transition:
+    transform 0.22s ease,
+    color 0.2s,
+    opacity 0.2s;
+}
+.cockpit-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 22%;
+  bottom: 22%;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--primary);
+  box-shadow: 0 0 8px var(--primary);
+  opacity: 0.35;
+  transition:
+    opacity 0.2s,
+    background 0.2s,
+    box-shadow 0.2s;
+}
+.cockpit-item::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--reactor) 16%, transparent),
+    transparent 85%
+  );
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.cockpit-item b {
+  display: block;
+  font: 400 13px/1.2 var(--font-display);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+.cockpit-item span {
+  display: block;
+  margin-top: 4px;
+  font: 400 11px/1.35 var(--font-body);
+  color: var(--muted-foreground);
+}
+.cockpit-item:is(:focus-visible, .sel) {
+  outline: none;
+  transform: translateZ(34px);
+  color: var(--reactor-hot);
+}
+.cockpit-item:is(:focus-visible, .sel) b {
+  text-shadow: 0 0 14px color-mix(in oklab, var(--reactor) 80%, transparent);
+}
+.cockpit-item:is(:focus-visible, .sel)::before {
+  opacity: 1;
+  background: var(--reactor-hot);
+  box-shadow:
+    0 0 10px var(--reactor-hot),
+    0 0 20px color-mix(in oklab, var(--reactor) 70%, transparent);
+}
+.cockpit-item:is(:focus-visible, .sel)::after {
+  opacity: 1;
+}
+.cockpit-item.cur b {
+  color: var(--primary);
+}
+.cockpit-item.cur b::after {
+  content: "  · tu jesteś";
+  font-size: 9px;
+  letter-spacing: 0.26em;
+  color: var(--muted-foreground);
+}
+.cockpit-item.dim {
+  opacity: 0.16;
+}
+.cockpit-item:disabled {
+  cursor: default;
+}
+.cockpit-foot {
+  position: absolute;
+  inset: auto 0 34px;
+  z-index: 3;
+  margin: 0;
+  padding: 0 16px;
+  text-align: center;
+  font: 400 10px/1.6 var(--font-display);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  opacity: 0;
+  transition: opacity 0.35s 0.3s;
+}
+.cockpit-overlay.ready .cockpit-foot {
+  opacity: 1;
+}
+.cockpit-foot b {
+  font-weight: 400;
+  color: var(--primary);
+}
+@media (max-width: 1080px) {
+  .cockpit-col {
+    width: 21vw;
+  }
+  .cockpit-col.c0 {
+    --x: -36vw;
+    --ang: 20deg;
+  }
+  .cockpit-col.c1 {
+    --x: -14vw;
+  }
+  .cockpit-col.c2 {
+    --x: 14vw;
+  }
+  .cockpit-col.c3 {
+    --x: 36vw;
+    --ang: -20deg;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cockpit-deck,
+  .cockpit-col,
+  .cockpit-item {
+    transition: none;
+  }
+}
+
 /* MiniArcCore — the mobile dock's menu button: the Arc Core in miniature, no
    frame. A pulsing golden core and three golden rings turning in 3D. */
 .mini-arc-core {
