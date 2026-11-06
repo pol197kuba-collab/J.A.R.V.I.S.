@@ -35,7 +35,13 @@ import {
 } from "../src/lib/markets/ingest.server";
 import { evaluateStandingOrders } from "../src/lib/orders/evaluate.server";
 import { recomputeFund } from "../src/lib/fund/fund.server";
-import { decideMarketRun } from "../src/lib/markets/schedule";
+import {
+  decideMarketRun,
+  lastRunOfSession,
+  SESSION_CLASSES,
+  SESSION_LABEL,
+  sessionAt,
+} from "../src/lib/markets/schedule";
 import { DAILY_TOKEN_BUDGET, warsawDay } from "../src/lib/markets/budget";
 
 const args = new Set(process.argv.slice(2));
@@ -150,27 +156,35 @@ async function main(): Promise<void> {
   }
 
   // ---------- 0. Czy ten przebieg w ogóle ma działać ----------
-  // Od 20.10.2026 job uruchamia baza o 20:00 (workflow_dispatch). Spóźniony
-  // cron GitHuba, który przyjdzie po takim przebiegu, kończy się tutaj —
-  // drugi zaciąg to drugie wywołanie modelu za te same dane.
+  // Job uruchamia baza (workflow_dispatch) dwa razy: rano dla akcji, ETF-ów i
+  // indeksów, wieczorem dla krypto, surowców i walut (schedule.ts). Spóźniony
+  // cron GitHuba, który przyjdzie po przebiegu TEJ SAMEJ sesji, kończy się
+  // tutaj — drugi zaciąg to drugie wywołanie modelu za te same dane.
   const startedAt = new Date();
   const event = process.env.GITHUB_EVENT_NAME;
-  const { data: lastRun } = await db
+  const session = sessionAt(startedAt);
+  const classes = SESSION_CLASSES[session];
+  const { data: recentRuns } = await db
     .from("job_runs")
     .select("finished_at")
     .eq("owner_id", ownerId)
     .eq("workflow", "market-grid.yml")
     .order("finished_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const decision = decideMarketRun(event, lastRun?.finished_at ?? null, startedAt);
+    .limit(6);
+  const lastSameSession = lastRunOfSession(
+    (recentRuns ?? []).map((r) => r.finished_at),
+    session,
+  );
+  const decision = decideMarketRun(event, lastSameSession, startedAt);
   if (!decision.run) {
     notice(
-      `Pomijam przebieg z crona: zaciąg był ${decision.lastFinishedAt} ` +
-        "(uruchomiony przez bazę o 20:00).",
+      decision.reason === "off_hours"
+        ? "Pomijam przebieg z crona: przyszedł poza sesjami (14:00–19:00)."
+        : `Pomijam przebieg z crona: ta sesja już była (${decision.lastFinishedAt}).`,
     );
     return;
   }
+  notice(`sesja: ${SESSION_LABEL[session]}`);
 
   const failures: string[] = [];
 
@@ -213,8 +227,11 @@ async function main(): Promise<void> {
   // i tak ma z czego wybierać.
   const watchSymbols = new Set(assets.map((a) => a.symbol));
   const scan = SCAN_ASSETS.filter((a) => !watchSymbols.has(a.symbol));
+  // Rano tylko instrumenty tej sesji (dzisiejsza decyzja), wieczorem
+  // wszystkie — wieczorny zaciąg domyka dzień całej historii notowań.
+  const inSession = (a: MarketAsset) => session === "evening" || classes.includes(a.assetClass);
   try {
-    const all = [...assets, ...scan];
+    const all = [...assets, ...scan].filter(inSession);
     const { errors } = await ingestQuotes(db, ownerId, all, 200, true);
     let scanMisses = 0;
     for (const [symbol, message] of errors) {
@@ -243,7 +260,11 @@ async function main(): Promise<void> {
   // ---------- 3. Typer ----------
   // Po notowaniach i newsach, bo liczy z jednego i drugiego.
   try {
-    const { rows, model } = await buildOutlook(db, ownerId, keys, { scan, record: true });
+    const { rows, model } = await buildOutlook(db, ownerId, keys, {
+      scan,
+      record: true,
+      classes,
+    });
     const scored = rows.filter((r) => r.scored);
     const up = scored.filter((r) => (r.ai?.direction ?? r.direction) === "up").length;
     const down = scored.filter((r) => (r.ai?.direction ?? r.direction) === "down").length;

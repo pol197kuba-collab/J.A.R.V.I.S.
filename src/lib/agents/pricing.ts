@@ -34,14 +34,17 @@ type Rate = {
  * dostawcy — prefiks zdejmujemy przed odczytem, bo `anthropic:claude-opus-5`
  * i `claude-opus-5` to ten sam model i ta sama cena.
  *
- * Zweryfikowane 2026-09-23. Przy aktualizacji zmieniaj TĘ datę razem z
+ * Zweryfikowane 2026-11-06. Przy aktualizacji zmieniaj TĘ datę razem z
  * liczbami — cennik bez daty po pół roku jest gorszy niż jego brak, bo
  * wygląda na aktualny.
  */
-export const PRICING_VERIFIED_ON = "2026-09-23";
+export const PRICING_VERIFIED_ON = "2026-11-06";
 
 const RATES: Readonly<Record<string, Rate>> = {
   // Anthropic — ceny pierwszej strony API.
+  "claude-opus-5-5": { inputPerM: 4, outputPerM: 20 },
+  "claude-sonnet-5-5": { inputPerM: 2, outputPerM: 10 },
+  "claude-haiku-5-5": { inputPerM: 0.1, outputPerM: 0.5 },
   "claude-opus-5": { inputPerM: 5, outputPerM: 25 },
   "claude-sonnet-5": { inputPerM: 2, outputPerM: 10 },
   "claude-haiku-4-5": { inputPerM: 1, outputPerM: 5 },

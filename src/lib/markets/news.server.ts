@@ -27,7 +27,7 @@ const FETCH_TIMEOUT_MS = 15_000;
 const MODEL_TIMEOUT_MS = 40_000;
 
 /** Model Claude użyty do oceny newsów, gdy klucz Anthropic jest dostępny. */
-const ANTHROPIC_NEWS_MODEL = "claude-sonnet-5";
+const ANTHROPIC_NEWS_MODEL = "claude-sonnet-5-5";
 
 // Ile nagłówków idzie do modelu w jednym wywołaniu. Jedno wywołanie na całą
 // paczkę, nie jedno na news: kilkadziesiąt osobnych żądań to kilkadziesiąt
@@ -156,6 +156,8 @@ export async function classifyMarketNews(
           contents,
           maxOutputTokens: 8192,
           timeoutMs: MODEL_TIMEOUT_MS,
+          // klasyfikacja nagłówków — długie myślenie tylko zjada budżet
+          effort: "low",
         });
         text = result.text || null;
         await budget.record("news", {
@@ -165,7 +167,10 @@ export async function classifyMarketNews(
           tokensOut: result.tokensOut,
           estimated: false,
         });
-      } catch {
+      } catch (err) {
+        console.warn(
+          `[newsy] Claude zawiódł, zapas Gemini: ${err instanceof Error ? err.message.slice(0, 200) : String(err)}`,
+        );
         text = null;
       }
     }

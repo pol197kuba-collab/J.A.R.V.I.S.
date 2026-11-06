@@ -12,7 +12,7 @@ import { estimateTokens, type ModelBudget } from "./budget";
 import { parseAlarmReply, type AlarmCandidate } from "./live";
 import type { ModelKeys } from "./ingest.server";
 
-export const ALARM_MODEL = "claude-haiku-4-5";
+export const ALARM_MODEL = "claude-haiku-5-5";
 
 export const ALARM_SYSTEM = `Zarządzasz ryzykiem pozycji na papierze. Pozycja zbliża się do stop-lossa. Masz dane: kierunek, cenę odniesienia, bieżącą cenę, ruch, odległość stopu, uzasadnienie prognozy, wskaźniki i nagłówki.
 Zdecyduj: "hold" (przesłanki prognozy nadal aktualne, ruch to szum) albo "close" (przesłanki się zdezaktualizowały albo nowe fakty przeczą pozycji). Nie wymyślaj liczb. Bez pewności — "hold", stop-loss zadziała sam.
@@ -63,8 +63,10 @@ export async function askAlarm(
         model: ALARM_MODEL,
         systemPrompt: ALARM_SYSTEM,
         contents: [{ role: "user", parts: [{ text: user }] }],
-        maxOutputTokens: 200,
+        maxOutputTokens: 300,
         timeoutMs: 30_000,
+        // krótka decyzja „trzymaj / zamknij” — bez myślenia, żeby nie zjadło limitu
+        noThinking: true,
       });
       await budget.record("alarm", {
         model: ALARM_MODEL,
@@ -73,8 +75,10 @@ export async function askAlarm(
         estimated: false,
       });
       if (r.text) return { ...parseAlarmReply(r.text), model: ALARM_MODEL };
-    } catch {
-      // spadamy na Gemini
+    } catch (err) {
+      console.warn(
+        `[alarm] Claude zawiódł, zapas Gemini: ${err instanceof Error ? err.message.slice(0, 200) : String(err)}`,
+      );
     }
   }
   if (keys.geminiApiKey) {

@@ -17,8 +17,8 @@ describe("budżet tokenów", () => {
     );
     expect(s.used).toBe(7_900);
     expect(denyReason(s, "forecast", 2_500)).toBeNull();
-    expect(denyReason(s, "forecast", 3_500)).toContain("pułap");
-    expect(denyReason(s, "news", 500)).toContain("pułap");
+    expect(denyReason(s, "forecast", 4_500)).toContain("pułap");
+    expect(denyReason(s, "news", 3_200)).toContain("pułap");
     const full = budgetState(
       [{ purpose: "alarm", tokens_in: DAILY_TOKEN_BUDGET - 100, tokens_out: 0 }],
       "d",

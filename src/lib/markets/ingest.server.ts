@@ -11,7 +11,13 @@
 // argumenty, zamiast czytać je z kontekstu żądania.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
-import { assetBySymbol, DEFAULT_WATCHLIST, isKnownSymbol, type MarketAsset } from "./assets";
+import {
+  assetBySymbol,
+  DEFAULT_WATCHLIST,
+  isKnownSymbol,
+  type AssetClass,
+  type MarketAsset,
+} from "./assets";
 import { normalizeSeries, type PricePoint } from "./series";
 import type { QuoteSource } from "./quotes.server";
 import { aggregateSentiment, type MarketImpact, type MarketNewsItem } from "./news";
@@ -343,11 +349,19 @@ export async function buildOutlook(
      * przypadkowej porze i nie woła modelu (to robi job, w budżecie).
      */
     record?: boolean;
+    /**
+     * Tylko te klasy instrumentów (sesja joba: rano akcje/ETF/indeksy,
+     * wieczorem krypto/surowce/waluty — schedule.ts). Brak = wszystkie.
+     */
+    classes?: readonly AssetClass[];
   } = {},
 ): Promise<{ rows: OutlookRow[]; model: string | null }> {
   const watch = await loadWatchlist(supabase, userId);
-  const symbols = [...new Set([...watch, ...(opts.scan ?? []).map((a) => a.symbol)])];
-  const assets = symbols.map(assetBySymbol).filter((a): a is MarketAsset => Boolean(a));
+  const inSession = (a: MarketAsset) => !opts.classes || opts.classes.includes(a.assetClass);
+  const assets = [...new Set([...watch, ...(opts.scan ?? []).map((a) => a.symbol)])]
+    .map(assetBySymbol)
+    .filter((a): a is MarketAsset => Boolean(a) && inSession(a!));
+  const symbols = assets.map((a) => a.symbol);
   const record = opts.record ?? false;
 
   // Notowania bierzemy z cache'u — typer nie odświeża danych sam, żeby

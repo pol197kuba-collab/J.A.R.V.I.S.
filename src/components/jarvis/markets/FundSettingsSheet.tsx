@@ -212,7 +212,7 @@ export function FundSettingsSheet({
               />
             </label>
             <Choice
-              name="Pilnowanie na żywo"
+              name="Takt rynku (ceny i pilnowanie)"
               value={draft.liveEveryMin}
               options={LIVE_OPTIONS.map((v) => ({ v, label: v === 0 ? "wył." : `${v} min` }))}
               onChange={(liveEveryMin) => setDraft({ ...draft, liveEveryMin })}

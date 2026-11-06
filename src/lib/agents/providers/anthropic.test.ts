@@ -91,6 +91,8 @@ describe("supportsTemperature", () => {
     expect(supportsTemperature("claude-opus-5")).toBe(false);
     expect(supportsTemperature("claude-sonnet-5")).toBe(false);
     expect(supportsTemperature("claude-haiku-4-5")).toBe(true);
+    expect(supportsTemperature("claude-haiku-5-5")).toBe(false);
+    expect(supportsTemperature("claude-opus-5-5")).toBe(false);
   });
 });
 

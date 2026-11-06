@@ -1,7 +1,7 @@
 // MARKET GRID — dzienny budżet tokenów modelu. Czysta logika + cienki
 // adapter do bazy (createModelBudget).
 //
-// 20 000 tokenów na dobę (czas warszawski) na WSZYSTKO, co moduł rynkowy
+// 30 000 tokenów na dobę (czas warszawski) na WSZYSTKO, co moduł rynkowy
 // robi modelem. Podział, żeby jedna rzecz nie zjadła reszty:
 // - prognozy (ai + ai_learned, oba horyzonty w jednym wywołaniu) — rdzeń,
 // - ocena newsów — miła, ale ma tani zamiennik (heurystyka),
@@ -16,14 +16,16 @@ import type { Database } from "@/integrations/supabase/types";
 
 export type BudgetPurpose = "forecast" | "forecast_learned" | "news" | "alarm";
 
-export const DAILY_TOKEN_BUDGET = 20_000;
+export const DAILY_TOKEN_BUDGET = 30_000;
 
 /** Pułapy per cel (sumują się do więcej niż budżet — wspólny limit i tak obowiązuje). */
 export const PURPOSE_CAP: Record<BudgetPurpose, number> = {
-  forecast: 7_000,
-  forecast_learned: 7_000,
-  news: 4_000,
-  alarm: 4_000,
+  // prognozy i newsy biegną dwa razy dziennie (8:30 akcje/ETF/indeksy,
+  // 20:00 krypto/surowce/waluty), alarmy przy częstszym takcie rynku
+  forecast: 8_000,
+  forecast_learned: 8_000,
+  news: 7_000,
+  alarm: 8_000,
 };
 
 /** ~3,5 znaku na token dla polsko-angielskiego tekstu z liczbami — z zapasem. */
