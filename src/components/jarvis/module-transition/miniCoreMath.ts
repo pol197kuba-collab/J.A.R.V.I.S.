@@ -3,12 +3,12 @@
 /** Half-size of the framed area in core radii: the outer ring (2.1) plus its ticks and glow. */
 export const MINI_CORE_FIT = 2.45;
 export const MINI_CORE_FOV = 30;
-/** Button size (px): 25% bigger than the old 60 px button. */
-export const MINI_CORE_BUTTON_PX = 75;
+/** Button size (px). */
+export const MINI_CORE_BUTTON_PX = 64;
 /** The canvas is larger than the button so the bloom never gets clipped. */
-export const MINI_CORE_CANVAS_PX = 96;
+export const MINI_CORE_CANVAS_PX = 82;
 /** Holding the core this long flies to /jarvis. */
-export const JARVIS_HOLD_MS = 1500;
+export const JARVIS_HOLD_MS = 1000;
 
 /** Camera distance that frames a sphere of `radius` in a square view of `fovDeg`. */
 export const miniCoreDistance = (radius: number, fovDeg: number) =>

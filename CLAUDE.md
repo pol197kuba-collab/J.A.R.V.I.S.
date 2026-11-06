@@ -254,16 +254,22 @@ brackets, no `HudTag` labels; headers get a lit dot instead of a rule
 (`hud-panel-head` / `hud-panel-title`). Fields inside `<main>` are recessed and
 glow on focus, buttons with a `border-primary*` class become glass keys,
 `[role=tablist]` rows a recessed track with a light puck on the active
-`[role=tab]`. Town and the no-3D path keep the classic frames. In new UI use
-real `role="tab"` / `aria-selected` for tab rows so they pick this up.
+`[role=tab]`. Inside panels the modules' own cyan frames follow by the
+utilities they already carry: `border border-primary*` boxes become inner
+glass, one-sided `border-b/t/l/r … border-primary*` rules a line of light
+fading at both ends, and `[role=group]` rows of `aria-pressed` buttons a track
+with a light puck. Status colours (destructive/warning/success) keep their
+lines. Town and the no-3D path keep the classic frames. In new UI use real
+`role="tab"` / `aria-selected` (or a `role="group"` of `aria-pressed`
+buttons) for tab and toggle rows so they pick this up.
 
 ## Mobile dock and the Orbita menu
 
 `MobileBottomNav` is a glass dock: the Arc Core itself in the middle, no frame
-(`DockCore`, 75 px: the real /jarvis core in miniature — same shader, rings,
+(`DockCore`, 64 px: the real /jarvis core in miniature — same shader, rings,
 shell, corona and bloom, no agents — from the lazy `createMiniCore.ts` on its
 own small canvas blended with `screen`; the CSS `MiniArcCore` stands in
-without the 3D layer. Tap opens the menu, a 1.5 s hold flies to `/jarvis`; it
+without the 3D layer. Tap opens the menu, a 1 s hold flies to `/jarvis`; it
 spins up / glows red from the real agent states), the current module
 with one live line on the left (`dockWidgets.ts`, pure and tested — real data
 from shared query keys only, no data → no line), agent status dots and the
