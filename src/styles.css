@@ -2002,6 +2002,180 @@ html[data-backdrop3d] .jarvis-bg-root {
   );
 }
 
+/* ---------------------------------------------------------------------------
+   Visor — the top bar in the 3D mode (DashboardShell: VisorHeader).
+   No glass slab, no boxed controls: a fade from the top edge keeps the
+   controls readable over the world (and over content scrolling under it),
+   controls are glowing text and icons, a line of light brightest in the
+   middle closes the bar. No backdrop-filter on purpose — a blurred strip
+   over a moving 3D scene shows as a band (the /jarvis status-bar bug).
+   --------------------------------------------------------------------------- */
+.hud-visor {
+  background: none;
+  isolation: isolate;
+}
+.hud-visor::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 -32px 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--background) 94%, transparent) 0%,
+    color-mix(in oklab, var(--background) 78%, transparent) 45%,
+    color-mix(in oklab, var(--background) 30%, transparent) 75%,
+    transparent 100%
+  );
+}
+.hud-visor-line {
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  bottom: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--primary) 30%, transparent) 25%,
+    color-mix(in oklab, var(--primary) 85%, transparent) 50%,
+    color-mix(in oklab, var(--primary) 30%, transparent) 75%,
+    transparent
+  );
+  box-shadow: 0 0 10px color-mix(in oklab, var(--primary) 45%, transparent);
+}
+/* the module title as a hologram */
+.hud-visor-title {
+  font-family: var(--font-display);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.32em;
+}
+.hud-visor-title-root {
+  color: color-mix(in oklab, var(--primary) 60%, transparent);
+}
+.hud-visor-title-sep {
+  padding: 0 0.6em;
+  color: color-mix(in oklab, var(--primary) 35%, transparent);
+}
+.hud-visor-title-module {
+  color: var(--foreground);
+  text-shadow:
+    0 0 10px color-mix(in oklab, var(--primary) 70%, transparent),
+    0 0 22px color-mix(in oklab, var(--primary) 35%, transparent);
+}
+
+/* every control on the visor: light, not boxes */
+.hud-visor :is(button, [role="group"]) {
+  border-color: transparent !important;
+  background-color: transparent !important;
+  background-image: none;
+  box-shadow: none !important;
+  border-radius: 0;
+}
+.hud-visor button {
+  position: relative;
+  color: color-mix(in oklab, var(--primary) 80%, transparent);
+  text-shadow: 0 0 10px color-mix(in oklab, var(--primary) 55%, transparent);
+  transition:
+    color 0.2s ease,
+    text-shadow 0.2s ease,
+    filter 0.2s ease;
+}
+.hud-visor button svg {
+  filter: drop-shadow(0 0 5px color-mix(in oklab, var(--primary) 70%, transparent));
+}
+.hud-visor button:hover:not(:disabled) {
+  color: var(--foreground);
+  text-shadow: 0 0 14px var(--primary);
+}
+/* the Arc Core keeps its own look — it is the 3D core itself */
+.hud-visor button:has(> canvas),
+.hud-visor [data-dock-core] {
+  text-shadow: none;
+}
+/* lit state (HUD/TOWN, voice on): a glowing underline, like tab rows */
+.hud-visor button[aria-pressed="true"] {
+  color: var(--primary) !important;
+  text-shadow: 0 0 12px var(--primary);
+}
+.hud-visor button[aria-pressed]::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: -2px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--primary);
+  box-shadow:
+    0 0 10px var(--primary),
+    0 0 22px var(--primary);
+  opacity: 0;
+  transform: scaleX(0.3);
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+}
+.hud-visor button[aria-pressed="true"]::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+/* the "listening" ping ring of the voice control: a soft glow, not a box */
+.hud-visor .animate-ping {
+  border-color: color-mix(in oklab, var(--primary) 35%, transparent) !important;
+  border-radius: 9999px;
+}
+
+/* SYS tray — the visor's actions, floating under it */
+.hud-visor-tray {
+  border: 0 !important;
+  background: radial-gradient(
+    140% 140% at 100% 0%,
+    color-mix(in oklab, var(--background) 97%, transparent),
+    color-mix(in oklab, var(--background) 90%, transparent) 65%,
+    color-mix(in oklab, var(--background) 55%, transparent)
+  ) !important;
+  box-shadow: none !important;
+}
+.hud-visor-tray button {
+  justify-content: flex-start;
+  width: 100%;
+  border-color: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0;
+  text-shadow: 0 0 10px currentColor;
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, currentColor 55%, transparent) 30%,
+    color-mix(in oklab, currentColor 55%, transparent) 70%,
+    transparent
+  );
+  background-size: 100% 1px;
+  background-position: bottom;
+  background-repeat: no-repeat;
+}
+.hud-visor-tray button > span[class*="absolute"] {
+  display: none;
+}
+/* the tray has room for words even on a phone, where the bar buttons
+   collapse to icons (portrait:hidden labels) */
+.hud-visor-tray button {
+  width: 100% !important;
+  height: auto !important;
+  padding: 7px 10px !important;
+  gap: 10px;
+}
+.hud-visor-tray button > span.portrait\:hidden {
+  display: inline !important;
+}
+.hud-visor-tray button svg {
+  filter: drop-shadow(0 0 5px currentColor);
+}
+
 /* Soft top/bottom cut for a scroll area whose bar is hidden. Without it a
    hidden scrollbar just slices content mid-glyph and reads as a rendering
    bug; with it the overflow looks like instrumentation running past the

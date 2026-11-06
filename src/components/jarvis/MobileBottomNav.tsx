@@ -7,7 +7,6 @@ import { useServerFn } from "@tanstack/react-start";
 import { cn } from "@/lib/utils";
 import { useHudNavigate, useRouteTransition } from "./TransitionContext";
 import { useArkReboot } from "./ArkRebootContext";
-import { useShowcase } from "./ShowcaseContext";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 import { GlobalVoiceCommand } from "./GlobalVoiceCommand";
@@ -237,8 +236,7 @@ const ringPos = (i: number, n: number) => {
 function ReactorMenu({ pathname, onClose }: { pathname: string; onClose: () => void }) {
   const { go, isTransitioning } = useHudNavigate();
   const { isDiagnosticRunning } = useArkReboot();
-  const { isRunning: isShowcaseRunning } = useShowcase();
-  const locked = isTransitioning || isDiagnosticRunning || isShowcaseRunning;
+  const locked = isTransitioning || isDiagnosticRunning;
 
   const [group, setGroup] = useState<ModuleGroup | null>(null);
   const activeGroup = groupOf(pathname);

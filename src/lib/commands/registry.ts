@@ -324,22 +324,6 @@ export const COMMAND_REGISTRY = [
     phrases: ["Jarvis close menu", "Hide sidebar", "Jarvis, zamknij menu", "Jarvis, schowaj menu"],
     description: "Collapses the side navigation drawer.",
   },
-  {
-    id: "demo_showcase",
-    category: "System",
-    kind: { type: "special" },
-    pattern:
-      /\b(poka[żz]\s+co\s+potrafisz|zr[óo]b\s+prezentacj[ęe](?:\s+(?:swoich\s+)?mo[żz]liwo[śs]ci)?|prezentacj[ęe]\s+mo[żz]liwo[śs]ci|poka[żz]\s+swoje\s+mo[żz]liwo[śs]ci|poka[żz]\s+demo|uruchom\s+demo|show\s+me\s+what\s+you\s+can\s+do|show\s+your\s+capabilities|capability\s+showcase|run\s+the\s+demo)\b/i,
-    confirmation: "Przyjąłem. Rozpoczynam pełną prezentację możliwości.",
-    label: "Capability Showcase",
-    phrases: [
-      "Jarvis, pokaż co potrafisz",
-      "Jarvis, zrób prezentację swoich możliwości",
-      "Show me what you can do",
-    ],
-    description:
-      "Runs a scripted, narrated cinematic tour through every major JARVIS module — skippable any time with Esc.",
-  },
   // Scan straight into a mode (S4.3): "zeskanuj paragon" opens Vision in
   // that mode and fires the scan; the confirm screen still gates the save.
   // Stems end in ASCII so \b holds after Polish endings (paragon-u, lodówk-ę).

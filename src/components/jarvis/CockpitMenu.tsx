@@ -7,7 +7,6 @@ import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 import { useHudNavigate, useRouteTransition } from "./TransitionContext";
 import { useArkReboot } from "./ArkRebootContext";
-import { useShowcase } from "./ShowcaseContext";
 import {
   cockpitBlurb,
   cockpitColumns,
@@ -32,8 +31,7 @@ export function CockpitMenu({ open, onClose }: { open: boolean; onClose: () => v
   const { go, isTransitioning } = useHudNavigate();
   const { menuFocus } = useRouteTransition();
   const { isDiagnosticRunning } = useArkReboot();
-  const { isRunning: isShowcaseRunning } = useShowcase();
-  const locked = isTransitioning || isDiagnosticRunning || isShowcaseRunning;
+  const locked = isTransitioning || isDiagnosticRunning;
 
   const [query, setQuery] = useState("");
   const [sel, setSel] = useState<CockpitSel | null>(null);

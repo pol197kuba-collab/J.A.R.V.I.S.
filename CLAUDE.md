@@ -315,6 +315,21 @@ own (`/jarvis`, `/mozg`, `/town`) the layer turns it on for as long as the menu
 is open, so the core is always in the middle. Without the 3D layer the classic
 sidebar and ⌘K palette stay.
 
+## Top bar in the 3D mode: the visor
+
+With the 3D layer on (HUD skin, desktop and phone) the top bar is
+`VisorHeader` (`DashboardShell.tsx`), not the glass `.hud-chrome` slab: no
+background, no boxed controls, no `backdrop-filter` (a frosted strip over the
+moving 3D world shows as a blurred band). A fade from the top edge keeps it
+readable, controls are glowing text / icons (the lit one gets a glowing
+underline), a line of light brightest in the middle closes it — the "Visor"
+block in `styles.css`. Left: Arc Core (desktop) + module title as a
+hologram; centre: talk to J.A.R.V.I.S. (a mic icon on a narrow bar); right:
+status, HUD/TOWN, alerts and SYS (reboot, fullscreen, deactivate in a
+holographic tray). Town skin and the no-3D path keep `ClassicHeader`.
+New header controls go into one of those groups and must read as light,
+not as a bordered box.
+
 ## Design skills: project rules win
 
 `.claude/skills/` holds third-party design skills (`design-taste-frontend`,
