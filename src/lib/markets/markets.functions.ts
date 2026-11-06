@@ -63,6 +63,8 @@ export type MarketSeries = {
   stats: SeriesStats;
   /** Który dostawca oddał najświeższy punkt tej serii. */
   source: string | null;
+  /** Na watchliście (false: tylko oglądany z listy obok wykresu). */
+  watched?: boolean;
 };
 
 export type MarketGrid = {
@@ -146,6 +148,11 @@ const GridInput = z
     days: z.number().int().min(7).max(1000).optional().default(120),
     /** Wymusza zaciąg z API, pomijając próg świeżości (przycisk „odśwież"). */
     force: z.boolean().optional().default(false),
+    /**
+     * Instrumenty z katalogu oglądane spoza watchlisty (lista obok wykresu):
+     * ich notowania przychodzą razem z obserwowanymi, bez dodawania do listy.
+     */
+    extra: z.array(z.string().min(1).max(32)).max(3).optional(),
   })
   .optional();
 
@@ -158,7 +165,10 @@ export const getMarketGrid = createServerFn({ method: "GET" })
     const { supabase, userId } = context;
 
     const { ingestQuotes, loadWatchlist } = await import("./ingest.server");
-    const symbols = await loadWatchlist(supabase, userId);
+    const watchlist = await loadWatchlist(supabase, userId);
+    const watchedSet = new Set(watchlist);
+    const extra = (data?.extra ?? []).filter((s) => !watchedSet.has(s) && assetBySymbol(s));
+    const symbols = [...watchlist, ...extra];
     const assets = symbols.map(assetBySymbol).filter((a): a is MarketAsset => Boolean(a));
 
     // Jedno odświeżenie naraz na proces — równolegli czytelnicy czekają na
@@ -236,6 +246,7 @@ export const getMarketGrid = createServerFn({ method: "GET" })
         points,
         stats: computeSeriesStats(points, sessionsPerWeekFor(asset.assetClass)),
         source: bucket[bucket.length - 1]?.source ?? null,
+        watched: watchedSet.has(asset.symbol),
       });
     }
 

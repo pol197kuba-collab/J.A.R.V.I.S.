@@ -17,18 +17,32 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { RefreshCw, TriangleAlert } from "lucide-react";
+import { Bell, RefreshCw, TriangleAlert } from "lucide-react";
 
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { Chips, EmptyState, LiveDot, PanelHint, StatTile } from "@/components/jarvis/fuel/chrome";
 import { MarketChart, type ChartMode } from "@/components/jarvis/markets/MarketChart";
-import { MarketWatchRail } from "@/components/jarvis/markets/MarketWatchRail";
 import { MarketNewsPanel } from "@/components/jarvis/markets/MarketNewsPanel";
-import { SentimentPanel } from "@/components/jarvis/markets/SentimentPanel";
 import { OutlookPanel } from "@/components/jarvis/markets/OutlookPanel";
 import { AccuracyPanel } from "@/components/jarvis/markets/AccuracyPanel";
+import { AccuracySummary } from "@/components/jarvis/markets/AccuracySummary";
 import { FundPanel } from "@/components/jarvis/markets/FundPanel";
-import { AssetPicker } from "@/components/jarvis/markets/AssetPicker";
+import { Fold } from "@/components/jarvis/markets/Fold";
+import { InstrumentList } from "@/components/jarvis/markets/InstrumentList";
+import {
+  accuracyHeadline,
+  breadth,
+  fundHeadline,
+  instrumentGroups,
+  newsMood,
+} from "@/components/jarvis/markets/marketsDigest";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { StandingOrdersPanel } from "@/components/jarvis/orders/StandingOrdersPanel";
 import { listStandingOrders } from "@/lib/orders/orders.functions";
 import { getFund, recomputeFundNow } from "@/lib/fund/fund.functions";
@@ -36,6 +50,7 @@ import { formatPercent, formatPrice } from "@/lib/markets/series";
 import { projectForecast, type ForecastPoint } from "@/lib/markets/projection";
 import {
   addToWatchlist,
+  getAssetCatalog,
   getMarketGrid,
   getMarketNews,
   getMarketOutlook,
@@ -90,6 +105,17 @@ function MarketsPage() {
   const [mode, setMode] = useState<ChartMode>("price");
   const [visibleSymbols, setVisibleSymbols] = useState<string[]>([]);
   const [newsSymbol, setNewsSymbol] = useState<string | null>(null);
+  // Instruments put on the chart from the list without being watched: their
+  // quotes come with the grid (at most 3, the most recent).
+  const [previews, setPreviews] = useState<string[]>([]);
+  const [ordersOpen, setOrdersOpen] = useState(false);
+
+  const fetchCatalog = useServerFn(getAssetCatalog);
+  const catalog = useQuery({
+    queryKey: ["market-catalog"],
+    queryFn: () => fetchCatalog(),
+    staleTime: Infinity,
+  });
 
   const fetchOrders = useServerFn(listStandingOrders);
   const orders = useQuery({
@@ -99,8 +125,9 @@ function MarketsPage() {
   });
 
   const grid = useQuery({
-    queryKey: ["market-grid", range],
-    queryFn: () => fetchGrid({ data: { days: range } }),
+    queryKey: ["market-grid", range, previews],
+    queryFn: () => fetchGrid({ data: { days: range, extra: previews } }),
+    placeholderData: (prev) => prev,
     refetchInterval: 5 * 60_000,
     staleTime: 60_000,
   });
@@ -157,6 +184,10 @@ function MarketsPage() {
   }, [series, visibleSymbols.length]);
 
   const toggleVisible = (symbol: string) => {
+    // not watched and not loaded yet: fetch it with the grid as a preview
+    if (!series.some((s) => s.symbol === symbol)) {
+      setPreviews((prev) => [...prev.filter((p) => p !== symbol), symbol].slice(-3));
+    }
     setVisibleSymbols((prev) => {
       if (prev.includes(symbol)) {
         // Ostatniej widocznej serii nie da się zgasić — pusty wykres nie jest
@@ -173,6 +204,7 @@ function MarketsPage() {
     mutationFn: (symbol: string) => addSymbol({ data: { symbol } }),
     onSuccess: async (result) => {
       toast.success(`Dodano ${result.symbol} do obserwowanych`);
+      setPreviews((prev) => prev.filter((p) => p !== result.symbol));
       await qc.invalidateQueries({ queryKey: ["market-grid"] });
     },
     onError: (err: unknown) =>
@@ -190,7 +222,7 @@ function MarketsPage() {
   });
 
   const refreshMutation = useMutation({
-    mutationFn: () => fetchGrid({ data: { days: range, force: true } }),
+    mutationFn: () => fetchGrid({ data: { days: range, force: true, extra: previews } }),
     onSuccess: async () => {
       toast.success("Notowania odświeżone");
       await qc.invalidateQueries({ queryKey: ["market-grid"] });
@@ -245,142 +277,206 @@ function MarketsPage() {
       toast.error(`Nie udało się przeliczyć funduszu: ${err instanceof Error ? err.message : err}`),
   });
 
-  const watched = series.map((s) => s.symbol);
   const primary = series.find((s) => s.symbol === visibleSymbols[0]) ?? null;
   const missing = grid.data?.missing ?? [];
 
+  // ---- the CEO view: plain facts first, details folded below ----
+  const watchedSeries = useMemo(() => series.filter((s) => s.watched !== false), [series]);
+  const market = useMemo(() => breadth(watchedSeries), [watchedSeries]);
+  const fundTop = useMemo(() => fundHeadline(fund.data?.players), [fund.data]);
+  const hits = useMemo(() => accuracyHeadline(scoreboard.data), [scoreboard.data]);
+  const mood = useMemo(() => newsMood(news.data?.items), [news.data]);
+  const groups = useMemo(() => {
+    const quotes = new Map(
+      series.map((s) => [
+        s.symbol,
+        { last: s.stats.last, change1d: s.stats.change1d, currency: s.currency },
+      ]),
+    );
+    return instrumentGroups(
+      catalog.data?.assets ?? [],
+      new Set(watchedSeries.map((s) => s.symbol)),
+      quotes,
+    );
+  }, [catalog.data, series, watchedSeries]);
+  const watchBusy = addMutation.isPending
+    ? (addMutation.variables ?? null)
+    : removeMutation.isPending
+      ? (removeMutation.variables ?? null)
+      : null;
+  const activeOrders = (orders.data ?? []).filter((o) => o.isEnabled).length;
+
   return (
-    <div className="space-y-6">
-      <HudPanel index={0} title="MARKET GRID // OVERVIEW" tone="elevated" className="p-5">
+    <div className="space-y-8">
+      <HudPanel index={0} title="MARKET GRID // PULS" tone="elevated" className="p-5">
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           <LiveDot active={grid.isFetching} label={grid.isFetching ? "SYNC" : "LIVE"} />
-          <button
-            type="button"
-            disabled={refreshMutation.isPending}
-            onClick={() => refreshMutation.mutate()}
-            className="font-display flex items-center gap-1.5 border border-primary/50 px-3 py-1 text-[9px] uppercase tracking-widest text-primary transition hover:bg-primary/20 disabled:opacity-40"
-          >
-            <RefreshCw className={refreshMutation.isPending ? "h-3 w-3 animate-spin" : "h-3 w-3"} />
-            ODŚWIEŻ
-          </button>
-        </div>
-
-        <div className="mt-4 grid gap-4 @[560px]:grid-cols-2 @[900px]:grid-cols-4">
-          <StatTile
-            label="Obserwowane"
-            value={String(series.length)}
-            hint={missing.length > 0 ? `${missing.length} bez danych` : "wszystkie z danymi"}
-          />
-          <StatTile
-            label="Największy wzrost"
-            value={movers.top ? formatPercent(movers.top.stats.change1d) : "—"}
-            color={changeColor(movers.top?.stats.change1d)}
-            hint={movers.top?.label}
-          />
-          <StatTile
-            label="Największy spadek"
-            value={movers.bottom ? formatPercent(movers.bottom.stats.change1d) : "—"}
-            color={changeColor(movers.bottom?.stats.change1d)}
-            hint={movers.bottom?.label}
-          />
-          <StatTile
-            label={primary ? primary.label : "Wybrany"}
-            value={primary ? formatPrice(primary.stats.last, primary.currency) : "—"}
-            hint={primary?.stats.lastDate ?? undefined}
-          />
-        </div>
-
-        <PanelHint>
-          Zmiany liczone w sesjach, nie w dniach kalendarzowych: dla akcji tydzień to 5 sesji, dla
-          krypto 7. Dane pochodzą z publicznych, darmowych źródeł (CoinGecko, Stooq, Yahoo Finance,
-          Frankfurter) i są orientacyjne — nie nadają się do rozliczeń.
-        </PanelHint>
-      </HudPanel>
-
-      <HudPanel index={1} title="MARKET GRID // CHART" className="p-5">
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Chips options={RANGES} value={range} onChange={setRange} ariaLabel="Zakres czasu" />
-          <Chips
-            options={MODES}
-            value={mode}
-            onChange={(next) => {
-              setMode(next);
-              // Powrót do trybu cenowego zostawia jedną serię — wspólna oś
-              // cenowa dla dwóch walut nie miałaby sensu.
-              if (next === "price") setVisibleSymbols((prev) => prev.slice(0, 1));
-            }}
-            ariaLabel="Tryb wykresu"
-          />
-        </div>
-
-        {grid.isLoading ? (
-          <EmptyState>Ładowanie notowań…</EmptyState>
-        ) : (
-          <>
-            <MarketChart
-              series={series}
-              visibleSymbols={visibleSymbols}
-              mode={mode}
-              forecasts={forecasts}
-            />
-            {/* Kreskowanie i pasmo trzeba nazwać. Przy jednym instrumencie nie
-                ma legendy, a nawet przy kilku legenda mówi, CZYJA to linia,
-                nie co znaczy jej przerywanie. */}
-            {Object.keys(forecasts).some((sym) => visibleSymbols.includes(sym)) && (
-              <p className="mt-2 font-mono text-[10px] text-muted-foreground">
-                Linia przerywana — prognoza na {outlook.data?.horizonDays ?? 7} dni. Pasmo — zakres
-                niepewności; im szersze, tym mniejsza pewność typera.
-              </p>
-            )}
-          </>
-        )}
-
-        <PanelHint>
-          {mode === "price"
-            ? "Tryb cenowy rysuje jeden instrument w jego walucie. Aby porównać kilka naraz, przełącz na „Indeks 100”."
-            : "Każda seria przeskalowana do 100 w pierwszym dniu zakresu — porównanie kierunku i siły ruchu niezależnie od ceny i waluty."}
-        </PanelHint>
-      </HudPanel>
-
-      <HudPanel index={2} title="MARKET GRID // WATCHLIST" className="p-5">
-        {series.length === 0 && !grid.isLoading ? (
-          <EmptyState>Brak danych — dodaj instrument poniżej</EmptyState>
-        ) : (
-          <MarketWatchRail
-            series={series}
-            visibleSymbols={visibleSymbols}
-            onToggle={toggleVisible}
-            onRemove={(symbol) => removeMutation.mutate(symbol)}
-            removingSymbol={removeMutation.isPending ? (removeMutation.variables ?? null) : null}
-          />
-        )}
-      </HudPanel>
-
-      {missing.length > 0 && (
-        <HudPanel index={3} title="MARKET GRID // DIAGNOSTYKA" tone="quiet" className="p-5">
-          <div className="mt-3 space-y-1.5">
-            {missing.map((m) => (
-              <div key={m.symbol} className="flex min-w-0 items-start gap-2">
-                <TriangleAlert
-                  className="mt-0.5 h-3 w-3 shrink-0"
-                  style={{ color: "var(--warning)" }}
-                />
-                <p className="min-w-0 break-words font-mono text-[10px] text-muted-foreground">
-                  <span className="text-foreground">{m.label}</span> ({m.symbol}): {m.reason}
-                </p>
-              </div>
-            ))}
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setOrdersOpen(true)}
+              className="font-display flex items-center gap-1.5 border border-primary/50 px-3 py-1 text-[9px] uppercase tracking-widest text-primary transition hover:bg-primary/20"
+            >
+              <Bell className="h-3 w-3" />
+              Powiadomienia
+              {activeOrders > 0 && <span className="text-muted-foreground">{activeOrders}</span>}
+            </button>
+            <button
+              type="button"
+              disabled={refreshMutation.isPending}
+              onClick={() => refreshMutation.mutate()}
+              className="font-display flex items-center gap-1.5 border border-primary/50 px-3 py-1 text-[9px] uppercase tracking-widest text-primary transition hover:bg-primary/20 disabled:opacity-40"
+            >
+              <RefreshCw
+                className={refreshMutation.isPending ? "h-3 w-3 animate-spin" : "h-3 w-3"}
+              />
+              Odśwież
+            </button>
           </div>
-          <PanelHint>
-            Darmowe źródła notowań bywają zawodne: Stooq potrafi odpowiedzieć stroną anty-bot, a
-            Yahoo limitować ruch po adresie IP serwera. Moduł próbuje kolejnych dostawców i pokazuje
-            tu ten, na którym się zatrzymał — pełne komunikaty trafiają też do System Logs.
-          </PanelHint>
-        </HudPanel>
-      )}
+        </div>
 
-      {/* Fundusz wyżej: wyniki agentów w złotówkach to pierwsze, co sprawdzamy. */}
-      <HudPanel index={3} title="MARKET GRID // FUNDUSZ" tone="elevated" className="min-w-0 p-5">
+        <div className="mt-4 grid grid-cols-2 gap-4 @[900px]:grid-cols-4">
+          <StatTile
+            label="Fundusz · lider"
+            value={fundTop ? formatPercent(fundTop.returnPct) : "—"}
+            color={changeColor(fundTop?.returnPct)}
+            hint={
+              fundTop
+                ? `${fundTop.label}${fundTop.basketPct !== null ? ` · koszyk ${formatPercent(fundTop.basketPct)}` : ""}`
+                : "gracze jeszcze nie grają"
+            }
+          />
+          <StatTile
+            label="Skuteczność prognoz"
+            value={hits?.meaningful ? `${hits.outOfTen} / 10` : "—"}
+            hint={
+              hits
+                ? hits.meaningful
+                  ? `${hits.name} trafia ${hits.outOfTen} na 10`
+                  : `zbiera dane: ${hits.settled} z ${hits.needed} rozliczonych`
+                : undefined
+            }
+          />
+          <StatTile
+            label="Rynek dziś"
+            value={market.known ? `${market.up}↑ ${market.down}↓` : "—"}
+            color={
+              market.up > market.down
+                ? "var(--success)"
+                : market.down > market.up
+                  ? "var(--destructive)"
+                  : undefined
+            }
+            hint={
+              market.top && market.bottom
+                ? `${market.top.label} ${formatPercent(market.top.stats.change1d)} · ${market.bottom.label} ${formatPercent(market.bottom.stats.change1d)}`
+                : undefined
+            }
+          />
+          <StatTile
+            label="Newsy"
+            value={mood ? `${mood.up}↑ ${mood.down}↓` : "—"}
+            color={
+              mood?.lean === "up"
+                ? "var(--success)"
+                : mood?.lean === "down"
+                  ? "var(--destructive)"
+                  : undefined
+            }
+            hint={
+              mood
+                ? mood.lean === "up"
+                  ? "przewaga wzrostowych"
+                  : mood.lean === "down"
+                    ? "przewaga spadkowych"
+                    : `mieszane · ${mood.neutral} neutralnych`
+                : undefined
+            }
+          />
+        </div>
+      </HudPanel>
+
+      <HudPanel index={1} title="MARKET GRID // WYKRES" className="p-5">
+        <div className="mt-3 grid gap-5 @[900px]:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-display truncate text-[18px] uppercase tracking-[0.14em]">
+                  {primary?.label ?? "Wybierz instrument"}
+                </p>
+                {primary && (
+                  <p className="mt-1 font-mono text-[13px] tabular-nums">
+                    {formatPrice(primary.stats.last, primary.currency)}
+                    <span className="ml-2" style={{ color: changeColor(primary.stats.change1d) }}>
+                      {formatPercent(primary.stats.change1d)}
+                    </span>
+                    {primary.watched === false && (
+                      <span className="ml-2 text-[10px] text-muted-foreground">podgląd</span>
+                    )}
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Chips
+                  options={RANGES}
+                  value={range}
+                  onChange={setRange}
+                  ariaLabel="Zakres czasu"
+                />
+                <Chips
+                  options={MODES}
+                  value={mode}
+                  onChange={(next) => {
+                    setMode(next);
+                    // Powrót do trybu cenowego zostawia jedną serię — wspólna oś
+                    // cenowa dla dwóch walut nie miałaby sensu.
+                    if (next === "price") setVisibleSymbols((prev) => prev.slice(0, 1));
+                  }}
+                  ariaLabel="Tryb wykresu"
+                />
+              </div>
+            </div>
+
+            {grid.isLoading ? (
+              <EmptyState>Ładowanie notowań…</EmptyState>
+            ) : (
+              <MarketChart
+                series={series}
+                visibleSymbols={visibleSymbols}
+                mode={mode}
+                forecasts={forecasts}
+              />
+            )}
+            <PanelHint>
+              {Object.keys(forecasts).some((sym) => visibleSymbols.includes(sym))
+                ? `Linia przerywana — prognoza na ${outlook.data?.horizonDays ?? 7} dni; pasmo — niepewność. `
+                : ""}
+              {mode === "price"
+                ? "Cena jednego instrumentu w jego walucie. Kilka naraz: „Indeks 100”."
+                : "Każda seria = 100 w pierwszym dniu zakresu: porównanie kierunku i siły ruchu."}
+            </PanelHint>
+          </div>
+
+          <div className="flex min-w-0 flex-col @[900px]:h-[520px] @max-[899px]:order-first">
+            <InstrumentList
+              groups={groups}
+              selected={visibleSymbols}
+              onSelect={toggleVisible}
+              onToggleWatch={(symbol, isWatched) =>
+                isWatched ? removeMutation.mutate(symbol) : addMutation.mutate(symbol)
+              }
+              busySymbol={watchBusy}
+            />
+            <p className="mt-2 font-mono text-[9px] leading-relaxed text-muted-foreground">
+              Zmiany w sesjach (tydzień akcji = 5, krypto = 7). Dane z darmowych źródeł —
+              orientacyjne.
+            </p>
+          </div>
+        </div>
+      </HudPanel>
+
+      {/* Fundusz: wyniki agentów w złotówkach to pierwsze, co sprawdzamy. */}
+      <HudPanel index={2} title="MARKET GRID // FUNDUSZ" tone="elevated" className="min-w-0 p-5">
         {fund.isLoading ? (
           <EmptyState>Ładowanie funduszu…</EmptyState>
         ) : fund.data ? (
@@ -394,8 +490,26 @@ function MarketsPage() {
         )}
       </HudPanel>
 
-      <div className="grid gap-6 @[900px]:grid-cols-[1fr_360px]">
-        <HudPanel index={3} title="MARKET GRID // TYPER" tone="elevated" className="min-w-0 p-5">
+      <HudPanel index={3} title="MARKET GRID // SKUTECZNOŚĆ" tone="quiet" className="min-w-0 p-5">
+        {scoreboard.isLoading ? (
+          <EmptyState>Rozliczanie prognoz…</EmptyState>
+        ) : scoreboard.data ? (
+          <>
+            <AccuracySummary board={scoreboard.data} />
+            <Fold title="Wszystkie szczegóły i wnioski">
+              <AccuracyPanel board={scoreboard.data} />
+            </Fold>
+          </>
+        ) : (
+          <EmptyState>Brak danych o skuteczności</EmptyState>
+        )}
+      </HudPanel>
+
+      <HudPanel index={4} title="MARKET GRID // SZCZEGÓŁY" tone="quiet" className="min-w-0 p-5">
+        <Fold
+          title={`Typer — prognozy na ${outlook.data?.horizonDays ?? 7} dni`}
+          hint={outlook.data ? `${outlook.data.rows.length} instrumentów` : undefined}
+        >
           {outlook.isLoading ? (
             <EmptyState>Liczenie sygnałów…</EmptyState>
           ) : (
@@ -405,21 +519,8 @@ function MarketsPage() {
               model={outlook.data?.model ?? null}
             />
           )}
-        </HudPanel>
-
-        <HudPanel index={3} title="MARKET GRID // SKUTECZNOŚĆ" tone="quiet" className="min-w-0 p-5">
-          {scoreboard.isLoading ? (
-            <EmptyState>Rozliczanie prognoz…</EmptyState>
-          ) : scoreboard.data ? (
-            <AccuracyPanel board={scoreboard.data} />
-          ) : (
-            <EmptyState>Brak danych o skuteczności</EmptyState>
-          )}
-        </HudPanel>
-      </div>
-
-      <div className="grid gap-6 @[900px]:grid-cols-[1fr_360px]">
-        <HudPanel index={3} title="MARKET GRID // NEWSY" className="min-w-0 p-5">
+        </Fold>
+        <Fold title="Newsy" hint={news.data ? `${news.data.items.length} pozycji` : undefined}>
           {news.isLoading ? (
             <EmptyState>Ładowanie newsów…</EmptyState>
           ) : (
@@ -431,37 +532,55 @@ function MarketsPage() {
               onClearFilter={() => setNewsSymbol(null)}
             />
           )}
-        </HudPanel>
+        </Fold>
+        {missing.length > 0 && (
+          <Fold title="Diagnostyka źródeł notowań" hint={`${missing.length} bez danych`}>
+            <div className="space-y-1.5">
+              {missing.map((m) => (
+                <div key={m.symbol} className="flex min-w-0 items-start gap-2">
+                  <TriangleAlert
+                    className="mt-0.5 h-3 w-3 shrink-0"
+                    style={{ color: "var(--warning)" }}
+                  />
+                  <p className="min-w-0 break-words font-mono text-[10px] text-muted-foreground">
+                    <span className="text-foreground">{m.label}</span> ({m.symbol}): {m.reason}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <PanelHint>
+              Darmowe źródła notowań bywają zawodne (Stooq, Yahoo). Moduł próbuje kolejnych
+              dostawców; pełne komunikaty trafiają też do System Logs.
+            </PanelHint>
+          </Fold>
+        )}
+      </HudPanel>
 
-        <HudPanel index={3} title="MARKET GRID // WYDŹWIĘK" tone="quiet" className="min-w-0 p-5">
-          {news.isLoading ? (
-            <EmptyState>Liczenie…</EmptyState>
-          ) : (
-            <SentimentPanel
-              rows={news.data?.sentiment ?? []}
-              onSelect={(symbol) => setNewsSymbol((prev) => (prev === symbol ? null : symbol))}
+      {/* Rozkazy (powiadomienia o progach cen) — w wysuwanym panelu, nie na stronie. */}
+      <Sheet open={ordersOpen} onOpenChange={setOrdersOpen}>
+        <SheetContent
+          side="right"
+          className="no-scrollbar w-full overflow-y-auto overflow-x-hidden sm:max-w-md"
+        >
+          <SheetHeader>
+            <SheetTitle className="font-display text-[12px] uppercase tracking-[0.3em] text-primary">
+              Powiadomienia rynkowe
+            </SheetTitle>
+            <SheetDescription className="text-[11px]">
+              Rozkazy stałe: J.A.R.V.I.S. powiadomi Cię, gdy cena przekroczy ustawiony próg.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-4 min-w-0">
+            <StandingOrdersPanel
+              subjectKind="market"
+              orders={orders.data ?? []}
+              seriesBySubject={orderSeries}
+              defaultSubject={visibleSymbols[0]}
+              queryKey={ORDERS_QUERY_KEY}
             />
-          )}
-        </HudPanel>
-      </div>
-
-      <HudPanel index={4} title="MARKET GRID // ROZKAZY" tone="quiet">
-        <StandingOrdersPanel
-          subjectKind="market"
-          orders={orders.data ?? []}
-          seriesBySubject={orderSeries}
-          defaultSubject={visibleSymbols[0]}
-          queryKey={ORDERS_QUERY_KEY}
-        />
-      </HudPanel>
-
-      <HudPanel index={5} title="MARKET GRID // DODAJ INSTRUMENT" tone="quiet" className="p-5">
-        <AssetPicker
-          watched={watched}
-          onAdd={(symbol) => addMutation.mutate(symbol)}
-          addingSymbol={addMutation.isPending ? (addMutation.variables ?? null) : null}
-        />
-      </HudPanel>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
