@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { addDays, simulate, type FundSignal, type PriceBook } from "./engine";
-import { compareBySymbol, summarizePlayer, type SummaryOrder } from "./summary";
+import {
+  compareBySymbol,
+  exposure,
+  leverageTone,
+  summarizePlayer,
+  type SummaryOrder,
+} from "./summary";
 
 const order = (o: Partial<SummaryOrder> & Pick<SummaryOrder, "symbol" | "side">): SummaryOrder => ({
   notionalPln: 10_000,
@@ -105,5 +111,20 @@ describe("compareBySymbol", () => {
     expect(rows[2].byPlayer).toEqual({ ai: 200, signals: -100 });
     expect(rows[2].sourcesTotalPln).toBe(100);
     expect(rows[1].sourcesTotalPln).toBe(0);
+  });
+});
+
+describe("exposure", () => {
+  it("splits long and short and divides by own funds (NAV)", () => {
+    // zrzut z gracza grającego tylko na spadek: 313 441 zł do odkupu przy 104 450 zł wyceny
+    const e = exposure([{ valuePln: -200_000 }, { valuePln: -113_441 }], 104_450);
+    expect(e.longPln).toBe(0);
+    expect(e.shortPln).toBe(313_441);
+    expect(e.leverage).toBeCloseTo(3.0, 1);
+    expect(leverageTone(e.leverage)).toBe("risk");
+    expect(exposure([{ valuePln: 50_000 }], 100_000)).toMatchObject({ leverage: 0.5 });
+    expect(leverageTone(0.5)).toBe("calm");
+    expect(leverageTone(2)).toBe("warn");
+    expect(exposure([], 0).leverage).toBeNull();
   });
 });
