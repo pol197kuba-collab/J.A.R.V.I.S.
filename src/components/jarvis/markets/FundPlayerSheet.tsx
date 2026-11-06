@@ -25,7 +25,7 @@ import {
 } from "@/lib/fund/fund.functions";
 import { episodes, type Episode } from "@/lib/fund/history";
 import { describeSettings, settingsFor, type FundSettings } from "@/lib/fund/settings";
-import type { PlayerSummary } from "@/lib/fund/summary";
+import { exposure, leverageTone, type PlayerSummary } from "@/lib/fund/summary";
 import { isWaiting } from "@/lib/fund/verdict";
 import { Fold } from "./Fold";
 import { PLAYER_COLOR, pctFmt, plnFmt, shortDate, signColor, zlFmt } from "./fundFormat";
@@ -189,11 +189,14 @@ export function FundPlayerSheet({
   summary,
   settings,
   onOpenChange,
+  positions = [],
 }: {
   player: FundPlayer | null;
   summary: PlayerSummary | undefined;
   settings: FundSettings | undefined;
   onOpenChange: (open: boolean) => void;
+  /** Pozycje gracza z getFund (od razu, bez czekania na historię) — do ekspozycji. */
+  positions?: ReadonlyArray<{ valuePln: number }>;
 }) {
   const fetchPlayer = useServerFn(getFundPlayer);
   const detail = useQuery({
@@ -207,6 +210,10 @@ export function FundPlayerSheet({
   const wins = closed.filter((e) => e.realizedPln > 0).length;
 
   const m = player?.metrics ?? null;
+  const exp = player ? exposure(positions, player.navPln) : null;
+  const tone = leverageTone(exp?.leverage ?? null);
+  const toneColor =
+    tone === "risk" ? "var(--destructive)" : tone === "warn" ? "var(--warning)" : undefined;
   const waiting = player ? isWaiting(player) : false;
   const rules =
     player?.kind === "source" && settings
@@ -243,18 +250,41 @@ export function FundPlayerSheet({
                 value={zlFmt(summary?.totalPln ?? player.navPln - 100_000)}
                 color={signColor(summary?.totalPln ?? player.navPln - 100_000)}
               />
-              <Stat label="Wycena" value={`${plnFmt(player.navPln)} zł`} />
+              <Stat label="Własne środki" value={`${plnFmt(player.navPln)} zł`} />
               <Stat
                 label="Trafione pozycje"
                 value={closed.length ? `${wins} z ${closed.length}` : "—"}
               />
-              <Stat label="Gotówka" value={`${plnFmt(player.cashPln)} zł`} />
               <Stat
                 label="Obsunięcie"
                 value={m ? pctFmt(m.maxDrawdownPct, 1) : "—"}
                 color={m && m.maxDrawdownPct < 0 ? "var(--destructive)" : undefined}
               />
+              <Stat
+                label="Dźwignia"
+                value={exp?.leverage == null ? "—" : `${plnFmt(exp.leverage, 1)}×`}
+                color={toneColor}
+              />
+              <Stat label="Na wzrost" value={`${plnFmt(exp?.longPln ?? 0)} zł`} />
+              <Stat label="Na spadek" value={`${plnFmt(exp?.shortPln ?? 0)} zł`} />
+              <Stat label="Razem w grze" value={`${plnFmt(exp?.grossPln ?? 0)} zł`} />
             </div>
+            {exp && exp.shortPln > 0.5 && (
+              <p className="mt-2 min-w-0 break-words font-mono text-[10px] leading-relaxed text-muted-foreground">
+                Gotówka na koncie ({plnFmt(player.cashPln)} zł) zawiera wpływy z krótkiej sprzedaży
+                — to pożyczone papiery, które trzeba odkupić ({plnFmt(exp.shortPln)} zł), nie wolne
+                środki. Własne środki = gotówka − odkup + pozycje na wzrost.
+              </p>
+            )}
+            {tone !== "calm" && exp?.leverage != null && (
+              <p
+                className="mt-1 font-mono text-[10px] leading-relaxed"
+                style={{ color: toneColor }}
+              >
+                Pozycje warte {plnFmt(exp.leverage, 1)}× własnych środków — ruch rynku o 10% to ok.{" "}
+                {plnFmt(exp.leverage * 10, 0)}% wyniku.
+              </p>
+            )}
 
             {detail.isLoading ? (
               <EmptyState>Wczytywanie historii…</EmptyState>

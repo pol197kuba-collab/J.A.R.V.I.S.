@@ -150,3 +150,27 @@ export function compareBySymbol(
     (a, b) => a.sourcesTotalPln - b.sourcesTotalPln || a.symbol.localeCompare(b.symbol),
   );
 }
+
+/**
+ * Ekspozycja gracza: ile trzyma na wzrost, ile na spadek i ile to razy jego
+ * własne środki (wycena). Gotówka gracza grającego na spadki jest zawyżona
+ * wpływami z krótkiej sprzedaży — to pożyczone papiery do odkupu, nie wolne
+ * pieniądze — więc karta pokazuje ekspozycję zamiast gotówki.
+ */
+export function exposure(
+  positions: ReadonlyArray<{ valuePln: number }>,
+  navPln: number,
+): { longPln: number; shortPln: number; grossPln: number; leverage: number | null } {
+  let longPln = 0;
+  let shortPln = 0;
+  for (const p of positions) {
+    if (p.valuePln >= 0) longPln += p.valuePln;
+    else shortPln += -p.valuePln;
+  }
+  const grossPln = longPln + shortPln;
+  return { longPln, shortPln, grossPln, leverage: navPln > 0 ? grossPln / navPln : null };
+}
+
+/** Kolor dźwigni: do 1,5× spokojnie, do 2,5× uwaga, wyżej — ryzyko. */
+export const leverageTone = (lev: number | null): "calm" | "warn" | "risk" =>
+  lev === null || lev <= 1.5 ? "calm" : lev <= 2.5 ? "warn" : "risk";

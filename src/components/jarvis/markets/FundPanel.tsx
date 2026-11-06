@@ -19,6 +19,7 @@ import { Fold } from "./Fold";
 import { FundNavChart } from "./FundNavChart";
 import { FundPlayerSheet } from "./FundPlayerSheet";
 import { FundSettingsSheet } from "./FundSettingsSheet";
+import { exposure, leverageTone } from "@/lib/fund/summary";
 import { SymbolComparison } from "./FundSummary";
 import { KIND_BADGE, PLAYER_COLOR, pctFmt, plnFmt, signColor, zlFmt } from "./fundFormat";
 import { Swatch } from "./Swatch";
@@ -87,14 +88,18 @@ function RankRow({
   player,
   rank,
   totalPln,
+  positions,
   onOpen,
 }: {
   player: FundPlayer;
   rank: number | null;
   totalPln: number | undefined;
+  positions: ReadonlyArray<{ valuePln: number }>;
   onOpen: () => void;
 }) {
   const m = player.metrics;
+  const lev = exposure(positions, player.navPln).leverage;
+  const tone = leverageTone(lev);
   const waiting = isWaiting(player);
   const pending = !waiting && startingWith(player) > 0;
   return (
@@ -119,6 +124,21 @@ function RankRow({
               : pending
                 ? "czeka na pierwsze zlecenia"
                 : `${KIND_BADGE[player.kind] ? `${KIND_BADGE[player.kind]} · ` : ""}${m?.trades ?? 0} transakcji · wycena ${plnFmt(player.navPln)} zł`}
+            {!waiting && !pending && lev !== null && lev > 0.05 && (
+              <span
+                style={{
+                  color:
+                    tone === "risk"
+                      ? "var(--destructive)"
+                      : tone === "warn"
+                        ? "var(--warning)"
+                        : undefined,
+                }}
+              >
+                {" "}
+                · dźwignia {plnFmt(lev, 1)}×
+              </span>
+            )}
           </span>
         </span>
         <span className="shrink-0 text-right">
@@ -274,6 +294,7 @@ export function FundPanel({
         summary={cardKey ? view.summary?.[cardKey] : undefined}
         settings={settings}
         onOpenChange={(o) => !o && setCardKey(null)}
+        positions={cardKey ? (view.positions[cardKey] ?? []) : []}
       />
     </>
   );
@@ -323,6 +344,7 @@ export function FundPanel({
                   player={p}
                   rank={unranked ? null : rank}
                   totalPln={view.summary?.[p.key]?.totalPln}
+                  positions={view.positions[p.key] ?? []}
                   onOpen={() => setCardKey(p.key)}
                 />
               );
