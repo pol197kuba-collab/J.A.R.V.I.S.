@@ -243,25 +243,33 @@ than the panels (`backdropMath.ts`, pure and tested). Not under `/jarvis`,
 panel glass lets more through). New modules get both for free by using
 `HudPanel`; keep panel backgrounds as glass, not opaque fills.
 
-## "Hologram" panels (3D mode)
+## "Data in space" module content (3D mode)
 
-Under `html[data-depth3d]` panels are made of light, not frames (the
-"Hologram" block in `src/styles.css`, unlayered so it beats the Tailwind
-utilities): smoked glass, a 1 px rim light on the edge facing the Arc Core
-(from above, swinging with `--tilt-x`, which the transition layer sets,
-quantized and throttled), depth shadows; no outlines, no `hud-corner`
-brackets, no `HudTag` labels; headers get a lit dot instead of a rule
-(`hud-panel-head` / `hud-panel-title`). Fields inside `<main>` are recessed and
-glow on focus, buttons with a `border-primary*` class become glass keys,
-`[role=tablist]` rows a recessed track with a light puck on the active
-`[role=tab]`. Inside panels the modules' own cyan frames follow by the
-utilities they already carry: `border border-primary*` boxes become inner
-glass, one-sided `border-b/t/l/r … border-primary*` rules a line of light
-fading at both ends, and `[role=group]` rows of `aria-pressed` buttons a track
-with a light puck. Status colours (destructive/warning/success) keep their
-lines. Town and the no-3D path keep the classic frames. In new UI use real
-`role="tab"` / `aria-selected` (or a `role="group"` of `aria-pressed`
-buttons) for tab and toggle rows so they pick this up.
+Under `html[data-depth3d]` modules have **no windows**: the "Data in space"
+block in `src/styles.css` (unlayered, so it beats the Tailwind utilities)
+strips panels of glass, frames, rim light and shadows, hides `hud-corner` and
+`HudTag`, and the content lies on the 3D world. Readability comes from the
+`.space-mist` layer (rendered by `ModuleTransitionLayer`, z-index 6: over the
+world, under the content), from space between sections and from light:
+
+- section titles (`hud-panel-title`) glow, with a lit dot, no rule;
+- `StatTile` numbers are holograms (`holo-stat` / `holo-stat-value`): big,
+  glowing, a beam under each, a little parallax from `--mx` / `--my` (set by
+  the transition layer from the pointer / phone tilt, quantized + throttled);
+- cyan-framed boxes become plain space, one-sided cyan rules lines of light
+  fading at both ends; status colours keep their lines;
+- tab rows (`role="tab"` + `aria-selected`) and toggle rows (`role="group"`
+  of `aria-pressed` buttons) are text, the active one lit with a glowing
+  underline; buttons with a `border-primary*` class are light text over a
+  glowing underline; fields sit on a line of light and glow on focus.
+
+Charts: `charts3d/RibbonChart3D` (lazy `createRibbonChart.ts`, same chunk
+rules as the other three.js code; math in `ribbonMath.ts`, pure and tested)
+draws series as ribbons of light over a floor grid, forecasts as beads with a
+cone of uncertainty, index mode as series standing one behind another. It
+renders on demand only (data, entrance, pointer, resize), never in a loop.
+`MarketChart` uses it in the 3D mode and keeps recharts otherwise. Town and
+the no-3D path keep the classic panels and charts.
 
 ## Mobile dock and the Orbita menu
 
