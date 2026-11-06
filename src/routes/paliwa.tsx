@@ -13,9 +13,10 @@ import { toast } from "sonner";
 import { DatabaseBackup } from "lucide-react";
 
 import { HudPanel } from "@/components/jarvis/HudPanel";
-import { Chips, LiveDot } from "@/components/jarvis/fuel/chrome";
+import { Chips, EmptyState, LiveDot, PanelHint } from "@/components/jarvis/fuel/chrome";
 import { FuelHeroPanel } from "@/components/jarvis/fuel/FuelHeroPanel";
-import { FuelProductRail } from "@/components/jarvis/fuel/FuelProductRail";
+import { FuelList } from "@/components/jarvis/fuel/FuelList";
+import { directionColor, formatPct, formatPln } from "@/components/jarvis/fuel/format";
 import {
   FuelChartLegend,
   FuelPriceChart,
@@ -193,25 +194,11 @@ function FuelPage() {
 
       <VehicleCostPanel index={1} />
 
-      <HudPanel index={1} title="PALIWA // PRZEGLĄD" tone="quiet" className="p-5 @max-[420px]:p-4">
-        {gridQuery.isLoading ? (
-          <p className="font-display py-6 text-center text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-            Ładowanie cennika…
-          </p>
-        ) : (
-          <FuelProductRail
-            series={series}
-            selectedId={selectedId}
-            onSelect={handleSelect}
-            visibleIds={visibleIds}
-            onToggleVisible={toggleVisible}
-          />
-        )}
-      </HudPanel>
-
+      {/* Przegląd + seria czasowa w jednym panelu, jak w /rynki: filtry nad
+          wykresem, lista paliw obok (na telefonie pasek nad wykresem). */}
       <HudPanel
         index={2}
-        title="WYKRES // SERIA CZASOWA"
+        title="PALIWA // WYKRES"
         rightSlot={
           <span className="font-mono text-[9px] text-muted-foreground">
             {series.reduce((sum, s) => sum + s.points.length, 0)} punktów
@@ -219,56 +206,106 @@ function FuelPage() {
         }
         className="p-5 @max-[420px]:p-4"
       >
-        <div className="flex flex-wrap items-center gap-3">
-          <Chips
-            options={RANGES}
-            value={range}
-            onChange={(next) => setRange(next)}
-            ariaLabel="Zakres czasu"
-          />
-          <Chips
-            options={MODES}
-            value={mode}
-            onChange={(next) => setMode(next)}
-            ariaLabel="Tryb wykresu"
-          />
-          <button
-            type="button"
-            aria-pressed={showBrent}
-            onClick={() => setShowBrent((v) => !v)}
-            className={`font-display rounded-full border px-2.5 py-1 text-[9px] uppercase tracking-widest transition ${
-              showBrent
-                ? "border-primary bg-primary/15 text-primary"
-                : "border-primary/25 text-muted-foreground hover:bg-primary/10"
-            }`}
-          >
-            ropa Brent
-          </button>
-        </div>
+        <div className="mt-3 grid gap-5 @[900px]:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-display truncate text-[18px] uppercase tracking-[0.14em]">
+                  {selected?.label ?? "Wybierz paliwo"}
+                </p>
+                {selected && (
+                  <p className="mt-1 font-mono text-[13px] tabular-nums">
+                    {formatPln(selected.stats.latest)}{" "}
+                    <span className="text-[10px] text-muted-foreground">PLN/m³</span>
+                    <span
+                      className="ml-2"
+                      style={{ color: directionColor(selected.stats.changeDay) }}
+                    >
+                      {formatPct(selected.stats.changeDayPct)}
+                    </span>
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Chips
+                  options={RANGES}
+                  value={range}
+                  onChange={(next) => setRange(next)}
+                  ariaLabel="Zakres czasu"
+                />
+                <Chips
+                  options={MODES}
+                  value={mode}
+                  onChange={(next) => setMode(next)}
+                  ariaLabel="Tryb wykresu"
+                />
+                <div
+                  role="group"
+                  aria-label="Nakładka"
+                  className="flex overflow-hidden rounded border border-primary/25"
+                >
+                  <button
+                    type="button"
+                    aria-pressed={showBrent}
+                    onClick={() => setShowBrent((v) => !v)}
+                    className={`font-display px-2.5 py-1 text-[9px] uppercase tracking-widest transition ${
+                      showBrent
+                        ? "bg-primary/20 text-primary"
+                        : "text-muted-foreground hover:bg-primary/10"
+                    }`}
+                  >
+                    ropa Brent
+                  </button>
+                </div>
+              </div>
+            </div>
 
-        <div className="mt-4">
-          <FuelPriceChart
-            series={series}
-            visibleIds={visibleIds}
-            primaryId={selectedId}
-            mode={mode}
-            overlay={overlayQuery.data}
-            showBrent={showBrent}
-          />
-          <FuelChartLegend
-            series={series}
-            visibleIds={visibleIds}
-            showBrent={showBrent}
-            mode={mode}
-          />
-        </div>
+            <div className="mt-4">
+              {gridQuery.isLoading ? (
+                <EmptyState>Ładowanie cennika…</EmptyState>
+              ) : (
+                <>
+                  <FuelPriceChart
+                    series={series}
+                    visibleIds={visibleIds}
+                    primaryId={selectedId}
+                    mode={mode}
+                    overlay={overlayQuery.data}
+                    showBrent={showBrent}
+                  />
+                  <FuelChartLegend
+                    series={series}
+                    visibleIds={visibleIds}
+                    showBrent={showBrent}
+                    mode={mode}
+                  />
+                </>
+              )}
+            </div>
 
-        {mode === "spread" && (
-          <p className="mt-2 font-mono text-[10px] text-muted-foreground">
-            Spread = cennik Orlenu minus koszt ropy przeliczony na PLN/m³. Rośnie, gdy marża i
-            koszty przetwórstwa idą w górę.
-          </p>
-        )}
+            <PanelHint>
+              {mode === "spread"
+                ? "Spread = cennik Orlenu minus koszt ropy przeliczony na PLN/m³. Rośnie, gdy marża i koszty przetwórstwa idą w górę."
+                : mode === "index"
+                  ? "Każde paliwo = 100 w pierwszym dniu zakresu: porównanie kierunku i siły ruchu."
+                  : "Cennik hurtowy Orlenu, PLN/m³ netto. Kilka paliw naraz: oko na liście; porównanie ruchu: „Indeks 100”."}
+            </PanelHint>
+          </div>
+
+          <div className="flex min-w-0 flex-col @[900px]:h-[520px] @max-[899px]:order-first">
+            <FuelList
+              series={series}
+              selectedId={selectedId}
+              visibleIds={visibleIds}
+              onSelect={handleSelect}
+              onToggleVisible={toggleVisible}
+            />
+            <p className="mt-2 font-mono text-[9px] leading-relaxed text-muted-foreground">
+              Zmiana dnia względem poprzedniej publikacji Orlenu. Dni bez publikacji domyka ostatnia
+              cena.
+            </p>
+          </div>
+        </div>
       </HudPanel>
 
       <div className="grid grid-cols-2 gap-6 @max-[900px]:grid-cols-1 @max-[420px]:gap-4">
