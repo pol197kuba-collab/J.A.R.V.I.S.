@@ -20,6 +20,8 @@ import {
   type TooltipProps,
 } from "recharts";
 import { EmptyState } from "@/components/jarvis/fuel/chrome";
+import { useRouteTransition } from "@/components/jarvis/TransitionContext";
+import { RibbonChart3D } from "@/components/jarvis/charts3d/RibbonChart3D";
 import { rebaseToHundred, type PricePoint } from "@/lib/markets/series";
 import type { ForecastPoint } from "@/lib/markets/projection";
 import type { MarketSeries } from "@/lib/markets/markets.functions";
@@ -156,8 +158,72 @@ export function MarketChart({
     };
   }, [visible, mode, forecasts]);
 
+  const { can3d } = useRouteTransition();
+  // The same rows, as the 3D ribbon chart wants them: points by row index.
+  const ribbon = useMemo(() => {
+    const formatY = (v: number) =>
+      mode === "index" ? v.toFixed(0) : v.toLocaleString("pl-PL", { maximumFractionDigits: 2 });
+    return {
+      rows: rows.length,
+      stacked: visible.length > 1,
+      dateLabel: (i: number) => (rows[i]?.label as string) ?? "",
+      formatY,
+      series: visible.map((s) => {
+        const key = keyFor(s.symbol);
+        const points: Array<{ i: number; v: number }> = [];
+        const forecast: Array<{ i: number; mid: number; low: number; high: number }> = [];
+        rows.forEach((r, i) => {
+          const v = r[key];
+          if (typeof v === "number") points.push({ i, v });
+          const fc = r[fcKeyFor(s.symbol)];
+          const band = r[bandKeyFor(s.symbol)] as unknown as [number, number] | undefined;
+          if (typeof fc === "number" && Array.isArray(band) && typeof v !== "number")
+            forecast.push({ i, mid: fc, low: band[0], high: band[1] });
+        });
+        return { key, color: s.colorToken, points, forecast };
+      }),
+    };
+  }, [rows, visible, mode]);
+
   if (visible.length === 0 || rows.length === 0) {
     return <EmptyState>Wybierz instrument z listy obserwowanych</EmptyState>;
+  }
+
+  if (can3d) {
+    return (
+      <RibbonChart3D
+        className="mt-3 h-[440px] w-full @max-[520px]:h-[320px]"
+        data={ribbon}
+        fallback={null}
+        tooltip={(i) => {
+          const row = rows[i];
+          if (!row) return null;
+          return (
+            <div className="font-display text-center text-[10px] uppercase tracking-[0.16em] text-foreground [text-shadow:0_0_10px_black,0_0_14px_var(--reactor)]">
+              {visible.map((s) => {
+                const v = row[keyFor(s.symbol)] ?? row[fcKeyFor(s.symbol)];
+                if (typeof v !== "number") return null;
+                return (
+                  <b
+                    key={s.symbol}
+                    className="block text-[17px] font-normal tracking-[0.06em]"
+                    style={{ color: s.colorToken }}
+                  >
+                    {mode === "index"
+                      ? v.toFixed(1)
+                      : v.toLocaleString("pl-PL", { maximumFractionDigits: 2 })}{" "}
+                    <span className="text-[10px] text-muted-foreground">
+                      {mode === "index" ? "pkt" : s.currency}
+                    </span>
+                  </b>
+                );
+              })}
+              {new Date(`${row.date}T00:00:00`).toLocaleDateString("pl-PL")}
+            </div>
+          );
+        }}
+      />
+    );
   }
 
   // Obszar pod linią tylko dla pojedynczej serii — przy kilku nakładające się

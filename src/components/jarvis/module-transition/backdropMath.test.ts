@@ -6,6 +6,7 @@ import {
   backdropCamera,
   backdropFade,
   backdropSeed,
+  backdropShift,
   hasBackdrop,
   tiltFromOrientation,
 } from "./backdropMath";
@@ -53,6 +54,12 @@ describe("module backdrop", () => {
     expect(next).toBeLessThan(0.1);
     expect(backdropFade(0)).toBe(0);
     expect(backdropFade(5000)).toBeCloseTo(BACKDROP_OPACITY);
+  });
+
+  it("keeps the core centred and shifts the frame onto the content area", () => {
+    expect(backdropCamera({ ...base, aspect: 1.8 }).look.x).toBe(0);
+    expect(backdropShift(1440, { left: 280, width: 1160 })).toBe(140);
+    expect(backdropShift(1440, null)).toBe(0);
   });
 
   it("reads the phone tilt around the usual holding angle", () => {

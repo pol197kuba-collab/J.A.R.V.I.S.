@@ -1057,106 +1057,81 @@
 }
 
 /* ---------------------------------------------------------------------------
-   "Hologram" — panels in the 3D mode (html[data-depth3d]).
+   "Data in space" — module content in the 3D mode (html[data-depth3d]).
 
-   In the 3D world, frames pin the panels to the screen. Here panels are made
-   of light instead: smoked glass, a rim light on the edge that faces the Arc
-   Core (it rides high on the screen, so the light comes from above and follows
-   the phone tilt: --tilt-x), soft depth shadows, no outlines, no corner
-   brackets, no NODE tags. Fields sit recessed into the glass and glow from
-   inside on focus; bordered buttons turn into glass keys; tab rows into a track
-   with a light puck. Town and the no-3D path never get here.
+   No windows: panels lose their glass, frames, rim light and shadows, and the
+   content lies straight on the 3D world. Readability comes from the mist
+   (.space-mist, under the content, over the world), from space between the
+   sections and from light: section titles glow, numbers float as holograms
+   (with a little parallax from --mx/--my), rules are lines of light fading at
+   both ends, toggles and bordered buttons are text with a glowing underline,
+   fields sit on a faint line of light. Status colours keep their meaning.
+   Town and the no-3D path never get here.
 
    Unlayered on purpose: these must win over the Tailwind utilities that draw
-   the old cyan borders inside the modules (utilities live in a layer).
+   the old cyan frames inside the modules (utilities live in a layer).
    --------------------------------------------------------------------------- */
 html[data-depth3d] .hud-corner,
 html[data-depth3d] .hud-tag {
   display: none;
 }
 
-html[data-depth3d] .hud-panel {
-  --rim-angle: calc(180deg + var(--tilt-x, 0) * 24deg);
-  border-color: transparent;
-}
-html[data-depth3d] .hud-panel--elevated {
-  background:
-    radial-gradient(
-      120% 70% at 50% -12%,
-      color-mix(in oklab, var(--primary) 10%, transparent),
-      transparent 62%
-    ),
-    linear-gradient(
-      180deg,
-      color-mix(in oklab, var(--surface-3) 64%, transparent),
-      color-mix(in oklab, var(--base-panel-floor) 74%, transparent)
-    );
-  box-shadow:
-    0 34px 70px -34px oklch(0 0 0 / 0.85),
-    0 18px 60px -40px color-mix(in oklab, var(--primary) 55%, transparent);
-  backdrop-filter: blur(9px) saturate(140%);
-}
-html[data-depth3d] .hud-panel--quiet {
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklab, var(--surface-1) 66%, transparent),
-    color-mix(in oklab, var(--base-panel-floor) 72%, transparent)
-  );
-  box-shadow: 0 22px 46px -30px oklch(0 0 0 / 0.8);
-  backdrop-filter: blur(4px);
-}
+/* panels: no window at all, only space between the sections */
+html[data-depth3d] .hud-panel,
+html[data-depth3d] .hud-panel--elevated,
+html[data-depth3d] .hud-panel--quiet,
 html[data-depth3d] .hud-panel--elevated:hover,
 html[data-depth3d] .hud-panel--quiet:hover {
   border-color: transparent;
-  box-shadow:
-    0 40px 80px -34px oklch(0 0 0 / 0.9),
-    0 22px 70px -38px color-mix(in oklab, var(--primary) 70%, transparent);
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  transform: none;
 }
-/* the rim light: a 1 px ring, bright on the edge facing the core, gone below */
-html[data-depth3d] .hud-panel::before {
-  inset: 0;
-  padding: 1px;
-  opacity: 1;
-  background: linear-gradient(
-    var(--rim-angle),
-    color-mix(in oklab, var(--primary) 80%, white 12%) 0%,
-    color-mix(in oklab, var(--primary) 32%, transparent) 18%,
-    transparent 48%,
-    transparent 82%,
-    color-mix(in oklab, var(--primary) 10%, transparent) 100%
-  );
-  -webkit-mask:
-    linear-gradient(black 0 0) content-box,
-    linear-gradient(black 0 0);
-  -webkit-mask-composite: xor;
-  mask:
-    linear-gradient(black 0 0) content-box exclude,
-    linear-gradient(black 0 0);
-  transition: background 0.3s ease;
-}
-html[data-depth3d] .hud-panel--quiet::before {
-  opacity: 0.55;
-}
-/* the glass catches the light under the rim */
+html[data-depth3d] .hud-panel::before,
 html[data-depth3d] .hud-panel::after {
-  background: radial-gradient(
-    90% 40% at 50% 0%,
-    color-mix(in oklab, var(--primary) 9%, transparent),
-    transparent 70%
-  );
-  mix-blend-mode: normal;
+  display: none;
 }
 
-/* headers: no rule under the title — a lit dot instead */
+/* the mist: darkens the world under the content (ModuleTransitionLayer) */
+.space-mist {
+  display: none;
+}
+html[data-backdrop3d] .space-mist {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      ellipse 85% 70% at 50% 62%,
+      color-mix(in oklab, var(--background) 62%, transparent),
+      color-mix(in oklab, var(--background) 18%, transparent) 70%,
+      transparent 100%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--background) 70%, transparent) 0,
+      transparent 140px
+    );
+}
+
+/* section titles: glowing eyebrows with a lit dot, no rule */
 html[data-depth3d] .hud-panel .hud-panel-head {
   border-bottom-color: transparent;
   border-image: none;
   background: none;
+  padding-inline: 0;
 }
 html[data-depth3d] .hud-panel-title {
   display: inline-flex;
   align-items: center;
-  gap: 0.6em;
+  gap: 0.7em;
+  font-size: 11px;
+  letter-spacing: 0.42em;
+  color: var(--primary);
+  text-shadow: 0 0 12px color-mix(in oklab, var(--primary) 70%, transparent);
 }
 html[data-depth3d] .hud-panel-title::before {
   content: "";
@@ -1170,115 +1145,9 @@ html[data-depth3d] .hud-panel-title::before {
     0 0 14px color-mix(in oklab, var(--primary) 60%, transparent);
 }
 
-/* fields: recessed into the glass, glowing from inside on focus */
+/* boxes framed in cyan inside the content: just space now */
 html[data-depth3d]
   main
-  :is(
-    input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]),
-    textarea,
-    select,
-    button[role="combobox"]
-  ):not([class*="bg-transparent"], [class*="border-0"], [class*="border-none"]) {
-  border-color: color-mix(in oklab, var(--primary) 9%, transparent);
-  background-color: color-mix(in oklab, var(--background) 72%, transparent);
-  box-shadow:
-    inset 0 2px 6px oklch(0 0 0 / 0.55),
-    inset 0 -1px 0 color-mix(in oklab, var(--primary) 10%, transparent);
-  transition:
-    box-shadow 0.2s ease,
-    border-color 0.2s ease;
-}
-html[data-depth3d]
-  main
-  :is(input, textarea, select, button[role="combobox"]):not(
-    [class*="bg-transparent"],
-    [class*="border-0"],
-    [class*="border-none"]
-  ):focus-visible {
-  outline: none;
-  border-color: color-mix(in oklab, var(--primary) 45%, transparent);
-  box-shadow:
-    inset 0 2px 6px oklch(0 0 0 / 0.5),
-    inset 0 0 18px -6px color-mix(in oklab, var(--primary) 70%, transparent),
-    0 0 16px -8px var(--primary);
-}
-
-/* bordered buttons → glass keys (filled primary buttons keep their fill) */
-html[data-depth3d]
-  main
-  :is(button, a)[class*="border-primary"]:not(
-    [role="tab"],
-    [role="combobox"],
-    [class~="bg-primary"],
-    [class*="rounded-full"]
-  ) {
-  border-color: color-mix(in oklab, var(--primary) 16%, transparent);
-  background-image: linear-gradient(
-    180deg,
-    color-mix(in oklab, var(--primary) 15%, transparent),
-    color-mix(in oklab, var(--primary) 4%, transparent)
-  );
-  border-radius: 0.6rem;
-  box-shadow:
-    inset 0 1px 0 color-mix(in oklab, var(--primary) 32%, transparent),
-    0 8px 20px -14px var(--primary);
-  transition:
-    box-shadow 0.2s ease,
-    background-image 0.2s ease,
-    border-color 0.2s ease;
-}
-html[data-depth3d]
-  main
-  :is(button, a)[class*="border-primary"]:not(
-    [role="tab"],
-    [role="combobox"],
-    [class~="bg-primary"],
-    [class*="rounded-full"]
-  ):hover:not(:disabled) {
-  border-color: color-mix(in oklab, var(--primary) 30%, transparent);
-  box-shadow:
-    inset 0 1px 0 color-mix(in oklab, var(--primary) 45%, transparent),
-    0 10px 26px -12px var(--primary);
-}
-/* the one strong action: filled primary glows instead of sitting flat */
-html[data-depth3d] main :is(button, a)[class~="bg-primary"]:not([role="tab"]) {
-  box-shadow:
-    inset 0 1px 0 color-mix(in oklab, white 40%, transparent),
-    0 0 22px -6px var(--primary);
-}
-
-/* tab rows: a recessed track and a light puck on the active tab */
-html[data-depth3d] main [role="tablist"] {
-  border-color: transparent;
-  background-color: color-mix(in oklab, var(--background) 60%, transparent);
-  box-shadow: inset 0 2px 8px oklch(0 0 0 / 0.55);
-}
-html[data-depth3d] main [role="tab"] {
-  transition:
-    background 0.25s ease,
-    box-shadow 0.25s ease,
-    color 0.25s ease;
-}
-html[data-depth3d] main [role="tab"]:is([aria-selected="true"], [data-state="active"]) {
-  background: radial-gradient(
-    120% 140% at 50% 0%,
-    color-mix(in oklab, var(--primary) 88%, white),
-    var(--primary) 75%
-  );
-  color: var(--primary-foreground);
-  box-shadow:
-    0 0 18px -4px var(--primary),
-    inset 0 1px 0 color-mix(in oklab, white 45%, transparent);
-}
-
-/* Hologram, inside the panels: the modules' own cyan frames turn into light
-   too. Matched by the utilities they already carry, so the classic look (Town,
-   no 3D) is untouched and new modules get it without extra classes. Only cyan
-   (border-primary*) frames change; status colours (destructive, warning,
-   success accents) keep their lines. */
-html[data-depth3d]
-  main
-  .hud-panel
   :is(
     div,
     section,
@@ -1298,15 +1167,12 @@ html[data-depth3d]
     [role="tablist"]
   ) {
   border-color: transparent;
-  background-color: color-mix(in oklab, var(--primary) 5%, transparent);
-  box-shadow:
-    inset 0 1px 0 color-mix(in oklab, var(--primary) 22%, transparent),
-    0 12px 26px -20px oklch(0 0 0 / 0.9);
+  background-color: transparent;
+  box-shadow: none;
 }
-/* one-sided rules → a line of light fading out at both ends */
+/* one-sided cyan rules → a line of light fading out at both ends */
 html[data-depth3d]
   main
-  .hud-panel
   :is([class~="border-b"], [class~="border-t"]):not(
     [class~="border"],
     .hud-panel-head,
@@ -1318,18 +1184,17 @@ html[data-depth3d]
   border-image: linear-gradient(
       90deg,
       transparent,
-      color-mix(in oklab, var(--primary) 30%, transparent) 22%,
-      color-mix(in oklab, var(--primary) 30%, transparent) 78%,
+      color-mix(in oklab, var(--primary) 26%, transparent) 25%,
+      color-mix(in oklab, var(--primary) 26%, transparent) 75%,
       transparent
     )
     1;
 }
 html[data-depth3d]
   main
-  .hud-panel
   :is([class~="border-l"], [class~="border-l-2"], [class~="border-r"]):not(
     [class~="border"],
-    .hud-panel-head,
+    .holo-stat,
     button,
     input,
     textarea,
@@ -1338,38 +1203,184 @@ html[data-depth3d]
   border-image: linear-gradient(
       180deg,
       transparent,
-      color-mix(in oklab, var(--primary) 42%, transparent) 25%,
-      color-mix(in oklab, var(--primary) 42%, transparent) 75%,
+      color-mix(in oklab, var(--primary) 40%, transparent) 25%,
+      color-mix(in oklab, var(--primary) 40%, transparent) 75%,
       transparent
     )
     1;
 }
-/* toggle rows (aria-pressed buttons in a group): a recessed track and a puck */
-html[data-depth3d] main [role="group"]:has(> button[aria-pressed]) {
-  gap: 2px;
-  padding: 2px;
-  border-color: transparent;
-  border-radius: 0.7rem;
-  background-color: color-mix(in oklab, var(--background) 60%, transparent);
-  box-shadow: inset 0 2px 8px oklch(0 0 0 / 0.55);
-}
-html[data-depth3d] main [role="group"] > button[aria-pressed] {
-  border-radius: 0.55rem;
-  transition:
-    background 0.25s ease,
-    box-shadow 0.25s ease,
-    color 0.25s ease;
-}
-html[data-depth3d] main [role="group"] > button[aria-pressed="true"] {
-  background: radial-gradient(
-    120% 140% at 50% 0%,
-    color-mix(in oklab, var(--primary) 88%, white),
-    var(--primary) 75%
+
+/* holographic numbers (StatTile): big, glowing, a beam under each, a little
+   parallax with the pointer at their own depth */
+html[data-depth3d] .holo-stat {
+  --d: 1;
+  border-left-color: transparent !important;
+  border-image: none !important;
+  padding-left: 0 !important;
+  transform: translate3d(
+    calc(var(--mx, 0) * var(--d) * 10px),
+    calc(var(--my, 0) * var(--d) * 6px),
+    0
   );
-  color: var(--primary-foreground);
+  transition: transform 0.3s ease-out;
+}
+html[data-depth3d] .holo-stat:nth-child(2) {
+  --d: 1.4;
+}
+html[data-depth3d] .holo-stat:nth-child(3) {
+  --d: 0.7;
+}
+html[data-depth3d] .holo-stat:nth-child(4) {
+  --d: 1.15;
+}
+html[data-depth3d] .holo-stat-value {
+  font-size: clamp(30px, 3.6vw, 48px);
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: 0.03em;
+  text-shadow: 0 0 18px color-mix(in oklab, currentColor 45%, transparent);
+}
+html[data-depth3d] .holo-stat::after {
+  content: "";
+  display: block;
+  height: 1px;
+  margin-top: 12px;
+  background: linear-gradient(90deg, var(--holo-beam, var(--primary)), transparent 70%);
+  opacity: 0.55;
+}
+
+/* fields: on a faint line of light, glowing from inside on focus */
+html[data-depth3d]
+  main
+  :is(
+    input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]),
+    textarea,
+    select,
+    button[role="combobox"]
+  ):not([class*="bg-transparent"], [class*="border-0"], [class*="border-none"]) {
+  border-color: transparent;
+  background-color: color-mix(in oklab, var(--background) 45%, transparent);
+  box-shadow: inset 0 -1px 0 color-mix(in oklab, var(--primary) 45%, transparent);
+  transition: box-shadow 0.2s ease;
+}
+html[data-depth3d]
+  main
+  :is(input, textarea, select, button[role="combobox"]):not(
+    [class*="bg-transparent"],
+    [class*="border-0"],
+    [class*="border-none"]
+  ):focus-visible {
+  outline: none;
   box-shadow:
-    0 0 16px -4px var(--primary),
-    inset 0 1px 0 color-mix(in oklab, white 45%, transparent);
+    inset 0 -2px 0 var(--primary),
+    0 10px 24px -14px var(--primary);
+}
+
+/* bordered buttons → light text over a glowing underline */
+html[data-depth3d]
+  main
+  :is(button, a)[class*="border-primary"]:not(
+    [role="tab"],
+    [role="combobox"],
+    [class~="bg-primary"],
+    [class*="rounded-full"]
+  ) {
+  border-color: transparent;
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  color: var(--primary);
+  text-shadow: 0 0 10px color-mix(in oklab, var(--primary) 55%, transparent);
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    var(--primary) 30%,
+    var(--primary) 70%,
+    transparent
+  );
+  background-size: 100% 1px;
+  background-position: bottom;
+  background-repeat: no-repeat;
+  transition:
+    color 0.2s ease,
+    text-shadow 0.2s ease;
+}
+html[data-depth3d]
+  main
+  :is(button, a)[class*="border-primary"]:not(
+    [role="tab"],
+    [role="combobox"],
+    [class~="bg-primary"],
+    [class*="rounded-full"]
+  ):hover:not(:disabled) {
+  color: var(--foreground);
+  text-shadow: 0 0 14px var(--primary);
+}
+/* the one strong action: filled primary glows instead of sitting flat */
+html[data-depth3d] main :is(button, a)[class~="bg-primary"]:not([role="tab"]) {
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, white 40%, transparent),
+    0 0 22px -6px var(--primary);
+}
+
+/* tab rows and toggle rows: text, the active one lit with a glowing underline */
+html[data-depth3d] main :is([role="tablist"], [role="group"]:has(> button[aria-pressed])) {
+  gap: 4px;
+  border-color: transparent;
+  background: none;
+  box-shadow: none;
+}
+html[data-depth3d] main :is([role="tab"], [role="group"] > button[aria-pressed]) {
+  position: relative;
+  background: none;
+  box-shadow: none;
+  color: var(--muted-foreground);
+  transition:
+    color 0.25s ease,
+    text-shadow 0.25s ease;
+}
+html[data-depth3d] main :is([role="tab"], [role="group"] > button[aria-pressed])::after {
+  content: "";
+  position: absolute;
+  left: 20%;
+  right: 20%;
+  bottom: 1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--primary);
+  box-shadow:
+    0 0 10px var(--primary),
+    0 0 22px var(--primary);
+  opacity: 0;
+  transform: scaleX(0.3);
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+}
+html[data-depth3d]
+  main
+  :is(
+    [role="tab"]:is([aria-selected="true"], [data-state="active"]),
+    [role="group"] > button[aria-pressed="true"]
+  ) {
+  background: none;
+  color: var(--foreground);
+  text-shadow: 0 0 12px color-mix(in oklab, var(--primary) 80%, transparent);
+}
+html[data-depth3d]
+  main
+  :is(
+    [role="tab"]:is([aria-selected="true"], [data-state="active"]),
+    [role="group"] > button[aria-pressed="true"]
+  )::after {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-depth3d] .holo-stat {
+    transform: none;
+    transition: none;
+  }
 }
 
 /* MiniArcCore — the mobile dock's menu button: the Arc Core in miniature, no

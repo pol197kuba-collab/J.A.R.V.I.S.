@@ -35,12 +35,15 @@ export function StatTile({
   hint?: string;
 }) {
   return (
-    <div className="min-w-0 border-l border-primary/15 pl-3 first:border-l-0 first:pl-0">
+    <div
+      className="holo-stat min-w-0 border-l border-primary/15 pl-3 first:border-l-0 first:pl-0"
+      style={color ? ({ "--holo-beam": color } as React.CSSProperties) : undefined}
+    >
       <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
         {label}
       </p>
       <p
-        className="font-display mt-1 truncate text-2xl font-bold tracking-wide @max-[420px]:text-xl"
+        className="holo-stat-value font-display mt-1 truncate text-2xl font-bold tracking-wide @max-[420px]:text-xl"
         style={{ color: color ?? "var(--foreground)" }}
       >
         {value}

@@ -113,33 +113,52 @@ export const ModuleTransitionLayer = forwardRef<ModuleTransitionHandle, { enable
       };
       // the panels' rim light follows the tilt too (html --tilt-x); quantized and
       // throttled, because a custom property on <html> restyles the whole page
+      // (and the floating numbers' parallax: --mx / --my)
       let lastTiltCss = "";
       let lastTiltAt = 0;
-      const tiltCss = (x: number) => {
-        const v = (Math.round(x * 20) / 20).toFixed(2);
+      const tiltCss = (x: number, y: number) => {
+        const vx = (Math.round(x * 20) / 20).toFixed(2);
+        const vy = (Math.round(y * 20) / 20).toFixed(2);
         const now = performance.now();
-        if (v === lastTiltCss || now - lastTiltAt < 100) return;
-        lastTiltCss = v;
+        if (`${vx}|${vy}` === lastTiltCss || now - lastTiltAt < 100) return;
+        lastTiltCss = `${vx}|${vy}`;
         lastTiltAt = now;
-        document.documentElement.style.setProperty("--tilt-x", v);
+        const st = document.documentElement.style;
+        st.setProperty("--tilt-x", vx);
+        st.setProperty("--mx", vx);
+        st.setProperty("--my", vy);
       };
       const onTilt = (e: DeviceOrientationEvent) => {
         const t = tiltFromOrientation(e.beta, e.gamma);
         sceneRef.current?.backdrop.tilt(t.x, t.y);
-        tiltCss(t.x);
+        tiltCss(t.x, t.y);
       };
       const onPointer = (e: PointerEvent) => {
         if (e.pointerType !== "mouse") return;
         const x = (e.clientX / window.innerWidth) * 2 - 1;
-        sceneRef.current?.backdrop.tilt(x, (e.clientY / window.innerHeight) * 2 - 1);
-        tiltCss(x);
+        const y = (e.clientY / window.innerHeight) * 2 - 1;
+        sceneRef.current?.backdrop.tilt(x, y);
+        tiltCss(x, y);
       };
+      // where the content area is (desktop navigation takes the left edge)
+      const main = document.querySelector("main");
+      const ro =
+        main && typeof ResizeObserver !== "undefined"
+          ? new ResizeObserver(() => {
+              const r = main.getBoundingClientRect();
+              sceneRef.current?.backdrop.content({ left: r.left, width: r.width });
+            })
+          : null;
+      if (main) ro?.observe(main);
       document.addEventListener("scroll", onScroll, { capture: true, passive: true });
       window.addEventListener("deviceorientation", onTilt, { passive: true });
       window.addEventListener("pointermove", onPointer, { passive: true });
       return () => {
         document.removeEventListener("scroll", onScroll, { capture: true });
-        document.documentElement.style.removeProperty("--tilt-x");
+        ro?.disconnect();
+        ["--tilt-x", "--mx", "--my"].forEach((k) =>
+          document.documentElement.style.removeProperty(k),
+        );
         window.removeEventListener("deviceorientation", onTilt);
         window.removeEventListener("pointermove", onPointer);
       };
@@ -182,6 +201,8 @@ export const ModuleTransitionLayer = forwardRef<ModuleTransitionHandle, { enable
     if (!enabled) return null;
     return (
       <>
+        {/* darkens the 3D world under the module content (styles.css: .space-mist) */}
+        <div aria-hidden="true" className="space-mist" />
         <canvas
           ref={canvasRef}
           aria-hidden="true"
