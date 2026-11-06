@@ -16,6 +16,7 @@ import type { GeminiContent } from "@/lib/agents/providers/types";
 import { dedupeNews, parseRss, type RssItem } from "@/lib/rss/parse";
 import type { MarketAsset } from "./assets";
 import {
+  balanceByFeed,
   MARKET_FEEDS,
   heuristicVerdict,
   type MarketImpact,
@@ -266,9 +267,12 @@ export async function ingestMarketNews(
     }),
   );
 
-  const deduped = dedupeNews(perFeed.flat())
-    .slice(0, limit)
-    .filter((i) => !opts.skipGuids?.has(i.guid));
+  // Już ocenione odpadają PRZED podziałem limitu — inaczej zajmowałyby
+  // miejsca, które należą się nowym nagłówkom.
+  const deduped = balanceByFeed(
+    dedupeNews(perFeed.flat()).filter((i) => !opts.skipGuids?.has(i.guid)),
+    limit,
+  );
   if (deduped.length === 0) return { items: [], errors };
 
   const verdicts = await classifyMarketNews(
