@@ -194,7 +194,10 @@ export function CockpitMenu({ open, onClose }: { open: boolean; onClose: () => v
                     item.url === pathname && "cur",
                     !cockpitMatches(item, query) && "dim",
                   )}
-                  onPointerEnter={() => setSel([c, r])}
+                  // only a real pointer move selects: rows that slide under a resting
+                  // cursor (the deck animating in, leaning) must not steal the
+                  // selection the search just made
+                  onPointerMove={() => (sel?.[0] !== c || sel?.[1] !== r) && setSel([c, r])}
                   onClick={() => pick(c, r)}
                 >
                   <b>{item.title}</b>
