@@ -19,6 +19,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { RibbonChart3D } from "@/components/jarvis/charts3d/RibbonChart3D";
+import { useRouteTransition } from "@/components/jarvis/TransitionContext";
 import { indexTo100 } from "@/lib/fuel/analytics";
 import type { FuelSeries, MarketOverlay } from "@/lib/fuel/fuel.functions";
 import { EmptyState, SeriesTooltip } from "./chrome";
@@ -29,6 +31,8 @@ export type ChartMode = "pln" | "index" | "spread";
 const BRENT_KEY = "brent";
 const BRENT_COLOR = "var(--muted-foreground)";
 const BRENT_LABEL = "Brent w PLN";
+/** Najwięcej punktów na wstęgę 3D — „MAX” (od 2004) to kilka tysięcy dni. */
+const RIBBON_MAX_POINTS = 600;
 
 type Row = { label: string } & Record<string, number | string | null>;
 
@@ -120,8 +124,75 @@ export function FuelPriceChart({
     return { rows: builtRows, keys: [...transformed.keys()] };
   }, [visible, showBrent, brentByDate, mode]);
 
+  const { can3d } = useRouteTransition();
+  // 3D (jak w /rynki): te same serie po transformacji trybu, przerzedzone
+  // równym krokiem — kształt zostaje, wstęga nie dźwiga tysięcy punktów.
+  const ribbon = useMemo(() => {
+    const step = Math.max(1, Math.ceil(rows.length / RIBBON_MAX_POINTS));
+    const sampled = rows.filter((_, i) => i % step === 0 || i === rows.length - 1);
+    const byId = new Map(visible.map((s) => [`p${s.productId}`, s]));
+    return {
+      sampled,
+      data: {
+        rows: sampled.length,
+        stacked: keys.length > 1,
+        dateLabel: (i: number) => String(sampled[i]?.label ?? ""),
+        formatY: (v: number) =>
+          mode === "index" ? v.toFixed(0) : v.toLocaleString("pl-PL", { maximumFractionDigits: 0 }),
+        series: keys.map((key) => {
+          const points: Array<{ i: number; v: number }> = [];
+          sampled.forEach((r, i) => {
+            const v = r[key];
+            if (typeof v === "number") points.push({ i, v });
+          });
+          return { key, color: byId.get(key)?.colorToken ?? BRENT_COLOR, points };
+        }),
+      },
+      labelOf: (key: string) => byId.get(key)?.label ?? BRENT_LABEL,
+      colorOf: (key: string) => byId.get(key)?.colorToken ?? BRENT_COLOR,
+    };
+  }, [rows, keys, visible, mode]);
+
   if (rows.length === 0) {
     return <EmptyState>Brak danych w wybranym zakresie</EmptyState>;
+  }
+
+  if (can3d) {
+    const unit3d = mode === "index" ? "pkt" : "PLN/m³";
+    return (
+      <RibbonChart3D
+        className="h-[440px] w-full @max-[520px]:h-[320px]"
+        data={ribbon.data}
+        fallback={null}
+        tooltip={(i) => {
+          const row = ribbon.sampled[i];
+          if (!row) return null;
+          return (
+            <div className="font-display text-center text-[10px] uppercase tracking-[0.16em] text-foreground [text-shadow:0_0_10px_black,0_0_14px_var(--reactor)]">
+              {keys.map((key) => {
+                const v = row[key];
+                if (typeof v !== "number") return null;
+                return (
+                  <b
+                    key={key}
+                    className="block text-[15px] font-normal tracking-[0.06em]"
+                    style={{ color: ribbon.colorOf(key) }}
+                  >
+                    {mode === "index"
+                      ? v.toFixed(1)
+                      : v.toLocaleString("pl-PL", { maximumFractionDigits: 0 })}{" "}
+                    <span className="text-[9px] text-muted-foreground">
+                      {unit3d} · {ribbon.labelOf(key)}
+                    </span>
+                  </b>
+                );
+              })}
+              {new Date(`${String(row.date)}T00:00:00`).toLocaleDateString("pl-PL")}
+            </div>
+          );
+        }}
+      />
+    );
   }
 
   const unit = mode === "index" ? "" : "PLN/m³";
