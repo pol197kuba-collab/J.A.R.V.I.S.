@@ -51,6 +51,9 @@ export const ModuleTransitionLayer = forwardRef<ModuleTransitionHandle, { enable
     const nameRef = useRef<HTMLElement>(null);
     const sceneRef = useRef<TransitionScene | null>(null);
     const [loaded, setLoaded] = useState(false);
+    // the desktop menu is open: the world (with the core in the middle) shows
+    // even on routes that have no backdrop of their own (/jarvis, /mozg, /town)
+    const [menuOpen, setMenuOpen] = useState(false);
     const queryClient = useQueryClient();
     const pathname = useRouterState({ select: (r) => r.location.pathname });
 
@@ -91,12 +94,12 @@ export const ModuleTransitionLayer = forwardRef<ModuleTransitionHandle, { enable
       const root = document.documentElement;
       root.toggleAttribute("data-depth3d", enabled);
       const scene = sceneRef.current;
-      const on = enabled && loaded && hasBackdrop(pathname);
+      const on = enabled && loaded && (hasBackdrop(pathname) || menuOpen);
       root.toggleAttribute("data-backdrop3d", on);
       if (!scene) return;
       scene.backdrop.set({ enabled: on, seed: backdropSeed(pathname) });
       scene.backdrop.scroll(0, window.innerHeight); // a new module starts at the top
-    }, [enabled, loaded, pathname]);
+    }, [enabled, loaded, pathname, menuOpen]);
     useEffect(
       () => () => {
         document.documentElement.removeAttribute("data-depth3d");
@@ -171,7 +174,10 @@ export const ModuleTransitionLayer = forwardRef<ModuleTransitionHandle, { enable
       () => ({
         ready: () => !!sceneRef.current && !sceneRef.current.playing,
         menu: () => sceneRef.current?.menu ?? null,
-        focus: (on) => sceneRef.current?.backdrop.focus(on),
+        focus: (on) => {
+          sceneRef.current?.backdrop.focus(on);
+          setMenuOpen(on);
+        },
         play({ kind, from, to, durationMs, coverStart, onSwap, onDone }) {
           const scene = sceneRef.current;
           if (!scene || scene.playing) return false;

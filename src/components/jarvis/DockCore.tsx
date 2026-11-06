@@ -21,10 +21,14 @@ import type { MiniCore } from "./module-transition/createMiniCore";
 export function DockCore({
   state,
   charging,
+  size = MINI_CORE_BUTTON_PX,
 }: {
   state: "idle" | "busy" | "error";
   charging: boolean;
+  /** Button size (px); the canvas is a little larger so the glow never clips. */
+  size?: number;
 }) {
+  const canvasPx = Math.round((size * MINI_CORE_CANVAS_PX) / MINI_CORE_BUTTON_PX);
   const { can3d } = useRouteTransition();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
@@ -66,15 +70,15 @@ export function DockCore({
     <span
       aria-hidden
       className="pointer-events-none relative block"
-      style={{ width: MINI_CORE_BUTTON_PX, height: MINI_CORE_BUTTON_PX }}
+      style={{ width: size, height: size }}
     >
       {can3d && (
         <canvas
           ref={canvasRef}
           className="absolute top-1/2 left-1/2 block -translate-x-1/2 -translate-y-1/2 transition-opacity duration-300"
           style={{
-            width: MINI_CORE_CANVAS_PX,
-            height: MINI_CORE_CANVAS_PX,
+            width: canvasPx,
+            height: canvasPx,
             mixBlendMode: "screen",
             // the corona fades out in a circle instead of ending at the canvas edge
             maskImage: "radial-gradient(circle closest-side, black 74%, transparent 100%)",
@@ -90,7 +94,7 @@ export function DockCore({
       )}
       {!ready && (
         <span className="absolute inset-0 flex items-center justify-center">
-          <MiniArcCore size={MINI_CORE_BUTTON_PX} state={state} charging={charging} />
+          <MiniArcCore size={size} state={state} charging={charging} />
         </span>
       )}
     </span>
