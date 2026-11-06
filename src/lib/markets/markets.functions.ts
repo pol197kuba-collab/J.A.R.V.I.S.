@@ -8,6 +8,7 @@
 //
 // Ten sam podział co w module paliwowym (fuel.functions.ts + ingest.server.ts).
 import type { LessonProgress } from "./lessons";
+import type { BrainPrediction, Divergence, LessonSpan } from "./brain";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
@@ -569,6 +570,157 @@ export const getPredictionScoreboard = createServerFn({ method: "GET" })
   });
 
 /** Katalog instrumentów dla wyszukiwarki w UI — bez odpytywania sieci. */
+// ------------------------------------------------------------ mózg AI ----
+
+export type AiBrain = {
+  /** Horyzont prognoz, z których pochodzą dzisiejsze wnioski (2, a bez nich 7). */
+  horizonDays: number;
+  windowDays: number;
+  /** Dzisiejsze wnioski — dokładnie te, które dostaje „AI z wnioskami”. */
+  lessons: Array<{
+    kind: "direction" | "base_rate" | "pnl";
+    textPl: string;
+    cases: number;
+    weeks: number;
+  }>;
+  progress: LessonProgress;
+  /** Oś czasu każdego wniosku (z market_predictions.lessons), aktywne najpierw. */
+  timeline: LessonSpan[];
+  /** Z czego się uczy: rozliczone prognozy w oknie wniosków. */
+  funnel: { total: number; bySource: Record<string, number>; byClass: Record<string, number> };
+  /** Wnioski w akcji: gdzie „AI z wnioskami” zdecydowało inaczej niż „AI”. */
+  divergences: Divergence[];
+  divergenceScore: { settled: number; learnedRight: number; plainRight: number };
+};
+
+/**
+ * Podsumowanie „Mózg AI” w /rynki: czego „AI z wnioskami” się nauczyło, od
+ * kiedy, z czego i co to zmieniło. Same odczyty z bazy, zero tokenów.
+ */
+export const getAiBrain = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<AiBrain> => {
+    const { supabase, userId } = context;
+    const { loadLessonInputs, HORIZON_DAYS, CONTROL_HORIZON } = await import("./ingest.server");
+    const { deriveLessons, lessonProgress, LESSON_WINDOW_DAYS } = await import("./lessons");
+    const { divergenceScore, divergences, learningFunnel, lessonTimeline } =
+      await import("./brain");
+
+    // dzisiejsze wnioski — ta sama ścieżka co w typerze (buildOutlook)
+    let horizonDays = HORIZON_DAYS;
+    let inputs = await loadLessonInputs(supabase, userId, HORIZON_DAYS);
+    let lessons = deriveLessons(inputs, Date.now(), { horizonDays });
+    if (lessons.length === 0) {
+      const control = await loadLessonInputs(supabase, userId, CONTROL_HORIZON);
+      const fromControl = deriveLessons(control, Date.now(), { horizonDays: CONTROL_HORIZON });
+      if (fromControl.length > 0) {
+        horizonDays = CONTROL_HORIZON;
+        inputs = control;
+        lessons = fromControl;
+      }
+    }
+
+    const since = new Date(Date.now() - LESSON_WINDOW_DAYS * 86_400_000).toISOString();
+    const history = await fetchAllPages<{ made_on: string | null; lessons: unknown }>((from, to) =>
+      supabase
+        .from("market_predictions")
+        .select("made_on, lessons, id")
+        .eq("owner_id", userId)
+        .eq("source", "ai_learned")
+        .not("lessons", "is", null)
+        .gte("made_at", since)
+        .order("made_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    const today = new Date().toISOString().slice(0, 10);
+    const timeline = lessonTimeline(
+      history.flatMap((r) =>
+        r.made_on && Array.isArray(r.lessons)
+          ? [
+              {
+                madeOn: r.made_on,
+                lessons: r.lessons.filter((x): x is string => typeof x === "string"),
+              },
+            ]
+          : [],
+      ),
+      lessons.map((l) => l.textPl),
+      today,
+    );
+
+    const settled = await fetchAllPages<{ source: string; symbol: string }>((from, to) =>
+      supabase
+        .from("market_predictions")
+        .select("source, symbol, id")
+        .eq("owner_id", userId)
+        .eq("stale", false)
+        .not("outcome", "is", null)
+        .gte("made_at", since)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+
+    const recentSince = new Date(Date.now() - 21 * 86_400_000).toISOString();
+    const pairs = await fetchAllPages<{
+      symbol: string;
+      made_on: string | null;
+      source: string;
+      direction: string;
+      confidence: number;
+      rationale_pl: string | null;
+      outcome: string | null;
+      actual_change_pct: number | null;
+    }>((from, to) =>
+      supabase
+        .from("market_predictions")
+        .select(
+          "symbol, made_on, source, direction, confidence, rationale_pl, outcome, actual_change_pct, id",
+        )
+        .eq("owner_id", userId)
+        .eq("stale", false)
+        .eq("horizon_days", HORIZON_DAYS)
+        .in("source", ["ai", "ai_learned"])
+        .gte("made_at", recentSince)
+        .order("made_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    const brainRows = pairs.flatMap((r): BrainPrediction[] =>
+      r.made_on
+        ? [
+            {
+              symbol: r.symbol,
+              madeOn: r.made_on,
+              source: r.source,
+              direction: r.direction,
+              confidence: r.confidence,
+              rationalePl: r.rationale_pl,
+              outcome: r.outcome === "hit" || r.outcome === "miss" ? r.outcome : null,
+              actualChangePct: r.actual_change_pct === null ? null : Number(r.actual_change_pct),
+            },
+          ]
+        : [],
+    );
+    const allDivergences = divergences(brainRows, 1000);
+
+    return {
+      horizonDays,
+      windowDays: LESSON_WINDOW_DAYS,
+      lessons: lessons.map((l) => ({
+        kind: l.kind,
+        textPl: l.textPl,
+        cases: l.cases,
+        weeks: l.weeks,
+      })),
+      progress: lessonProgress(inputs),
+      timeline,
+      funnel: learningFunnel(settled),
+      divergences: allDivergences.slice(0, 8),
+      divergenceScore: divergenceScore(allDivergences),
+    };
+  });
+
 /** Ostatnia cena i zmiana dnia każdego instrumentu z katalogu (lista obok wykresu). */
 export type CatalogQuote = { last: number; change1d: number | null; date: string };
 

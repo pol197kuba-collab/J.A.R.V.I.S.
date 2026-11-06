@@ -10,36 +10,6 @@ import type { ScoreRow } from "@/lib/markets/scoreboard";
 import { REGIME_LABEL_PL } from "@/lib/markets/regime";
 import { Fold } from "./Fold";
 
-/** Ile wniosków widać od razu — reszta pod „Wszystkie wnioski”. */
-const LESSONS_VISIBLE = 3;
-
-type BoardLesson = PredictionScoreboard["lessons"][number];
-
-const lessonBorder = (lesson: BoardLesson): string =>
-  lesson.kind === "pnl"
-    ? lesson.rate < 0
-      ? "color-mix(in oklab, var(--destructive) 70%, transparent)"
-      : "color-mix(in oklab, var(--success) 70%, transparent)"
-    : lesson.kind === "direction"
-      ? "color-mix(in oklab, var(--warning) 70%, transparent)"
-      : "color-mix(in oklab, var(--primary) 50%, transparent)";
-
-function LessonList({ lessons }: { lessons: BoardLesson[] }) {
-  return (
-    <ul className="mt-1.5 space-y-1.5">
-      {lessons.map((lesson) => (
-        <li
-          key={lesson.textPl}
-          className="min-w-0 break-words border-l-2 pl-2 text-[11px] leading-snug text-foreground/85"
-          style={{ borderColor: lessonBorder(lesson) }}
-        >
-          {lesson.textPl}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 // Klucz = źródło·horyzont (scoreboard.sourceKey) — 2 dni to gra bieżąca,
 // 7 dni to kontrola i historia sprzed zmiany horyzontu.
 const SOURCE_LABEL: Record<string, string> = {
@@ -171,23 +141,10 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
           </div>
         </div>
 
-        <div>
-          <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
-            Czego się nauczyłem
-          </p>
-          {board.lessons.length > 0 ? (
-            <LessonList lessons={board.lessons.slice(0, LESSONS_VISIBLE)} />
-          ) : (
-            <LessonProgressNote progress={board.lessonProgress} />
-          )}
-        </div>
+        <p className="font-mono text-[10px] text-muted-foreground">
+          Wnioski, z których korzysta „AI z wnioskami”: panel MÓZG AI powyżej.
+        </p>
       </div>
-
-      {board.lessons.length > LESSONS_VISIBLE && (
-        <Fold title="Wszystkie wnioski" hint={`+${board.lessons.length - LESSONS_VISIBLE}`}>
-          <LessonList lessons={board.lessons.slice(LESSONS_VISIBLE)} />
-        </Fold>
-      )}
 
       <Fold title="Szczegóły skuteczności" hint="kierunek · sytuacja · instrument">
         <div className="space-y-4">
@@ -253,31 +210,5 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
         </PanelHint>
       </Fold>
     </>
-  );
-}
-
-/** Why there's no lesson yet, in numbers — so an empty list doesn't look broken. */
-function LessonProgressNote({ progress }: { progress?: PredictionScoreboard["lessonProgress"] }) {
-  const p = progress;
-  return (
-    <div className="mt-1.5 space-y-1 font-mono text-[10px] leading-snug text-muted-foreground/80">
-      <p>
-        Wniosek wymaga co najmniej 12 rozliczonych przypadków z dwóch różnych tygodni i trafności
-        wyraźnie (o 10 pp) innej niż losowa. Do tego czasu „Model AI + wnioski” nie prognozuje.
-      </p>
-      {p && p.settled === 0 && <p>Na razie nie ma rozliczonych prognoz z rozpoznanym reżimem.</p>}
-      {p?.closest && (
-        <p>
-          Najbliżej: „{p.closest.scope}”, prognozy {p.closest.direction} — {p.closest.cases}/12
-          przypadków, {Math.min(p.closest.weeks, 2)}/2 tyg.
-        </p>
-      )}
-      {p && p.enoughButRandom > 0 && (
-        <p>
-          {p.enoughButRandom} {p.enoughButRandom === 1 ? "sytuacja ma" : "sytuacje mają"} już dość
-          przypadków, ale trafność nie odbiega od losowej — tu nie ma czego się nauczyć.
-        </p>
-      )}
-    </div>
   );
 }

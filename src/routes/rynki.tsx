@@ -26,6 +26,7 @@ import { MarketNewsPanel } from "@/components/jarvis/markets/MarketNewsPanel";
 import { OutlookPanel } from "@/components/jarvis/markets/OutlookPanel";
 import { AccuracyPanel } from "@/components/jarvis/markets/AccuracyPanel";
 import { AccuracySummary } from "@/components/jarvis/markets/AccuracySummary";
+import { AiBrainPanel } from "@/components/jarvis/markets/AiBrainPanel";
 import { FundPanel } from "@/components/jarvis/markets/FundPanel";
 import { Fold } from "@/components/jarvis/markets/Fold";
 import { InstrumentList } from "@/components/jarvis/markets/InstrumentList";
@@ -55,6 +56,7 @@ import {
   getMarketGrid,
   getMarketNews,
   getMarketOutlook,
+  getAiBrain,
   getPredictionScoreboard,
   removeFromWatchlist,
   type MarketSeries,
@@ -169,6 +171,15 @@ function MarketsPage() {
   const scoreboard = useQuery({
     queryKey: ["market-scoreboard"],
     queryFn: () => fetchScoreboard(),
+    refetchInterval: 30 * 60_000,
+    staleTime: 10 * 60_000,
+  });
+
+  // Mózg AI: czego „AI z wnioskami” się nauczyło — same odczyty z bazy.
+  const fetchBrain = useServerFn(getAiBrain);
+  const brain = useQuery({
+    queryKey: ["market-ai-brain"],
+    queryFn: () => fetchBrain(),
     refetchInterval: 30 * 60_000,
     staleTime: 10 * 60_000,
   });
@@ -531,13 +542,23 @@ function MarketsPage() {
         )}
       </HudPanel>
 
-      <HudPanel index={3} title="MARKET GRID // SKUTECZNOŚĆ" tone="quiet" className="min-w-0 p-5">
+      <HudPanel index={3} title="MARKET GRID // MÓZG AI" className="min-w-0 p-5">
+        {brain.isLoading ? (
+          <EmptyState>Czytam wnioski…</EmptyState>
+        ) : brain.data ? (
+          <AiBrainPanel brain={brain.data} board={scoreboard.data} fund={fund.data} />
+        ) : (
+          <EmptyState>Nie udało się wczytać wniosków</EmptyState>
+        )}
+      </HudPanel>
+
+      <HudPanel index={4} title="MARKET GRID // SKUTECZNOŚĆ" tone="quiet" className="min-w-0 p-5">
         {scoreboard.isLoading ? (
           <EmptyState>Rozliczanie prognoz…</EmptyState>
         ) : scoreboard.data ? (
           <>
             <AccuracySummary board={scoreboard.data} />
-            <Fold title="Wszystkie szczegóły i wnioski">
+            <Fold title="Wszystkie szczegóły">
               <AccuracyPanel board={scoreboard.data} />
             </Fold>
           </>
@@ -546,7 +567,7 @@ function MarketsPage() {
         )}
       </HudPanel>
 
-      <HudPanel index={4} title="MARKET GRID // SZCZEGÓŁY" tone="quiet" className="min-w-0 p-5">
+      <HudPanel index={5} title="MARKET GRID // SZCZEGÓŁY" tone="quiet" className="min-w-0 p-5">
         <Fold
           title={`Typer — prognozy na ${outlook.data?.horizonDays ?? 7} dni`}
           hint={outlook.data ? `${outlook.data.rows.length} instrumentów` : undefined}
