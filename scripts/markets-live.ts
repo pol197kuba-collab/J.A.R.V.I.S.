@@ -19,7 +19,8 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "../src/integrations/supabase/types";
 import { assetBySymbol, type MarketAsset } from "../src/lib/markets/assets";
-import { computeFund, persistFund } from "../src/lib/fund/fund.server";
+import { computeFund, loadFundSettings, persistFund } from "../src/lib/fund/fund.server";
+import { liveRunDue } from "../src/lib/fund/settings";
 import { fetchLivePrices } from "../src/lib/markets/liveQuotes.server";
 import { liveDecisions, type PlayerEvent } from "../src/lib/markets/live";
 import { askAlarm } from "../src/lib/markets/alarm.server";
@@ -107,8 +108,30 @@ async function main() {
     return;
   }
 
+  // ---------- 0. częstotliwość z ustawień funduszu ----------
+  // Cron biegnie co 15 min; rzadsze pilnowanie (albo wyłączone) = pomijamy
+  // przebiegi, bez zapisu do job_runs, żeby licznik „ostatni przebieg” był
+  // prawdziwy.
+  const settings = await loadFundSettings(db, ownerId);
+  const { data: lastRun } = await db
+    .from("job_runs")
+    .select("finished_at")
+    .eq("owner_id", ownerId)
+    .eq("workflow", "market-live.yml")
+    .order("finished_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!liveRunDue(lastRun?.finished_at ?? null, startedAt, settings.liveEveryMin)) {
+    notice(
+      settings.liveEveryMin === 0
+        ? "Pilnowanie na żywo wyłączone w ustawieniach funduszu."
+        : `Pilnowanie co ${settings.liveEveryMin} min — jeszcze nie teraz.`,
+    );
+    return;
+  }
+
   // ---------- 1. stan funduszu ----------
-  const run = await computeFund(db, ownerId);
+  const run = await computeFund(db, ownerId, undefined, settings);
   if (!run) {
     notice("Fundusz bez prognoz — nic do pilnowania.");
     await finish(0);
@@ -257,7 +280,7 @@ async function main() {
 
   // ---------- 5. zapis funduszu ----------
   if (written > 0) {
-    const fresh = await computeFund(db, ownerId);
+    const fresh = await computeFund(db, ownerId, undefined, settings);
     if (fresh) await persistFund(db, ownerId, fresh);
     notice(`fundusz przeliczony (${written} nowych zdarzeń, ${closed} zamknięć z alarmu)`);
   }
