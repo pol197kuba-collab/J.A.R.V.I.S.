@@ -134,11 +134,22 @@ export const ModuleTransitionLayer = forwardRef<ModuleTransitionHandle, { enable
         sceneRef.current?.backdrop.tilt(x, (e.clientY / window.innerHeight) * 2 - 1);
         tiltCss(x);
       };
+      // where the content area is (desktop navigation takes the left edge)
+      const main = document.querySelector("main");
+      const ro =
+        main && typeof ResizeObserver !== "undefined"
+          ? new ResizeObserver(() => {
+              const r = main.getBoundingClientRect();
+              sceneRef.current?.backdrop.content({ left: r.left, width: r.width });
+            })
+          : null;
+      if (main) ro?.observe(main);
       document.addEventListener("scroll", onScroll, { capture: true, passive: true });
       window.addEventListener("deviceorientation", onTilt, { passive: true });
       window.addEventListener("pointermove", onPointer, { passive: true });
       return () => {
         document.removeEventListener("scroll", onScroll, { capture: true });
+        ro?.disconnect();
         document.documentElement.style.removeProperty("--tilt-x");
         window.removeEventListener("deviceorientation", onTilt);
         window.removeEventListener("pointermove", onPointer);

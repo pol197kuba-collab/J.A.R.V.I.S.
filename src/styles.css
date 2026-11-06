@@ -1094,7 +1094,10 @@ html[data-depth3d] .hud-panel--elevated {
   box-shadow:
     0 34px 70px -34px oklch(0 0 0 / 0.85),
     0 18px 60px -40px color-mix(in oklab, var(--primary) 55%, transparent);
-  backdrop-filter: blur(9px) saturate(140%);
+  /* no live blur: re-blurring every panel on every frame of the moving 3D
+     world below is the costliest thing on the page while scrolling and
+     during transitions */
+  backdrop-filter: none;
 }
 html[data-depth3d] .hud-panel--quiet {
   background: linear-gradient(
@@ -1103,7 +1106,7 @@ html[data-depth3d] .hud-panel--quiet {
     color-mix(in oklab, var(--base-panel-floor) 72%, transparent)
   );
   box-shadow: 0 22px 46px -30px oklch(0 0 0 / 0.8);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
 }
 html[data-depth3d] .hud-panel--elevated:hover,
 html[data-depth3d] .hud-panel--quiet:hover {

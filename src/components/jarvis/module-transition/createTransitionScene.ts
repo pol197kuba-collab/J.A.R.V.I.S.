@@ -94,6 +94,7 @@ import {
   backdropAzimuth,
   backdropCamera,
   backdropFade,
+  backdropShift,
   smooth,
 } from "./backdropMath";
 import { buildCoreRings, stepCoreRings } from "./coreRig";
@@ -167,6 +168,8 @@ export interface BackdropControl {
   scroll(px: number, viewportH: number): void;
   /** Phone tilt / pointer, each -1…1. */
   tilt(x: number, y: number): void;
+  /** The content area (the module's `<main>`), to centre the world on it. */
+  content(rect: { left: number; width: number } | null): void;
 }
 
 export interface TransitionScene {
@@ -913,6 +916,7 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
     scrollPx: 0,
     viewH: 1,
     tilt: { x: 0, y: 0 },
+    content: null as { left: number; width: number } | null,
     tx: 0,
     ty: 0,
     t0: 0,
@@ -966,7 +970,12 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
       tiltY: bd.ty,
     });
     camera.fov = 45;
-    frameOn(0, null);
+    // centre the world on the content area, not the whole window (desktop navigation)
+    const dx = backdropShift(vw, bd.content);
+    camera.aspect = vw / vh;
+    if (Math.abs(dx) > 0.5) camera.setViewOffset(vw, vh, -dx, 0, vw, vh);
+    else camera.clearViewOffset();
+    camera.updateProjectionMatrix();
     camera.position.set(cam.x, cam.y, cam.z);
     camera.lookAt(lk.x, lk.y, lk.z);
     updateCore(dt, bd.time, null, 0);
@@ -993,6 +1002,9 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
     tilt(x, y) {
       bd.tilt.x = x;
       bd.tilt.y = y;
+    },
+    content(rect) {
+      bd.content = rect;
     },
   };
 

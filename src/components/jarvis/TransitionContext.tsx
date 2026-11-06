@@ -23,6 +23,7 @@ import {
   pickKind,
   transitionDuration,
 } from "@/components/jarvis/module-transition/transitionMath";
+import { MODULE_ITEMS } from "@/components/jarvis/modules";
 import { hasWebGl, isLoginSceneEnabled } from "@/lib/theme/loginScene";
 import { useUiMode } from "@/lib/theme/uiMode";
 
@@ -92,10 +93,37 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => () => clearTimers(), []);
 
+  // Load every module's code in idle time after the dashboard is up, so a jump
+  // never imports + compiles a route chunk in the middle of a flight (the
+  // modules have no loaders: this fetches code only, no data).
+  useEffect(() => {
+    let cancelled = false;
+    const urls = MODULE_ITEMS.map((m) => m.url);
+    const idle =
+      typeof window.requestIdleCallback === "function"
+        ? (fn: () => void) => window.requestIdleCallback(fn, { timeout: 2000 })
+        : (fn: () => void) => window.setTimeout(fn, 200);
+    const next = () => {
+      const url = urls.shift();
+      if (cancelled || !url) return;
+      void router
+        .preloadRoute({ to: url })
+        .catch(() => undefined)
+        .finally(() => idle(next));
+    };
+    const start = window.setTimeout(() => idle(next), 2500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(start);
+    };
+  }, [router]);
+
   const startTransition = useCallback(
     (path: string, opts?: { fromMenu?: boolean }): TransitionStart => {
       if (transition !== "idle") return false;
       if (path === pathname) return false;
+      // the target's code starts loading at take-off, not at the route swap
+      void router.preloadRoute({ to: path }).catch(() => undefined);
       const l = layer.current;
       if (can3d && l?.ready()) {
         // from the orbit menu the camera is already inside a node: no Arc Core

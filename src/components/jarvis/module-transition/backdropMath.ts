@@ -67,13 +67,22 @@ export function backdropCamera(o: BackdropInput): { cam: Vec3; look: Vec3 } {
     y: Math.sin(elev) * dist,
     z: Math.cos(az) * Math.cos(elev) * dist,
   };
-  // look below the core so it rides high on the screen; landscape a bit to the left
-  const look = {
-    x: portrait ? 0 : Math.cos(az) * 260,
-    y: (portrait ? -330 : -230) - lift,
-    z: portrait ? 0 : -Math.sin(az) * 260,
-  };
+  // look below the core so it rides high on the screen, centred horizontally (the
+  // scene then shifts the frame onto the content area: backdropShift)
+  const look = { x: 0, y: (portrait ? -330 : -230) - lift, z: 0 };
   return { cam, look };
+}
+
+/**
+ * Horizontal shift (px) that centres the backdrop on the content area instead of
+ * the whole window (on desktop the navigation takes the left edge).
+ */
+export function backdropShift(
+  viewportW: number,
+  content: { left: number; width: number } | null,
+): number {
+  if (!content || content.width <= 0) return 0;
+  return content.left + content.width / 2 - viewportW / 2;
 }
 
 /** Smoothly turn `from` toward `to` (shortest way round), `k` per second. */
