@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   annualizedVolatility,
+  catalogQuotes,
   changeOverSessions,
   computeSeriesStats,
   formatPercent,
@@ -124,5 +125,19 @@ describe("formatting", () => {
     expect(formatPercent(2.5)).toBe("+2.50%");
     expect(formatPercent(-2.5)).toBe("-2.50%");
     expect(formatPercent(null)).toBe("—");
+  });
+});
+
+describe("catalogQuotes", () => {
+  it("ostatnia cena i zmiana dnia per instrument, z dowolnej kolejności", () => {
+    const q = catalogQuotes([
+      { symbol: "PKO.PL", quote_date: "2026-11-06", close: 66 },
+      { symbol: "MSFT.US", quote_date: "2026-11-05", close: 500 },
+      { symbol: "PKO.PL", quote_date: "2026-11-05", close: 60 },
+      { symbol: "BAD", quote_date: "2026-11-05", close: 0 },
+    ]);
+    expect(q["PKO.PL"]).toEqual({ last: 66, change1d: expect.closeTo(10, 6), date: "2026-11-06" });
+    expect(q["MSFT.US"]).toEqual({ last: 500, change1d: null, date: "2026-11-05" });
+    expect(q.BAD).toBeUndefined();
   });
 });

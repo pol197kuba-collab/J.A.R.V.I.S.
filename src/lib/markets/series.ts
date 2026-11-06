@@ -156,3 +156,33 @@ export function formatPercent(value: number | null): string {
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(2)}%`;
 }
+
+/**
+ * Wiersze notowań (dowolna kolejność, wiele instrumentów) → ostatnia cena i
+ * zmiana względem poprzedniego zamknięcia, per instrument. Lista obok wykresu
+ * pokazuje to dla całego katalogu, nie tylko obserwowanych.
+ */
+export function catalogQuotes(
+  rows: ReadonlyArray<{ symbol: string; quote_date: string; close: number }>,
+): Record<string, { last: number; change1d: number | null; date: string }> {
+  const by = new Map<string, Array<{ date: string; close: number }>>();
+  for (const r of rows) {
+    const close = Number(r.close);
+    if (!Number.isFinite(close) || close <= 0) continue;
+    const list = by.get(r.symbol) ?? [];
+    list.push({ date: r.quote_date, close });
+    by.set(r.symbol, list);
+  }
+  const out: Record<string, { last: number; change1d: number | null; date: string }> = {};
+  for (const [symbol, list] of by) {
+    list.sort((a, b) => a.date.localeCompare(b.date));
+    const last = list[list.length - 1];
+    const prev = list.length > 1 ? list[list.length - 2] : null;
+    out[symbol] = {
+      last: last.close,
+      change1d: prev ? (last.close / prev.close - 1) * 100 : null,
+      date: last.date,
+    };
+  }
+  return out;
+}
