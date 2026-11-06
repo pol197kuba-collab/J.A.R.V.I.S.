@@ -14,6 +14,7 @@ import { z } from "zod";
 import { assetBySymbol, MARKET_ASSETS, type MarketAsset } from "./assets";
 import { fetchAllPages } from "@/lib/db/paginate";
 import {
+  catalogQuotes,
   computeSeriesStats,
   normalizeSeries,
   sessionsPerWeekFor,
@@ -177,6 +178,15 @@ export const getMarketGrid = createServerFn({ method: "GET" })
     let didFetch = false;
     if (refreshInFlight) {
       await refreshInFlight.catch(() => undefined);
+      // Trwający zaciąg obejmował watchlistę, nie podgląd z listy obok
+      // wykresu — bez tego kliknięty instrument zostawał bez notowań aż do
+      // następnego odświeżenia (5 min) i wykres prosił o „obserwowane”.
+      const extraAssets = extra.map(assetBySymbol).filter((a): a is MarketAsset => Boolean(a));
+      if (extraAssets.length > 0) {
+        const r = await ingestQuotes(supabase, userId, extraAssets, days, force);
+        didFetch = r.didFetch;
+        errors = r.errors;
+      }
     } else {
       const run = ingestQuotes(supabase, userId, assets, days, force).then((r) => {
         didFetch = r.didFetch;
@@ -539,6 +549,37 @@ export const getPredictionScoreboard = createServerFn({ method: "GET" })
   });
 
 /** Katalog instrumentów dla wyszukiwarki w UI — bez odpytywania sieci. */
+/** Ostatnia cena i zmiana dnia każdego instrumentu z katalogu (lista obok wykresu). */
+export type CatalogQuote = { last: number; change1d: number | null; date: string };
+
+/**
+ * Ceny CAŁEGO katalogu z cache'u notowań — bez żadnego zapytania do
+ * zewnętrznych API (te wypełnia wieczorny job dla wszystkich instrumentów
+ * i takt rynku dla obserwowanych). Dzięki temu lista pokazuje cenę także
+ * przy instrumentach, których nie obserwujesz.
+ */
+export const getCatalogQuotes = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<Record<string, CatalogQuote>> => {
+    const { supabase } = context;
+    const since = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
+    const rows = await fetchAllPages<{ symbol: string; quote_date: string; close: number }>(
+      (from, to) =>
+        supabase
+          .from("market_quotes")
+          .select("symbol, quote_date, close")
+          .in(
+            "symbol",
+            MARKET_ASSETS.map((a) => a.symbol),
+          )
+          .gte("quote_date", since)
+          .order("quote_date", { ascending: true })
+          .order("symbol", { ascending: true })
+          .range(from, to),
+    );
+    return catalogQuotes(rows);
+  });
+
 export const getAssetCatalog = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async () => ({

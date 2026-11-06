@@ -94,3 +94,68 @@ export const packetT = (time: number, busy: boolean, k: number, per: number, i: 
   (time * (busy ? 0.55 : 0.22) + k / per + i * 0.173) % 1;
 
 export const clamp01 = (v: number) => clamp(v);
+
+// ---- label collisions ------------------------------------------------------------
+
+/** A label's box on screen (px), before any collision shift. */
+export type LabelBox = {
+  id: string;
+  left: number;
+  top: number;
+  w: number;
+  h: number;
+  /** Projected depth (NDC z): smaller = nearer the camera. */
+  depth: number;
+};
+
+export type LabelFix = { dy: number; dim: boolean };
+
+const overlaps = (
+  a: { left: number; top: number; w: number; h: number },
+  b: { left: number; top: number; w: number; h: number },
+  gap: number,
+) =>
+  a.left < b.left + b.w + gap &&
+  b.left < a.left + a.w + gap &&
+  a.top < b.top + b.h + gap &&
+  b.top < a.top + a.h + gap;
+
+/**
+ * Keep agent labels from printing over each other when two nodes line up with
+ * the camera. Nearer labels win their spot; a farther label slides just above
+ * or below the one in its way (the smaller move, at most `maxShift` px), and
+ * if no spot is free it is dimmed instead of covering a readable one. Dimmed
+ * labels don't block others. `prev` (last frame's shifts) keeps a label on the
+ * side it already went to — without it two labels passing each other flip
+ * above/below every few frames and the eased motion never settles.
+ */
+export function resolveLabels(
+  boxes: readonly LabelBox[],
+  gap = 4,
+  maxShift = 90,
+  prev?: ReadonlyMap<string, number>,
+): Map<string, LabelFix> {
+  const out = new Map<string, LabelFix>();
+  const placed: Array<{ left: number; top: number; w: number; h: number }> = [];
+  for (const b of [...boxes].sort((x, y) => x.depth - y.depth)) {
+    const candidates = [0];
+    for (const p of placed) {
+      if (!overlaps(b, p, gap)) continue;
+      candidates.push(p.top + p.h + gap - b.top, p.top - gap - (b.top + b.h));
+    }
+    const was = prev?.get(b.id) ?? 0;
+    candidates.sort((x, y) => Math.abs(x - was) - Math.abs(y - was));
+    const dy = candidates.find(
+      (d) =>
+        Math.abs(d) <= maxShift &&
+        placed.every((p) => !overlaps({ ...b, top: b.top + d }, p, gap - 0.5)),
+    );
+    if (dy === undefined) {
+      out.set(b.id, { dy: 0, dim: true });
+      continue;
+    }
+    placed.push({ left: b.left, top: b.top + dy, w: b.w, h: b.h });
+    out.set(b.id, { dy, dim: false });
+  }
+  return out;
+}

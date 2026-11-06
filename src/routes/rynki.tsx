@@ -51,6 +51,7 @@ import { projectForecast, type ForecastPoint } from "@/lib/markets/projection";
 import {
   addToWatchlist,
   getAssetCatalog,
+  getCatalogQuotes,
   getMarketGrid,
   getMarketNews,
   getMarketOutlook,
@@ -115,6 +116,16 @@ function MarketsPage() {
     queryKey: ["market-catalog"],
     queryFn: () => fetchCatalog(),
     staleTime: Infinity,
+  });
+
+  // Ceny całego katalogu z cache'u (bez zewnętrznych API) — lista obok
+  // wykresu pokazuje je też przy instrumentach, których nie obserwujesz.
+  const fetchCatalogQuotes = useServerFn(getCatalogQuotes);
+  const catalogQuotes = useQuery({
+    queryKey: ["market-catalog-quotes"],
+    queryFn: () => fetchCatalogQuotes(),
+    refetchInterval: 5 * 60_000,
+    staleTime: 2 * 60_000,
   });
 
   const fetchOrders = useServerFn(listStandingOrders);
@@ -278,7 +289,21 @@ function MarketsPage() {
   });
 
   const primary = series.find((s) => s.symbol === visibleSymbols[0]) ?? null;
-  const missing = grid.data?.missing ?? [];
+  const missing = useMemo(() => grid.data?.missing ?? [], [grid.data]);
+  // Wybrany instrument nie ma (jeszcze) serii: mów, co się dzieje, zamiast
+  // odsyłać do obserwowanych — wybrać można wszystko z listy.
+  const chartGap = useMemo(() => {
+    if (
+      visibleSymbols.length === 0 ||
+      visibleSymbols.some((v) => series.some((s) => s.symbol === v))
+    )
+      return null;
+    const sym = visibleSymbols[0];
+    const label = catalog.data?.assets.find((a) => a.symbol === sym)?.label ?? sym;
+    if (grid.isFetching) return `Wczytuję notowania: ${label}…`;
+    const why = missing.find((m) => m.symbol === sym)?.reason;
+    return why ? `Brak notowań: ${label} — ${why}` : `Brak notowań: ${label}. Spróbuj „Odśwież”.`;
+  }, [visibleSymbols, series, catalog.data, grid.isFetching, missing]);
 
   // ---- the CEO view: plain facts first, details folded below ----
   const watchedSeries = useMemo(() => series.filter((s) => s.watched !== false), [series]);
@@ -287,18 +312,30 @@ function MarketsPage() {
   const hits = useMemo(() => accuracyHeadline(scoreboard.data), [scoreboard.data]);
   const mood = useMemo(() => newsMood(news.data?.items), [news.data]);
   const groups = useMemo(() => {
-    const quotes = new Map(
-      series.map((s) => [
-        s.symbol,
-        { last: s.stats.last, change1d: s.stats.change1d, currency: s.currency },
+    const currencyOf = new Map((catalog.data?.assets ?? []).map((a) => [a.symbol, a.currency]));
+    const quotes = new Map<
+      string,
+      { last: number | null; change1d: number | null; currency: string }
+    >(
+      Object.entries(catalogQuotes.data ?? {}).map(([symbol, q]) => [
+        symbol,
+        { last: q.last, change1d: q.change1d, currency: currencyOf.get(symbol) ?? "" },
       ]),
     );
+    // serie na wykresie są świeższe (właśnie dociągnięte) — mają pierwszeństwo
+    for (const s of series) {
+      quotes.set(s.symbol, {
+        last: s.stats.last,
+        change1d: s.stats.change1d,
+        currency: s.currency,
+      });
+    }
     return instrumentGroups(
       catalog.data?.assets ?? [],
       new Set(watchedSeries.map((s) => s.symbol)),
       quotes,
     );
-  }, [catalog.data, series, watchedSeries]);
+  }, [catalog.data, catalogQuotes.data, series, watchedSeries]);
   const watchBusy = addMutation.isPending
     ? (addMutation.variables ?? null)
     : removeMutation.isPending
@@ -402,7 +439,9 @@ function MarketsPage() {
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div className="min-w-0">
                 <p className="font-display truncate text-[18px] uppercase tracking-[0.14em]">
-                  {primary?.label ?? "Wybierz instrument"}
+                  {primary?.label ??
+                    catalog.data?.assets.find((a) => a.symbol === visibleSymbols[0])?.label ??
+                    "Wybierz instrument"}
                 </p>
                 {primary && (
                   <p className="mt-1 font-mono text-[13px] tabular-nums">
@@ -439,6 +478,8 @@ function MarketsPage() {
 
             {grid.isLoading ? (
               <EmptyState>Ładowanie notowań…</EmptyState>
+            ) : chartGap ? (
+              <EmptyState>{chartGap}</EmptyState>
             ) : (
               <MarketChart
                 series={series}

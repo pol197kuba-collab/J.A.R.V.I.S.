@@ -23,7 +23,12 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import type { Database, Json } from "../src/integrations/supabase/types";
-import { assetBySymbol, SCAN_ASSETS, type MarketAsset } from "../src/lib/markets/assets";
+import {
+  assetBySymbol,
+  MARKET_ASSETS,
+  SCAN_ASSETS,
+  type MarketAsset,
+} from "../src/lib/markets/assets";
 import {
   buildOutlook,
   ingestNews,
@@ -221,29 +226,31 @@ async function main(): Promise<void> {
   // progi świeżości chronią przed zbyt częstym odpytywaniem z przeglądarki,
   // nie przed planowym przebiegiem.
   //
-  // Watchlista + skaner (płynne krypto i ETF-y). Awaria instrumentu z
-  // watchlisty to awaria przebiegu; ze skanera — tylko ostrzeżenie, bo przy
-  // ponad stu darmowych zapytaniach pojedyncze odmowy są normalne, a skaner
-  // i tak ma z czego wybierać.
+  // CAŁY katalog (od 6.11.2026), nie tylko watchlista i skaner — wybrać do
+  // wykresu można każdy instrument, więc każdy ma mieć historię. Awaria
+  // instrumentu z watchlisty to awaria przebiegu; pozostałych — tylko
+  // ostrzeżenie, bo przy ponad stu darmowych zapytaniach pojedyncze odmowy
+  // są normalne. Typer (krok 3) skanuje jak dotąd: watchlista + skaner.
   const watchSymbols = new Set(assets.map((a) => a.symbol));
   const scan = SCAN_ASSETS.filter((a) => !watchSymbols.has(a.symbol));
+  const catalogRest = MARKET_ASSETS.filter((a) => !watchSymbols.has(a.symbol));
   // Rano tylko instrumenty tej sesji (dzisiejsza decyzja), wieczorem
   // wszystkie — wieczorny zaciąg domyka dzień całej historii notowań.
   const inSession = (a: MarketAsset) => session === "evening" || classes.includes(a.assetClass);
   try {
-    const all = [...assets, ...scan].filter(inSession);
+    const all = [...assets, ...catalogRest].filter(inSession);
     const { errors } = await ingestQuotes(db, ownerId, all, 200, true);
     let scanMisses = 0;
     for (const [symbol, message] of errors) {
       if (watchSymbols.has(symbol)) await report("notowania", `${symbol} — ${message}`);
       else {
         scanMisses += 1;
-        warn(`skaner: ${symbol} — ${message}`);
+        warn(`katalog: ${symbol} — ${message}`);
       }
     }
     notice(
       `notowania: ${all.length - errors.size} z ${all.length} instrumentów zaciągnięte` +
-        (scanMisses > 0 ? ` (skaner: ${scanMisses} bez danych)` : ""),
+        (scanMisses > 0 ? ` (spoza watchlisty: ${scanMisses} bez danych)` : ""),
     );
   } catch (err) {
     await report("notowania", err instanceof Error ? err.message : String(err));

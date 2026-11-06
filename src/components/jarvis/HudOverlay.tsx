@@ -113,8 +113,11 @@ export function HudOverlay({
         </button>
       )}
 
-      {/* Bottom status bar */}
-      <div className="pointer-events-auto mt-auto flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/15 bg-black/40 px-4 py-2 backdrop-blur-sm">
+      {/* Bottom status bar — text only, straight on the 3D world. It used to
+          be a full-width glass strip (bg + backdrop-blur): invisible on the
+          dark sky, but every agent or ring passing under it showed a blurred
+          band across the matrix, and it swallowed clicks on those agents. */}
+      <div className="pointer-events-none mt-auto flex flex-wrap items-center justify-between gap-2 px-4 py-2 [text-shadow:0_0_8px_black]">
         <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-white/40">
           drag to orbit · scroll to zoom · click a node for details
         </span>

@@ -34,12 +34,31 @@ function formatElapsed(totalSeconds: number): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
+/** One agent label, as the node reports it each frame (screen px, before shifts). */
+export type LabelSlot = {
+  el: HTMLDivElement;
+  /** Offset from the node's screen position (what the transform applies). */
+  ox: number;
+  oy: number;
+  /** Anchor point relative to the canvas: label's side edge / centre, vertical middle. */
+  x: number;
+  y: number;
+  ax: "0%" | "-100%" | "-50%";
+  align: "left" | "right" | "center";
+  depth: number;
+  /** Smoothed collision shift and opacity (LabelResolver). */
+  dy: number;
+  alpha: number;
+  style: string;
+};
+
 export function AgentNode3DV2({
   agent,
   index,
   spec,
   positions,
   core,
+  labels,
   selected,
   onSelect,
 }: {
@@ -50,6 +69,8 @@ export function AgentNode3DV2({
   positions: THREE.Vector3[];
   /** Core's screen position in px, refreshed every frame by the canvas. */
   core: MutableRefObject<{ x: number; y: number }>;
+  /** Shared label slots: the canvas' LabelResolver places all labels together. */
+  labels: MutableRefObject<Map<string, LabelSlot>>;
   selected: boolean;
   onSelect: (slug: string | null) => void;
 }) {
@@ -91,7 +112,14 @@ export function AgentNode3DV2({
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
   const v = useMemo(() => new THREE.Vector3(), []);
-  const lastTransform = useRef("");
+
+  // the label's slot is ours; drop it when the node goes away
+  useEffect(() => {
+    const map = labels.current;
+    return () => {
+      map.delete(agent.slug);
+    };
+  }, [labels, agent.slug]);
 
   useFrame((state, dt) => {
     const g = group.current;
@@ -107,7 +135,8 @@ export function AgentNode3DV2({
         0.8 * (busy ? 1 + Math.sin(t * 5 + index) * 0.07 : hovered || selected ? 1.18 : 1);
       b.scale.setScalar(base);
     }
-    // label beside the node, facing away from the core (screen space)
+    // label beside the node, facing away from the core (screen space); the
+    // canvas' LabelResolver moves it off other labels and writes the style
     const el = label.current;
     if (el) {
       v.copy(positions[index]).project(camera);
@@ -115,13 +144,20 @@ export function AgentNode3DV2({
       const sy = (-v.y * 0.5 + 0.5) * size.height;
       const narrow = size.width < NARROW_PX;
       const p = labelPlacement(sx - core.current.x, sy - core.current.y, narrow);
+      const slot = labels.current.get(agent.slug);
       const oy = p.oy + (narrow ? NARROW_LABEL_DROP : 0);
-      const tr = `translate(${p.ax},-50%) translate(${Math.round(p.ox)}px,${Math.round(oy)}px)`;
-      if (tr !== lastTransform.current) {
-        lastTransform.current = tr;
-        el.style.transform = tr;
-        el.style.textAlign = p.align;
-      }
+      const next = {
+        el,
+        ox: p.ox,
+        oy,
+        x: sx + p.ox,
+        y: sy + oy,
+        ax: p.ax,
+        align: p.align,
+        depth: v.z,
+      };
+      if (slot) Object.assign(slot, next);
+      else labels.current.set(agent.slug, { ...next, dy: 0, alpha: 1, style: "" });
     }
   });
 
