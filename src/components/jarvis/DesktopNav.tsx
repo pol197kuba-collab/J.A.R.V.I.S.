@@ -17,9 +17,10 @@ export const OPEN_COCKPIT_EVENT = "jarvis:cockpit";
 
 /**
  * Desktop navigation in the 3D mode, instead of the sidebar: the Arc Core
- * itself in the bottom-left corner (the same mini core as the phone dock — tap
- * opens the "Kokpit" menu, a 1 s hold flies to /jarvis) and the Kokpit, which
- * Ctrl/⌘K, the header's MENU button and the voice "open menu" command open too.
+ * itself at the left end of the header (the same mini core as the phone dock —
+ * tap opens the "Kokpit" menu, a 1 s hold flies to /jarvis; in the header it
+ * never covers a module's own controls) and the Kokpit, which Ctrl/⌘K and the
+ * voice "open menu" command open too.
  */
 export function DesktopNav() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
@@ -77,9 +78,9 @@ export function DesktopNav() {
         {...handlers}
         aria-label="Menu modułów (przytrzymaj 1 s: J.A.R.V.I.S.)"
         aria-expanded={open}
-        className="fixed bottom-5 left-5 z-[75] flex h-[66px] w-[66px] touch-manipulation select-none items-center justify-center rounded-full [-webkit-tap-highlight-color:transparent]"
+        className="relative -my-2 flex h-11 w-11 shrink-0 touch-manipulation select-none items-center justify-center rounded-full [-webkit-tap-highlight-color:transparent]"
       >
-        <DockCore state={state} charging={holding} />
+        <DockCore state={state} charging={holding} size={42} />
       </button>
       <CockpitMenu open={open} onClose={close} />
     </>

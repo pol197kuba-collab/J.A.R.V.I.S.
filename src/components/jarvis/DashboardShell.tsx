@@ -80,7 +80,6 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
           <AppSidebar />
         </div>
       )}
-      {!isMobile && can3d && <DesktopNav />}
       <div className="relative z-10 flex min-h-screen min-w-0 flex-1 flex-col portrait:min-h-0 landscape:max-md:min-h-0 short:min-h-0">
         <HudHeader onShutdown={onShutdown} />
         <main
@@ -170,6 +169,9 @@ function HudHeader({ onShutdown }: { onShutdown: () => void }) {
   // On a phone the bar is always compact; on desktop the measured width
   // decides, so collapsing the rail gives the labels back.
   const compact = isMobile || density === "compact";
+  // desktop in the 3D mode: the Arc Core in the header opens the "Kokpit" menu
+  const { can3d } = useRouteTransition();
+  const cockpitNav = !isMobile && can3d;
 
   return (
     <header
@@ -178,10 +180,10 @@ function HudHeader({ onShutdown }: { onShutdown: () => void }) {
     >
       <span className="hud-chrome-rule" aria-hidden />
 
-      {!isMobile && <HudMenuTrigger />}
+      {!isMobile && (cockpitNav ? <DesktopNav /> : <HudMenuTrigger />)}
 
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <MiniArcReactor size={20} />
+        {!cockpitNav && <MiniArcReactor size={20} />}
         {/* Was a static "STARK SECURE TERMINAL". Showing the active module
             instead turns decoration into orientation — which matters most on
             a phone, where the rail isn't visible at all. */}

@@ -942,6 +942,7 @@ export function createTransitionScene(o: TransitionOverlays, C: SceneColors): Tr
   function enterBackdrop() {
     bd.on = true;
     bd.az = bd.targetAz;
+    bd.focusK = 0;
     bd.t0 = performance.now();
     bd.lastRender = 0;
     canvas.style.zIndex = BACK_Z;

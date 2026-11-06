@@ -206,7 +206,7 @@ export function CockpitMenu({ open, onClose }: { open: boolean; onClose: () => v
         </div>
       </div>
       <p className="cockpit-foot">
-        Klik w rdzeń lub <b>Esc</b>: zamknij · przytrzymaj rdzeń 1 s: <b>J.A.R.V.I.S.</b> ·{" "}
+        Klik w tło lub <b>Esc</b>: zamknij · przytrzymaj rdzeń w nagłówku 1 s: <b>J.A.R.V.I.S.</b> ·{" "}
         <b>Ctrl/⌘ K</b>: to menu
       </p>
     </div>,
