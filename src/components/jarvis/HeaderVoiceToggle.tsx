@@ -1,9 +1,15 @@
+import { Mic } from "lucide-react";
 import { useVoiceCommands } from "./VoiceCommandContext";
 import { audio } from "@/lib/audio/AudioEngine";
 import { speak } from "@/lib/audio/speak";
 import { cn } from "@/lib/utils";
 
-export function HeaderVoiceToggle() {
+/**
+ * `iconOnly`: the narrow 3D visor (phone) — a microphone that glows when
+ * voice control is armed and pulses while it listens; the full "TALK TO
+ * JARVIS" label only fits a wide bar without its frame.
+ */
+export function HeaderVoiceToggle({ iconOnly = false }: { iconOnly?: boolean } = {}) {
   const { enabled, supported, listening, inConversation, setEnabled } = useVoiceCommands();
 
   const onClick = () => {
@@ -59,6 +65,32 @@ export function HeaderVoiceToggle() {
     </span>
   );
 
+  if (iconOnly) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={!supported}
+        aria-pressed={enabled}
+        aria-label={label}
+        title={`${label} · ${status}`}
+        className={cn(
+          "relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
+          !supported && "cursor-not-allowed opacity-40",
+          !active && "opacity-70",
+        )}
+      >
+        {live && (
+          <span
+            className="pointer-events-none absolute inset-0 animate-ping rounded-full border border-primary/60"
+            aria-hidden
+          />
+        )}
+        <Mic className={cn("h-3.5 w-3.5", conversing && "animate-blink")} strokeWidth={1.75} />
+      </button>
+    );
+  }
+
   return (
     <button
       type="button"
@@ -83,7 +115,7 @@ export function HeaderVoiceToggle() {
       )}
       <Wave side="left" />
       <span className="flex flex-col items-center leading-none">
-        <span className="text-[10px] tracking-[0.28em] landscape:max-md:text-[8px] landscape:max-md:tracking-[0.18em] short:text-[8px] short:tracking-[0.18em]">
+        <span className="whitespace-nowrap text-[10px] tracking-[0.28em] landscape:max-md:text-[8px] landscape:max-md:tracking-[0.18em] short:text-[8px] short:tracking-[0.18em]">
           TALK TO JARVIS
         </span>
         <span

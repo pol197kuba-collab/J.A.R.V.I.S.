@@ -155,6 +155,82 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
  * different application.
  */
 function HudHeader({ onShutdown }: { onShutdown: () => void }) {
+  const { can3d } = useRouteTransition();
+  // 3D mode: the bar is a visor over the world, not a glass slab
+  if (can3d) return <VisorHeader onShutdown={onShutdown} />;
+  return <ClassicHeader onShutdown={onShutdown} />;
+}
+
+/**
+ * Top bar in the 3D mode — a visor, not a bar: no glass slab and no boxed
+ * controls (a frosted strip over a moving 3D world shows as a blurred band,
+ * the bug the /jarvis status bar had). Controls float over a soft fade from
+ * the top edge, as glowing text and icons, the way module content does
+ * ("Data in space"); a line of light, brightest in the middle, closes it.
+ * Left: the Arc Core (Kokpit menu, desktop) and the module title as a
+ * hologram. Centre: talk to J.A.R.V.I.S. Right: status, HUD/TOWN, alerts and
+ * SYS (reboot, fullscreen, deactivate). Styles: "Visor" block, styles.css.
+ */
+function VisorHeader({ onShutdown }: { onShutdown: () => void }) {
+  const isMobile = useIsMobile();
+  const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const moduleTitle = moduleTitleFor(pathname);
+  const { ref, density } = useHeaderDensity<HTMLElement>();
+  const compact = isMobile || density === "compact";
+
+  return (
+    <header
+      ref={ref}
+      data-visor=""
+      className="hud-visor cockpit-dim sticky top-0 z-20 flex h-12 min-w-0 items-center gap-3 px-4 portrait:h-11 portrait:gap-2 portrait:px-3 landscape:max-md:h-9 landscape:max-md:gap-2 landscape:max-md:px-2 short:h-9 short:gap-2 short:px-2"
+    >
+      <span className="hud-visor-line" aria-hidden />
+
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        {!isMobile && <DesktopNav />}
+        <span className="hud-visor-title min-w-0 truncate whitespace-nowrap">
+          {!compact && moduleTitle !== "J.A.R.V.I.S." && (
+            <span className="hud-visor-title-root">J.A.R.V.I.S.</span>
+          )}
+          {moduleTitle && (
+            <>
+              {!compact && moduleTitle !== "J.A.R.V.I.S." && (
+                <span className="hud-visor-title-sep">//</span>
+              )}
+              <span className="hud-visor-title-module">{moduleTitle}</span>
+            </>
+          )}
+        </span>
+      </div>
+
+      {!compact && (
+        <div className="flex shrink-0 justify-center">
+          <HeaderVoiceToggle />
+        </div>
+      )}
+
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-3 portrait:gap-2">
+        <span
+          className="font-display flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[9px] uppercase tracking-[0.25em]"
+          style={{ color: "var(--success)" }}
+          title="All Systems Nominal"
+        >
+          <span
+            className="h-1.5 w-1.5 shrink-0 animate-blink rounded-full"
+            style={{ backgroundColor: "var(--success)", boxShadow: "0 0 8px var(--success)" }}
+          />
+          {density === "full" && !isMobile && <span>Nominal</span>}
+        </span>
+        <UiModeToggle compact={compact} />
+        {compact && <HeaderVoiceToggle iconOnly />}
+        <NotificationBell />
+        <SysMenu onShutdown={onShutdown} showFullscreen={!isMobile} visor />
+      </div>
+    </header>
+  );
+}
+
+function ClassicHeader({ onShutdown }: { onShutdown: () => void }) {
   const isMobile = useIsMobile();
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const moduleTitle = moduleTitleFor(pathname);
@@ -247,9 +323,12 @@ function HudHeader({ onShutdown }: { onShutdown: () => void }) {
 function SysMenu({
   onShutdown,
   showFullscreen = false,
+  visor = false,
 }: {
   onShutdown: () => void;
   showFullscreen?: boolean;
+  /** 3D mode: a glowing SYS over the visor, the actions in a holographic tray. */
+  visor?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -269,12 +348,12 @@ function SysMenu({
       <PopoverContent
         align="end"
         sideOffset={8}
-        className="hud-chrome w-auto border-primary/25 p-2"
+        className={visor ? "hud-visor-tray w-auto p-3" : "hud-chrome w-auto border-primary/25 p-2"}
         onClick={() => setOpen(false)}
       >
-        <div className="flex items-center gap-2">
+        <div className={visor ? "flex flex-col items-stretch gap-2" : "flex items-center gap-2"}>
           <RebootButton />
-          {showFullscreen && <FullscreenToggle />}
+          {showFullscreen && <FullscreenToggle withLabel={visor} />}
           <DeactivateButton onClick={onShutdown} />
         </div>
       </PopoverContent>
@@ -340,7 +419,7 @@ function JarvisBackdrop() {
   );
 }
 
-function FullscreenToggle() {
+function FullscreenToggle({ withLabel = false }: { withLabel?: boolean }) {
   const [active, setActive] = useState(false);
   useEffect(() => {
     setActive(isFullscreen());
@@ -358,6 +437,11 @@ function FullscreenToggle() {
       className="flex items-center justify-center rounded-md border border-primary/40 bg-primary/[0.06] p-1.5 text-primary shadow-[inset_0_1px_0_color-mix(in_oklab,var(--primary)_18%,transparent)] transition-all duration-200 hover:border-primary/70 hover:bg-primary/15 hover:text-foreground hover:shadow-[0_0_12px_-4px_var(--primary)]"
     >
       <Icon className="h-3 w-3" strokeWidth={1.75} />
+      {withLabel && (
+        <span className="font-display ml-1.5 text-[10px] uppercase tracking-[0.3em]">
+          {active ? "Zamknij pełny ekran" : "Pełny ekran"}
+        </span>
+      )}
     </button>
   );
 }
