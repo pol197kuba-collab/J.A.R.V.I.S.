@@ -6,6 +6,7 @@
 // camera sees. Runs server-side so the key never reaches the browser,
 // mirroring the Agent Runtime pattern in runtime.server.ts.
 
+import { secretsClient } from "@/lib/system/userSecrets";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
@@ -55,7 +56,7 @@ export const analyzeScan = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const startedAt = Date.now();
 
-    const { data: secret } = await supabase
+    const { data: secret } = await (await secretsClient(supabase))
       .from("user_secrets")
       .select("gemini_api_key")
       .eq("owner_id", userId)

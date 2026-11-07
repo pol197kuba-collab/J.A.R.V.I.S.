@@ -2,6 +2,7 @@
 // Notes are user-scoped (RLS in DB); the same table is written by the
 // jarvis (J.A.R.V.I.S.) core's `save_note` tool.
 
+import { secretsClient } from "@/lib/system/userSecrets";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
@@ -30,7 +31,7 @@ async function noteEmbeddingPatch(
   title: string,
   body: string,
 ): Promise<{ embedding?: string }> {
-  const { data } = await supabase
+  const { data } = await (await secretsClient(supabase))
     .from("user_secrets")
     .select("gemini_api_key")
     .eq("owner_id", userId)

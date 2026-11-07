@@ -4,6 +4,7 @@
 // 60 s (src/lib/vision/live.ts), so this stays a handful of cheap calls.
 // Only failures are logged — a log row per frame would flood system_events.
 
+import { secretsClient } from "@/lib/system/userSecrets";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
@@ -42,7 +43,7 @@ export const detectObjects = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<LiveDetections> => {
     const { supabase, userId } = context;
     const startedAt = Date.now();
-    const { data: secret } = await supabase
+    const { data: secret } = await (await secretsClient(supabase))
       .from("user_secrets")
       .select("gemini_api_key")
       .eq("owner_id", userId)

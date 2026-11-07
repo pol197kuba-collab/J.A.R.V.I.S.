@@ -4,6 +4,7 @@
 // Klucz PRYWATNY nigdy nie pojawia się w żadnej z tych odpowiedzi — wychodzi
 // wyłącznie publiczny, bo tylko on jest przeglądarce potrzebny do
 // zasubskrybowania. Prywatny zostaje po stronie serwera i podpisuje wysyłkę.
+import { secretsClient } from "@/lib/system/userSecrets";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
@@ -158,7 +159,11 @@ export const getBriefDelivery = createServerFn({ method: "GET" })
     const { supabase, userId } = context;
     const [{ data: secret }, { data: brief }, { data: dispatches }, { data: market }] =
       await Promise.all([
-        supabase.from("user_secrets").select("github_token").eq("owner_id", userId).maybeSingle(),
+        (await secretsClient(supabase))
+          .from("user_secrets")
+          .select("github_token")
+          .eq("owner_id", userId)
+          .maybeSingle(),
         supabase
           .from("daily_briefs")
           .select("brief_date, created_at")

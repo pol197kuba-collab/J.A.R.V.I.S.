@@ -7,6 +7,7 @@
 // Storage objects. Signed URLs are minted here rather than stored so they
 // can't leak long-lived and can be re-issued after they expire.
 
+import { secretsClient } from "@/lib/system/userSecrets";
 import { createServerFn } from "@tanstack/react-start";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
@@ -106,7 +107,7 @@ export async function enrichGeneratedFileImages(
 
   const spec = row.spec as unknown as ProducerDocSpec;
 
-  const { data: secret } = await supabase
+  const { data: secret } = await (await secretsClient(supabase))
     .from("user_secrets")
     .select("gemini_api_key, google_cse_api_key, google_cse_cx")
     .eq("owner_id", userId)

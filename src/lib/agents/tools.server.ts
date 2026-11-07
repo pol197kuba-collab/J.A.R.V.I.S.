@@ -9,6 +9,7 @@
 // OpenSearch, public HTTP fetch) or the user's own Supabase row-level data.
 // No paid keys are touched here.
 
+import { secretsClient } from "@/lib/system/userSecrets";
 import { isIP } from "node:net";
 import { lookup } from "node:dns/promises";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -1093,7 +1094,7 @@ const listProjects: Tool = {
 };
 
 async function getGithubToken(ctx: ToolContext): Promise<string | null> {
-  const { data } = await ctx.supabase
+  const { data } = await (await secretsClient(ctx.supabase))
     .from("user_secrets")
     .select("github_token")
     .eq("owner_id", ctx.userId)

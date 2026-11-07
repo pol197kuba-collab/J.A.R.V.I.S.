@@ -5,6 +5,7 @@
 // spine we'll extend with tool-calling, multi-step planning and other agent
 // types (Architect, Developer, ...) in later iterations.
 
+import { secretsClient } from "@/lib/system/userSecrets";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import type { AgentRunResult } from "./runtime.functions";
@@ -553,7 +554,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
   // 2. Resolve Gemini API key (required) + Groq API key (optional — free-tier
   // fallback, used only for the UI-action classifier pass and emergency
   // failover, never as the primary reasoning engine) from user_secrets.
-  const { data: secret } = await supabase
+  const { data: secret } = await (await secretsClient(supabase))
     .from("user_secrets")
     .select("gemini_api_key, groq_api_key, anthropic_api_key")
     .eq("owner_id", userId)

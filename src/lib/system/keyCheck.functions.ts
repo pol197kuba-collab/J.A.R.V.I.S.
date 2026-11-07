@@ -8,6 +8,7 @@
 // trzeba wyłapać.
 //
 // Klucze nie opuszczają serwera — klient dostaje tylko werdykt.
+import { secretsClient } from "@/lib/system/userSecrets";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { classifyKeyFailure, REASON_FIX, REASON_LABEL, type ProviderId } from "./providerKeys";
@@ -63,7 +64,7 @@ export const testProviderKeys = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<KeyCheck[]> => {
     const { supabase, userId } = context;
-    const { data, error } = await supabase
+    const { data, error } = await (await secretsClient(supabase))
       .from("user_secrets")
       .select(
         "gemini_api_key, anthropic_api_key, groq_api_key, google_cse_api_key, google_cse_cx, github_token",

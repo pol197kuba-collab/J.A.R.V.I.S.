@@ -26,7 +26,7 @@ scrollbar on long unbroken tokens (URLs, IDs, etc.).
 ## Responsive panels: container queries, not viewport variants
 
 Panel-internal layout (text size, stat-tile rows, grids, forms — anything
-rendered *inside* a `HudPanel`) must respond to the **panel's own rendered
+rendered _inside_ a `HudPanel`) must respond to the **panel's own rendered
 width**, not the device's viewport orientation. Use Tailwind's container
 query variants (`@container` is already set on `HudPanel` and on
 `DashboardShell`'s `<main>`) with **arbitrary pixel values**, not the
@@ -45,12 +45,12 @@ not the ~300–900px range panels actually render at):
 ```
 
 **Do not use `portrait:`/`landscape:max-md:`/`short:` for panel-internal
-content.** Those variants read the *device's* orientation/height, which
+content.** Those variants read the _device's_ orientation/height, which
 doesn't track how much room a panel actually has (a panel can be narrow
 on a wide landscape screen if it's one of several side-by-side, and vice
 versa) — that mismatch is exactly what caused new dashboard modules to
 overflow/overlap on mobile despite "looking fine" during review. A small
-number of those variants remain legitimate at the *shell* level only
+number of those variants remain legitimate at the _shell_ level only
 (`DashboardShell` itself, and routes that deliberately opt into a fixed,
 non-scrolling "windowed" viewport like `/jarvis`'s 3D canvas) — don't
 add new ones there without a specific reason tied to the physical
@@ -61,7 +61,7 @@ on a route's own root wrapper to force everything to fit one screen —
 `DashboardShell`'s `<main>` is always `overflow-y-auto`, and fighting
 that from inside a route clips content instead of letting the user
 scroll to it. If a route genuinely needs a fixed, non-scrolling viewport
-(immersive full-bleed views only), give *that route's own wrapper* a
+(immersive full-bleed views only), give _that route's own wrapper_ a
 definite height (e.g. `h-[100dvh]`) and `overflow-hidden`, matching the
 `/jarvis` pattern — never rely on `<main>` clipping for you.
 
@@ -154,9 +154,9 @@ the older one it replaces) — keep them that way:
   curves match the prototype. Don't use `MeshDistortMaterial` for the core,
   don't add/remove post-processing, don't "simplify for performance" or retune
   colours/pacing. The only allowed quality drop is DPR (after 120 frames with
-  >50% frames over 34 ms, floor `min(devicePixelRatio, 1.25)`) — never
-  geometry, shader or bloom. Bloom is three's `UnrealBloomPass` in both
-  renderers (`BloomComposer.tsx` inside R3F), not `@react-three/postprocessing`.
+  > 50% frames over 34 ms, floor `min(devicePixelRatio, 1.25)`) — never
+  > geometry, shader or bloom. Bloom is three's `UnrealBloomPass` in both
+  > renderers (`BloomComposer.tsx` inside R3F), not `@react-three/postprocessing`.
 - **Switch:** `isLoginSceneEnabled()` in `src/lib/theme/loginScene.ts`
   (`LOGIN_SCENE_DEFAULT_ENABLED` is the one rollout line; `?loginScene=1|0`
   is read once per page load, `localStorage["jarvis.loginScene"]` also works).
@@ -329,6 +329,27 @@ status, HUD/TOWN, alerts and SYS (reboot, fullscreen, deactivate in a
 holographic tray). Town skin and the no-3D path keep `ClassicHeader`.
 New header controls go into one of those groups and must read as light,
 not as a bordered box.
+
+## Secrets and shared tables: server-only access
+
+- **`user_secrets` is closed to the browser** (migration
+  `20261107120000_lock_secrets_and_shared_writes.sql` revokes every privilege
+  from `anon`/`authenticated`). Server code reaches it only through
+  `secretsClient()` (`src/lib/system/userSecrets.ts`):
+  `(await secretsClient(supabase)).from("user_secrets")`. Never call
+  `.from("user_secrets")` on the user's client, and never return a raw key to
+  the client — masked previews only. That client is service_role (bypasses
+  RLS), so **every query must filter by `owner_id` taken from the verified
+  token** (`userId` from `requireSupabaseAuth`), never from request input.
+- **Shared cache tables** (`orlen_fuel_prices`, `orlen_market_series`,
+  `fuel_news_items`, `market_quotes`, `market_news_items`) are read-only for
+  signed-in users; writes go through service_role
+  (`resolveWriteClient()` / `sharedCacheWriter`). Don't add `WITH CHECK (true)`
+  write policies — `supabase/tests/rls.sql` (CI: `rls-tests.yml`) fails on them.
+- The server needs the `JARVIS_SUPABASE_SERVICE_ROLE_KEY` secret (Lovable).
+  Deploy order for changes like this: secret → publish app → run migration.
+- Add every new table with RLS enabled and an owner policy; extend
+  `supabase/tests/rls.sql` when a table gets a non-obvious access rule.
 
 ## Design skills: project rules win
 

@@ -1,0 +1,42 @@
+name: RLS tests
+
+# Sprawdza uprawnienia w bazie: RLS włączone wszędzie, brak polityk zapisu
+# „dla wszystkich", user_secrets zamknięta dla przeglądarki, wspólne tabele
+# cache tylko do odczytu dla zalogowanych, izolacja użytkowników.
+#
+# Stawia lokalnego Supabase (Docker), wgrywa WSZYSTKIE migracje od zera i
+# puszcza supabase/tests/rls.sql. Nie dotyka produkcyjnej bazy ani sekretów.
+#
+# Uwaga: to pierwszy raz, gdy cała historia migracji jest wgrywana na pustą
+# bazę. Jeśli któraś stara migracja zakłada stan z ręcznych zmian, job
+# wywróci się na niej, a nie na testach — wtedy trzeba ją naprawić (albo
+# zrobić migrację bazową), nie wyłączać testów.
+on:
+  pull_request:
+    branches: [main]
+    paths: ["supabase/migrations/**", "supabase/tests/**", ".github/workflows/rls-tests.yml"]
+  workflow_dispatch:
+
+jobs:
+  rls:
+    name: rls.sql na lokalnym Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.48.3
+
+      - name: Lokalny Supabase + migracje
+        run: supabase start
+
+      - name: Testy RLS
+        run: |
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+            -v ON_ERROR_STOP=1 -f supabase/tests/rls.sql
+
+      - name: Zatrzymaj Supabase
+        if: always()
+        run: supabase stop --no-backup

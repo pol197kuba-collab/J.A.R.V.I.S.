@@ -8,6 +8,7 @@
 //
 // Zapisuje `resolveWriter` (niżej): service_role, gdy aplikacja go ma, a poza
 // tym sesja zalogowanego użytkownika.
+import { secretsClient } from "@/lib/system/userSecrets";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
@@ -136,13 +137,13 @@ const logFailure = (context: LogContext, message: string, meta: Json) =>
 /**
  * Klient, którym moduł zapisuje do cache'u.
  *
- * Pierwszy wybór to service_role — omija RLS i nie zależy od tego, kto
- * akurat jest zalogowany. Ale w tej instalacji Supabase jest zarządzany
- * przez Lovable i ten klucz jest poza zasięgiem właściciela, więc drugim
- * wyborem jest klient bieżącego użytkownika: migracja
- * 20260920140000_fuel_grid_authenticated_writes.sql daje zalogowanym prawo
- * zapisu do trzech tabel cache. Ten sam wybór co w local-worker/worker.py,
- * który celowo loguje się kluczem anon zamiast service role.
+ * Zapis do tabel cache wymaga service_role: migracja
+ * 20261107120000_lock_secrets_and_shared_writes.sql odebrała go zalogowanym
+ * użytkownikom (wcześniej dawała go 20260920140000, bo klucz był poza
+ * zasięgiem właściciela). Sekret JARVIS_SUPABASE_SERVICE_ROLE_KEY jest teraz
+ * wymagany na serwerze. Drugi wybór — klient bieżącego użytkownika — został
+ * tylko dla testów i lokalnego dev bez sekretu; po migracji kończy się
+ * błędem uprawnień, i to ma być głośny sygnał braku konfiguracji.
  *
  * Zwraca też `viaServiceRole`, bo to rozróżnienie decyduje, czy operacja
  * ciężka (pełna archiwizacja) ma sens z poziomu przeglądarki.
@@ -166,8 +167,9 @@ async function noteSessionWrites(context: LogContext): Promise<void> {
   await logEvent(
     context,
     "warn",
-    "Brak SUPABASE_SERVICE_ROLE_KEY — moduł paliwowy zapisuje cache sesją zalogowanego " +
-      "użytkownika (polityki z migracji 20260920140000).",
+    "Brak JARVIS_SUPABASE_SERVICE_ROLE_KEY — moduł paliwowy zapisuje cache sesją " +
+      "zalogowanego użytkownika, a po migracji 20261107120000 taki zapis jest zabroniony. " +
+      "Ustaw sekret na serwerze.",
     {} as Json,
   );
 }
@@ -447,7 +449,7 @@ export const getFuelNews = createServerFn({ method: "GET" })
       const writer = await resolveWriter({ supabase, userId });
       // Klucz Gemini jest BYOK (user_secrets) — bez niego newsy dalej
       // działają, tylko z oceną heurystyczną zamiast streszczeń po polsku.
-      const { data: secret } = await supabase
+      const { data: secret } = await (await secretsClient(supabase))
         .from("user_secrets")
         .select("gemini_api_key")
         .eq("owner_id", userId)

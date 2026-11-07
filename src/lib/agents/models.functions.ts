@@ -5,6 +5,7 @@
 // idzie przez server function. Wynik jest cache'owany w procesie: lista
 // modeli zmienia się raz na tygodnie, a dropdown otwiera się przy każdym
 // wejściu w Ustawienia i w Centrum Agentów.
+import { secretsClient } from "@/lib/system/userSecrets";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ANTHROPIC_MODELS, GEMINI_MODELS, type ModelOption } from "./models";
@@ -58,7 +59,7 @@ export const listAvailableModels = createServerFn({ method: "GET" })
     const cached = cache.get(userId);
     if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.value;
 
-    const { data: secret } = await supabase
+    const { data: secret } = await (await secretsClient(supabase))
       .from("user_secrets")
       .select("gemini_api_key, anthropic_api_key")
       .eq("owner_id", userId)

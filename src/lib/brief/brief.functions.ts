@@ -6,6 +6,7 @@
 // na model, a przy kilku kartach naraz zbudowałoby go kilka razy. Rubrykę
 // robi nocny job; przycisk „złóż teraz" jest osobną, świadomą decyzją
 // użytkownika.
+import { secretsClient } from "@/lib/system/userSecrets";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -17,7 +18,7 @@ type Db = SupabaseClient<Database>;
 
 /** Klucze modeli tego użytkownika — BYOK, nigdy nie opuszczają serwera. */
 async function loadModelKeys(supabase: Db, userId: string): Promise<BriefKeys> {
-  const { data } = await supabase
+  const { data } = await (await secretsClient(supabase))
     .from("user_secrets")
     .select("gemini_api_key, anthropic_api_key")
     .eq("owner_id", userId)

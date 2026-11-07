@@ -8,6 +8,7 @@
 // zapala gwiazdy). Odpowiedź Gemini powstaje wyłącznie z tego, co znalazły;
 // bez klucza panel dostaje znalezione źródła i jasny komunikat.
 
+import { secretsClient } from "@/lib/system/userSecrets";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
@@ -46,7 +47,7 @@ export const askBrain = createServerFn({ method: "POST" })
     const question = data.question.trim();
     const { getToolByName } = await import("@/lib/agents/tools.server");
 
-    const { data: secret } = await supabase
+    const { data: secret } = await (await secretsClient(supabase))
       .from("user_secrets")
       .select("gemini_api_key")
       .eq("owner_id", userId)

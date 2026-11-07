@@ -18,6 +18,7 @@
 // instead of a silent partial result, same philosophy as flightRadar's
 // `area_too_large` discriminated result.
 
+import { secretsClient } from "@/lib/system/userSecrets";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
@@ -184,7 +185,7 @@ export const processDocumentFn = createServerFn({ method: "POST" })
       );
     }
 
-    const { data: secret } = await supabase
+    const { data: secret } = await (await secretsClient(supabase))
       .from("user_secrets")
       .select("gemini_api_key")
       .eq("owner_id", userId)

@@ -7,6 +7,7 @@
 // Each save also clears this user's photos whose 30 days have passed.
 // The Gemini key comes from user_secrets server-side, as in analyzeScan.
 
+import { secretsClient } from "@/lib/system/userSecrets";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
@@ -45,7 +46,7 @@ export const extractScan = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const startedAt = Date.now();
 
-    const { data: secret } = await supabase
+    const { data: secret } = await (await secretsClient(supabase))
       .from("user_secrets")
       .select("gemini_api_key")
       .eq("owner_id", userId)

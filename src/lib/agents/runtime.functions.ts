@@ -8,6 +8,7 @@
 // Wszystkie funkcje są chronione przez requireSupabaseAuth — klucz Gemini
 // nigdy nie opuszcza serwera.
 
+import { secretsClient } from "@/lib/system/userSecrets";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
@@ -190,7 +191,7 @@ export const getGeminiKeyStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { data, error } = await supabase
+    const { data, error } = await (await secretsClient(supabase))
       .from("user_secrets")
       .select("gemini_api_key")
       .eq("owner_id", userId)
@@ -211,7 +212,7 @@ export const saveGeminiKey = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => SaveKeyInput.parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase
+    const { error } = await (await secretsClient(supabase))
       .from("user_secrets")
       .upsert({ owner_id: userId, gemini_api_key: data.key.trim() }, { onConflict: "owner_id" });
     if (error) {
@@ -228,7 +229,7 @@ export const deleteGeminiKey = createServerFn({ method: "POST" })
     // Clears only this column, not the whole row — user_secrets now also
     // holds groq_api_key, and a full row delete would silently wipe that
     // too even though the user only asked to clear their Gemini key.
-    const { error } = await supabase
+    const { error } = await (await secretsClient(supabase))
       .from("user_secrets")
       .update({ gemini_api_key: null })
       .eq("owner_id", userId);
@@ -247,7 +248,7 @@ export const getGroqKeyStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { data, error } = await supabase
+    const { data, error } = await (await secretsClient(supabase))
       .from("user_secrets")
       .select("groq_api_key")
       .eq("owner_id", userId)
@@ -265,7 +266,7 @@ export const saveGroqKey = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => SaveKeyInput.parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase
+    const { error } = await (await secretsClient(supabase))
       .from("user_secrets")
       .upsert({ owner_id: userId, groq_api_key: data.key.trim() }, { onConflict: "owner_id" });
     if (error) {
@@ -279,7 +280,7 @@ export const deleteGroqKey = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase
+    const { error } = await (await secretsClient(supabase))
       .from("user_secrets")
       .update({ groq_api_key: null })
       .eq("owner_id", userId);
@@ -299,7 +300,7 @@ export const getAnthropicKeyStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { data, error } = await supabase
+    const { data, error } = await (await secretsClient(supabase))
       .from("user_secrets")
       .select("anthropic_api_key")
       .eq("owner_id", userId)
@@ -317,7 +318,7 @@ export const saveAnthropicKey = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => SaveKeyInput.parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase
+    const { error } = await (await secretsClient(supabase))
       .from("user_secrets")
       .upsert({ owner_id: userId, anthropic_api_key: data.key.trim() }, { onConflict: "owner_id" });
     if (error) {
@@ -331,7 +332,7 @@ export const deleteAnthropicKey = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase
+    const { error } = await (await secretsClient(supabase))
       .from("user_secrets")
       .update({ anthropic_api_key: null })
       .eq("owner_id", userId);
@@ -395,7 +396,7 @@ export const getGoogleCseStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { data, error } = await supabase
+    const { data, error } = await (await secretsClient(supabase))
       .from("user_secrets")
       .select("google_cse_api_key, google_cse_cx")
       .eq("owner_id", userId)
@@ -420,7 +421,7 @@ export const saveGoogleCseCredentials = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => SaveGoogleCseInput.parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase.from("user_secrets").upsert(
+    const { error } = await (await secretsClient(supabase)).from("user_secrets").upsert(
       {
         owner_id: userId,
         google_cse_api_key: data.key.trim(),
@@ -439,7 +440,7 @@ export const deleteGoogleCseCredentials = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase
+    const { error } = await (await secretsClient(supabase))
       .from("user_secrets")
       .update({ google_cse_api_key: null, google_cse_cx: null })
       .eq("owner_id", userId);
@@ -459,7 +460,7 @@ export const getGithubTokenStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { data, error } = await supabase
+    const { data, error } = await (await secretsClient(supabase))
       .from("user_secrets")
       .select("github_token")
       .eq("owner_id", userId)
@@ -477,7 +478,7 @@ export const saveGithubToken = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => SaveKeyInput.parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase
+    const { error } = await (await secretsClient(supabase))
       .from("user_secrets")
       .upsert({ owner_id: userId, github_token: data.key.trim() }, { onConflict: "owner_id" });
     if (error) {
@@ -491,7 +492,7 @@ export const deleteGithubToken = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase
+    const { error } = await (await secretsClient(supabase))
       .from("user_secrets")
       .update({ github_token: null })
       .eq("owner_id", userId);

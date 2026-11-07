@@ -13,6 +13,7 @@
 // zgodności. Stąd import jest LENIWY i opakowany: gdyby się tam nie wczytała,
 // dzwonek w aplikacji i tak zapala się normalnie, a my dostajemy wpis w logu
 // zamiast wyjątku w środku zapisu.
+import { secretsClient } from "@/lib/system/userSecrets";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -47,7 +48,7 @@ type Vapid = { publicKey: string; privateKey: string; subject: string };
 
 /** Klucze VAPID właściciela; null, gdy jeszcze nie zostały wygenerowane. */
 export async function loadVapidKeys(db: Db, ownerId: string): Promise<Vapid | null> {
-  const { data } = await db
+  const { data } = await (await secretsClient(db))
     .from("user_secrets")
     .select("vapid_public_key, vapid_private_key, vapid_subject")
     .eq("owner_id", ownerId)
@@ -82,7 +83,7 @@ export async function ensureVapidKeys(
   if (!webpush) return null;
 
   const keys = webpush.generateVAPIDKeys();
-  const { error } = await db.from("user_secrets").upsert(
+  const { error } = await (await secretsClient(db)).from("user_secrets").upsert(
     {
       owner_id: ownerId,
       vapid_public_key: keys.publicKey,

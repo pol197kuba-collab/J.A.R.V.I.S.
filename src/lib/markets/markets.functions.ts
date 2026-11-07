@@ -7,6 +7,7 @@
 // uwierzytelnienie, walidacja wejścia, progi świeżości i kształt odpowiedzi.
 //
 // Ten sam podział co w module paliwowym (fuel.functions.ts + ingest.server.ts).
+import { secretsClient } from "@/lib/system/userSecrets";
 import type { LessonProgress } from "./lessons";
 import type { BrainPrediction, Divergence, LessonSpan } from "./brain";
 import { createServerFn } from "@tanstack/react-start";
@@ -82,7 +83,7 @@ export type MarketGrid = {
 
 /** Klucze modeli tego użytkownika — BYOK, nigdy nie opuszczają serwera. */
 async function loadModelKeys(supabase: Db, userId: string): Promise<ModelKeys> {
-  const { data } = await supabase
+  const { data } = await (await secretsClient(supabase))
     .from("user_secrets")
     .select("gemini_api_key, anthropic_api_key")
     .eq("owner_id", userId)

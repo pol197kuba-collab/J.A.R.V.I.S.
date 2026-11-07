@@ -9,6 +9,7 @@
 //
 // Dlatego każda funkcja tutaj bierze klienta Supabase i ownerId jako
 // argumenty, zamiast czytać je z kontekstu żądania.
+import { resolveWriteClient } from "@/lib/fuel/writeAccess.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import {
@@ -91,6 +92,18 @@ const lastRefreshAt = new Map<string, number>();
 
 const refreshThresholdFor = (asset: MarketAsset): number =>
   asset.assetClass === "crypto" ? MIN_REFRESH_CRYPTO_MS : MIN_REFRESH_MS;
+
+/**
+ * Klient do zapisu we WSPÓLNYCH tabelach cache (`market_quotes`,
+ * `market_news_items`). Zapis wymaga service_role — migracja
+ * 20261107120000_lock_secrets_and_shared_writes.sql odebrała go zalogowanym
+ * użytkownikom. Bez skonfigurowanego klucza zwracamy klienta wywołującego
+ * (testy, skrypty działające na własnym kliencie).
+ */
+async function sharedCacheWriter(fallback: Db): Promise<Db> {
+  const admin = (await resolveWriteClient()) as Db | null;
+  return admin ?? fallback;
+}
 
 export async function logEvent(
   supabase: Db,
@@ -198,8 +211,9 @@ async function persistSeries(
   }));
   // Paczkami — jedno żądanie z tysiącem wierszy potrafi przekroczyć limit
   // payloadu PostgREST-a.
+  const writer = await sharedCacheWriter(supabase);
   for (let i = 0; i < rows.length; i += 500) {
-    const { error } = await supabase
+    const { error } = await writer
       .from("market_quotes")
       .upsert(rows.slice(i, i + 500), { onConflict: "symbol,quote_date" });
     if (error) throw new Error(error.message);
@@ -310,7 +324,8 @@ export async function ingestNews(
     summary_pl: i.summaryPl,
     classified_by: i.classifiedBy,
   }));
-  const { error } = await supabase.from("market_news_items").upsert(rows, { onConflict: "guid" });
+  const writer = await sharedCacheWriter(supabase);
+  const { error } = await writer.from("market_news_items").upsert(rows, { onConflict: "guid" });
   if (error) {
     await logEvent(supabase, userId, "error", `Zapis newsów: ${error.message}`, {} as Json);
     return { written: 0, aiCount: 0, errors: [`zapis do bazy: ${error.message}`] };

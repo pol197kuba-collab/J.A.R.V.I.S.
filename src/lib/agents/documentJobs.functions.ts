@@ -16,6 +16,7 @@
 //     image-enrichment pass had none, and "done" used to mean the same thing
 //     whether or not the images actually made it in.
 
+import { secretsClient } from "@/lib/system/userSecrets";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
@@ -233,7 +234,7 @@ export async function runDocumentJobCore(
       .eq("id", job.id);
 
     try {
-      const { data: secret } = await supabase
+      const { data: secret } = await (await secretsClient(supabase))
         .from("user_secrets")
         .select("gemini_api_key")
         .eq("owner_id", userId)
