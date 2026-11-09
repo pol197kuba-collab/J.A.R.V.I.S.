@@ -39,7 +39,20 @@ export type FetchOutcome =
   | { symbol: string; ok: true; points: PricePoint[]; source: QuoteSource }
   | { symbol: string; ok: false; error: string };
 
+/** Jedna powtórka po przejściowej porażce (timeout / 5xx) — nie po 4xx. */
 async function getJson(url: string): Promise<unknown> {
+  try {
+    return await getJsonOnce(url);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const transient = /abort|timeout|fetch failed|HTTP 5\d\d/i.test(msg);
+    if (!transient) throw err;
+    await new Promise((r) => setTimeout(r, 1_500));
+    return getJsonOnce(url);
+  }
+}
+
+async function getJsonOnce(url: string): Promise<unknown> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
