@@ -224,7 +224,12 @@ async function fetchText(url: string): Promise<string> {
   try {
     const res = await fetch(url, {
       signal: ctrl.signal,
-      headers: { Accept: "application/rss+xml,application/xml,text/xml" },
+      // Bez User-Agenta część kanałów (FXStreet → HTTP 403) traktuje żądanie
+      // jak scraping; ten sam, uczciwy nagłówek co w quotes.server.ts.
+      headers: {
+        Accept: "application/rss+xml,application/xml,text/xml",
+        "User-Agent": "JARVIS-MarketGrid/1.0 (personal dashboard; +https://github.com/)",
+      },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.text();
