@@ -4,12 +4,25 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { logServerError } from "@/lib/system/logServerError";
-import { computeCommute, loadCommuteSettings, loadTomtomKey } from "./commute.server";
+import {
+  computeCommute,
+  loadCommuteSettings,
+  loadSavedRoutes,
+  loadTomtomKey,
+  previewRoute,
+} from "./commute.server";
 import { geocode, type GeocodeHit } from "./tomtom.server";
-import type { CommuteResult, CommuteSettings } from "./types";
+import {
+  MAX_SAVED_ROUTES,
+  MAX_VIA_POINTS,
+  type CommuteResult,
+  type CommuteRoute,
+  type CommuteSettings,
+  type SavedRoute,
+} from "./types";
 
 export type CommuteResponse =
-  | { status: "ok"; result: CommuteResult; settings: CommuteSettings }
+  | { status: "ok"; result: CommuteResult; settings: CommuteSettings; saved: SavedRoute[] }
   | { status: "no_key" | "no_places"; settings: CommuteSettings };
 
 export const getCommuteSettingsFn = createServerFn({ method: "GET" })
@@ -106,9 +119,9 @@ export const getCommuteFn = createServerFn({ method: "POST" })
     const settings = await loadCommuteSettings(supabase, userId);
     try {
       const outcome = await computeCommute(supabase, userId, data.direction, new Date(), settings);
-      return outcome.ok
-        ? { status: "ok", result: outcome.result, settings }
-        : { status: outcome.reason, settings };
+      if (!outcome.ok) return { status: outcome.reason, settings };
+      const saved = await loadSavedRoutes(supabase, userId, data.direction).catch(() => []);
+      return { status: "ok", result: outcome.result, settings, saved };
     } catch (err) {
       // Ślad w System Logs — klient i tak dostaje tylko ogólny błąd.
       await logServerError(supabase, userId, "commute.fetch", err);
@@ -130,4 +143,139 @@ export const getMapTileKeyFn = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<{ key: string | null }> => {
     const { supabase, userId } = context;
     return { key: await loadTomtomKey(supabase, userId) };
+  });
+
+// ---------------------------------------------------------------------------
+// Moje trasy (zapisane warianty z punktami pośrednimi)
+// ---------------------------------------------------------------------------
+
+const Direction = z.enum(["to", "back"]);
+const Via = z.object({
+  lat: z.number().min(-90).max(90),
+  lon: z.number().min(-180).max(180),
+  label: z.string().trim().max(120).optional(),
+});
+
+const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
+const cleanVia = (via: Array<z.infer<typeof Via>>) =>
+  via.map((v) => ({ lat: r6(v.lat), lon: r6(v.lon), ...(v.label ? { label: v.label } : {}) }));
+
+const SaveRouteInput = z.object({
+  id: z.string().uuid().optional(),
+  direction: Direction,
+  name: z.string().trim().min(1).max(60),
+  via: z.array(Via).min(1).max(MAX_VIA_POINTS),
+  makeDefault: z.boolean().optional(),
+});
+
+export const saveCommuteRouteFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => SaveRouteInput.parse(input))
+  .handler(async ({ data, context }): Promise<SavedRoute[]> => {
+    const { supabase, userId } = context;
+    const existing = await loadSavedRoutes(supabase, userId, data.direction);
+    if (!data.id && existing.length >= MAX_SAVED_ROUTES) {
+      throw new Error(`Można zapisać najwyżej ${MAX_SAVED_ROUTES} trasy na kierunek.`);
+    }
+    const via = cleanVia(data.via);
+    if (data.id) {
+      const { error } = await supabase
+        .from("commute_routes")
+        .update({ name: data.name, via })
+        .eq("id", data.id)
+        .eq("owner_id", userId);
+      if (error) throw new Error(error.message);
+    } else {
+      const { data: row, error } = await supabase
+        .from("commute_routes")
+        .insert({
+          owner_id: userId,
+          direction: data.direction,
+          name: data.name,
+          via,
+          position: existing.length,
+          // Pierwsza zapisana trasa kierunku od razu staje się domyślną — po to ją dodajesz.
+          is_default: false,
+        })
+        .select("id")
+        .single();
+      if (error) {
+        await logServerError(supabase, userId, "commute.route", error);
+        throw new Error(error.message);
+      }
+      data.id = row.id;
+      if (existing.length === 0) data.makeDefault = true;
+    }
+    if (data.makeDefault && data.id) await setDefault(supabase, userId, data.direction, data.id);
+    return loadSavedRoutes(supabase, userId, data.direction);
+  });
+
+async function setDefault(
+  supabase: Parameters<typeof loadSavedRoutes>[0],
+  userId: string,
+  direction: "to" | "back",
+  id: string | null,
+): Promise<void> {
+  // Najpierw zdejmujemy gwiazdkę (unikalny indeks pilnuje jednej na kierunek),
+  // potem nadajemy nową. Gdyby drugi krok padł, zostaje trasa automatyczna.
+  const clear = await supabase
+    .from("commute_routes")
+    .update({ is_default: false })
+    .eq("owner_id", userId)
+    .eq("direction", direction)
+    .eq("is_default", true);
+  if (clear.error) throw new Error(clear.error.message);
+  if (id === null) return;
+  const set = await supabase
+    .from("commute_routes")
+    .update({ is_default: true })
+    .eq("id", id)
+    .eq("owner_id", userId)
+    .eq("direction", direction);
+  if (set.error) throw new Error(set.error.message);
+}
+
+/** `id: null` = trasą domyślną znów jest najszybsza automatyczna. */
+export const setDefaultCommuteRouteFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ direction: Direction, id: z.string().uuid().nullable() }).parse(input),
+  )
+  .handler(async ({ data, context }): Promise<SavedRoute[]> => {
+    const { supabase, userId } = context;
+    await setDefault(supabase, userId, data.direction, data.id);
+    return loadSavedRoutes(supabase, userId, data.direction);
+  });
+
+export const deleteCommuteRouteFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ id: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }): Promise<{ ok: true }> => {
+    const { supabase, userId } = context;
+    const { error } = await supabase
+      .from("commute_routes")
+      .delete()
+      .eq("id", data.id)
+      .eq("owner_id", userId);
+    if (error) {
+      await logServerError(supabase, userId, "commute.route", error);
+      throw new Error(error.message);
+    }
+    return { ok: true };
+  });
+
+/** Podgląd trasy z punktami pośrednimi w edytorze: czas, dystans i linia do narysowania. */
+export const previewCommuteRouteFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ direction: Direction, via: z.array(Via).min(1).max(MAX_VIA_POINTS) }).parse(input),
+  )
+  .handler(async ({ data, context }): Promise<CommuteRoute | null> => {
+    const { supabase, userId } = context;
+    try {
+      return await previewRoute(supabase, userId, data.direction, cleanVia(data.via));
+    } catch (err) {
+      await logServerError(supabase, userId, "commute.preview", err);
+      throw err;
+    }
   });

@@ -79,7 +79,39 @@ export type CommuteIncident = {
   at: LatLon;
 };
 
+/** Punkt pośredni zapisanej trasy; etykieta to to, co wpisał lub wskazał użytkownik. */
+export type ViaPoint = LatLon & { label?: string };
+
+export type SavedRoute = {
+  id: string;
+  direction: CommuteDirection;
+  name: string;
+  via: ViaPoint[];
+  isDefault: boolean;
+};
+
+/** Najwyżej tyle zapisanych tras na kierunek i punktów pośrednich na trasę. */
+export const MAX_SAVED_ROUTES = 3;
+export const MAX_VIA_POINTS = 3;
+
+/**
+ * Jedna z tras do wyboru: zapisana przez użytkownika albo automatyczna
+ * (najszybsza / alternatywa). `route` to dokładnie to, co leży na mapie.
+ */
+export type CommuteOption = {
+  /** "saved:<uuid>" albo "auto:<n>". */
+  id: string;
+  kind: "saved" | "auto";
+  name: string;
+  isDefault: boolean;
+  route: CommuteRoute;
+};
+
 export type Detour = {
+  /** Opcja, którą proponujemy; po id, bo przez sieć nie przeżyją referencje. */
+  optionId: string;
+  /** Nazwa zapisanej trasy; null dla automatycznej. */
+  name: string | null;
   route: CommuteRoute;
   /** O ile krócej niż trasa główna (ujemne = dłużej, ale omija utrudnienie). */
   savesSec: number;
@@ -92,8 +124,13 @@ export type CommuteResult = {
   direction: CommuteDirection;
   origin: LatLon & { label: string };
   destination: LatLon & { label: string };
+  /** Trasa domyślna: zapisana oznaczona gwiazdką albo najszybsza automatyczna. */
   main: CommuteRoute;
+  /** Pozostałe trasy (do porównania i objazdów). */
   alternatives: CommuteRoute[];
+  /** Wszystkie trasy do wyboru, domyślna pierwsza. */
+  options: CommuteOption[];
+  defaultId: string;
   /** Utrudnienia leżące na trasie głównej albo na jednej z alternatyw. */
   incidents: CommuteIncident[];
   detour: Detour | null;

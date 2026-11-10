@@ -2,7 +2,7 @@
 // zdania. Czyste: te same liczby dają ten sam tekst.
 import { INCIDENT_LABEL } from "./tomtom";
 import { delayMin, hm, hmOf, leaveByMin, minutesOf, warsawParts } from "./plan";
-import type { CommuteResult, CommuteSettings } from "./types";
+import type { CommuteOption, CommuteResult, CommuteSettings } from "./types";
 
 export type CommuteFacts = {
   /** Planowany wyjazd, HH:MM. */
@@ -24,8 +24,14 @@ const where = (i: CommuteResult["incidents"][number]): string =>
   [i.road, i.from && i.to ? `${i.from} → ${i.to}` : (i.from ?? i.to)].filter(Boolean).join(", ") ||
   "na trasie";
 
-export function commuteFacts(result: CommuteResult, settings: CommuteSettings): CommuteFacts {
-  const m = result.main;
+export function commuteFacts(
+  result: CommuteResult,
+  settings: CommuteSettings,
+  /** Trasa, o którą pytamy; domyślnie domyślna. Objazd dotyczy tylko domyślnej. */
+  option?: CommuteOption,
+): CommuteFacts {
+  const m = option?.route ?? result.main;
+  const isDefault = !option || option.id === result.defaultId;
   const departAt = m.departAt ? new Date(m.departAt) : null;
   const departMin = result.direction === "to" ? settings.departToMin : settings.departBackMin;
   const leave = leaveByMin(settings.arriveByMin, m.durationSec);
@@ -46,14 +52,15 @@ export function commuteFacts(result: CommuteResult, settings: CommuteSettings): 
         where: where(i),
         delayMin: i.delaySec === null ? null : minutesOf(i.delaySec),
       })),
-    detour: result.detour
-      ? {
-          via: result.detour.via,
-          durationMin: minutesOf(result.detour.route.durationSec),
-          savesMin: Math.round(result.detour.savesSec / 60),
-          avoidsIncident: result.detour.reason === "avoids_incident",
-        }
-      : null,
+    detour:
+      result.detour && isDefault
+        ? {
+            via: result.detour.via,
+            durationMin: minutesOf(result.detour.route.durationSec),
+            savesMin: Math.round(result.detour.savesSec / 60),
+            avoidsIncident: result.detour.reason === "avoids_incident",
+          }
+        : null,
   };
 }
 

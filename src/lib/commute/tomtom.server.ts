@@ -3,6 +3,7 @@
 // „TomTom HTTP <status>", żeby alarm o padniętym kluczu
 // (providerKeys.findKeyFailures) umiał je rozpoznać w System Logs.
 import { incidentBoxes } from "./geo";
+import { assembleOptions } from "./options";
 import { attachIncidents, mergeIncidents, parseIncidents, parseRoutes, pickDetour } from "./tomtom";
 import type {
   CommuteDirection,
@@ -11,6 +12,7 @@ import type {
   CommuteRoute,
   Detour,
   LatLon,
+  SavedRoute,
 } from "./types";
 import type { DeparturePlan } from "./plan";
 
@@ -49,13 +51,18 @@ export async function fetchRoutes(
   from: LatLon,
   to: LatLon,
   plan: DeparturePlan,
+  opts: { via?: readonly LatLon[]; alternatives?: number } = {},
 ): Promise<CommuteRoute[]> {
+  const via = opts.via ?? [];
   const params = new URLSearchParams({
     key,
     traffic: "true",
     travelMode: "car",
     routeType: "fastest",
-    maxAlternatives: "2",
+    // Trasa z punktami pośrednimi jest jedna — alternatyw dla niej nie liczymy
+    // (TomTom ich w tym trybie nie daje), a automatyczne propozycje idą osobnym
+    // zapytaniem bez tych punktów.
+    maxAlternatives: String(via.length > 0 ? 0 : (opts.alternatives ?? 2)),
     computeTravelTimeFor: "all",
     instructionsType: "text",
     language: "pl-PL",
@@ -63,9 +70,8 @@ export async function fetchRoutes(
   });
   // „Teraz" = bez departAt (żywy ruch); inaczej godzina z planu.
   if (!plan.live) params.set("departAt", rfc3339(plan.at));
-  const url =
-    `${BASE}/routing/1/calculateRoute/${from.lat},${from.lon}:${to.lat},${to.lon}/json?` +
-    params.toString();
+  const stops = [from, ...via, to].map((p) => `${p.lat},${p.lon}`).join(":");
+  const url = `${BASE}/routing/1/calculateRoute/${stops}/json?` + params.toString();
   const routes = parseRoutes(await getJson(url, "trasa"));
   if (routes.length === 0) throw new Error("TomTom trasa: odpowiedź bez żadnej trasy");
   return routes;
@@ -125,33 +131,63 @@ export async function geocode(key: string, query: string): Promise<GeocodeHit[]>
   return out;
 }
 
-/** Cała robota dla jednego kierunku: trasy + utrudnienia + objazd. */
+/**
+ * Cała robota dla jednego kierunku: trasy zapisane (z punktami pośrednimi),
+ * automatyczne propozycje (bez nich), utrudnienia i objazd.
+ *
+ * `main` to trasa DOMYŚLNA — zapisana z gwiazdką, a bez niej najszybsza
+ * automatyczna. To ją czytają briefing, kafelek, dock i alert, a objazd
+ * porównujemy z nią, nie z tym, co wybrałaby mapa.
+ */
 export async function buildCommute(
   key: string,
   direction: CommuteDirection,
   origin: LatLon & { label: string },
   destination: LatLon & { label: string },
   plan: DeparturePlan,
+  saved: readonly SavedRoute[] = [],
 ): Promise<CommuteResult> {
-  const [main, ...alternatives] = await fetchRoutes(key, origin, destination, plan);
+  const [auto, ...savedRoutes] = await Promise.all([
+    fetchRoutes(key, origin, destination, plan),
+    // Zapisana trasa, której TomTom nie umie wyznaczyć (np. punkt poza drogą),
+    // nie może zabrać całego wyniku — pomijamy ją, reszta działa.
+    ...saved.map((meta) =>
+      fetchRoutes(key, origin, destination, plan, { via: meta.via })
+        .then((r) => ({ meta, route: r[0] }))
+        .catch(() => null),
+    ),
+  ]);
+  const savedOk = (savedRoutes as Array<{ meta: SavedRoute; route: CommuteRoute } | null>).filter(
+    (x): x is { meta: SavedRoute; route: CommuteRoute } => x !== null && !!x.route,
+  );
+
+  const { options, defaultId } = assembleOptions(savedOk, auto);
+  const def = options.find((o) => o.id === defaultId) ?? options[0];
+  const others = options.filter((o) => o !== def);
+  const allRoutes = options.map((o) => o.route);
 
   // Utrudnienia są DODATKIEM do czasu przejazdu. Padnięte pobranie nie może
   // zabrać samego czasu dojazdu — czas z ruchem już je w sobie zawiera.
   let incidents: CommuteIncident[] = [];
   try {
-    const all = await fetchIncidents(key, main.points);
-    incidents = attachIncidents([main, ...alternatives], all);
+    const all = await fetchIncidents(
+      key,
+      allRoutes.flatMap((r) => r.points),
+    );
+    incidents = attachIncidents(allRoutes, all);
   } catch {
     incidents = [];
   }
 
-  const detour: Detour | null = pickDetour(main, alternatives, incidents);
+  const detour: Detour | null = pickDetour(def.route, others, incidents);
   return {
     direction,
     origin,
     destination,
-    main,
-    alternatives,
+    main: def.route,
+    alternatives: others.map((o) => o.route),
+    options,
+    defaultId: def.id,
     incidents,
     detour,
     live: plan.live,

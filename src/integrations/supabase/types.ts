@@ -419,6 +419,39 @@ export type Database = {
           },
         ]
       }
+      commute_routes: {
+        Row: {
+          created_at: string
+          direction: string
+          id: string
+          is_default: boolean
+          name: string
+          owner_id: string
+          position: number
+          via: Json
+        }
+        Insert: {
+          created_at?: string
+          direction: string
+          id?: string
+          is_default?: boolean
+          name: string
+          owner_id: string
+          position?: number
+          via?: Json
+        }
+        Update: {
+          created_at?: string
+          direction?: string
+          id?: string
+          is_default?: boolean
+          name?: string
+          owner_id?: string
+          position?: number
+          via?: Json
+        }
+        Relationships: []
+      }
       commute_settings: {
         Row: {
           alert_delay_min: number

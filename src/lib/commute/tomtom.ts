@@ -3,6 +3,7 @@
 import { anyNearPolyline, decimate, overlapFraction } from "./geo";
 import type {
   CommuteIncident,
+  CommuteOption,
   CommuteRoute,
   Detour,
   IncidentKind,
@@ -230,7 +231,7 @@ export function viaStreets(main: CommuteRoute, alt: CommuteRoute, max = 3): stri
 
 export function pickDetour(
   main: CommuteRoute,
-  alternatives: readonly CommuteRoute[],
+  candidates: readonly CommuteOption[],
   incidents: readonly CommuteIncident[],
 ): Detour | null {
   const byId = new Map(incidents.map((i) => [i.id, i]));
@@ -242,7 +243,8 @@ export function pickDetour(
   const mainSerious = serious(main.incidentIds);
 
   let best: Detour | null = null;
-  for (const alt of alternatives) {
+  for (const option of candidates) {
+    const alt = option.route;
     if (overlapFraction(alt.points, main.points, 80) >= SAME_ROUTE_OVERLAP) continue;
     const saves = main.durationSec - alt.durationSec;
     const altSerious = serious(alt.incidentIds);
@@ -253,7 +255,14 @@ export function pickDetour(
     }
     if (!reason) continue;
     if (!best || alt.durationSec < best.route.durationSec) {
-      best = { route: alt, savesSec: saves, via: viaStreets(main, alt), reason };
+      best = {
+        optionId: option.id,
+        name: option.kind === "saved" ? option.name : null,
+        route: alt,
+        savesSec: saves,
+        via: viaStreets(main, alt),
+        reason,
+      };
     }
   }
   return best;
