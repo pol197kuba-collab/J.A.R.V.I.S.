@@ -2,7 +2,7 @@
 // więc trzy miejsca na ekranie to jedno pobranie, nie trzy.
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { getCommuteFn, getCommuteSettingsFn } from "./commute.functions";
+import { getCommuteFn, getCommuteSettingsFn, getMapTileKeyFn } from "./commute.functions";
 import type { CommuteDirection } from "./types";
 
 export const COMMUTE_SETTINGS_KEY = ["commute", "settings"] as const;
@@ -38,5 +38,15 @@ export function useCommute(direction: CommuteDirection, enabled = true) {
         : PLANNED_REFRESH_MS,
     refetchOnWindowFocus: false,
     retry: 1,
+  });
+}
+
+/** Klucz do kafelków mapy; zmienia się tylko po zmianie klucza w Ustawieniach. */
+export function useMapTileKey() {
+  const fn = useServerFn(getMapTileKeyFn);
+  return useQuery({
+    queryKey: ["commute", "tile-key"] as const,
+    queryFn: () => fn(),
+    staleTime: 10 * 60_000,
   });
 }

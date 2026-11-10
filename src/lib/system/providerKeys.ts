@@ -75,7 +75,8 @@ export const PROVIDERS: readonly ProviderInfo[] = [
       "Dojazd do pracy: czas z ruchem, utrudnienia, objazdy i mapa trasy (Situation Room, kafelek, dock, briefing, alert).",
     ifBroken:
       "Dojazd nie pokazuje trasy ani czasu; briefing pomija sekcję „Dojazd”, alert o opóźnieniu nie przychodzi.",
-    source: "developer.tomtom.com → Dashboard → Keys (darmowy tier ok. 2500 zapytań dziennie)",
+    source:
+      "developer.tomtom.com → Dashboard → Keys; produkty klucza: Routing, Traffic, Search i Map Display (kafelki mapy). Darmowy tier ok. 2500 zapytań dziennie",
   },
 ];
 

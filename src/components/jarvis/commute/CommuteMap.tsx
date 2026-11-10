@@ -106,14 +106,24 @@ function buildPins(result: CommuteResult): Pin[] {
 const pinHtml = (p: Pin) =>
   `<div class="commute-pin" style="--c:${p.color}"><b>${p.text}</b><i></i></div>`;
 
+/** Kafelki TomTom (styl nocny) — ten sam klucz co trasy; wymaga produktu Map Display API. */
+const tileUrl = (key: string) =>
+  `https://api.tomtom.com/map/1/tile/basic/night/{z}/{x}/{y}.png?key=${encodeURIComponent(key)}&language=pl-PL`;
+
+/** Tyle nieudanych kafelków z rzędu uznajemy za „podkład niedostępny". */
+const TILE_ERRORS_BEFORE_HINT = 4;
+
 export function CommuteMap({
   result,
   showDetour,
   tilt,
+  tileKey,
 }: {
   result: CommuteResult;
   showDetour: boolean;
   tilt: boolean;
+  /** Klucz do kafelków; null = mapa bez podkładu (sama trasa na ciemnym tle). */
+  tileKey: string | null;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -121,7 +131,9 @@ export function CommuteMap({
   const mapRef = useRef<LeafletNS.Map | null>(null);
   const layerRef = useRef<LeafletNS.LayerGroup | null>(null);
   const probesRef = useRef<Array<{ pin: Pin; marker: LeafletNS.Marker }>>([]);
+  const tileLayerRef = useRef<LeafletNS.TileLayer | null>(null);
   const fittedFor = useRef<string | null>(null);
+  const [tilesBlocked, setTilesBlocked] = useState(false);
   const [ready, setReady] = useState(false);
   const [screenPins, setScreenPins] = useState<Array<Pin & { x: number; y: number }>>([]);
 
@@ -171,11 +183,6 @@ export function CommuteMap({
       map.attributionControl.setPrefix(false);
       map.on("click", () => map.scrollWheelZoom.enable());
       containerRef.current.addEventListener("mouseleave", () => map.scrollWheelZoom.disable());
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        attribution: "&copy; OpenStreetMap, &copy; CARTO · TomTom",
-        subdomains: "abcd",
-        maxZoom: 19,
-      }).addTo(map);
       layerRef.current = L.layerGroup().addTo(map);
       mapRef.current = map;
       setReady(true);
@@ -189,6 +196,40 @@ export function CommuteMap({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Podkład: kafelki TomTom. Osobny efekt, bo klucz dochodzi z serwera już po
+  // utworzeniu mapy. Bez klucza (albo gdy TomTom odmawia kafelków, np. klucz
+  // nie ma produktu Map Display API) zostaje sama trasa na ciemnym tle —
+  // czytelna, tylko bez ulic.
+  useEffect(() => {
+    const L = leafletRef.current;
+    const map = mapRef.current;
+    if (!L || !map) return;
+    tileLayerRef.current?.remove();
+    tileLayerRef.current = null;
+    setTilesBlocked(false);
+    if (!tileKey) return;
+    let errors = 0;
+    const layer = L.tileLayer(tileUrl(tileKey), {
+      attribution: "&copy; TomTom, &copy; OpenStreetMap",
+      maxZoom: 18,
+      tileSize: 256,
+    });
+    layer.on("tileerror", () => {
+      errors += 1;
+      if (errors === TILE_ERRORS_BEFORE_HINT) setTilesBlocked(true);
+    });
+    layer.on("tileload", () => {
+      errors = 0;
+      setTilesBlocked(false);
+    });
+    layer.addTo(map);
+    layer.bringToBack();
+    tileLayerRef.current = layer;
+    return () => {
+      layer.remove();
+    };
+  }, [ready, tileKey]);
 
   // Rysowanie: trasa, odcinki z utrudnieniem, objazd, znaczniki.
   useEffect(() => {
@@ -322,6 +363,14 @@ export function CommuteMap({
           ))}
         </div>
       )}
+
+      {tileKey === null || tilesBlocked ? (
+        <p className="pointer-events-none absolute bottom-3 left-3 z-[500] max-w-[60%] font-display text-[9px] uppercase tracking-[0.18em] text-warning">
+          {tileKey === null
+            ? "Brak podkładu mapy — dodaj klucz TomTom"
+            : "Podkład niedostępny — włącz Map Display API w kluczu TomTom"}
+        </p>
+      ) : null}
 
       <div className="absolute bottom-3 right-3 z-[500] flex flex-col gap-1">
         {(
