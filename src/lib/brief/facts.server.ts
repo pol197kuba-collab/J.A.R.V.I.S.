@@ -18,6 +18,8 @@ import { describeOrder, type StandingOrder } from "@/lib/orders/rules";
 import { warsawDate } from "@/lib/format/warsaw";
 import { currentBudget } from "@/lib/agents/budget.server";
 import { fetchDayWeather } from "@/lib/weather/openMeteo.server";
+import { commuteFacts, isCommuteDay } from "@/lib/commute/brief";
+import { computeCommute, loadCommuteSettings } from "@/lib/commute/commute.server";
 import { logServerError } from "@/lib/system/logServerError";
 import { budgetMessage } from "@/lib/agents/budget";
 import type { BriefFacts } from "./types";
@@ -327,6 +329,26 @@ async function loadWeather(db: Db, ownerId: string): Promise<BriefFacts["weather
   }
 }
 
+/**
+ * Dojazd do pracy na planowaną godzinę wyjazdu.
+ *
+ * BRAK ADRESÓW, KLUCZA I WEEKEND TO WYBÓR, nie awaria — rubryka milczy. Zepsute
+ * pobranie od TomTom jest awarią i zostawia ślad w `system_events` (stamtąd
+ * czyta ją sekcja „Usterki" następnego briefingu oraz alarm o kluczu).
+ */
+async function loadCommute(db: Db, ownerId: string): Promise<BriefFacts["commute"]> {
+  const now = new Date();
+  if (!isCommuteDay(now)) return null;
+  try {
+    const settings = await loadCommuteSettings(db, ownerId);
+    const outcome = await computeCommute(db, ownerId, "to", now, settings);
+    return outcome.ok ? commuteFacts(outcome.result, settings) : null;
+  } catch (err) {
+    await logServerError(db, ownerId, "brief.commute", err);
+    return null;
+  }
+}
+
 async function loadFailures(db: Db, ownerId: string): Promise<BriefFacts["failures"]> {
   const since = new Date(Date.now() - DAY_MS).toISOString();
   const { data } = await db
@@ -361,19 +383,31 @@ export async function gatherFacts(db: Db, ownerId: string): Promise<BriefFacts> 
     }
   };
 
-  const [movers, calls, accuracy, fuel, firedOrders, tasks, failures, budget, weather, fund] =
-    await Promise.all([
-      safe(() => loadMovers(db, ownerId), []),
-      safe(() => loadCalls(db, ownerId), []),
-      safe(() => loadAccuracy(db, ownerId), { settled: 0, hitRatePct: null }),
-      safe(() => loadFuel(db), null),
-      safe(() => loadFiredOrders(db, ownerId), []),
-      safe(() => loadTasks(db, ownerId), { overdue: [], today: [] }),
-      safe(() => loadFailures(db, ownerId), { count: 0, sample: null }),
-      safe(() => loadBudget(db, ownerId), null),
-      safe(() => loadWeather(db, ownerId), null),
-      safe(() => loadFund(db, ownerId), null),
-    ]);
+  const [
+    movers,
+    calls,
+    accuracy,
+    fuel,
+    firedOrders,
+    tasks,
+    failures,
+    budget,
+    weather,
+    fund,
+    commute,
+  ] = await Promise.all([
+    safe(() => loadMovers(db, ownerId), []),
+    safe(() => loadCalls(db, ownerId), []),
+    safe(() => loadAccuracy(db, ownerId), { settled: 0, hitRatePct: null }),
+    safe(() => loadFuel(db), null),
+    safe(() => loadFiredOrders(db, ownerId), []),
+    safe(() => loadTasks(db, ownerId), { overdue: [], today: [] }),
+    safe(() => loadFailures(db, ownerId), { count: 0, sample: null }),
+    safe(() => loadBudget(db, ownerId), null),
+    safe(() => loadWeather(db, ownerId), null),
+    safe(() => loadFund(db, ownerId), null),
+    safe(() => loadCommute(db, ownerId), null),
+  ]);
 
   return {
     // Data WARSZAWSKA, nie UTC. O 00:30 czasu lokalnego w UTC trwa jeszcze
@@ -391,5 +425,6 @@ export async function gatherFacts(db: Db, ownerId: string): Promise<BriefFacts> 
     budget,
     weather,
     fund,
+    commute,
   };
 }

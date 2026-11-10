@@ -7,6 +7,7 @@ import { UiModeSettings } from "@/components/jarvis/UiModeSettings";
 import { PushToggle } from "@/components/jarvis/orders/PushToggle";
 import { BriefScheduleControls } from "@/components/jarvis/brief/BriefScheduleControls";
 import { ApiKeysSection } from "@/components/jarvis/settings/ApiKeysSection";
+import { CommuteSettingsPanel } from "@/components/jarvis/commute/CommuteSettingsPanel";
 import { useAudioSettings } from "@/lib/audio/useAudioSettings";
 import { audio } from "@/lib/audio/AudioEngine";
 import { useServerFn } from "@tanstack/react-start";
@@ -33,6 +34,7 @@ const CATALOG_STATUS_LABEL: Record<string, string> = {
 const TABS = [
   { id: "keys", label: "Klucze API" },
   { id: "jarvis", label: "J.A.R.V.I.S." },
+  { id: "commute", label: "Dojazd" },
   { id: "notifications", label: "Powiadomienia" },
   { id: "look", label: "Wygląd i dźwięk" },
 ] as const;
@@ -118,6 +120,7 @@ function Settings() {
         <ApiKeysSection onGeminiLinked={setGeminiLinked} />
       </div>
       {tab === "jarvis" && <JarvisSection geminiLinked={geminiLinked === true} />}
+      {tab === "commute" && <CommuteSettingsPanel onGoToKeys={() => pickTab("keys")} />}
       {tab === "notifications" && <NotificationsSection />}
       {tab === "look" && <LookSection />}
     </div>

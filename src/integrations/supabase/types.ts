@@ -419,6 +419,57 @@ export type Database = {
           },
         ]
       }
+      commute_settings: {
+        Row: {
+          alert_delay_min: number
+          alert_enabled: boolean
+          alert_state: Json
+          arrive_by_min: number | null
+          depart_back_min: number
+          depart_to_min: number
+          home_label: string | null
+          home_lat: number | null
+          home_lon: number | null
+          owner_id: string
+          updated_at: string
+          work_label: string | null
+          work_lat: number | null
+          work_lon: number | null
+        }
+        Insert: {
+          alert_delay_min?: number
+          alert_enabled?: boolean
+          alert_state?: Json
+          arrive_by_min?: number | null
+          depart_back_min?: number
+          depart_to_min?: number
+          home_label?: string | null
+          home_lat?: number | null
+          home_lon?: number | null
+          owner_id: string
+          updated_at?: string
+          work_label?: string | null
+          work_lat?: number | null
+          work_lon?: number | null
+        }
+        Update: {
+          alert_delay_min?: number
+          alert_enabled?: boolean
+          alert_state?: Json
+          arrive_by_min?: number | null
+          depart_back_min?: number
+          depart_to_min?: number
+          home_label?: string | null
+          home_lat?: number | null
+          home_lon?: number | null
+          owner_id?: string
+          updated_at?: string
+          work_label?: string | null
+          work_lat?: number | null
+          work_lon?: number | null
+        }
+        Relationships: []
+      }
       daily_briefs: {
         Row: {
           brief_date: string
@@ -2130,6 +2181,7 @@ export type Database = {
           google_cse_cx: string | null
           groq_api_key: string | null
           owner_id: string
+          tomtom_api_key: string | null
           updated_at: string
           vapid_private_key: string | null
           vapid_public_key: string | null
@@ -2144,6 +2196,7 @@ export type Database = {
           google_cse_cx?: string | null
           groq_api_key?: string | null
           owner_id: string
+          tomtom_api_key?: string | null
           updated_at?: string
           vapid_private_key?: string | null
           vapid_public_key?: string | null
@@ -2158,6 +2211,7 @@ export type Database = {
           google_cse_cx?: string | null
           groq_api_key?: string | null
           owner_id?: string
+          tomtom_api_key?: string | null
           updated_at?: string
           vapid_private_key?: string | null
           vapid_public_key?: string | null

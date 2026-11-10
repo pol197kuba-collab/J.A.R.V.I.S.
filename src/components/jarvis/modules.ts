@@ -148,7 +148,7 @@ export const MODULE_GROUPS: readonly ModuleGroup[] = [
         shortTitle: "Situation",
         url: "/situation-room",
         icon: Radar,
-        keywords: "mapa satelita telemetria",
+        keywords: "dojazd praca trasa mapa korki objazd utrudnienia ruch drogowy",
       },
       { title: "Commands", shortTitle: "Commands", url: "/commands", icon: Command },
     ],

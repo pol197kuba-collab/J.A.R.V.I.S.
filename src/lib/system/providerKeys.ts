@@ -6,7 +6,7 @@
 // o padniętym kluczu (providerAlarm.server.ts), więc opis „co się stanie" i
 // rozpoznawanie błędu żyją w jednym miejscu.
 
-export type ProviderId = "gemini" | "anthropic" | "groq" | "google_cse" | "github";
+export type ProviderId = "gemini" | "anthropic" | "groq" | "google_cse" | "github" | "tomtom";
 
 export type ProviderInfo = {
   id: ProviderId;
@@ -67,6 +67,16 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     source:
       "github.com/settings/personal-access-tokens (Issues: read/write, Contents: read, Actions: read/write — Actions uruchamia briefing i Market Grid o czasie)",
   },
+  {
+    id: "tomtom",
+    label: "TomTom",
+    required: false,
+    modules:
+      "Dojazd do pracy: czas z ruchem, utrudnienia, objazdy i mapa trasy (Situation Room, kafelek, dock, briefing, alert).",
+    ifBroken:
+      "Dojazd nie pokazuje trasy ani czasu; briefing pomija sekcję „Dojazd”, alert o opóźnieniu nie przychodzi.",
+    source: "developer.tomtom.com → Dashboard → Keys (darmowy tier ok. 2500 zapytań dziennie)",
+  },
 ];
 
 export const providerInfo = (id: ProviderId): ProviderInfo => PROVIDERS.find((p) => p.id === id)!;
@@ -120,6 +130,7 @@ const SEGMENT_PROVIDER: Record<string, ProviderId> = {
   anthropic: "anthropic",
   gemini: "gemini",
   groq: "groq",
+  tomtom: "tomtom",
 };
 
 /**
@@ -129,7 +140,7 @@ const SEGMENT_PROVIDER: Record<string, ProviderId> = {
  */
 export function findKeyFailures(message: string): ProviderFailure[] {
   const out: ProviderFailure[] = [];
-  const re = /\b(Anthropic|Gemini|Groq) HTTP (\d{3})/gi;
+  const re = /\b(Anthropic|Gemini|Groq|TomTom) HTTP (\d{3})/gi;
   const hits = [...message.matchAll(re)];
   hits.forEach((m, i) => {
     const provider = SEGMENT_PROVIDER[m[1].toLowerCase()];

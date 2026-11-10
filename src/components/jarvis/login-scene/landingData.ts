@@ -77,7 +77,7 @@ const MODULE_BLURBS: Record<string, string> = {
   Zadania: "Kolejka, którą prowadzą agenci",
   Notatki: "Archiwum Twoje i J.A.R.V.I.S.-a",
   Dokumenty: "Baza pod wyszukiwanie M.E.T.R.I.C.-a",
-  "Situation Room": "Centrum dowodzenia zespołem",
+  "Situation Room": "Dojazd do pracy: korki, objazdy i mapa trasy",
 };
 
 /** Approved one-line description of a module (modules.ts title), if it has one. */

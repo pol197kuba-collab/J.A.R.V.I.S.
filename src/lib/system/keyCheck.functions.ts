@@ -66,7 +66,7 @@ export const testProviderKeys = createServerFn({ method: "POST" })
     const { data, error } = await supabase
       .from("user_secrets")
       .select(
-        "gemini_api_key, anthropic_api_key, groq_api_key, google_cse_api_key, google_cse_cx, github_token",
+        "gemini_api_key, anthropic_api_key, groq_api_key, google_cse_api_key, google_cse_cx, github_token, tomtom_api_key",
       )
       .eq("owner_id", userId)
       .maybeSingle();
@@ -78,6 +78,7 @@ export const testProviderKeys = createServerFn({ method: "POST" })
     const cseKey = data?.google_cse_api_key?.trim();
     const cseCx = data?.google_cse_cx?.trim();
     const github = data?.github_token?.trim();
+    const tomtom = data?.tomtom_api_key?.trim();
 
     return Promise.all([
       gemini
@@ -119,5 +120,10 @@ export const testProviderKeys = createServerFn({ method: "POST" })
             },
           }).then((p) => verdict("github", p))
         : missing("github"),
+      tomtom
+        ? probe(
+            `https://api.tomtom.com/routing/1/calculateRoute/52.2297,21.0122:52.2400,21.0300/json?key=${encodeURIComponent(tomtom)}&traffic=false`,
+          ).then((p) => verdict("tomtom", p))
+        : missing("tomtom"),
     ]);
   });

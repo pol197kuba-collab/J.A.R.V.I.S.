@@ -62,7 +62,7 @@ export function CommandPalette() {
       setOpen(false);
       audio.playClick();
       if (item.url === "/situation-room") {
-        speak("Uruchamiam telemetrię satelitarną.");
+        speak("Sprawdzam dojazd do pracy.");
       }
       go(item.url);
     },

@@ -291,6 +291,58 @@ export const deleteGroqKey = createServerFn({ method: "POST" })
   });
 
 // ---------------------------------------------------------------------------
+// user_secrets (TomTom API key — dojazd do pracy: trasy z ruchem, utrudnienia,
+// wyszukiwanie adresów)
+// ---------------------------------------------------------------------------
+
+export const getTomtomKeyStatus = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { data, error } = await supabase
+      .from("user_secrets")
+      .select("tomtom_api_key")
+      .eq("owner_id", userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const key = data?.tomtom_api_key?.trim() ?? "";
+    return {
+      linked: key.length > 0,
+      preview: key ? `••••••••${key.slice(-4)}` : null,
+    };
+  });
+
+export const saveTomtomKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => SaveKeyInput.parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { error } = await supabase
+      .from("user_secrets")
+      .upsert({ owner_id: userId, tomtom_api_key: data.key.trim() }, { onConflict: "owner_id" });
+    if (error) {
+      await logServerError(supabase, userId, "settings.tomtom_key", error);
+      throw new Error(error.message);
+    }
+    return { ok: true as const };
+  });
+
+export const deleteTomtomKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { error } = await supabase
+      .from("user_secrets")
+      .update({ tomtom_api_key: null })
+      .eq("owner_id", userId);
+    if (error) {
+      await logServerError(supabase, userId, "settings.tomtom_key", error);
+      throw new Error(error.message);
+    }
+    return { ok: true as const };
+  });
+
+// ---------------------------------------------------------------------------
 // user_secrets (Anthropic API key — optional, unlocks Claude as the primary
 // reasoning engine for agents whose model is "anthropic:"-prefixed)
 // ---------------------------------------------------------------------------

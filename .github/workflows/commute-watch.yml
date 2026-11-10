@@ -1,0 +1,46 @@
+name: Commute Watch
+
+# Sprawdza ruch na trasie dom ↔ praca i, gdy dojazd jest wyraźnie dłuższy od
+# typowego (albo na trasie jest poważne utrudnienie z objazdem), puka w telefon.
+#
+# URUCHAMIA GO BAZA (pg_cron → workflow_dispatch, patrz migracja
+# 20261110091000_commute_watch_dispatch.sql), bo harmonogram GitHub Actions
+# spóźnia się o godziny — alert po wyjściu z domu nic nie daje. Cron poniżej to
+# tylko zapas, rzadki i tylko w dni robocze rano i po południu (UTC).
+on:
+  schedule:
+    - cron: "10 4,5,13 * * 1-5"
+  workflow_dispatch:
+
+# Dwa przebiegi naraz nie mogą wysłać dwóch alertów.
+concurrency:
+  group: commute-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    name: alert o opóźnieniu dojazdu
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check commute
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          JARVIS_OWNER_ID: ${{ secrets.JARVIS_OWNER_ID }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          JARVIS_EMAIL: ${{ secrets.JARVIS_EMAIL }}
+          JARVIS_PASSWORD: ${{ secrets.JARVIS_PASSWORD }}
+          # Opcjonalne: klucz z Ustawień → Klucze ma pierwszeństwo; to zapas.
+          TOMTOM_API_KEY: ${{ secrets.TOMTOM_API_KEY }}
+        run: npx --yes tsx@4.21.0 scripts/commute-watch.ts

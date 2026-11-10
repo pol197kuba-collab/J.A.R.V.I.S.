@@ -2,6 +2,7 @@
 // interfejsu. Osobny plik, bo czyta je i kod serwera, i komponent React, a
 // ani jeden nie ma powodu ciągnąć za sobą zależności drugiego.
 
+import type { CommuteFacts } from "@/lib/commute/brief";
 import type { DayWeather } from "@/lib/weather/day";
 
 /** Co system wie o świecie użytkownika na rano. Same liczby, zero prozy. */
@@ -69,6 +70,12 @@ export type BriefFacts = {
    * zaczynać się od zdania o dniu, a nie od kursu bitcoina.
    */
   weather: DayWeather | null;
+
+  /**
+   * Dojazd do pracy na planowaną godzinę wyjazdu (dni robocze); null w
+   * weekend, bez adresów albo klucza TomTom, albo gdy dostawca nie odpowiedział.
+   */
+  commute: CommuteFacts | null;
 };
 
 export type BriefSectionKind =
@@ -78,6 +85,7 @@ export type BriefSectionKind =
   | "fuel"
   | "orders"
   | "tasks"
+  | "commute"
   | "failures"
   | "budget";
 

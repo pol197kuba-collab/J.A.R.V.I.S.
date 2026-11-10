@@ -8,7 +8,7 @@
 //       ?productId=43&from=2026-09-01&to=2026-09-19
 // Odpowiedź: tablica posortowana MALEJĄCO po dacie, `value` w PLN/m³ netto.
 // Brak nagłówka Access-Control-Allow-Origin — stąd wymóg wołania po stronie
-// serwera (patrz src/lib/geo/flightRadar.ts, ten sam powód).
+// serwera (tak samo jak dawny radar lotów w Situation Room — usunięty).
 
 export const ORLEN_API_BASE = "https://tool.orlen.pl/api/wholesalefuelprices/ByProduct";
 

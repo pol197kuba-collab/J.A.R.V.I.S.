@@ -57,11 +57,31 @@ export function agentsLine(dots: readonly AgentDot[]): string | null {
   return "agenci w gotowości";
 }
 
+/**
+ * "Praca: 31 min, +4" — the commute in one line. No data → no line; a delay
+ * under 3 min is noise and stays out.
+ */
+export function commuteLine(
+  c: { direction: "to" | "back"; durationMin: number; delayMin: number | null } | null | undefined,
+): string | null {
+  if (!c || !Number.isFinite(c.durationMin)) return null;
+  const where = c.direction === "to" ? "Praca" : "Dom";
+  const delay = c.delayMin !== null && c.delayMin >= 3 ? `, +${c.delayMin}` : "";
+  return `${where}: ${c.durationMin} min${delay}`;
+}
+
 /** The context line under the module name: the module's own number, else open tasks. */
 export function dockLine(
   pathname: string,
-  d: { fundDayPct?: number | null; openTasks?: number | null; dots: readonly AgentDot[] },
+  d: {
+    fundDayPct?: number | null;
+    openTasks?: number | null;
+    dots: readonly AgentDot[];
+    commute?: string | null;
+  },
 ): string | null {
+  if (pathname === "/situation-room") return d.commute ?? tasksLine(d.openTasks);
+  if (pathname === "/") return d.commute ?? tasksLine(d.openTasks) ?? agentsLine(d.dots);
   if (pathname === "/rynki") return fundLine(d.fundDayPct) ?? tasksLine(d.openTasks);
   if (pathname === "/agent-hub" || pathname === "/jarvis") return agentsLine(d.dots);
   return tasksLine(d.openTasks) ?? agentsLine(d.dots);

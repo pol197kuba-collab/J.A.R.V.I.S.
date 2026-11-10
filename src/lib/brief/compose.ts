@@ -13,6 +13,7 @@
 // nagłówkami, z których cztery mówią „bez zmian", uczy przewijać go bez
 // czytania — a wtedy nie zauważy się tego jednego dnia, w którym coś się
 // wydarzyło. Lepiej, żeby spokojny dzień miał dwie linijki.
+import { commuteLines } from "@/lib/commute/brief";
 import { money, signedPct } from "@/lib/format/number";
 import { dayAdvice, weatherSentence } from "@/lib/weather/day";
 import type { BriefFacts, BriefSection, ComposedBrief } from "./types";
@@ -99,6 +100,16 @@ function fundSection(facts: BriefFacts): BriefSection | null {
       `Od startu prowadzi ${fund.leader.label} (${signedPct(fund.leader.returnPct)}).`,
     ],
   };
+}
+
+/**
+ * Dojazd JEST w rubryce zawsze, gdy są dane — inaczej niż reszta sekcji, które
+ * milczą w spokojny dzień. O czas dojazdu użytkownik pytał wprost: „jak
+ * zwykle” to też odpowiedź, a brak linii wyglądałby jak awaria.
+ */
+function commuteSection(facts: BriefFacts): BriefSection | null {
+  if (!facts.commute) return null;
+  return { kind: "commute", heading: "Dojazd", lines: commuteLines(facts.commute) };
 }
 
 function fuelSection(facts: BriefFacts): BriefSection | null {
@@ -233,6 +244,7 @@ export function composeBrief(facts: BriefFacts): ComposedBrief {
     // agentów na resztę miesiąca, więc jest ważniejszy niż pojedyncza awaria.
     budgetSection(facts),
     failuresSection(facts),
+    commuteSection(facts),
     ordersSection(facts),
     tasksSection(facts),
     marketsSection(facts),

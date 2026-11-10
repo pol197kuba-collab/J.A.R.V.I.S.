@@ -1,287 +1,369 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
-import { TacticalMap, type FlightStatus } from "@/components/jarvis/TacticalMap";
-import { WeatherTelemetry } from "@/components/jarvis/WeatherTelemetry";
-import { GithubActivityPulse } from "@/components/jarvis/GithubActivityPulse";
-import { SystemPulseStream } from "@/components/jarvis/SystemPulseStream";
+import { useHudNavigate } from "@/components/jarvis/TransitionContext";
+import { CommuteMap } from "@/components/jarvis/commute/CommuteMap";
+import { commuteFacts } from "@/lib/commute/brief";
+import { defaultDirection, hmOf, minutesOf } from "@/lib/commute/plan";
+import { INCIDENT_LABEL } from "@/lib/commute/tomtom";
+import { useCommute, useCommuteSettings } from "@/lib/commute/useCommute";
+import type { CommuteDirection, CommuteIncident, CommuteResult } from "@/lib/commute/types";
+import { useDepth3d } from "@/lib/theme/useDepth3d";
+import { cn } from "@/lib/utils";
+
+const DESCRIPTION =
+  "Dojazd do pracy: czas z ruchem na żywo, utrudnienia na trasie, objazdy i mapa trasy.";
 
 export const Route = createFileRoute("/situation-room")({
   head: () => ({
     meta: [
       { title: "JARVIS // Situation Room" },
-      {
-        name: "description",
-        content:
-          "Unified command radar — position, live system activity, weather and GitHub pulse.",
-      },
+      { name: "description", content: DESCRIPTION },
       { property: "og:title", content: "JARVIS // Situation Room" },
-      {
-        property: "og:description",
-        content:
-          "Unified command radar — position, live system activity, weather and GitHub pulse.",
-      },
+      { property: "og:description", content: DESCRIPTION },
     ],
   }),
   component: SituationRoomPage,
 });
 
-type Status = "acquiring" | "locked" | "fallback";
+const SETTINGS_TAB_KEY = "jarvis_settings_tab";
 
-type Fix = {
-  lat: number;
-  lon: number;
-  accuracy: number;
-  altitude: number | null;
-  heading: number | null;
-};
+/** Przejście do Ustawień na właściwą zakładkę (ta jest zapamiętywana w localStorage). */
+function SettingsLink({ tab, children }: { tab: "keys" | "commute"; children: string }) {
+  const { go } = useHudNavigate();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        try {
+          window.localStorage.setItem(SETTINGS_TAB_KEY, tab);
+        } catch {
+          /* ignore */
+        }
+        go("/settings");
+      }}
+      className="font-display inline-block border border-primary/60 px-3 py-2 text-[10px] uppercase tracking-widest text-primary hover:bg-primary/20"
+    >
+      {children}
+    </button>
+  );
+}
 
-const FALLBACK: Fix = {
-  lat: 52.2297,
-  lon: 21.0122,
-  accuracy: 9999,
-  altitude: null,
-  heading: null,
-};
+function toneForDelay(delay: number | null): string {
+  if (delay === null || delay < 5) return "var(--success)";
+  if (delay < 10) return "var(--warning)";
+  return "var(--destructive)";
+}
 
 function SituationRoomPage() {
-  const [fix, setFix] = useState<Fix>(FALLBACK);
-  const [status, setStatus] = useState<Status>("acquiring");
-  const [bootProgress, setBootProgress] = useState(0);
-  // Aircraft now load based on the map's own current viewport (real ADS-B
-  // via adsb.lol, owned by TacticalMap since it owns the Leaflet instance
-  // the viewport comes from) — like a real flight tracker, not a fixed
-  // radius around "home". This just reflects that status back into the
-  // HUD readout above the map.
-  const [flightStatus, setFlightStatus] = useState<FlightStatus>({ kind: "ok", count: 0 });
+  const settings = useCommuteSettings();
+  const [picked, setPicked] = useState<CommuteDirection | null>(null);
+  const direction: CommuteDirection =
+    picked ?? (settings.data ? defaultDirection(new Date(), settings.data) : "to");
+  const [showDetour, setShowDetour] = useState(true);
+  const depth3d = useDepth3d();
+  const [tiltPref, setTiltPref] = useState<boolean | null>(null);
+  const tilt = tiltPref ?? depth3d;
 
-  // Boot / acquisition sequence — runs once
+  const commute = useCommute(direction, !!settings.data);
+  const response = commute.data;
+
+  const facts = useMemo(
+    () => (response?.status === "ok" ? commuteFacts(response.result, response.settings) : null),
+    [response],
+  );
+
+  // „Odświeżono" — minuta od ostatniego pobrania, żeby nie stało na starej wartości.
+  const [, tick] = useState(0);
   useEffect(() => {
-    let cancelled = false;
-    const start = performance.now();
-    let raf = 0;
-    const tick = () => {
-      if (cancelled) return;
-      const elapsed = performance.now() - start;
-      const p = Math.min(1, elapsed / 1800);
-      setBootProgress(p);
-      if (p < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-
-    if (typeof navigator !== "undefined" && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          if (cancelled) return;
-          setFix({
-            lat: pos.coords.latitude,
-            lon: pos.coords.longitude,
-            accuracy: pos.coords.accuracy,
-            altitude: pos.coords.altitude,
-            heading: pos.coords.heading,
-          });
-          setTimeout(() => !cancelled && setStatus("locked"), 1800);
-        },
-        () => {
-          if (cancelled) return;
-          setTimeout(() => !cancelled && setStatus("fallback"), 1800);
-        },
-        { enableHighAccuracy: true, timeout: 6000, maximumAge: 60_000 },
-      );
-    } else {
-      setTimeout(() => !cancelled && setStatus("fallback"), 1800);
-    }
-
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(raf);
-    };
+    const t = setInterval(() => tick((n) => n + 1), 30_000);
+    return () => clearInterval(t);
   }, []);
 
-  const isLoading = status === "acquiring";
-  const signatureLabel =
-    status === "acquiring"
-      ? "● ACQUIRING…"
-      : status === "locked"
-        ? "● PINPOINTED"
-        : "● FALLBACK GRID";
+  const tabs: Array<[CommuteDirection, string]> = [
+    ["to", "DO PRACY"],
+    ["back", "POWRÓT"],
+  ];
 
   return (
     <div className="space-y-3 p-3 @max-[420px]:space-y-2 @max-[420px]:p-2">
-      <HudPanel index={0} title="SITUATION ROOM // ORBITAL UPLINK" className="p-3">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1 pt-2 font-display text-[10px] uppercase tracking-[0.2em] @max-[380px]:text-[9px]">
-          <Row
-            label="SIGNATURE"
-            value={signatureLabel}
-            valueClass={
-              status === "locked"
-                ? "text-[color:var(--success)]"
-                : status === "fallback"
-                  ? "text-[color:var(--warning,#f5a524)]"
-                  : "text-primary"
-            }
-          />
-          <Row
-            label="ACCURACY"
-            value={status === "acquiring" ? "—" : `±${Math.round(fix.accuracy)}m`}
-          />
-          <Row label="LAT" value={status === "acquiring" ? "--.----" : fix.lat.toFixed(4)} mono />
-          <Row label="LON" value={status === "acquiring" ? "--.----" : fix.lon.toFixed(4)} mono />
-          <Row
-            label="ALTITUDE"
-            value={fix.altitude == null ? "—" : `${fix.altitude.toFixed(0)}m`}
-          />
-          <Row label="HEADING" value={fix.heading == null ? "—" : `${fix.heading.toFixed(0)}°`} />
-        </div>
-      </HudPanel>
-
-      <HudPanel
-        index={1}
-        title={
-          status === "acquiring"
-            ? "ACQUIRING SATELLITE LOCK…"
-            : `HOST SIGNATURE ${status === "locked" ? "PINPOINTED" : "ESTIMATED"} // LAT: ${fix.lat.toFixed(4)} LON: ${fix.lon.toFixed(4)}`
-        }
-        className="flex flex-col"
-      >
-        <div className="relative h-[55vh] overflow-hidden bg-black landscape:max-md:h-[50vh]">
-          <TacticalMap
-            lat={fix.lat}
-            lon={fix.lon}
-            active={!isLoading}
-            onStatusChange={setFlightStatus}
-          />
-          {isLoading ? <AcquireOverlay progress={bootProgress} /> : null}
-
-          <div className="pointer-events-none absolute inset-0">
-            <HudCorners />
-            <div className="absolute left-3 top-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
-              LIVE FEED // STARK SAT-LINK // CH:
-              {(Math.abs(fix.lat * 100) | 0).toString(16).toUpperCase().padStart(3, "0")}-
-              {(Math.abs(fix.lon * 100) | 0).toString(16).toUpperCase().padStart(3, "0")}
-            </div>
-            <div
-              className="absolute right-3 top-3 font-display text-[9px] uppercase tracking-[0.25em]"
-              style={{
-                color:
-                  flightStatus.kind === "error"
-                    ? "var(--destructive)"
-                    : flightStatus.kind === "zoom_in"
-                      ? "var(--warning)"
-                      : "color-mix(in oklab, var(--primary) 70%, transparent)",
-              }}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <div role="tablist" aria-label="Kierunek dojazdu" className="flex gap-5">
+          {tabs.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={direction === id}
+              onClick={() => setPicked(id)}
+              className={cn(
+                "font-display border-b-2 pb-1 text-[11px] uppercase tracking-[0.18em] transition",
+                direction === id
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-primary",
+              )}
             >
-              {flightStatus.kind === "error"
-                ? "AIRCRAFT: UPLINK ERROR — SEE SYSTEM LOGS"
-                : flightStatus.kind === "zoom_in"
-                  ? "AIRCRAFT: ZOOM IN TO LOAD"
-                  : `AIRCRAFT: ${flightStatus.count}`}
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-3">
+          <span className="font-display text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
+            {response?.status === "ok"
+              ? `${response.result.live ? "RUCH NA ŻYWO" : `PROGNOZA NA ${facts?.departHm ?? ""}`} · ${hmOf(new Date(response.result.fetchedAt))} · TomTom`
+              : "TomTom"}
+          </span>
+          <button
+            type="button"
+            aria-pressed={tilt}
+            onClick={() => setTiltPref(!tilt)}
+            className="font-display border border-primary/40 px-2 py-1 text-[9px] uppercase tracking-[0.2em] text-primary hover:bg-primary/10"
+          >
+            {tilt ? "WIDOK 2D" : "WIDOK 3D"}
+          </button>
+          <button
+            type="button"
+            disabled={commute.isFetching}
+            onClick={() => void commute.refetch()}
+            className="font-display border border-primary/40 px-2 py-1 text-[9px] uppercase tracking-[0.2em] text-primary hover:bg-primary/10 disabled:opacity-40"
+          >
+            {commute.isFetching ? "ODŚWIEŻAM…" : "ODŚWIEŻ"}
+          </button>
+        </div>
+      </div>
+
+      {settings.isLoading || (commute.isLoading && !response) ? (
+        <HudPanel index={0} title="DOJAZD // WYZNACZAM TRASĘ" className="p-5">
+          <p className="mt-3 text-xs text-muted-foreground">Pobieram ruch i utrudnienia…</p>
+        </HudPanel>
+      ) : commute.isError ? (
+        <HudPanel index={0} title="DOJAZD // BRAK ŁĄCZNOŚCI" className="p-5">
+          <p className="mt-3 min-w-0 break-words text-xs" style={{ color: "var(--destructive)" }}>
+            {commute.error instanceof Error ? commute.error.message : "Nie udało się pobrać trasy."}{" "}
+            Szczegóły w System Logs.
+          </p>
+          <button
+            type="button"
+            onClick={() => void commute.refetch()}
+            className="font-display mt-4 border border-primary/60 px-3 py-2 text-[10px] uppercase tracking-widest text-primary hover:bg-primary/20"
+          >
+            SPRÓBUJ PONOWNIE
+          </button>
+        </HudPanel>
+      ) : response && response.status !== "ok" ? (
+        <HudPanel
+          index={0}
+          title={response.status === "no_key" ? "DOJAZD // BRAK KLUCZA" : "DOJAZD // BRAK ADRESÓW"}
+          className="p-5"
+        >
+          <p className="mt-3 min-w-0 break-words text-xs text-muted-foreground">
+            {response.status === "no_key"
+              ? "Dojazd korzysta z TomTom (darmowy klucz z developer.tomtom.com). Dodaj go w Ustawieniach, potem ustaw adresy."
+              : "Podaj adres domu i pracy, a policzę czas dojazdu, pokażę utrudnienia i objazdy."}
+          </p>
+          <div className="mt-4">
+            <SettingsLink tab={response.status === "no_key" ? "keys" : "commute"}>
+              {response.status === "no_key" ? "DODAJ KLUCZ" : "USTAW ADRESY"}
+            </SettingsLink>
+          </div>
+        </HudPanel>
+      ) : response?.status === "ok" && facts ? (
+        <div className="grid grid-cols-1 gap-3 @[900px]:grid-cols-[minmax(0,1fr)_360px]">
+          <HudPanel
+            index={1}
+            title={`${response.result.origin.label} → ${response.result.destination.label}`}
+            className="flex flex-col"
+          >
+            <div className="relative h-[55vh] min-h-[300px] overflow-hidden">
+              <CommuteMap result={response.result} showDetour={showDetour} tilt={tilt} />
+              <div className="pointer-events-none absolute left-3 top-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
+                TRASA · {(response.result.main.distanceM / 1000).toFixed(1).replace(".", ",")} KM
+              </div>
             </div>
-            <div className="absolute left-3 bottom-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
-              GRID: MAP // MODE: ADS-B // SCOPE: VIEWPORT
-            </div>
-            <div className="absolute right-3 bottom-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
-              {status === "locked"
-                ? "LOCK: STABLE"
-                : status === "fallback"
-                  ? "LOCK: DEGRADED"
-                  : "LOCK: PENDING"}
-            </div>
+          </HudPanel>
+
+          <div className="flex min-w-0 flex-col gap-3">
+            <SummaryPanel facts={facts} direction={direction} />
+            <IncidentsPanel
+              incidents={response.result.incidents}
+              mainIds={response.result.main.incidentIds}
+            />
+            <DetourPanel
+              result={response.result}
+              showDetour={showDetour}
+              onToggle={() => setShowDetour((v) => !v)}
+            />
           </div>
         </div>
-      </HudPanel>
-
-      <div className="grid grid-cols-1 gap-3 @[640px]:grid-cols-3 @max-[420px]:gap-2">
-        <WeatherTelemetry index={2} lat={fix.lat} lon={fix.lon} />
-        <GithubActivityPulse index={3} />
-        <SystemPulseStream index={4} />
-      </div>
+      ) : null}
     </div>
   );
 }
 
-function Row({
-  label,
-  value,
-  valueClass,
-  mono,
+function SummaryPanel({
+  facts,
+  direction,
 }: {
-  label: string;
-  value: string;
-  valueClass?: string;
-  mono?: boolean;
+  facts: ReturnType<typeof commuteFacts>;
+  direction: CommuteDirection;
 }) {
+  const tone = toneForDelay(facts.delayMin);
   return (
-    <div className="flex justify-between border-b border-primary/15 pb-0.5">
-      <span className="text-primary/60">{label}</span>
-      <span className={`${valueClass ?? "text-foreground/85"} ${mono ? "tabular-nums" : ""}`}>
-        {value}
-      </span>
-    </div>
+    <HudPanel
+      index={2}
+      title={`DOJAZD ${direction === "to" ? "DO PRACY" : "DO DOMU"} · WYJAZD ${facts.departHm}`}
+      className="p-4"
+    >
+      <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="holo-stat-value font-display text-5xl leading-none text-primary @max-[380px]:text-4xl">
+          {facts.durationMin}
+          <span className="ml-1 text-xl">min</span>
+        </span>
+        {facts.delayMin !== null && (
+          <span
+            className="font-display border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em]"
+            style={{ color: tone, borderColor: tone }}
+          >
+            {facts.delayMin >= 5
+              ? `+${facts.delayMin} min vs typowo`
+              : facts.delayMin <= -3
+                ? `${facts.delayMin} min vs typowo`
+                : "jak zwykle"}
+          </span>
+        )}
+      </div>
+      <p className="mt-2 min-w-0 break-words text-xs text-muted-foreground">
+        {[
+          facts.typicalMin !== null ? `typowo ${facts.typicalMin} min` : null,
+          facts.arriveHm ? `przyjazd ${facts.arriveHm}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+      </p>
+      {facts.leaveByHm && facts.arriveByHm && direction === "to" && (
+        <p className="mt-3 min-w-0 break-words border-l-2 border-primary bg-primary/10 px-3 py-2 text-xs">
+          Żeby być na {facts.arriveByHm}, wyjdź najpóźniej o{" "}
+          <b className="text-primary">{facts.leaveByHm}</b>.
+        </p>
+      )}
+    </HudPanel>
   );
 }
 
-function HudCorners() {
-  const c = "absolute h-4 w-4 border-primary/70";
+const incidentTone = (i: CommuteIncident) =>
+  i.kind === "accident" || i.kind === "closure" || i.severity >= 3
+    ? "var(--destructive)"
+    : "var(--warning)";
+
+function IncidentsPanel({
+  incidents,
+  mainIds,
+}: {
+  incidents: CommuteIncident[];
+  mainIds: string[];
+}) {
+  const onMain = incidents.filter((i) => mainIds.includes(i.id));
   return (
-    <div className="pointer-events-none absolute inset-0">
-      <div className={`${c} left-1 top-1 border-l border-t`} />
-      <div className={`${c} right-1 top-1 border-r border-t`} />
-      <div className={`${c} left-1 bottom-1 border-l border-b`} />
-      <div className={`${c} right-1 bottom-1 border-r border-b`} />
-    </div>
+    <HudPanel
+      index={3}
+      title={`UTRUDNIENIA NA TRASIE (${onMain.length})`}
+      tone="quiet"
+      className="p-4"
+    >
+      {onMain.length === 0 ? (
+        <p className="mt-3 text-xs" style={{ color: "var(--success)" }}>
+          Bez zgłoszonych utrudnień na trasie.
+        </p>
+      ) : (
+        <ul className="no-scrollbar mt-3 max-h-64 space-y-3 overflow-y-auto overflow-x-hidden">
+          {onMain.map((i) => {
+            const where =
+              [i.road, i.from && i.to ? `${i.from} → ${i.to}` : (i.from ?? i.to)]
+                .filter(Boolean)
+                .join(", ") || "na trasie";
+            const facts = [
+              i.delaySec ? `+${minutesOf(i.delaySec)} min` : null,
+              i.startTime ? `od ${hmOf(new Date(i.startTime))}` : null,
+              i.endTime ? `do ${hmOf(new Date(i.endTime))}` : null,
+            ].filter(Boolean);
+            return (
+              <li key={i.id} className="min-w-0 text-xs">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span
+                    className="font-display shrink-0 border px-1.5 py-0.5 text-[9px] tracking-[0.12em]"
+                    style={{ color: incidentTone(i), borderColor: incidentTone(i) }}
+                  >
+                    {INCIDENT_LABEL[i.kind]}
+                  </span>
+                  <b className="min-w-0 break-words">{where}</b>
+                </div>
+                {(i.description || facts.length > 0) && (
+                  <p className="mt-1 min-w-0 break-words text-muted-foreground">
+                    {[i.description, facts.join(" · ")].filter(Boolean).join(" — ")}
+                  </p>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </HudPanel>
   );
 }
 
-function AcquireOverlay({ progress }: { progress: number }) {
-  const pct = Math.round(progress * 100);
+function DetourPanel({
+  result,
+  showDetour,
+  onToggle,
+}: {
+  result: CommuteResult;
+  showDetour: boolean;
+  onToggle: () => void;
+}) {
+  const d = result.detour;
   return (
-    <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-[1px]">
-      <div className="relative h-24 w-24">
-        <svg
-          viewBox="0 0 100 100"
-          className="h-full w-full text-primary animate-spin"
-          style={{ animationDuration: "2.4s" }}
-        >
-          <circle
-            cx="50"
-            cy="50"
-            r="44"
-            fill="none"
-            stroke="currentColor"
-            strokeOpacity="0.25"
-            strokeWidth="1"
-          />
-          <circle
-            cx="50"
-            cy="50"
-            r="44"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeDasharray={`${progress * 276} 276`}
-            transform="rotate(-90 50 50)"
-          />
-          <circle
-            cx="50"
-            cy="50"
-            r="32"
-            fill="none"
-            stroke="currentColor"
-            strokeOpacity="0.4"
-            strokeDasharray="2 4"
-          />
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center font-display text-[11px] tracking-[0.2em] text-primary">
-          {pct}%
-        </div>
-      </div>
-      <div className="font-display text-[10px] uppercase tracking-[0.4em] text-primary/85">
-        ACQUIRING ORBITAL UPLINK
-      </div>
-      <div className="font-mono text-[9px] uppercase tracking-[0.25em] text-primary/55">
-        triangulating • cross-referencing nav-sats • locking signature
-      </div>
-    </div>
+    <HudPanel index={4} title="PROPONOWANY OBJAZD" tone="quiet" className="p-4">
+      {d ? (
+        <>
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="font-display text-3xl leading-none text-accent">
+              {minutesOf(d.route.durationSec)}
+              <span className="ml-1 text-base">min</span>
+            </span>
+            <span
+              className="font-display border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em]"
+              style={{
+                color: d.savesSec > 0 ? "var(--success)" : "var(--warning)",
+                borderColor: d.savesSec > 0 ? "var(--success)" : "var(--warning)",
+              }}
+            >
+              {d.savesSec > 0
+                ? `−${Math.round(d.savesSec / 60)} min`
+                : `+${Math.abs(Math.round(d.savesSec / 60))} min, omija utrudnienie`}
+            </span>
+          </div>
+          <p className="mt-2 min-w-0 break-words text-xs text-muted-foreground">
+            {d.via.length > 0 ? `przez ${d.via.join(" i ")} · ` : ""}
+            {(d.route.distanceM - result.main.distanceM) / 1000 >= 0 ? "+" : "−"}
+            {Math.abs((d.route.distanceM - result.main.distanceM) / 1000)
+              .toFixed(1)
+              .replace(".", ",")}{" "}
+            km
+          </p>
+          <button
+            type="button"
+            aria-pressed={showDetour}
+            onClick={onToggle}
+            className="font-display mt-3 border border-accent/50 px-2 py-1 text-[9px] uppercase tracking-[0.2em] text-accent hover:bg-accent/10"
+          >
+            {showDetour ? "UKRYJ NA MAPIE" : "POKAŻ NA MAPIE"}
+          </button>
+        </>
+      ) : (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Brak lepszej trasy — główna jest teraz najszybsza.
+        </p>
+      )}
+    </HudPanel>
   );
 }
