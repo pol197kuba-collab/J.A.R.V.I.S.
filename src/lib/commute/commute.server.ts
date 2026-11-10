@@ -3,12 +3,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { planDeparture } from "./plan";
-import { buildCommute } from "./tomtom.server";
+import { buildCommute, fetchRoutes } from "./tomtom.server";
 import {
   DEFAULT_COMMUTE_SETTINGS,
   type CommuteDirection,
   type CommuteResult,
+  type CommuteRoute,
   type CommuteSettings,
+  type LatLon,
+  type SavedRoute,
+  type ViaPoint,
 } from "./types";
 
 type Db = SupabaseClient<Database>;
@@ -51,6 +55,38 @@ export async function loadTomtomKey(db: Db, ownerId: string): Promise<string | n
   return data?.tomtom_api_key?.trim() || process.env.TOMTOM_API_KEY?.trim() || null;
 }
 
+type RouteRow = Database["public"]["Tables"]["commute_routes"]["Row"];
+
+function viaFromJson(value: unknown): ViaPoint[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((v): ViaPoint[] => {
+    const p = v as { lat?: unknown; lon?: unknown; label?: unknown };
+    return typeof p?.lat === "number" && typeof p?.lon === "number"
+      ? [{ lat: p.lat, lon: p.lon, ...(typeof p.label === "string" ? { label: p.label } : {}) }]
+      : [];
+  });
+}
+
+export const savedFromRow = (row: RouteRow): SavedRoute => ({
+  id: row.id,
+  direction: row.direction === "back" ? "back" : "to",
+  name: row.name,
+  via: viaFromJson(row.via),
+  isDefault: row.is_default,
+});
+
+export async function loadSavedRoutes(
+  db: Db,
+  ownerId: string,
+  direction?: CommuteDirection,
+): Promise<SavedRoute[]> {
+  let q = db.from("commute_routes").select("*").eq("owner_id", ownerId);
+  if (direction) q = q.eq("direction", direction);
+  const { data, error } = await q.order("position").order("created_at");
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(savedFromRow);
+}
+
 export type CommuteOutcome =
   | { ok: true; result: CommuteResult }
   | { ok: false; reason: "no_key" | "no_places" };
@@ -74,5 +110,33 @@ export async function computeCommute(
   );
   const [origin, destination] =
     direction === "to" ? [settings.home, settings.work] : [settings.work, settings.home];
-  return { ok: true, result: await buildCommute(key, direction, origin, destination, plan) };
+  // Brak tabeli tras (migracja jeszcze nie wgrana) nie może zabić dojazdu —
+  // wtedy liczymy jak dawniej, z samych tras automatycznych.
+  const saved = await loadSavedRoutes(db, ownerId, direction).catch(() => []);
+  return {
+    ok: true,
+    result: await buildCommute(key, direction, origin, destination, plan, saved),
+  };
+}
+
+/** Podgląd trasy z punktami pośrednimi (edytor): sama trasa, bez utrudnień. */
+export async function previewRoute(
+  db: Db,
+  ownerId: string,
+  direction: CommuteDirection,
+  via: readonly LatLon[],
+  now: Date = new Date(),
+): Promise<CommuteRoute | null> {
+  const settings = await loadCommuteSettings(db, ownerId);
+  if (!settings.home || !settings.work) return null;
+  const key = await loadTomtomKey(db, ownerId);
+  if (!key) return null;
+  const plan = planDeparture(
+    now,
+    direction === "to" ? settings.departToMin : settings.departBackMin,
+  );
+  const [origin, destination] =
+    direction === "to" ? [settings.home, settings.work] : [settings.work, settings.home];
+  const [route] = await fetchRoutes(key, origin, destination, plan, { via });
+  return route ?? null;
 }

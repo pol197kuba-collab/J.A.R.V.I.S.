@@ -21,7 +21,7 @@ import {
   warsawLocalToDate,
   warsawParts,
 } from "./plan";
-import type { CommuteIncident, CommuteRoute, LatLon } from "./types";
+import type { CommuteIncident, CommuteOption, CommuteRoute, LatLon } from "./types";
 
 const line = (...pts: Array<[number, number]>): LatLon[] => pts.map(([lat, lon]) => ({ lat, lon }));
 
@@ -36,6 +36,18 @@ const route = (over: Partial<CommuteRoute>): CommuteRoute => ({
   streets: [],
   incidentIds: [],
   ...over,
+});
+
+const opt = (
+  route: CommuteRoute,
+  id = "auto:1",
+  kind: "auto" | "saved" = "auto",
+): CommuteOption => ({
+  id,
+  kind,
+  name: "Alt",
+  isDefault: false,
+  route,
 });
 
 const incident = (over: Partial<CommuteIncident>): CommuteIncident => ({
@@ -191,7 +203,7 @@ describe("pickDetour", () => {
         { name: "Grójecka", meters: 500 },
       ],
     });
-    const d = pickDetour(main, [alt], [acc]);
+    const d = pickDetour(main, [opt(alt)], [acc]);
     expect(d?.reason).toBe("faster");
     expect(d?.savesSec).toBe(420);
     expect(d?.via).toEqual(["Rakowiecka"]);
@@ -200,14 +212,14 @@ describe("pickDetour", () => {
   it("omija poważne utrudnienie nawet będąc minimalnie dłuższym", () => {
     const calmMain = route({ durationSec: 1_800, incidentIds: ["acc"] });
     const alt = route({ points: altPoints, durationSec: 1_900 });
-    const d = pickDetour(calmMain, [alt], [acc]);
+    const d = pickDetour(calmMain, [opt(alt)], [acc]);
     expect(d?.reason).toBe("avoids_incident");
   });
 
   it("nie proponuje niczego, gdy alternatywa jest tą samą trasą albo gorsza", () => {
-    expect(pickDetour(main, [route({ durationSec: 1_000 })], [acc])).toBeNull();
+    expect(pickDetour(main, [opt(route({ durationSec: 1_000 }))], [acc])).toBeNull();
     const slower = route({ points: altPoints, durationSec: 3_500 });
-    expect(pickDetour(main, [slower], [acc])).toBeNull();
+    expect(pickDetour(main, [opt(slower)], [acc])).toBeNull();
   });
 
   it("viaStreets pomija ulice wspólne i krótkie odcinki", () => {
@@ -365,5 +377,72 @@ describe("alert o opóźnieniu", () => {
     const d = decideAlert("to", f, cfg, {}, now);
     expect(d.send).toBe(true);
     if (d.send) expect(d.body).toContain("objazd przez Puławska: 30 min");
+  });
+});
+
+import { assembleOptions, deltaVsDefaultMin } from "./options";
+import type { SavedRoute } from "./types";
+
+describe("assembleOptions", () => {
+  const meta = (id: string, over: Partial<SavedRoute> = {}): SavedRoute => ({
+    id,
+    direction: "to",
+    name: `Trasa ${id}`,
+    via: [],
+    isDefault: false,
+    ...over,
+  });
+  const west = line([52.0, 21.0], [52.05, 20.9], [52.1, 20.8]);
+  const east = line([52.0, 21.0], [52.05, 21.1], [52.1, 21.2]);
+  const mid = line([52.0, 21.0], [52.05, 21.0], [52.1, 21.0]);
+
+  it("bez zapisanych domyślna jest najszybsza automatyczna", () => {
+    const { options, defaultId } = assembleOptions(
+      [],
+      [route({ points: mid, durationSec: 1_800 }), route({ points: west, durationSec: 2_000 })],
+    );
+    expect(defaultId).toBe("auto:0");
+    expect(options.map((o) => [o.id, o.isDefault])).toEqual([
+      ["auto:0", true],
+      ["auto:1", false],
+    ]);
+  });
+
+  it("zapisana domyślna jest pierwsza, a automatyczne zostają obok", () => {
+    const { options, defaultId } = assembleOptions(
+      [
+        {
+          meta: meta("a", { isDefault: true }),
+          route: route({ points: west, durationSec: 2_500 }),
+        },
+      ],
+      [route({ points: mid, durationSec: 1_800 }), route({ points: east, durationSec: 2_100 })],
+    );
+    expect(defaultId).toBe("saved:a");
+    expect(options.map((o) => o.id)).toEqual(["saved:a", "auto:0", "auto:1"]);
+    expect(options[0].isDefault).toBe(true);
+    expect(deltaVsDefaultMin(options[1], options[0])).toBe(-12);
+  });
+
+  it("zapisana trasa idąca tą samą drogą co automatyczna nie dubluje się", () => {
+    const { options } = assembleOptions(
+      [{ meta: meta("a", { isDefault: true }), route: route({ points: mid, durationSec: 1_850 }) }],
+      [route({ points: mid, durationSec: 1_800 }), route({ points: east, durationSec: 2_100 })],
+    );
+    expect(options.map((o) => o.id)).toEqual(["saved:a", "auto:1"]);
+  });
+
+  it("kolejność: domyślna, reszta zapisanych, automatyczne od najszybszej", () => {
+    const { options } = assembleOptions(
+      [
+        { meta: meta("b"), route: route({ points: east, durationSec: 2_600 }) },
+        {
+          meta: meta("a", { isDefault: true }),
+          route: route({ points: west, durationSec: 2_500 }),
+        },
+      ],
+      [route({ points: mid, durationSec: 1_800 })],
+    );
+    expect(options.map((o) => o.id)).toEqual(["saved:a", "saved:b", "auto:0"]);
   });
 });

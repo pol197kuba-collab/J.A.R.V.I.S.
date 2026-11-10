@@ -3,7 +3,13 @@ import type * as LeafletNS from "leaflet";
 import { useThemeColors } from "@/lib/theme/themeColor";
 import { INCIDENT_LABEL, incidentRuns } from "@/lib/commute/tomtom";
 import { minutesOf } from "@/lib/commute/plan";
-import type { CommuteIncident, CommuteResult, LatLon } from "@/lib/commute/types";
+import type {
+  CommuteIncident,
+  CommuteOption,
+  CommuteResult,
+  LatLon,
+  ViaPoint,
+} from "@/lib/commute/types";
 
 // Mapa trasy dojazdu. Leaflet ładowany dynamicznie (dotyka `window` przy
 // imporcie, a każda trasa jest renderowana po stronie serwera — patrz
@@ -79,7 +85,7 @@ function incidentText(i: CommuteIncident): string {
   return `${INCIDENT_LABEL[i.kind]}${mins}`;
 }
 
-function buildPins(result: CommuteResult): Pin[] {
+function buildPins(result: CommuteResult, selected: CommuteOption): Pin[] {
   const toWork = result.direction === "to";
   const pins: Pin[] = [
     {
@@ -96,7 +102,7 @@ function buildPins(result: CommuteResult): Pin[] {
     },
   ];
   for (const i of result.incidents
-    .filter((x) => result.main.incidentIds.includes(x.id))
+    .filter((x) => selected.route.incidentIds.includes(x.id))
     .slice(0, 6)) {
     pins.push({ key: `inc-${i.id}`, at: i.at, text: incidentText(i), color: incidentColor(i) });
   }
@@ -113,15 +119,29 @@ const tileUrl = (key: string) =>
 /** Tyle nieudanych kafelków z rzędu uznajemy za „podkład niedostępny". */
 const TILE_ERRORS_BEFORE_HINT = 4;
 
+/** Tryb edycji trasy: klik na mapie dodaje punkt pośredni, pinezki da się przeciągać. */
+export type CommuteEditorOverlay = {
+  via: ViaPoint[];
+  /** Podgląd trasy z tymi punktami; null, dopóki nie wróci z serwera. */
+  preview: LatLon[] | null;
+  onAdd: (p: LatLon) => void;
+  onMove: (index: number, p: LatLon) => void;
+};
+
 export function CommuteMap({
   result,
+  selectedId,
   showDetour,
   tilt,
   tileKey,
+  editor,
 }: {
   result: CommuteResult;
+  /** Która trasa jest „wybrana" (podświetlona); nieznane id = domyślna. */
+  selectedId: string | null;
   showDetour: boolean;
   tilt: boolean;
+  editor?: CommuteEditorOverlay | null;
   /** Klucz do kafelków; null = mapa bez podkładu (sama trasa na ciemnym tle). */
   tileKey: string | null;
 }) {
@@ -137,7 +157,16 @@ export function CommuteMap({
   const [ready, setReady] = useState(false);
   const [screenPins, setScreenPins] = useState<Array<Pin & { x: number; y: number }>>([]);
 
-  const pins = useMemo(() => buildPins(result), [result]);
+  const selected = useMemo(
+    () => result.options.find((o) => o.id === selectedId) ?? result.options[0],
+    [result, selectedId],
+  );
+  const pins = useMemo(() => buildPins(result, selected), [result, selected]);
+  // Callbacki edytora przez ref: mapa tworzy się raz i nie może trzymać starych.
+  const editorRef = useRef<CommuteEditorOverlay | null>(null);
+  editorRef.current = editor ?? null;
+  const editing = !!editor;
+  const editorKey = editor ? JSON.stringify([editor.via, editor.preview?.length ?? 0]) : "";
   const viewKey = `${result.direction}:${result.origin.lat},${result.origin.lon}:${result.destination.lat},${result.destination.lon}`;
 
   // Pozycje ekranowe sond → znaczniki HTML (tryb pochylony).
@@ -181,7 +210,10 @@ export function CommuteMap({
         zoomDelta: 0.5,
       });
       map.attributionControl.setPrefix(false);
-      map.on("click", () => map.scrollWheelZoom.enable());
+      map.on("click", (e: LeafletNS.LeafletMouseEvent) => {
+        map.scrollWheelZoom.enable();
+        editorRef.current?.onAdd({ lat: e.latlng.lat, lon: e.latlng.lng });
+      });
       containerRef.current.addEventListener("mouseleave", () => map.scrollWheelZoom.disable());
       layerRef.current = L.layerGroup().addTo(map);
       mapRef.current = map;
@@ -241,26 +273,58 @@ export function CommuteMap({
     probesRef.current = [];
 
     const ll = (p: LatLon): LeafletNS.LatLngTuple => [p.lat, p.lon];
-    const main = result.main.points.map(ll);
+    const main = selected.route.points.map(ll);
+    const detourId = showDetour && result.detour ? result.detour.optionId : null;
 
-    if (showDetour && result.detour) {
-      L.polyline(result.detour.route.points.map(ll), {
-        className: "commute-detour",
-        weight: 4,
+    // Pozostałe trasy: objazd wyraźnie (przerywana), reszta ledwo widoczna.
+    for (const o of result.options) {
+      if (o.id === selected.id && !editing) continue;
+      const isDetour = !editing && o.id === detourId;
+      L.polyline(o.route.points.map(ll), {
+        className: isDetour ? "commute-detour" : "commute-other",
+        weight: isDetour ? 4 : 3,
         interactive: false,
         lineCap: "round",
       }).addTo(layer);
     }
-    L.polyline(main, { className: "commute-route-glow", weight: 14, interactive: false }).addTo(
-      layer,
-    );
-    L.polyline(main, { className: "commute-route", weight: 4, interactive: false }).addTo(layer);
-    for (const run of incidentRuns(result.main, result.incidents)) {
-      L.polyline(run.map(ll), {
-        className: "commute-route-hot",
-        weight: 5,
-        interactive: false,
-      }).addTo(layer);
+
+    const ed = editorRef.current;
+    if (ed) {
+      // Edycja: pokazujemy podgląd trasy z punktami, a numerowane pinezki da się przeciągać.
+      if (ed.preview && ed.preview.length > 1) {
+        const pv = ed.preview.map(ll);
+        L.polyline(pv, { className: "commute-route-glow", weight: 14, interactive: false }).addTo(
+          layer,
+        );
+        L.polyline(pv, { className: "commute-route", weight: 4, interactive: false }).addTo(layer);
+      }
+      ed.via.forEach((v, i) => {
+        const m = L.marker(ll(v), {
+          draggable: true,
+          icon: L.divIcon({
+            className: "commute-pin-wrap",
+            html: `<div class="commute-via">${i + 1}</div>`,
+            iconSize: [0, 0],
+          }),
+          keyboard: false,
+        }).addTo(layer);
+        m.on("dragend", () => {
+          const at = m.getLatLng();
+          editorRef.current?.onMove(i, { lat: at.lat, lon: at.lng });
+        });
+      });
+    } else {
+      L.polyline(main, { className: "commute-route-glow", weight: 14, interactive: false }).addTo(
+        layer,
+      );
+      L.polyline(main, { className: "commute-route", weight: 4, interactive: false }).addTo(layer);
+      for (const run of incidentRuns(selected.route, result.incidents)) {
+        L.polyline(run.map(ll), {
+          className: "commute-route-hot",
+          weight: 5,
+          interactive: false,
+        }).addTo(layer);
+      }
     }
 
     for (const pin of pins) {
@@ -285,10 +349,7 @@ export function CommuteMap({
 
     if (fittedFor.current !== `${viewKey}:${tilt}`) {
       fittedFor.current = `${viewKey}:${tilt}`;
-      const pts = [
-        ...main,
-        ...(showDetour && result.detour ? result.detour.route.points.map(ll) : []),
-      ];
+      const pts = result.options.flatMap((o) => o.route.points.map(ll));
       map.invalidateSize();
       map.fitBounds(L.latLngBounds(pts), {
         padding: tilt ? [90, 90] : [48, 48],
@@ -296,7 +357,7 @@ export function CommuteMap({
       });
     }
     requestAnimationFrame(reproject);
-  }, [ready, result, pins, showDetour, tilt, viewKey, reproject]);
+  }, [ready, result, selected, pins, showDetour, tilt, viewKey, reproject, editing, editorKey]);
 
   // Zmiana trybu zmienia rozmiar płaszczyzny — mapa musi się o tym dowiedzieć,
   // a znaczniki 3D przeliczyć po zakończeniu animacji pochylenia.
@@ -346,7 +407,10 @@ export function CommuteMap({
     <div ref={stageRef} className="commute-stage">
       <DuotoneFilter />
       <div className="commute-plane" data-tilt={tilt ? "true" : "false"}>
-        <div ref={containerRef} className="commute-map absolute inset-0" />
+        <div
+          ref={containerRef}
+          className={`commute-map absolute inset-0${editing ? " commute-editing" : ""}`}
+        />
       </div>
 
       {tilt && (

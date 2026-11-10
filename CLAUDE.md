@@ -352,6 +352,16 @@ its routes on another provider's map, which is exactly what the HUD look needs.
   "data in space", default when `html[data-depth3d]`) lays the same map on a
   tilted plane; pins stand above it as HTML, positioned from invisible probe
   markers (`overflow:hidden` on Leaflet flattens 3D contexts).
+- **My routes:** table `commute_routes` (per direction, ≤3 saved routes, each
+  1–3 via points, one `is_default` enforced by a partial unique index).
+  `buildCommute` computes saved routes with their own requests (TomTom gives no
+  alternatives for waypoint routes) and the automatic fastest + alternatives
+  WITHOUT via points, so user waypoints never distort the proposals;
+  `options.ts` (`assembleOptions`, pure, tested) merges and de-duplicates them.
+  `result.main` = the default route (saved ★, else automatic fastest) — brief,
+  tile, dock and alerts read it, and detours are compared against it. The page
+  lets you pick any option, set the default and edit routes on the map (click
+  adds a via point, pins drag; map is forced flat while editing).
 - **Config:** table `commute_settings` (exact home/work coordinates — the old
   `user_settings.home_lat/lon` stay ~1 km for weather), TomTom key in
   `user_secrets.tomtom_api_key` (Settings → Klucze API), UI in Settings →

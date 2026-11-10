@@ -3735,6 +3735,7 @@ html[data-backdrop3d] .jarvis-bg-root {
 .commute-route,
 .commute-route-glow,
 .commute-route-hot,
+.commute-other,
 .commute-detour {
   fill: none;
   stroke-linecap: round;
@@ -3751,6 +3752,34 @@ html[data-backdrop3d] .jarvis-bg-root {
 .commute-route-hot {
   stroke: var(--destructive);
   filter: drop-shadow(0 0 5px var(--destructive));
+}
+.commute-other {
+  fill: none;
+  stroke-linecap: round;
+  stroke: color-mix(in oklab, var(--primary) 50%, transparent);
+  stroke-dasharray: 1 8;
+}
+.commute-editing,
+.commute-editing.leaflet-grab {
+  cursor: crosshair;
+}
+.commute-via {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--reactor);
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--background) 70%, var(--reactor));
+  color: var(--reactor);
+  font:
+    700 11px/1 var(--font-display, ui-monospace),
+    monospace;
+  box-shadow: 0 0 10px var(--reactor);
+  cursor: grab;
 }
 .commute-detour {
   stroke: var(--accent);
