@@ -6,7 +6,7 @@ import { CommuteMap } from "@/components/jarvis/commute/CommuteMap";
 import { commuteFacts } from "@/lib/commute/brief";
 import { defaultDirection, hmOf, minutesOf } from "@/lib/commute/plan";
 import { INCIDENT_LABEL } from "@/lib/commute/tomtom";
-import { useCommute, useCommuteSettings } from "@/lib/commute/useCommute";
+import { useCommute, useCommuteSettings, useMapTileKey } from "@/lib/commute/useCommute";
 import type { CommuteDirection, CommuteIncident, CommuteResult } from "@/lib/commute/types";
 import { useDepth3d } from "@/lib/theme/useDepth3d";
 import { cn } from "@/lib/utils";
@@ -65,6 +65,7 @@ function SituationRoomPage() {
   const [tiltPref, setTiltPref] = useState<boolean | null>(null);
   const tilt = tiltPref ?? depth3d;
 
+  const tileKey = useMapTileKey();
   const commute = useCommute(direction, !!settings.data);
   const response = commute.data;
 
@@ -175,7 +176,12 @@ function SituationRoomPage() {
             className="flex flex-col"
           >
             <div className="relative h-[55vh] min-h-[300px] overflow-hidden">
-              <CommuteMap result={response.result} showDetour={showDetour} tilt={tilt} />
+              <CommuteMap
+                result={response.result}
+                showDetour={showDetour}
+                tilt={tilt}
+                tileKey={tileKey.data?.key ?? null}
+              />
               <div className="pointer-events-none absolute left-3 top-3 font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
                 TRASA · {(response.result.main.distanceM / 1000).toFixed(1).replace(".", ",")} KM
               </div>

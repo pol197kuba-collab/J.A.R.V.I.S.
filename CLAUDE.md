@@ -345,7 +345,7 @@ its routes on another provider's map, which is exactly what the HUD look needs.
   `commute.functions.ts` + `useCommute.ts` (shared query keys: page, home tile
   and mobile dock are one fetch). Tests in `commute.test.ts`.
 - **Map:** `components/jarvis/commute/CommuteMap.tsx` — Leaflet (dynamic
-  import, same SSR rule as before). Tiles are CARTO dark recoloured by the SVG
+  import, same SSR rule as before). Tiles are TomTom's night raster (same key as routing, needs the Map Display API product; CARTO basemaps now demand a paid key) recoloured by the SVG
   duotone filter `#commute-duotone` whose two colours come from tokens
   (`--background`, `--primary`) via `useThemeColors`; route/detour/pins are
   `.commute-*` classes (SVG attributes can't hold `var()`). Tilt mode (3D

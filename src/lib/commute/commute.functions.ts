@@ -115,3 +115,19 @@ export const getCommuteFn = createServerFn({ method: "POST" })
       throw err;
     }
   });
+
+/**
+ * Klucz do kafelków mapy.
+ *
+ * ŚWIADOMY WYJĄTEK od zasady „klucz zostaje na serwerze": kafelki ładuje
+ * przeglądarka (<img>), która nie wyśle nagłówka autoryzacji do pośrednika, a
+ * każdy kafelek przez serwer kosztowałby osobne wywołanie funkcji. Klucz jest
+ * własnością zalogowanego właściciela i wraca tylko do niego. W panelu TomTom
+ * można go dodatkowo zawęzić do domeny aplikacji (Allowed referrers).
+ */
+export const getMapTileKeyFn = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<{ key: string | null }> => {
+    const { supabase, userId } = context;
+    return { key: await loadTomtomKey(supabase, userId) };
+  });
