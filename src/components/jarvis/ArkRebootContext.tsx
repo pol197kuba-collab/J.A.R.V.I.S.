@@ -28,7 +28,7 @@ export const REBOOT_SEQUENCE: RebootStep[] = [
   {
     path: "/situation-room",
     module: "SITUATION ROOM",
-    log: "[SITUATION_ROOM: CALIBRATING SATELLITE LINKS...]",
+    log: "[SITUATION_ROOM: REFRESHING TRAFFIC & ROUTES...]",
   },
   {
     path: "/system-logs",

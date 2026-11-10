@@ -66,7 +66,7 @@ export function CockpitMenu({ open, onClose }: { open: boolean; onClose: () => v
       audio.playClick();
       onClose();
       if (item.url === pathname) return;
-      if (item.url === "/situation-room") speak("Uruchamiam telemetrię satelitarną.");
+      if (item.url === "/situation-room") speak("Sprawdzam dojazd do pracy.");
       go(item.url);
     },
     [go, locked, onClose, pathname],

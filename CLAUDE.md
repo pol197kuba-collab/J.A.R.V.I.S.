@@ -330,6 +330,38 @@ holographic tray). Town skin and the no-3D path keep `ClassicHeader`.
 New header controls go into one of those groups and must read as light,
 not as a bordered box.
 
+## Dojazd do pracy (`/situation-room`)
+
+Situation Room is the commute module (the old flight radar, weather and
+GitHub-pulse panels are gone). Data comes from **TomTom** (routes with
+traffic, incidents, geocoding) — *not* Google: Google's terms forbid drawing
+its routes on another provider's map, which is exactly what the HUD look needs.
+
+- **Code:** `src/lib/commute/` — `tomtom.ts` (pure parsing, `pickDetour`,
+  `incidentRuns`), `plan.ts` (`planDeparture`: live traffic only inside the
+  window around the planned departure, otherwise the next workday's planned
+  time; Mon–Fri only), `alert.ts` (pure push decision), `brief.ts` (facts +
+  sentences for the morning brief), `*.server.ts` (network/DB),
+  `commute.functions.ts` + `useCommute.ts` (shared query keys: page, home tile
+  and mobile dock are one fetch). Tests in `commute.test.ts`.
+- **Map:** `components/jarvis/commute/CommuteMap.tsx` — Leaflet (dynamic
+  import, same SSR rule as before). Tiles are CARTO dark recoloured by the SVG
+  duotone filter `#commute-duotone` whose two colours come from tokens
+  (`--background`, `--primary`) via `useThemeColors`; route/detour/pins are
+  `.commute-*` classes (SVG attributes can't hold `var()`). Tilt mode (3D
+  "data in space", default when `html[data-depth3d]`) lays the same map on a
+  tilted plane; pins stand above it as HTML, positioned from invisible probe
+  markers (`overflow:hidden` on Leaflet flattens 3D contexts).
+- **Config:** table `commute_settings` (exact home/work coordinates — the old
+  `user_settings.home_lat/lon` stay ~1 km for weather), TomTom key in
+  `user_secrets.tomtom_api_key` (Settings → Klucze API), UI in Settings →
+  Dojazd. Defaults: leave 06:00, return 14:50.
+- **Alerts:** `scripts/commute-watch.ts` + `commute-watch.yml`, started by
+  pg_cron (`dispatch_commute_watch`) like the morning brief. One alert per
+  direction per day unless the delay grew by 10+ min.
+- **Quota:** keep TomTom calls cheap — queries refetch every 5 min only while
+  the result is live, every 30 min for a planned departure.
+
 ## Design skills: project rules win
 
 `.claude/skills/` holds third-party design skills (`design-taste-frontend`,

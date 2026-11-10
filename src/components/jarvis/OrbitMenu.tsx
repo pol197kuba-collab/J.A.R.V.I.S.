@@ -117,7 +117,7 @@ export function OrbitMenu({
       close();
       return;
     }
-    if (item.url === "/situation-room") speak("Uruchamiam telemetrię satelitarną.");
+    if (item.url === "/situation-room") speak("Sprawdzam dojazd do pracy.");
     setLeaving(true);
     menu.pick(i, () => {
       go(item.url, { fromMenu: true });

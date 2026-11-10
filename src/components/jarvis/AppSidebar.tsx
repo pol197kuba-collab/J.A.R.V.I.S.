@@ -71,7 +71,7 @@ export function AppSidebar() {
     (item: ModuleEntry) => {
       audio.playClick();
       if (item.url === "/situation-room") {
-        speak("Uruchamiam telemetrię satelitarną.");
+        speak("Sprawdzam dojazd do pracy.");
       }
       if (isMobile) setOpenMobile(false);
       go(item.url);

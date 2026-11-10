@@ -1,8 +1,8 @@
 // Prognoza dobowa z Open-Meteo. Bez klucza, bez konta, bez limitu, który
 // dałoby się tu przekroczyć jednym odpytaniem na dobę.
 //
-// DOBOWA, NIE BIEŻĄCA. Pulpit pokazuje odczyt „teraz" (WeatherTelemetry) i
-// tak ma być — patrzy się na niego w ciągu dnia. Briefing czyta się raz,
+// DOBOWA, NIE BIEŻĄCA. Odczyt „teraz" (taki pokazywał dawny panel pogody na
+// pulpicie) ma sens w ciągu dnia. Briefing czyta się raz,
 // rano, i odpowiada na inne pytanie: „jak ubrać się na DZIŚ". Odczyt z
 // siódmej rano odpowiedziałby na nie myląco — o siódmej prawie zawsze jest
 // chłodno i prawie nigdy nie pada tyle, co po południu.

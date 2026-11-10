@@ -14,6 +14,7 @@ const quiet: BriefFacts = {
   failures: { count: 0, sample: null },
   budget: null,
   weather: null,
+  commute: null,
   fund: null,
 };
 
@@ -231,5 +232,47 @@ describe("composeBrief — fundusz", () => {
 
   it("bez przeliczonego funduszu nie ma sekcji", () => {
     expect(kinds(quiet)).not.toContain("fund");
+  });
+});
+
+describe("composeBrief — dojazd", () => {
+  const commute = {
+    departHm: "06:00",
+    arriveHm: "06:38",
+    durationMin: 38,
+    typicalMin: 27,
+    delayMin: 11,
+    leaveByHm: "06:22",
+    arriveByHm: "07:00",
+    incidents: [{ label: "wypadek", where: "Grójecka", delayMin: 9 }],
+    detour: {
+      via: ["Rakowiecka", "Puławska"],
+      durationMin: 31,
+      savesMin: 7,
+      avoidsIncident: false,
+    },
+  };
+
+  it("jest w rubryce, gdy są dane — także w spokojny dzień", () => {
+    const calm = facts({
+      commute: { ...commute, durationMin: 27, delayMin: 0, incidents: [], detour: null },
+    });
+    const section = composeBrief(calm).sections.find((s) => s.kind === "commute");
+    expect(section?.lines[0]).toContain("27 min, jak zwykle");
+  });
+
+  it("mówi o utrudnieniu, objeździe i o tym, kiedy wyjść", () => {
+    const text = composeBrief(facts({ commute }))
+      .sections.find((s) => s.kind === "commute")!
+      .lines.join(" ");
+    expect(text).toContain("o 11 min dłużej");
+    expect(text).toContain("wypadek, Grójecka");
+    expect(text).toContain("Rakowiecka i Puławska");
+    expect(text).toContain("o 7 min krócej");
+    expect(text).toContain("najpóźniej o 06:22");
+  });
+
+  it("bez danych nie ma sekcji", () => {
+    expect(kinds(quiet)).not.toContain("commute");
   });
 });

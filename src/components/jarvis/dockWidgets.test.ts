@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   agentDots,
   agentsLine,
+  commuteLine,
   dockLine,
   fundLine,
   plural,
@@ -62,5 +63,24 @@ describe("dock widgets", () => {
     expect(dockLine("/jarvis", { openTasks: 2, dots })).toBe("1 agent pracuje");
     expect(dockLine("/notes", { openTasks: null, dots: [] })).toBeNull();
     expect(agentsLine(agentDots([row("metric", "idle")]))).toBe("agenci w gotowości");
+  });
+});
+
+describe("commute line", () => {
+  it("says where, how long and (only when it matters) how much worse", () => {
+    expect(commuteLine({ direction: "to", durationMin: 31, delayMin: 4 })).toBe(
+      "Praca: 31 min, +4",
+    );
+    expect(commuteLine({ direction: "back", durationMin: 28, delayMin: 1 })).toBe("Dom: 28 min");
+    expect(commuteLine({ direction: "to", durationMin: 27, delayMin: null })).toBe("Praca: 27 min");
+    expect(commuteLine(null)).toBeNull();
+  });
+
+  it("owns the line on its module and on the home page, with a fallback", () => {
+    const dots = agentDots([]);
+    expect(dockLine("/situation-room", { commute: "Praca: 31 min", openTasks: 2, dots })).toBe(
+      "Praca: 31 min",
+    );
+    expect(dockLine("/", { commute: null, openTasks: 2, dots })).toBe("2 otwarte zadania");
   });
 });

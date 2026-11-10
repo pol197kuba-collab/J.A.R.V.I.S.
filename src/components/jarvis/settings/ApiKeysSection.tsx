@@ -10,16 +10,19 @@ import {
   deleteGithubToken,
   deleteGoogleCseCredentials,
   deleteGroqKey,
+  deleteTomtomKey,
   getAnthropicKeyStatus,
   getGeminiKeyStatus,
   getGithubTokenStatus,
   getGoogleCseStatus,
   getGroqKeyStatus,
+  getTomtomKeyStatus,
   saveAnthropicKey,
   saveGeminiKey,
   saveGithubToken,
   saveGoogleCseCredentials,
   saveGroqKey,
+  saveTomtomKey,
 } from "@/lib/agents/runtime.functions";
 import { invalidateModelCatalog } from "@/lib/agents/models.functions";
 import { MODEL_CATALOG_QUERY_KEY } from "@/lib/agents/useModelCatalog";
@@ -234,6 +237,11 @@ export function ApiKeysSection({ onGeminiLinked }: { onGeminiLinked: (linked: bo
       save: useServerFn(saveGroqKey),
       del: useServerFn(deleteGroqKey),
     },
+    tomtom: {
+      status: useServerFn(getTomtomKeyStatus),
+      save: useServerFn(saveTomtomKey),
+      del: useServerFn(deleteTomtomKey),
+    },
     github: {
       status: useServerFn(getGithubTokenStatus),
       save: useServerFn(saveGithubToken),
@@ -252,6 +260,7 @@ export function ApiKeysSection({ onGeminiLinked }: { onGeminiLinked: (linked: bo
       groq: loading,
       google_cse: loading,
       github: loading,
+      tomtom: loading,
     };
   });
   const [cseCx, setCseCx] = useState<string | null>(null);
@@ -290,7 +299,7 @@ export function ApiKeysSection({ onGeminiLinked }: { onGeminiLinked: (linked: bo
     } catch {
       /* ignore */
     }
-    (["gemini", "anthropic", "groq", "google_cse", "github"] as const).forEach(
+    (["gemini", "anthropic", "groq", "google_cse", "github", "tomtom"] as const).forEach(
       (id) => void refresh(id),
     );
   }, [refresh]);
@@ -471,6 +480,7 @@ export function ApiKeysSection({ onGeminiLinked }: { onGeminiLinked: (linked: bo
             await afterChange("google_cse");
           }}
         />
+        {simpleCard("tomtom", 4, "Wklej klucz TomTom…")}
         {simpleCard("github", 4, "Wklej token GitHub (ghp_… lub github_pat_…)")}
       </div>
     </div>

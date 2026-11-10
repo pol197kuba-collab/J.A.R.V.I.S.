@@ -2,7 +2,7 @@
 //
 // Pobieranie idzie przez serwer, bo tool.orlen.pl nie wystawia nagłówka
 // Access-Control-Allow-Origin — przeglądarka dostałaby ścianę CORS. Ten sam
-// powód i ten sam wzorzec co src/lib/geo/flightRadar.functions.ts, łącznie
+// powód i ten sam wzorzec co przy dawnym radarze lotów (usuniętym), łącznie
 // z logowaniem awarii do system_events, żeby były widoczne w /system-logs
 // bez zaglądania do devtools.
 //
@@ -84,7 +84,7 @@ export type FuelNewsItem = {
 // Orlen publikuje cennik raz dziennie, więc odpytywanie go częściej niż co
 // kwadrans to czysty koszt. Moduł żyje w procesie Nitro tak długo jak on,
 // a `inFlight` gwarantuje, że pięciu jednoczesnych czytelników wywoła jeden
-// zaciąg, nie pięć (ten sam wzorzec co GithubActivityPulse po stronie UI).
+// zaciąg, nie pięć (tak samo robił dawny panel GithubActivityPulse po stronie UI).
 const MIN_PRICE_REFRESH_MS = 15 * 60_000;
 const MIN_MARKET_REFRESH_MS = 60 * 60_000;
 const MIN_NEWS_REFRESH_MS = 10 * 60_000;

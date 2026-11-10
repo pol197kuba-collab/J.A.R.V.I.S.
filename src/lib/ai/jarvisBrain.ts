@@ -192,7 +192,7 @@ const FALLBACK_MODULE: Record<string, string[]> = {
     "Uruchamiam JobFit AI. Optymalizator CV online.",
     "Moduł JobFit aktywny, Panie Sławiński.",
   ],
-  telemetry: ["Uruchamiam telemetrię satelitarną.", "Kanał Situation Room startuje."],
+  telemetry: ["Sprawdzam dojazd do pracy.", "Kanał Situation Room startuje."],
   dashboard: ["Wracam do głównego kokpitu, Panie Sławiński."],
 };
 

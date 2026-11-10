@@ -4,6 +4,7 @@ import { CockpitHero } from "@/components/jarvis/CockpitHero";
 import { SystemPulsePanel } from "@/components/jarvis/SystemPulsePanel";
 import { MorningBriefPanel } from "@/components/jarvis/brief/MorningBriefPanel";
 import { BudgetPanel } from "@/components/jarvis/budget/BudgetPanel";
+import { CommuteTile } from "@/components/jarvis/commute/CommuteTile";
 import { TaskBoardPanel } from "@/components/jarvis/TaskBoardPanel";
 import { ArcReactorTriangle } from "@/components/jarvis/ArcReactorTriangle";
 import { useAgentStatus } from "@/components/jarvis/useAgentStatus";
@@ -69,11 +70,13 @@ function Index() {
         </div>
       </HudPanel>
 
-      <BudgetPanel index={2} />
+      <CommuteTile index={2} />
 
-      <SystemPulsePanel index={3} />
+      <BudgetPanel index={3} />
 
-      <TaskBoardPanel index={4} />
+      <SystemPulsePanel index={4} />
+
+      <TaskBoardPanel index={5} />
     </div>
   );
 }

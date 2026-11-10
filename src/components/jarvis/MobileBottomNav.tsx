@@ -15,7 +15,10 @@ import { DockCore } from "./DockCore";
 import { useLongPress } from "./useLongPress";
 import { OrbitMenu } from "./OrbitMenu";
 import { MENU_GROUPS, MODULE_ITEMS, type ModuleEntry, type ModuleGroup } from "./modules";
-import { agentDots, dockLine, reactorState, type AgentDot } from "./dockWidgets";
+import { agentDots, commuteLine, dockLine, reactorState, type AgentDot } from "./dockWidgets";
+import { commuteFacts } from "@/lib/commute/brief";
+import { defaultDirection } from "@/lib/commute/plan";
+import { useCommute, useCommuteSettings } from "@/lib/commute/useCommute";
 import { JARVIS_HOLD_MS } from "./module-transition/miniCoreMath";
 import { listAgents } from "@/lib/agents/runtime.functions";
 import { listTasks } from "@/lib/tasks/tasks.functions";
@@ -184,8 +187,26 @@ function useDockData(pathname: string) {
     staleTime: 5 * 60_000,
     enabled: pathname === "/rynki",
   });
+  // Dojazd tylko tam, gdzie go widać (strona główna i własny moduł) — każde
+  // pobranie to zapytania do TomTom, a klucz zapytania jest wspólny z kafelkiem
+  // i stroną, więc to jedno pobranie, nie trzy.
+  const wantsCommute = pathname === "/" || pathname === "/situation-room";
+  const commuteSettings = useCommuteSettings();
+  const direction = commuteSettings.data
+    ? defaultDirection(new Date(), commuteSettings.data)
+    : "to";
+  const commute = useCommute(direction, wantsCommute && !!commuteSettings.data);
+  const commuteFactsNow =
+    commute.data?.status === "ok" ? commuteFacts(commute.data.result, commute.data.settings) : null;
   const dots = agentDots(agents);
   const line = dockLine(pathname, {
+    commute: commuteLine(
+      commuteFactsNow && {
+        direction,
+        durationMin: commuteFactsNow.durationMin,
+        delayMin: commuteFactsNow.delayMin,
+      },
+    ),
     fundDayPct: pathname === "/rynki" ? (townFund(fund)?.dayAvg ?? null) : null,
     openTasks: Array.isArray(tasks) ? tasks.length : null,
     dots,
@@ -260,7 +281,7 @@ function ReactorMenu({ pathname, onClose }: { pathname: string; onClose: () => v
   const openModule = (item: ModuleEntry) => {
     if (locked) return;
     audio.playClick();
-    if (item.url === "/situation-room") speak("Uruchamiam telemetrię satelitarną.");
+    if (item.url === "/situation-room") speak("Sprawdzam dojazd do pracy.");
     onClose();
     if (item.url !== pathname) go(item.url);
   };

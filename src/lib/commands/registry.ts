@@ -175,17 +175,19 @@ export const COMMAND_REGISTRY = [
     category: "Navigation",
     kind: { type: "route", path: "/situation-room" },
     pattern:
-      /\b(show\s+telemetry|open\s+map|geo[-\s]?tracking|otwórz\s+mapę|otworz\s+mape|pokaż\s+mapę|pokaz\s+mape|geolokalizacja)\b/i,
-    confirmation: "Uruchamiam telemetrię satelitarną.",
+      /\b(show\s+telemetry|open\s+map|geo[-\s]?tracking|otwórz\s+mapę|otworz\s+mape|pokaż\s+mapę|pokaz\s+mape|geolokalizacja|dojazd|korki)\b/i,
+    confirmation: "Sprawdzam dojazd do pracy.",
     label: "Open Situation Room",
     phrases: [
       "Show telemetry",
       "Open map",
       "Jarvis, pokaż mapę satelitarną",
       "Jarvis, otwórz geolokalizację",
+      "Jarvis, jaki jest dojazd do pracy",
+      "Jarvis, pokaż korki",
     ],
     description:
-      "Opens the Situation Room — live position radar, system events, weather and GitHub pulse.",
+      "Opens the Situation Room — commute to work: live traffic, incidents, detours and the route map.",
   },
   {
     id: "open_subsystems",
