@@ -16,6 +16,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { callAnthropic } from "@/lib/ai/llm/anthropic";
 import type { GeminiContent } from "@/lib/ai/llm/types";
+import { callGemini } from "@/lib/ai/llm/gemini";
+import type { LedgerContext } from "@/lib/ai/llm/ledger";
+import type { GeminiUsageMetadata } from "@/lib/ai/llm/usage";
 import { notifyOwner } from "@/lib/notifications/notify.server";
 import type { PushResult } from "@/lib/notifications/push.server";
 import { composeBrief, sectionsToSpoken } from "./compose";
@@ -29,7 +32,6 @@ export type BriefKeys = { anthropicApiKey: string | null; geminiApiKey: string |
 const MODEL_TIMEOUT_MS = 30_000;
 const ANTHROPIC_BRIEF_MODEL = "claude-sonnet-5";
 const GEMINI_MODEL = "gemini-2.5-flash";
-const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 /** Ile znaków wolno mieć wersji mówionej. Powyżej tego to już nie briefing. */
 const MAX_SPOKEN_CHARS = 900;
@@ -118,47 +120,42 @@ export function isUsableGreeting(text: string): boolean {
   return !looksLikeMarkdown(trimmed);
 }
 
-async function rewriteWithGemini(apiKey: string, input: string): Promise<string | null> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), MODEL_TIMEOUT_MS);
-  try {
-    const res = await fetch(
-      `${GEMINI_ENDPOINT_BASE}/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: "POST",
-        signal: ctrl.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: [{ role: "user", parts: [{ text: input }] }],
-          generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
-        }),
-      },
-    );
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    return (
-      data.candidates?.[0]?.content?.parts
-        ?.map((p) => p.text ?? "")
-        .join("")
-        .trim() || null
-    );
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+async function rewriteWithGemini(
+  apiKey: string,
+  input: string,
+  ledger: LedgerContext | undefined,
+): Promise<string | null> {
+  const res = await callGemini<{
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    usageMetadata?: GeminiUsageMetadata;
+  }>({
+    apiKey,
+    model: GEMINI_MODEL,
+    body: {
+      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents: [{ role: "user", parts: [{ text: input }] }],
+      generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
+    },
+    timeoutMs: MODEL_TIMEOUT_MS,
+    ledger,
+  });
+  if (!res.ok) return null;
+  return (
+    res.data.candidates?.[0]?.content?.parts
+      ?.map((p) => p.text ?? "")
+      .join("")
+      .trim() || null
+  );
 }
 
 /**
  * Przepisuje powitanie i treść na płynniejsze. Zwraca też nazwę modelu, żeby
  * dało się później sprawdzić, który wariant briefingu użytkownik widział.
  */
-async function polish(
+export async function polishBrief(
   parts: Parts,
   keys: BriefKeys,
+  ledger?: LedgerContext,
 ): Promise<{ greeting: string; body: string; generatedBy: string }> {
   const plain = { ...parts, generatedBy: "facts" };
   if (!keys.anthropicApiKey && !keys.geminiApiKey) return plain;
@@ -186,6 +183,7 @@ async function polish(
         contents,
         maxOutputTokens: 1024,
         timeoutMs: MODEL_TIMEOUT_MS,
+        ledger,
       });
       const ok = accept(result.text, ANTHROPIC_BRIEF_MODEL);
       if (ok) return ok;
@@ -195,7 +193,7 @@ async function polish(
   }
 
   if (keys.geminiApiKey) {
-    const ok = accept(await rewriteWithGemini(keys.geminiApiKey, input), GEMINI_MODEL);
+    const ok = accept(await rewriteWithGemini(keys.geminiApiKey, input, ledger), GEMINI_MODEL);
     if (ok) return ok;
   }
 
@@ -230,9 +228,10 @@ export async function buildDailyBrief(
 ): Promise<BuildBriefResult> {
   const facts = await gatherFacts(db, ownerId);
   const composed: ComposedBrief = composeBrief(facts);
-  const { greeting, body, generatedBy } = await polish(
+  const { greeting, body, generatedBy } = await polishBrief(
     { greeting: composed.greeting, body: sectionsToSpoken(composed.sections) },
     keys,
+    { db, ownerId, module: "brief", purpose: "polish" },
   );
   const spoken = `${greeting} ${body}`;
 
