@@ -93,3 +93,91 @@ export function budgetMessage(status: BudgetStatus): string | null {
   }
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// Wydatki z księgi llm_usage (etap 2: A3/A12). Wiersze przychodzą już
+// zsumowane przez bazę (funkcja llm_spend_by_module, grupy moduł × model);
+// tu tylko składamy sumy i dwa podziały — z TYCH SAMYCH wierszy, więc
+// podział w panelu zawsze sumuje się do kwoty budżetu.
+// ---------------------------------------------------------------------------
+
+export type SpendByModuleRow = {
+  module: string;
+  model: string;
+  cost_usd: number;
+  calls: number;
+  unpriced: number;
+  today_usd: number;
+};
+
+export type SpendRow = { key: string; label: string; costUsd: number; runs: number };
+
+export type SpendSummary = {
+  spentUsd: number;
+  todayUsd: number;
+  calls: number;
+  unpriced: number;
+  byModule: SpendRow[];
+  byModel: SpendRow[];
+};
+
+const MODULE_LABELS: Readonly<Record<string, string>> = {
+  agents: "Agenci i czat",
+  "agents (przed księgą)": "Czat (przed księgą)",
+  markets: "Rynki",
+  brief: "Briefing",
+  vision: "Vision",
+  brain: "Mózg",
+  fuel: "Paliwa",
+  documents: "Dokumenty",
+  notes: "Notatki",
+};
+
+export const moduleLabel = (module: string): string => MODULE_LABELS[module] ?? module;
+
+/** Największe pozycje na wierzchu; drobnica i tak nie zmieni decyzji. */
+const topBySpend = (rows: Iterable<SpendRow>, limit = 8): SpendRow[] =>
+  [...rows].sort((a, b) => b.costUsd - a.costUsd).slice(0, limit);
+
+export function summarizeSpend(rows: readonly SpendByModuleRow[]): SpendSummary {
+  const num = (v: unknown) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const byModule = new Map<string, SpendRow>();
+  const byModel = new Map<string, SpendRow>();
+  let spentUsd = 0;
+  let todayUsd = 0;
+  let calls = 0;
+  let unpriced = 0;
+  for (const r of rows) {
+    const cost = num(r.cost_usd);
+    const n = num(r.calls);
+    spentUsd += cost;
+    todayUsd += num(r.today_usd);
+    calls += n;
+    unpriced += num(r.unpriced);
+    const m = byModule.get(r.module) ?? {
+      key: r.module,
+      label: moduleLabel(r.module),
+      costUsd: 0,
+      runs: 0,
+    };
+    m.costUsd += cost;
+    m.runs += n;
+    byModule.set(r.module, m);
+    const modelKey = bareModelId(r.model || "—");
+    const md = byModel.get(modelKey) ?? { key: modelKey, label: modelKey, costUsd: 0, runs: 0 };
+    md.costUsd += cost;
+    md.runs += n;
+    byModel.set(modelKey, md);
+  }
+  return {
+    spentUsd,
+    todayUsd,
+    calls,
+    unpriced,
+    byModule: topBySpend(byModule.values()),
+    byModel: topBySpend(byModel.values()),
+  };
+}

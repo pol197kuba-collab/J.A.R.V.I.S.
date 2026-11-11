@@ -2577,6 +2577,7 @@ export type Database = {
         Returns: {
           calls: number
           cost_usd: number
+          model: string
           module: string
           today_usd: number
           unpriced: number

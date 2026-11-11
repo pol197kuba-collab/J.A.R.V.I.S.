@@ -66,7 +66,9 @@ CREATE POLICY "LLM usage: owner writes"
 -- z service role podają owner jawnie.
 -- -------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.llm_spend_by_module(p_owner UUID, p_since TIMESTAMPTZ)
-RETURNS TABLE (module TEXT, cost_usd NUMERIC, calls BIGINT, unpriced BIGINT, today_usd NUMERIC)
+RETURNS TABLE (
+  module TEXT, model TEXT, cost_usd NUMERIC, calls BIGINT, unpriced BIGINT, today_usd NUMERIC
+)
 LANGUAGE sql
 STABLE
 SECURITY INVOKER
@@ -76,17 +78,18 @@ AS $$
     SELECT min(created_at) AS at FROM public.llm_usage WHERE owner_id = p_owner
   ),
   rows AS (
-    SELECT u.module, u.cost_usd, u.created_at
+    SELECT u.module, u.model, u.cost_usd, u.created_at
       FROM public.llm_usage u
      WHERE u.owner_id = p_owner AND u.created_at >= p_since
     UNION ALL
-    SELECT 'agents (przed księgą)', r.cost_usd, r.created_at
+    SELECT 'agents (przed księgą)', coalesce(r.model, '—'), r.cost_usd, r.created_at
       FROM public.agent_runs r, ledger_start s
      WHERE r.user_id = p_owner
        AND r.created_at >= p_since
        AND r.created_at < coalesce(s.at, 'infinity'::timestamptz)
   )
   SELECT module,
+         model,
          coalesce(sum(cost_usd), 0)                                   AS cost_usd,
          count(*)                                                     AS calls,
          count(*) FILTER (WHERE cost_usd IS NULL)                     AS unpriced,
@@ -94,7 +97,7 @@ AS $$
            WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
          ), 0)                                                        AS today_usd
     FROM rows
-   GROUP BY module
+   GROUP BY module, model
 $$;
 
 GRANT EXECUTE ON FUNCTION public.llm_spend_by_module(UUID, TIMESTAMPTZ) TO authenticated, service_role;
