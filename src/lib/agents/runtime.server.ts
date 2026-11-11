@@ -1374,6 +1374,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
               apiKey,
               model,
               logEvent,
+              untrustedContent: untrustedSeen,
             });
             if (bringsUntrustedContent(tool, callArgs)) {
               untrustedSeen = true;

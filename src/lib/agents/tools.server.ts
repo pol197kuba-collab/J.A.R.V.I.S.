@@ -26,6 +26,11 @@ export type ToolContext = {
   runId: string;
   apiKey: string;
   model: string;
+  /**
+   * Model widział w tej turze obcą treść (strona, dokument, plik). `remember`
+   * zapisuje wtedy wpis jako origin = "tool" (A2d).
+   */
+  untrustedContent?: boolean;
   logEvent: (
     level: "info" | "warn" | "error",
     source: string,
@@ -512,6 +517,8 @@ const remember: Tool = {
       .map((t) => t.trim().slice(0, 40))
       .slice(0, 20);
     const importance = clampInt(args.importance, 1, 5, 3);
+    // A2d: skąd wpis — od właściciela czy z tury z obcą treścią.
+    const origin = ctx.untrustedContent ? "tool" : "user";
 
     // Embed the value so `recall` can find it by meaning. Best-effort: a null
     // embedding just means this row is keyword-only searchable for now.
@@ -530,7 +537,14 @@ const remember: Tool = {
       if (existing) {
         const { error } = await ctx.supabase
           .from("memories")
-          .update({ value, tags, importance, source: AGENT_SLUGS.JARVIS, ...embeddingPatch })
+          .update({
+            value,
+            tags,
+            importance,
+            origin,
+            source: AGENT_SLUGS.JARVIS,
+            ...embeddingPatch,
+          })
           .eq("id", existing.id);
         if (error) {
           await ctx.logEvent("error", "tool.remember", error.message, { key } as Json);
@@ -555,6 +569,7 @@ const remember: Tool = {
         value,
         tags,
         importance,
+        origin,
         source: AGENT_SLUGS.JARVIS,
         ...embeddingPatch,
       })
@@ -750,7 +765,21 @@ const recall: Tool = {
       for (const n of kwNotes ?? []) if (!seenNotes.has(n.id)) notes.push(n);
     }
 
-    const results = merged.slice(0, limit);
+    // A2d: pochodzenie wpisu wraca razem z treścią — także dla trafień
+    // semantycznych, których RPC nie zwraca tej kolumny. Brak odczytu → "unknown".
+    const picked = merged.slice(0, limit);
+    const origins = new Map<string, string>();
+    if (picked.length > 0) {
+      const { data: originRows } = await ctx.supabase
+        .from("memories")
+        .select("id, origin")
+        .in(
+          "id",
+          picked.map((m) => m.id),
+        );
+      for (const r of originRows ?? []) origins.set(r.id, r.origin);
+    }
+    const results = picked.map((m) => ({ ...m, origin: origins.get(m.id) ?? "unknown" }));
     const noteResults = notes.slice(0, limit).map((n) => ({
       id: n.id,
       title: n.title,

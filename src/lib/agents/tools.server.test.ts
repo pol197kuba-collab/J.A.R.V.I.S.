@@ -12,7 +12,9 @@ import {
   getToolByName,
   toolRisk,
   bringsUntrustedContent,
+  type ToolContext,
 } from "./tools.server";
+import { makeDb } from "./runtime.testkit";
 
 const lookupMock = vi.mocked(lookup);
 
@@ -293,5 +295,77 @@ describe("klasa ryzyka narzędzi", () => {
     expect(bringsUntrustedContent(local, { action: "read_text_file" })).toBe(true);
     expect(bringsUntrustedContent(local, { action: "list_dir" })).toBe(true);
     expect(bringsUntrustedContent(local, { action: "write_text_file" })).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A2d — źródło wpisu w pamięci (plan naprawczy, etap 1)
+// ---------------------------------------------------------------------------
+
+describe("remember / recall — pochodzenie wpisu", () => {
+  const baseCtx = (db: ToolContext["supabase"], untrustedContent?: boolean): ToolContext => ({
+    supabase: db,
+    userId: "u1",
+    agentId: "a1",
+    runId: "r1",
+    apiKey: "",
+    model: "gemini-2.5-flash",
+    logEvent: async () => {},
+    untrustedContent,
+  });
+
+  async function rememberWith(untrustedContent: boolean | undefined) {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline"))); // bez embeddingu
+    const { db, calls } = makeDb((table, ops) =>
+      table === "memories" && ops.some((o) => o.method === "insert")
+        ? { data: { id: "m1" }, error: null }
+        : undefined,
+    );
+    const res = await getToolByName("remember")!.execute(
+      { value: "Właściciel lubi espresso." },
+      baseCtx(db, untrustedContent),
+    );
+    vi.unstubAllGlobals();
+    const insert = calls.find((c) => c.ops.some((o) => o.method === "insert"))!;
+    return {
+      res,
+      row: insert.ops.find((o) => o.method === "insert")!.args[0] as Record<string, unknown>,
+    };
+  }
+
+  it("wpis z tury bez obcej treści ma origin = user", async () => {
+    const { res, row } = await rememberWith(false);
+    expect(res).toMatchObject({ ok: true, id: "m1" });
+    expect(row.origin).toBe("user");
+  });
+
+  it("wpis z tury, w której była obca treść, ma origin = tool", async () => {
+    const { row } = await rememberWith(true);
+    expect(row.origin).toBe("tool");
+  });
+
+  it("recall zwraca origin razem z treścią", async () => {
+    const { db } = makeDb((table, ops) => {
+      if (table !== "memories") return undefined;
+      if (ops.some((o) => o.method === "in"))
+        return { data: [{ id: "m1", origin: "tool" }], error: null };
+      return {
+        data: [
+          {
+            id: "m1",
+            key: null,
+            value: "Właściciel lubi espresso.",
+            tags: [],
+            importance: 3,
+            updated_at: "2026-11-11",
+          },
+        ],
+        error: null,
+      };
+    });
+    const res = (await getToolByName("recall")!.execute({}, baseCtx(db))) as {
+      memories: Array<Record<string, unknown>>;
+    };
+    expect(res.memories[0]).toMatchObject({ value: "Właściciel lubi espresso.", origin: "tool" });
   });
 });
