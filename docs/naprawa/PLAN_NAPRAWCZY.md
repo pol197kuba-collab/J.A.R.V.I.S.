@@ -186,22 +186,39 @@ Dopiero po etapie 2, żeby efekt było widać w liczbach.
 
 - [ ] Zapisać w Dzienniku punkt odniesienia z księgi: średnie tokeny wejścia
       na turę J.A.R.V.I.S. z ostatnich 7 dni.
-- [ ] **Cache promptu Anthropic**: `cache_control` na bloku systemowym
+      → NIE ZROBIONE: księga ruszyła z etapem 2 (2026-11-11), a wykonawca nie
+      ma dostępu do produkcyjnej bazy. Zmiany etapu 3 weszły od razu (decyzja
+      właściciela 2026-11-11), więc punktem odniesienia będzie okres przed
+      publikacją etapu 3. Zapytanie do uruchomienia w Supabase:
+      `select date_trunc('day', created_at) d, purpose, count(*), avg(tokens_input)::int,
+      sum(cache_read) from llm_usage where module = 'agents' group by 1, 2 order by 1, 2;`
+- [x] **Cache promptu Anthropic**: `cache_control` na bloku systemowym
       i definicjach narzędzi. Sprawdzić w aktualnej dokumentacji minimalną
       długość prefiksu i ceny zapisu do cache.
-- [ ] **Stabilny prefiks**: data i godzina wychodzą z końca promptu systemowego
+      → sprawdzone 2026-11-11: minimum 512 tokenów (modele 5.x), 1024 Sonnet 5,
+      4096 Haiku 4.5; zapis ×1,25 (TTL 5 min), odczyt ×0,1, dla Opus/Sonnet
+      5.5 ×0,05 (dopisane w cenniku). Ponad plan: automatyczne cache'owanie
+      ogona rozmowy, żeby kroki pętli narzędziowej czytały z cache.
+- [x] **Stabilny prefiks**: data i godzina wychodzą z końca promptu systemowego
       do osobnego, krótkiego bloku po części cache'owanej (dziś zmienna data
       unieważnia cache co minutę).
-- [ ] **Historia z serwera**: `runAgent` bierze historię z `messages` po
+- [x] **Historia z serwera**: `runAgent` bierze historię z `messages` po
       `conversationId`, przycina ją do budżetu tokenów (najnowsze w całości,
       starsze odcinane), a pole `history` od klienta zostaje tylko dla
       rozmowy bez `conversationId`.
-- [ ] **Klasyfikator UI** (`runtime.server.ts` ~1424): uruchamiać tylko, gdy
+      → budżet ~6000 tokenów (`HISTORY_TOKEN_BUDGET`, `src/lib/agents/history.ts`),
+      z bazy ostatnie 40 wiadomości; najnowsza zostaje zawsze.
+- [x] **Klasyfikator UI** (`runtime.server.ts` ~1424): uruchamiać tylko, gdy
       wypowiedź jest krótka i pasuje do słownika komend z
       `src/lib/commands/registry.ts`; w pozostałych przypadkach pomijać.
       Testy na przypadkach opisanych w komentarzach (luźne polecenia nawigacji
       nadal działają; pytania merytoryczne nie odpalają klasyfikatora).
+      → `src/lib/commands/intentGate.ts`. Słownik = wzorce z rejestru + czasowniki
+      luźnych poleceń (sam rejestr dubluje regex klienta, więc nic by nie
+      dawał). Ponad plan: prośba o nowy plik dalej idzie do klasyfikatora, gdy
+      agent ma `queue_document_job` — inaczej ta ścieżka by zniknęła.
 - [ ] Zapisać w Dzienniku ten sam pomiar po tygodniu.
+      → czeka na tydzień po publikacji (to samo zapytanie co wyżej).
 
 ## Etap 4 — rozbicie rdzenia agentów (A6, A17, A19)
 
@@ -351,6 +368,7 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 | 2026-11-11 | `src/lib/agents/models.ts` (katalog modeli) | Katalog nadal oferuje `gemini-2.0-flash`, który według forum Google wyłączono 31.03.2026; nie ma go w cenniku (koszt `null`). | 2 | |
 | 2026-11-11 | build (`npm run build`) | 31 ostrzeżeń „externalized for browser compatibility”, m.in. `node:dns`/`node:net` z `tools.server.ts` i `web-push` — kod serwerowy jest w grafie importów klienta. Identycznie na `main` przed etapem 2; build przechodzi, nic z tego nie trafia do bundla przeglądarki (sprawdzone). | 2 | |
 | 2026-11-11 | `src/lib/agents/pricing.ts` | Stawki Groq niezweryfikowane u źródła (strona Groq niedostępna z sesji, agregatory sprzeczne — część mówi o przejściu tych modeli na „contact sales”). Sprawdzić ręcznie na groq.com/pricing. | 2 | |
+| 2026-11-11 | `src/lib/ai/llm/anthropic.ts` (`forceToolName`) | Wymuszenie narzędzia przez `tool_choice: {type: "tool"}` (F.O.R.G.E. → `generate_document`) według dokumentacji Claude API zwraca 400 na Claude Opus 5.5 i Sonnet 5.5. Agent ustawiony na te modele padnie przy wymuszeniu (potem zejdzie na Gemini). | 3 | |
 
 ## Dziennik
 
@@ -359,7 +377,8 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 | 2026-11-11 | — | — | czysty / 981 zielonych / 0 błędów, 15 ostrzeżeń | stan wyjściowy |
 | 2026-11-11 | 0 | #223 | czysty / 992 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Pokrycie `src/lib/agents`: linie 40,06% (1002/2501), instrukcje 38,57%, gałęzie 33,66%, funkcje 36,09%; `runtime.server.ts` linie 80,7% / gałęzie 67,7% (bez nowych testów 73,5% / 59,0%); `tools.server.ts` linie 20,1%. Całe `src`: linie 23,46%. Mutacja kontrolna (+1 token w zapisie, klasyfikator mimo wywołań narzędzi) wywraca 10 z 11 nowych testów. |
 | 2026-11-11 | 1 | #225 | czysty / 1013 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Testy z etapu 0 bez zmian w asercjach. Pokrycie `src/lib/agents`: linie 44,80% (było 40,06%), gałęzie 37,11%; `runtime.server.ts` 82,3%, `tools.server.ts` 35,9% (było 20,1%). Migracja `memories.origin` — wchodzi sama po merge; nowy kod `remember` jej wymaga, więc publikacja w Lovable PO migracji. |
-| 2026-11-11 | 2 | (PR w toku) | czysty / 1046 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Pokrycie `src/lib/agents`: linie 45,33% (było 44,80%), `src/lib/ai/llm` 88,8%. Build OK, w bundlu przeglądarki brak księgi i klucza. Migracja `llm_usage` i funkcja sumująca sprawdzone na lokalnym Postgresie 16 (dwa przebiegi, przejście z `agent_runs`). Kolejność wdrożenia: migracja (sama po merge) → publikacja w Lovable. |
+| 2026-11-11 | 2 | #226 | czysty / 1046 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Pokrycie `src/lib/agents`: linie 45,33% (było 44,80%), `src/lib/ai/llm` 88,8%. Build OK, w bundlu przeglądarki brak księgi i klucza. Migracja `llm_usage` i funkcja sumująca sprawdzone na lokalnym Postgresie 16 (dwa przebiegi, przejście z `agent_runs`). Kolejność wdrożenia: migracja (sama po merge) → publikacja w Lovable. |
+| 2026-11-11 | 3 | (PR w toku) | czysty / 1068 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Pomiar przed/po niewykonany (brak dostępu do bazy, księga od dziś) — zapytanie w etapie 3. Oczekiwany efekt: klasyfikator tylko dla poleceń UI (zamiast po każdej turze bez narzędzi), historia ≤ ~6000 tokenów zamiast do 30×8000 znaków, cache promptu dla agentów na Claude. |
 
 ## Załącznik: znaleziska z rewizji (skrót)
 
