@@ -727,7 +727,11 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     timeZone: "Europe/Warsaw",
   })}, ${now.toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Warsaw" })} (ISO: ${now.toISOString()}). Używaj TEJ daty jako punktu odniesienia dla wszelkich względnych określeń czasu ("jutro", "za tydzień", "w przyszły poniedziałek" itp.) — nigdy nie zgaduj daty z pamięci.`;
 
-  const systemPrompt = `${basePrompt}${rosterBlock}${uiActionInstructions}${dateInstructions}`;
+  // Etap 3 (A10): stała część promptu osobno, data i godzina osobno, ZA nią.
+  // Godzina zmienia się co minutę — doklejona do całości unieważniała cache
+  // promptu przy każdej turze.
+  const systemPrompt = `${basePrompt}${rosterBlock}${uiActionInstructions}`;
+  const systemSuffix = dateInstructions;
 
   // Model resolution: agent override → user default → hardcoded fallback.
   let modelRef = agent.model?.trim() ?? "";
@@ -1067,6 +1071,8 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
             apiKey: anthropicApiKey as string,
             model,
             systemPrompt,
+            systemSuffix,
+            cacheSystem: true,
             contents,
             toolDeclarations: toolDeclarations.length > 0 ? toolDeclarations : undefined,
             forceToolName: forceGenerateDocument ? GENERATE_DOCUMENT_TOOL : undefined,
@@ -1098,7 +1104,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           for (let emptyRetry = 0; emptyRetry < 2; emptyRetry++) {
             const thinkingOff = forceGenerateDocument || (emptyRetry > 0 && /flash/i.test(model));
             const requestBody = JSON.stringify({
-              systemInstruction: { parts: [{ text: systemPrompt }] },
+              systemInstruction: { parts: [{ text: systemPrompt }, { text: systemSuffix }] },
               generationConfig: {
                 temperature,
                 maxOutputTokens,
@@ -1260,7 +1266,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           const groqResult = await callGroq({
             apiKey: groqApiKey,
             model: DEFAULT_GROQ_FALLBACK_MODEL,
-            systemPrompt,
+            systemPrompt: `${systemPrompt}${systemSuffix}`,
             contents,
             toolDeclarations: toolDeclarations.length > 0 ? toolDeclarations : undefined,
             // Carry the producer's forced-tool-call through to the failover

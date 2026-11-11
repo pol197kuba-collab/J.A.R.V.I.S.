@@ -167,3 +167,47 @@ describe("callAnthropic", () => {
     );
   });
 });
+
+// Etap 3 (A10): cache promptu. Stała część promptu (z definicjami narzędzi
+// przed nią) z punktem cache; data i godzina w osobnym bloku ZA nim, żeby
+// zmieniająca się co minutę godzina nie unieważniała cache.
+describe("callAnthropic — cache promptu", () => {
+  const base = {
+    apiKey: "sk-test",
+    model: "claude-opus-5-5",
+    systemPrompt: "Jesteś JARVIS. Długi, stały prompt.",
+    contents: [{ role: "user" as const, parts: [{ text: "cześć" }] }],
+  };
+
+  it("cacheSystem: blok stały z cache_control, zmienny blok bez niego, cache ogona rozmowy", async () => {
+    const fetchMock = mockFetchOnce({
+      content: [{ type: "text", text: "ok" }],
+      usage: { input_tokens: 5, output_tokens: 2, cache_read_input_tokens: 3000 },
+    });
+
+    const res = await callAnthropic({
+      ...base,
+      cacheSystem: true,
+      systemSuffix: "AKTUALNA DATA I CZAS: środa, 11 listopada 2026, 21:40",
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.system).toEqual([
+      { type: "text", text: base.systemPrompt, cache_control: { type: "ephemeral" } },
+      { type: "text", text: "AKTUALNA DATA I CZAS: środa, 11 listopada 2026, 21:40" },
+    ]);
+    expect(body.cache_control).toEqual({ type: "ephemeral" });
+    expect(res.usage.cacheRead).toBe(3000);
+  });
+
+  it("bez cacheSystem prompt zostaje zwykłym tekstem (zmienny dopisany na końcu)", async () => {
+    const fetchMock = mockFetchOnce({
+      content: [{ type: "text", text: "ok" }],
+      usage: { input_tokens: 5, output_tokens: 2 },
+    });
+    await callAnthropic({ ...base, systemSuffix: "DATA" });
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.system).toBe(`${base.systemPrompt}DATA`);
+    expect(body.cache_control).toBeUndefined();
+  });
+});

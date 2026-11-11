@@ -27,6 +27,8 @@ type Rate = {
   inputPerM: number;
   /** USD za milion tokenów wyjściowych. */
   outputPerM: number;
+  /** USD za milion tokenów odczytanych z cache, gdy inna niż 0,1 × wejście. */
+  cacheReadPerM?: number;
 };
 
 /**
@@ -43,8 +45,9 @@ export const PRICING_VERIFIED_ON = "2026-11-11";
 
 const RATES: Readonly<Record<string, Rate>> = {
   // Anthropic — ceny pierwszej strony API.
-  "claude-opus-5-5": { inputPerM: 4, outputPerM: 20 },
-  "claude-sonnet-5-5": { inputPerM: 2, outputPerM: 10 },
+  // Odczyt z cache 0,05× (sprawdzone w dokumentacji Claude API 2026-11-11).
+  "claude-opus-5-5": { inputPerM: 4, outputPerM: 20, cacheReadPerM: 0.2 },
+  "claude-sonnet-5-5": { inputPerM: 2, outputPerM: 10, cacheReadPerM: 0.1 },
   "claude-haiku-5-5": { inputPerM: 0.1, outputPerM: 0.5 },
   "claude-opus-5": { inputPerM: 5, outputPerM: 25 },
   "claude-sonnet-5": { inputPerM: 2, outputPerM: 10 },
@@ -102,7 +105,11 @@ export function costUsd(model: string, usage: TokenUsage): number | null {
 
   const perToken = rate.inputPerM / 1_000_000;
   const input = Math.max(0, usage.input) * perToken;
-  const cacheRead = Math.max(0, usage.cacheRead ?? 0) * perToken * CACHE_READ_MULTIPLIER;
+  const cacheReadPerToken =
+    rate.cacheReadPerM !== undefined
+      ? rate.cacheReadPerM / 1_000_000
+      : perToken * CACHE_READ_MULTIPLIER;
+  const cacheRead = Math.max(0, usage.cacheRead ?? 0) * cacheReadPerToken;
   const cacheWrite = Math.max(0, usage.cacheWrite ?? 0) * perToken * CACHE_WRITE_MULTIPLIER;
   const output = (Math.max(0, usage.output) * rate.outputPerM) / 1_000_000;
 
