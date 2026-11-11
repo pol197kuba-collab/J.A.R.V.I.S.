@@ -125,36 +125,60 @@ narzędzia…”).
 
 ## Etap 2 — jeden klient LLM i jedna księga kosztów (A3, A4, A7, A11, A12, A18, A20)
 
-- [ ] **Księga.** Tabela `llm_usage` (owner, moduł, cel, dostawca, model,
+- [x] **Księga.** Tabela `llm_usage` (owner, moduł, cel, dostawca, model,
       tokeny wejścia / wyjścia / myślenia / cache, `cost_usd`, `run_id`
       opcjonalnie, czas), RLS właściciela. `market_model_usage` zostaje
       i dalej pilnuje dziennego limitu tokenów rynków — nie ruszamy tej logiki,
       tylko dopisujemy równoległy zapis do księgi.
-- [ ] **Klient.** `src/lib/ai/llm/`: jedna funkcja na dostawcę (Gemini,
+      → migracja `20261111140000_llm_usage.sql` (+ kolumna `estimated` dla
+      szacowanego zużycia embeddingów); rynki piszą do księgi przez
+      `ModelBudget.ledger`.
+- [x] **Klient.** `src/lib/ai/llm/`: jedna funkcja na dostawcę (Gemini,
       Anthropic, Groq) z jednym timeoutem, jednym retry na 429/5xx, kluczem
       Gemini w nagłówku `x-goog-api-key` (A18), odczytem pełnego zużycia —
       w tym `thoughtsTokenCount` (A11; najpierw sprawdzić w aktualnej
       dokumentacji Gemini, jak pole się nazywa i jak jest rozliczane) —
       i zapisem do księgi. Istniejące `providers/*` stają się jego częścią.
-- [ ] **Migracja wywołań**, po jednym module na commit, każdy z testem:
+      → sprawdzone w dokumentacji Gemini 2026-11-11: `thoughtsTokenCount`,
+      rozliczane po stawce wyjściowej; nagłówek `x-goog-api-key`.
+      ZAŁOŻENIE: `promptTokenCount` zawiera tokeny z cache (dokumentacja nie
+      mówi wprost) — koszt Gemini liczony od pełnego wejścia (zawyżenie).
+      Wyjątek od „jednego retry”: tura czatu Gemini zostaje przy 3 ponowieniach
+      (celowa poprawka na burze 503 z 2026-07), podgląd Vision na żywo i
+      wyszukiwanie zdjęć bez ponowień (czas rzeczywisty / własny limit czasu).
+- [x] **Migracja wywołań**, po jednym module na commit, każdy z testem:
       `runtime.server.ts` (pętla i klasyfikator), `tools.server.ts`
       (`web_search`), `producer.server.ts`, `documentJobs.functions.ts`,
       `brief/build.server.ts`, `fuel/news.server.ts`, `vision/*` (3 pliki),
       `brain/ask.functions.ts`, `ai/embed.ts`, moduł rynków, skrypty.
       Na końcu `grep generativelanguage.googleapis.com src scripts` zwraca
       tylko klienta, `keyCheck` i `models.functions`.
-- [ ] **A4.** Run zakończony błędem zapisuje tokeny i koszt zebrane do chwili
+      → plus `src/lib/ai/jarvisBrain.ts` (przeglądarkowa ścieżka czatu, bez
+      dostępu do księgi — usuwa ją etap 5, A8) i atrapy w testach. Doszły
+      moduły spoza listy: QA i zdjęcia dokumentów, embeddingi notatek i
+      dokumentów, nazwy gromad w skrypcie Mózgu.
+- [x] **A4.** Run zakończony błędem zapisuje tokeny i koszt zebrane do chwili
       awarii.
-- [ ] **A20.** Koszt liczony per wywołanie po faktycznym modelu (Groq osobno),
+- [x] **A20.** Koszt liczony per wywołanie po faktycznym modelu (Groq osobno),
       nie po modelu runu.
-- [ ] **A3/A12.** Budżet miesięczny liczony z księgi, sumą po stronie bazy
+- [x] **A3/A12.** Budżet miesięczny liczony z księgi, sumą po stronie bazy
       (funkcja SQL albo zapytanie z paginacją — nie `select` wszystkich
       wierszy). `BudgetPanel` pokazuje podział na moduły z tych samych danych.
-- [ ] Cennik (`pricing.ts`): dopisać modele, które po migracji wyjdą jako
+      → funkcja `llm_spend_by_module` (moduł × model) z przejściem: koszty
+      czatu z `agent_runs` sprzed pierwszego wpisu księgi, żeby budżet nie
+      spadł do zera w dniu wdrożenia. Panel: „Wg modułu” i „Wg modelu”;
+      lista „Wg agenta” usunięta (księga nie zna agenta).
+- [x] Cennik (`pricing.ts`): dopisać modele, które po migracji wyjdą jako
       „spoza cennika”, i zaktualizować datę weryfikacji.
+      → Gemini 2.5 Flash-Lite, `gemini-embedding-001`, Groq 8B i 70B (Groq
+      NIEZWERYFIKOWANY u źródła). Pozostałe modele „spoza cennika” wyjdą
+      z księgi po tygodniu pracy — do dopisania w etapie 3.
 
 Gotowe, gdy: każde wywołanie modelu w aplikacji zostawia wiersz w księdze,
 a suma w panelu budżetu zgadza się z sumą księgi.
+→ Suma i podziały w panelu pochodzą z tych samych wierszy funkcji bazy, więc
+zgadzają się z konstrukcji. Na produkcji do potwierdzenia przez właściciela
+po tygodniu (`select module, count(*), sum(cost_usd) from llm_usage group by 1`).
 
 ## Etap 3 — tańsza tura (A9, A10)
 
@@ -324,6 +348,9 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 |---|---|---|---|---|
 | 2026-11-11 | `runtime.server.ts`, koniec pętli narzędziowej | Komunikat po wyczerpaniu limitu iteracji jest po angielsku („I have completed several tool calls but ran out of orchestration cycles…”), reszta odpowiedzi jest po polsku. Utrwalony w teście charakteryzującym nr 5. | 0 | |
 | 2026-11-11 | `bun.lock` | Rejestr Lovable (`europe-west*-npm.pkg.dev`) jest niedostępny z sesji Claude Code w chmurze, więc `bun install` tam nie działa. Nowe wpisy (`@vitest/coverage-v8` i zależności) mają pusty adres, czyli domyślny rejestr npm, zamiast adresu cache Lovable. Sprawdzić, czy build w Lovable przechodzi. | 0 | nie wymaga naprawy — właściciel potwierdził 2026-11-11, że build w Lovable przechodzi |
+| 2026-11-11 | `src/lib/agents/models.ts` (katalog modeli) | Katalog nadal oferuje `gemini-2.0-flash`, który według forum Google wyłączono 31.03.2026; nie ma go w cenniku (koszt `null`). | 2 | |
+| 2026-11-11 | build (`npm run build`) | 31 ostrzeżeń „externalized for browser compatibility”, m.in. `node:dns`/`node:net` z `tools.server.ts` i `web-push` — kod serwerowy jest w grafie importów klienta. Identycznie na `main` przed etapem 2; build przechodzi, nic z tego nie trafia do bundla przeglądarki (sprawdzone). | 2 | |
+| 2026-11-11 | `src/lib/agents/pricing.ts` | Stawki Groq niezweryfikowane u źródła (strona Groq niedostępna z sesji, agregatory sprzeczne — część mówi o przejściu tych modeli na „contact sales”). Sprawdzić ręcznie na groq.com/pricing. | 2 | |
 
 ## Dziennik
 
@@ -331,7 +358,8 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 |---|---|---|---|---|
 | 2026-11-11 | — | — | czysty / 981 zielonych / 0 błędów, 15 ostrzeżeń | stan wyjściowy |
 | 2026-11-11 | 0 | #223 | czysty / 992 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Pokrycie `src/lib/agents`: linie 40,06% (1002/2501), instrukcje 38,57%, gałęzie 33,66%, funkcje 36,09%; `runtime.server.ts` linie 80,7% / gałęzie 67,7% (bez nowych testów 73,5% / 59,0%); `tools.server.ts` linie 20,1%. Całe `src`: linie 23,46%. Mutacja kontrolna (+1 token w zapisie, klasyfikator mimo wywołań narzędzi) wywraca 10 z 11 nowych testów. |
-| 2026-11-11 | 1 | (PR w toku) | czysty / 1013 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Testy z etapu 0 bez zmian w asercjach. Pokrycie `src/lib/agents`: linie 44,80% (było 40,06%), gałęzie 37,11%; `runtime.server.ts` 82,3%, `tools.server.ts` 35,9% (było 20,1%). Migracja `memories.origin` — wchodzi sama po merge; nowy kod `remember` jej wymaga, więc publikacja w Lovable PO migracji. |
+| 2026-11-11 | 1 | #225 | czysty / 1013 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Testy z etapu 0 bez zmian w asercjach. Pokrycie `src/lib/agents`: linie 44,80% (było 40,06%), gałęzie 37,11%; `runtime.server.ts` 82,3%, `tools.server.ts` 35,9% (było 20,1%). Migracja `memories.origin` — wchodzi sama po merge; nowy kod `remember` jej wymaga, więc publikacja w Lovable PO migracji. |
+| 2026-11-11 | 2 | (PR w toku) | czysty / 1046 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Pokrycie `src/lib/agents`: linie 45,33% (było 44,80%), `src/lib/ai/llm` 88,8%. Build OK, w bundlu przeglądarki brak księgi i klucza. Migracja `llm_usage` i funkcja sumująca sprawdzone na lokalnym Postgresie 16 (dwa przebiegi, przejście z `agent_runs`). Kolejność wdrożenia: migracja (sama po merge) → publikacja w Lovable. |
 
 ## Załącznik: znaleziska z rewizji (skrót)
 

@@ -6,8 +6,8 @@
 // i tak pilnuje pozycji mechanicznie).
 
 import { DEFAULT_GEMINI_MODEL } from "@/lib/agents/models";
-import { callAnthropic } from "@/lib/agents/providers/anthropic";
-import { callGeminiText } from "@/lib/agents/providers/geminiText";
+import { callAnthropic } from "@/lib/ai/llm/anthropic";
+import { callGeminiText } from "@/lib/ai/llm/geminiText";
 import { estimateTokens, type ModelBudget } from "./budget";
 import { parseAlarmReply, type AlarmCandidate } from "./live";
 import type { ModelKeys } from "./ingest.server";
@@ -65,6 +65,7 @@ export async function askAlarm(
         contents: [{ role: "user", parts: [{ text: user }] }],
         maxOutputTokens: 300,
         timeoutMs: 30_000,
+        ledger: budget.ledger?.("alarm"),
         // krótka decyzja „trzymaj / zamknij” — bez myślenia, żeby nie zjadło limitu
         noThinking: true,
       });
@@ -88,6 +89,7 @@ export async function askAlarm(
       system: ALARM_SYSTEM,
       user,
       timeoutMs: 30_000,
+      ledger: budget.ledger?.("alarm"),
     });
     if (g.ok) {
       await budget.record("alarm", {

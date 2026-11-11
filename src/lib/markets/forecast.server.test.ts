@@ -8,6 +8,8 @@ import {
   type ForecastInput,
 } from "./forecast.server";
 import type { PricePoint } from "./series";
+import { createModelBudget } from "./budget";
+import { makeDb } from "@/lib/agents/runtime.testkit";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -206,36 +208,36 @@ describe("forecastWithModel", () => {
   });
 
   it("falls back to Gemini and names it when Claude fails", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn()
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 500,
-          json: async () => ({}),
-          text: async () => "",
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: async () => ({
-            candidates: [
-              {
-                content: {
-                  parts: [{ text: '[{"symbol":"BTC","direction":"flat","confidence":20}]' }],
+    // Odpowiedź po adresie, nie po kolejności: klient modeli ponawia raz po 5xx.
+    const fetchMock = vi.fn(async (url: unknown) =>
+      String(url).includes("api.anthropic.com")
+        ? { ok: false, status: 500, json: async () => ({}), text: async () => "" }
+        : {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              candidates: [
+                {
+                  content: {
+                    parts: [{ text: '[{"symbol":"BTC","direction":"flat","confidence":20}]' }],
+                  },
                 },
-              },
-            ],
-          }),
-          text: async () => "",
-        }),
+              ],
+            }),
+            text: async () => "",
+          },
     );
+    vi.stubGlobal("fetch", fetchMock);
     const result = await forecastWithModel([input("BTC")], {
       anthropicApiKey: "sk-test",
       geminiApiKey: "gem",
     });
     expect(result.model).toBe("gemini-2.5-flash");
+    // Claude: pierwsza próba + jedno ponowienie po 500, potem Gemini.
+    const claudeCalls = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).includes("api.anthropic.com"),
+    );
+    expect(claudeCalls).toHaveLength(2);
     expect(result.verdicts[0].direction).toBe("flat");
   });
 
@@ -313,5 +315,51 @@ describe("forecastWithModel", () => {
       geminiApiKey: "gem",
     });
     expect(result.model).toBeNull();
+  });
+});
+
+// Etap 2: moduł rynków pisze równolegle do księgi llm_usage.
+describe("forecastWithModel — księga llm_usage", () => {
+  it("prognoza modelem zostawia wiersz w llm_usage obok market_model_usage", async () => {
+    const { db, calls } = makeDb(() => undefined);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: '[{"symbol":"BTC","direction":"flat","confidence":20}]' }],
+              },
+            },
+          ],
+          usageMetadata: { promptTokenCount: 300, candidatesTokenCount: 40 },
+        }),
+        text: async () => "",
+      }),
+    );
+    await forecastWithModel(
+      [input("BTC")],
+      { anthropicApiKey: null, geminiApiKey: "gem" },
+      {
+        budget: createModelBudget(db, "owner-1"),
+      },
+    );
+    const inserted = calls
+      .filter((c) => c.ops.some((o) => o.method === "insert"))
+      .map((c) => c.table);
+    expect(inserted).toContain("market_model_usage");
+    const row = calls.find((c) => c.table === "llm_usage")?.ops.find((o) => o.method === "insert")
+      ?.args[0] as Record<string, unknown> | undefined;
+    expect(row).toMatchObject({
+      owner_id: "owner-1",
+      module: "markets",
+      purpose: "forecast",
+      provider: "gemini",
+      tokens_input: 300,
+      tokens_output: 40,
+    });
   });
 });

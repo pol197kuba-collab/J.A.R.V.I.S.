@@ -56,6 +56,9 @@ import {
   type DocSpec,
   type ProducerSpec,
 } from "./docSpec";
+import { callGemini } from "@/lib/ai/llm/gemini";
+import type { LedgerContext } from "@/lib/ai/llm/ledger";
+import type { GeminiUsageMetadata } from "@/lib/ai/llm/usage";
 
 // Typy i walidacja opisu mieszkają w ./docSpec (plik czysty, bez zależności
 // serwerowych — czyta go też podgląd w przeglądarce). Re-eksport zostaje,
@@ -380,36 +383,38 @@ const OG_IMAGE_TAG_RE =
 // outlet sets — and embeds that image directly. No scraping of page bodies,
 // no third-party search API, no signup: only the two calls the project
 // already makes elsewhere (Gemini grounding, a plain fetch).
-async function fetchWebSearchOgImage(
+export async function fetchWebSearchOgImage(
   query: string,
   geminiApiKey: string,
   note: Note,
+  ledger?: LedgerContext,
 ): Promise<DocImage | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), OG_IMAGE_TIMEOUT_MS);
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_GEMINI_MODEL}:generateContent?key=${encodeURIComponent(geminiApiKey)}`,
-      {
-        method: "POST",
-        signal: ctrl.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          generationConfig: { temperature: 0, maxOutputTokens: 50 },
-          tools: [{ google_search: {} }],
-          contents: [{ role: "user", parts: [{ text: query }] }],
-        }),
-      },
-    );
-    if (!res.ok) {
-      note(`og-image: wyszukiwarka HTTP ${res.status}`);
-      return null;
-    }
-    const data = (await res.json()) as {
+    const res = await callGemini<{
       candidates?: Array<{
         groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string } }> };
       }>;
-    };
+      usageMetadata?: GeminiUsageMetadata;
+    }>({
+      apiKey: geminiApiKey,
+      model: DEFAULT_GEMINI_MODEL,
+      body: {
+        generationConfig: { temperature: 0, maxOutputTokens: 50 },
+        tools: [{ google_search: {} }],
+        contents: [{ role: "user", parts: [{ text: query }] }],
+      },
+      timeoutMs: OG_IMAGE_TIMEOUT_MS,
+      retries: 0,
+      ledger,
+    });
+    if (!res.ok) {
+      if (res.status === null) throw new Error(res.error ?? res.message);
+      note(`og-image: wyszukiwarka HTTP ${res.status}`);
+      return null;
+    }
+    const data = res.data;
     const urls = (data.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [])
       .flatMap((c) => (c.web?.uri ? [c.web.uri] : []))
       .slice(0, 4);
@@ -615,6 +620,7 @@ async function resolveOneImage(
   usedHashes: Set<string>,
   note: Note,
   googleCse?: GoogleCseCreds,
+  ledger?: LedgerContext,
 ): Promise<DocImage | null> {
   const claim = async (candidate: DocImage | null, tier: string): Promise<DocImage | null> => {
     if (!candidate) return null;
@@ -663,7 +669,7 @@ async function resolveOneImage(
   if (wikiPl) return wikiPl;
 
   const webPhoto = await claim(
-    await fetchWebSearchOgImage(job.imageQuery, apiKey, note),
+    await fetchWebSearchOgImage(job.imageQuery, apiKey, note, ledger),
     "og-image",
   );
   if (webPhoto) return webPhoto;
@@ -687,6 +693,8 @@ export async function generateDocImages(
   apiKey: string,
   onWarn?: (message: string) => Promise<void> | void,
   googleCse?: GoogleCseCreds,
+  /** Księga llm_usage dla wyszukiwania zdjęć przez Gemini. */
+  ledger?: LedgerContext,
 ): Promise<DocImages> {
   type Job = { key: "hero" | number; imageQuery: string; pageUrl?: string };
   const jobs: Job[] = [];
@@ -715,6 +723,7 @@ export async function generateDocImages(
         usedHashes,
         (text) => notes.push(text),
         googleCse,
+        ledger,
       );
       if (result) {
         if (job.key === "hero") images.hero = result;

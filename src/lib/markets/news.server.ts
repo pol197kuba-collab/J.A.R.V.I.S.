@@ -9,10 +9,10 @@
 // heurystykę słownikową. Obie ścieżki AI przechodzą przez te same adaptery
 // co rozmowy agentów, żeby nie powstała trzecia kopia wywołania modelu.
 import { DEFAULT_GEMINI_MODEL } from "@/lib/agents/models";
-import { callAnthropic } from "@/lib/agents/providers/anthropic";
-import { callGeminiText } from "@/lib/agents/providers/geminiText";
+import { callAnthropic } from "@/lib/ai/llm/anthropic";
+import { callGeminiText } from "@/lib/ai/llm/geminiText";
 import { estimateTokens, UNLIMITED_BUDGET, type ModelBudget } from "./budget";
-import type { GeminiContent } from "@/lib/agents/providers/types";
+import type { GeminiContent } from "@/lib/ai/llm/types";
 import { dedupeNews, parseRss, type RssItem } from "@/lib/rss/parse";
 import type { MarketAsset } from "./assets";
 import {
@@ -157,6 +157,7 @@ export async function classifyMarketNews(
           contents,
           maxOutputTokens: 8192,
           timeoutMs: MODEL_TIMEOUT_MS,
+          ledger: budget.ledger?.("news"),
           // klasyfikacja nagłówków — długie myślenie tylko zjada budżet
           effort: "low",
         });
@@ -185,6 +186,7 @@ export async function classifyMarketNews(
         system,
         user: userPrompt(batch),
         timeoutMs: MODEL_TIMEOUT_MS,
+        ledger: budget.ledger?.("news"),
       });
       text = gemini.ok ? gemini.text : null;
       if (gemini.ok) {

@@ -67,3 +67,36 @@ describe("buildDigest", () => {
     expect(digest).toContain("1. Wstęp — Treść wstępu.");
   });
 });
+
+// Etap 2: QA dokumentu przez klienta modeli, z wierszem w księdze.
+describe("judgeDocument — klient modeli i księga", () => {
+  it("klucz w nagłówku, wiersz documents/qa", async () => {
+    const { vi } = await import("vitest");
+    const { makeDb } = await import("./runtime.testkit");
+    const { judgeDocument } = await import("./documentJobs.functions");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: '{"ok": true, "reason": "Spełnia."}' }] } }],
+        usageMetadata: { promptTokenCount: 400, candidatesTokenCount: 20 },
+      }),
+      text: async () => "",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { db, calls } = makeDb(() => undefined);
+
+    const verdict = await judgeDocument("tajny", "Raport o X", "1. Wstęp", {
+      db,
+      ownerId: "u1",
+      module: "documents",
+      purpose: "qa",
+    });
+    vi.unstubAllGlobals();
+
+    expect(verdict).toEqual({ ok: true, reason: "Spełnia." });
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain("tajny");
+    const row = calls.find((c) => c.table === "llm_usage")?.ops[0].args[0];
+    expect(row).toMatchObject({ module: "documents", purpose: "qa", tokens_input: 400 });
+  });
+});

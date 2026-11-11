@@ -202,7 +202,11 @@ export const processDocumentFn = createServerFn({ method: "POST" })
     for (let i = 0; i < chunks.length; i += EMBED_BATCH_SIZE) {
       const batch = chunks.slice(i, i + EMBED_BATCH_SIZE);
       const batchResults = await Promise.all(
-        batch.map((c) => embedText(c, apiKey, "RETRIEVAL_DOCUMENT")),
+        batch.map((c) =>
+          embedText(c, apiKey, "RETRIEVAL_DOCUMENT", {
+            ledger: { db: supabase, ownerId: userId, module: "documents", purpose: "embed" },
+          }),
+        ),
       );
       embeddings.push(...batchResults);
     }

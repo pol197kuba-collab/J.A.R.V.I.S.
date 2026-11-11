@@ -473,3 +473,91 @@ describe("A21 — ważność linku do wygenerowanego pliku", () => {
     expect(SIGNED_URL_TTL_SECONDS).toBe(24 * 3600);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Etap 2 — narzędzia zapisują zużycie modeli do księgi llm_usage
+// ---------------------------------------------------------------------------
+
+describe("narzędzia — księga llm_usage", () => {
+  const ledgerRows = (calls: ReturnType<typeof makeDb>["calls"]) =>
+    calls
+      .filter((c) => c.table === "llm_usage")
+      .map((c) => c.ops.find((o) => o.method === "insert")!.args[0] as Record<string, unknown>);
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("web_search: klucz w nagłówku, wiersz w księdze z run_id i celem web_search", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: "Odpowiedź." }] } }],
+        usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 20 },
+      }),
+      text: async () => "",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { db, calls } = makeDb(() => undefined);
+    const res = await getToolByName("web_search")!.execute(
+      { query: "pogoda" },
+      {
+        supabase: db,
+        userId: "u1",
+        agentId: "a1",
+        runId: "r1",
+        apiKey: "tajny",
+        model: "gemini-2.5-flash",
+        logEvent: async () => {},
+      },
+    );
+    expect(res).toMatchObject({ answer: "Odpowiedź." });
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain("tajny");
+    expect(ledgerRows(calls)).toEqual([
+      expect.objectContaining({
+        module: "agents",
+        purpose: "web_search",
+        run_id: "r1",
+        tokens_input: 50,
+        tokens_output: 20,
+      }),
+    ]);
+  });
+
+  it("remember: embedding zapisany w księdze jako cel embed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ embedding: { values: new Array(768).fill(0.1) } }),
+        text: async () => "",
+      }),
+    );
+    const { db, calls } = makeDb((table, ops) =>
+      table === "memories" && ops.some((o) => o.method === "insert")
+        ? { data: { id: "m1" }, error: null }
+        : undefined,
+    );
+    await getToolByName("remember")!.execute(
+      { value: "Lubię espresso." },
+      {
+        supabase: db,
+        userId: "u1",
+        agentId: "a1",
+        runId: "r1",
+        apiKey: "k",
+        model: "gemini-2.5-flash",
+        logEvent: async () => {},
+      },
+    );
+    expect(ledgerRows(calls)).toEqual([
+      expect.objectContaining({
+        module: "agents",
+        purpose: "embed",
+        model: "gemini-embedding-001",
+        run_id: "r1",
+        estimated: true,
+      }),
+    ]);
+  });
+});

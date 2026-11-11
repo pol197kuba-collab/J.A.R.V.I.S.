@@ -68,11 +68,12 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
     // Wpis klasyfikatora ląduje na liście wywołań narzędzi.
     expect(toolNames(row.output)).toEqual(["classifier_none"]);
     expect((row.output as { text: string }).text).toBe(result.output);
-    // STAN OBECNY (A9/A20): tokeny klasyfikatora Groq nie są liczone.
-    expect(row.tokens_input).toBe(1000);
-    expect(row.tokens_output).toBe(200);
+    // Etap 2 (A20): klasyfikator Groq liczy się do runu, po stawce Groq.
+    expect(row.tokens_input).toBe(1040);
+    expect(row.tokens_output).toBe(205);
     expect(row.model).toBe("gemini-2.5-flash");
-    expect(row.cost_usd).toBeCloseTo(0.0008, 6); // 1000 × $0,3/M + 200 × $2,5/M
+    // Gemini 1000 × $0,3/M + 200 × $2,5/M = 0,0008; Groq 8B 40/5 tokenów ≈ 0,000002.
+    expect(row.cost_usd).toBeCloseTo(0.000802, 6);
 
     // Tura trafia do historii rozmowy: wiadomość użytkownika + odpowiedź.
     const msgs = writes(calls, "messages", "insert")[0].payload as unknown as Array<{
@@ -178,7 +179,9 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
     // Tokeny rodzica to tylko jego własne tury — dziecko liczy się osobno.
     expect(parent.tokens_input).toBe(1700);
     expect(parent.tokens_output).toBe(65);
-    expect(parent.cost_usd).toBe(0.000672); // zaokrąglone do 6 miejsc w costUsd
+    // Etap 2: suma kosztów wywołań, każde zaokrąglone do 6 miejsc jak wiersz
+    // księgi (0,00034 + 0,000333), zamiast zaokrąglenia całości (0,000672).
+    expect(parent.cost_usd).toBe(0.000673);
 
     // Rozmowę i jej wiadomości zakłada tylko run najwyższego poziomu.
     expect(writes(calls, "conversations", "insert")).toHaveLength(1);
@@ -292,10 +295,11 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
     const row = finalRunRow(calls, "run-1")!;
     expect(row.status).toBe("error");
     expect(row.error).toBe("Gemini HTTP 400: API key expired");
-    // STAN OBECNY (A4): tokeny pierwszej, udanej tury przepadają — wiersz
-    // błędu nie ma tokenów ani kosztu. Etap 2 zmienia tę asercję.
-    expect(row).not.toHaveProperty("tokens_input");
-    expect(row).not.toHaveProperty("cost_usd");
+    // Etap 2 (A4): wiersz błędu ma tokeny i koszt zebrane do chwili awarii.
+    expect(row.tokens_input).toBe(600);
+    expect(row.tokens_output).toBe(15);
+    expect(row.cost_usd).toBeCloseTo(0.0002175, 5); // 600 × 0,3/M + 15 × 2,5/M
+    expect(row.model).toBe("gemini-2.5-flash");
 
     const agentUpdates = writes(calls, "agents", "update").map((w) => w.payload);
     expect(agentUpdates.at(-1)).toMatchObject({ status: "error" });
@@ -328,10 +332,9 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
     expect(row.status).toBe("done");
     expect(row.tokens_input).toBe(300);
     expect(row.tokens_output).toBe(40);
-    // STAN OBECNY (A20): tokeny Groq zapisane pod modelem Gemini i wycenione
-    // po jego stawce. Etap 2 zmienia tę asercję.
+    // Etap 2 (A20): tura Groq wyceniona po stawce Groq 70B, nie Gemini.
     expect(row.model).toBe("gemini-2.5-flash");
-    expect(row.cost_usd).toBeCloseTo(0.00019, 6);
+    expect(row.cost_usd).toBeCloseTo(0.000209, 6); // 300 × 0,59/M + 40 × 0,79/M
     expect(loggedMessages(calls)).toContain("failover to groq succeeded");
   });
 
@@ -440,9 +443,10 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
         },
       ],
     });
-    // Groq: tokeny klasyfikatora poza runem (STAN OBECNY, A9/A20).
-    expect(row.tokens_input).toBe(900);
-    expect(row.tokens_output).toBe(30);
+    // Etap 2: tokeny klasyfikatora Groq wchodzą do runu.
+    expect(row.tokens_input).toBe(940);
+    expect(row.tokens_output).toBe(35);
+    expect(row.cost_usd).toBeCloseTo(0.000347, 6);
   });
 
   it("9b. klasyfikator UI bez Groq: druga płatna tura Gemini, jej tokeny wchodzą do runu", async () => {

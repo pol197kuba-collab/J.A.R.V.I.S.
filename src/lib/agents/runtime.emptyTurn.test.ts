@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { runOrchestrator } from "./runtime.server";
-import { callGroq, chooseGroqModel } from "./providers/groq";
+import { callGroq, chooseGroqModel } from "@/lib/ai/llm/groq";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
 // Live failure (2026-10-09): with Claude out of credits the run fell back to

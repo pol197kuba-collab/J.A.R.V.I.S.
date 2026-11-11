@@ -24,12 +24,14 @@ import {
   parseModelRef,
   ANTHROPIC_PREFIX,
 } from "./models";
-import { callAnthropic } from "./providers/anthropic";
-import { callGroq } from "./providers/groq";
-import { costUsd } from "./pricing";
+import { callAnthropic } from "@/lib/ai/llm/anthropic";
+import { callGemini } from "@/lib/ai/llm/gemini";
+import { withPurpose, type LedgerContext } from "@/lib/ai/llm/ledger";
+import { addUsage, ZERO_USAGE, type GeminiUsageMetadata, type LlmUsage } from "@/lib/ai/llm/usage";
+import { callGroq } from "@/lib/ai/llm/groq";
 import { chooseModel } from "./budget";
 import { currentBudget } from "./budget.server";
-import type { GeminiContent, GeminiPart } from "./providers/types";
+import type { GeminiContent, GeminiPart } from "@/lib/ai/llm/types";
 import { AGENT_SLUGS, isToolForcedForAgent } from "@/lib/constants/agentSlugs";
 import { UI_ACTIONS, type UiAction } from "@/lib/constants/uiActions";
 import { COMMAND_REGISTRY } from "@/lib/commands/registry";
@@ -53,8 +55,6 @@ const UI_ACTIONS_WITH_NONE = [...UI_ACTIONS, "none"] as const;
 export const UI_ACTION_CONFIRMATIONS: Record<UiAction, string> = Object.fromEntries(
   COMMAND_REGISTRY.map((c) => [c.id, c.confirmation]),
 ) as Record<UiAction, string>;
-
-const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 const DEFAULT_SYSTEM_PROMPT = `${JARVIS_PERSONA}
 
@@ -144,7 +144,6 @@ const DEFAULT_MAX_OUTPUT_TOKENS = 1600;
 // Transient Gemini HTTP statuses worth retrying before failing over: 429
 // (rate limit), 500/502/503/504 (overload / gateway). 503 "high demand" is
 // the one seen storming in production.
-const GEMINI_RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const GEMINI_MAX_RETRIES = 3;
 const GEMINI_RETRY_BACKOFF_MS = 700;
 
@@ -210,6 +209,8 @@ export type ClassifierFallbackDeps = {
    *  classifier when it isn't would let the fallback "succeed" at calling a tool
    *  the main turn could never have called either. Defaults to false. */
   queueDocumentJobEnabled?: boolean;
+  /** Księga zużycia — klasyfikator zapisuje się w niej z celem "classifier". */
+  ledger?: LedgerContext;
   logEvent: (
     level: "info" | "warn" | "error",
     source: string,
@@ -227,7 +228,14 @@ export type ClassifierFallbackResult = {
   toolCallLogEntry: { name: string; args: Record<string, unknown> } | null;
   tokensInDelta: number;
   tokensOutDelta: number;
+  /** Pełne zużycie klasyfikatora (Groq i/lub Gemini) — liczy się do runu. */
+  usage: LlmUsage;
+  /** Koszt po faktycznych modelach (null = któryś spoza cennika). */
+  costUsd: number | null;
 };
+
+type ClassifierCoreResult = Omit<ClassifierFallbackResult, "usage" | "costUsd">;
+type UsageTracker = (usage: LlmUsage, costUsd: number | null) => void;
 
 // Forces one narrow yes/no decision ("does this message match a UI action?")
 // via the free Groq tier when a key is configured, falling back to Gemini on
@@ -244,6 +252,28 @@ const QUEUE_DOCUMENT_JOB_TOOL_NAME = "queue_document_job";
 export async function runClassifierFallback(
   deps: ClassifierFallbackDeps,
 ): Promise<ClassifierFallbackResult> {
+  // Etap 2 (A9/A20): klasyfikator płaci jak każde wywołanie — Groq też.
+  let usage: LlmUsage = ZERO_USAGE;
+  let costUsd: number | null = 0;
+  const track: UsageTracker = (u, c) => {
+    usage = addUsage(usage, u);
+    costUsd = costUsd === null || c === null ? null : costUsd + c;
+  };
+  const result = await classifyCore(deps, track);
+  return {
+    ...result,
+    tokensInDelta: usage.input,
+    tokensOutDelta: usage.output + usage.thinking,
+    usage,
+    costUsd,
+  };
+}
+
+async function classifyCore(
+  deps: ClassifierFallbackDeps,
+  track: UsageTracker,
+): Promise<ClassifierCoreResult> {
+  const classifierLedger = deps.ledger && withPurpose(deps.ledger, "classifier");
   const {
     groqApiKey,
     input,
@@ -297,7 +327,7 @@ export async function runClassifierFallback(
   const handleQueueDocumentJob = async (
     call: { name: string; args?: Record<string, unknown> },
     via: string,
-  ): Promise<ClassifierFallbackResult> => {
+  ): Promise<ClassifierCoreResult> => {
     // Only ever called when queueTool is truthy, which itself only happens
     // when the caller opted in via queueDocumentJobEnabled — the same
     // caller is responsible for also passing real supabase/userId/agentId
@@ -367,7 +397,9 @@ export async function runClassifierFallback(
         // A plain UI-action pick only needs the enum value (50 is plenty);
         // queue_document_job additionally has to generate a title + brief.
         maxOutputTokens: queueTool ? 200 : 50,
+        ledger: classifierLedger,
       });
+      track(groqResult.usage, groqResult.costUsd);
       const call = groqResult.functionCalls[0];
       if (queueTool && call?.name === QUEUE_DOCUMENT_JOB_TOOL_NAME) {
         return await handleQueueDocumentJob(call, "groq");
@@ -419,33 +451,33 @@ export async function runClassifierFallback(
   }
 
   try {
-    const classifyRes = await fetch(
-      `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: classifierSystemPrompt }] },
-          tools: [{ functionDeclarations: classifierToolDeclarations }],
-          safetySettings: GEMINI_SAFETY_SETTINGS,
-          toolConfig: {
-            functionCallingConfig: {
-              mode: "ANY",
-              allowedFunctionNames: classifierAllowedNames,
-            },
+    const classifyRes = await callGemini<{
+      candidates?: Array<{ content?: { parts?: GeminiPart[] } }>;
+      usageMetadata?: GeminiUsageMetadata;
+    }>({
+      apiKey,
+      model,
+      body: {
+        systemInstruction: { parts: [{ text: classifierSystemPrompt }] },
+        tools: [{ functionDeclarations: classifierToolDeclarations }],
+        safetySettings: GEMINI_SAFETY_SETTINGS,
+        toolConfig: {
+          functionCallingConfig: {
+            mode: "ANY",
+            allowedFunctionNames: classifierAllowedNames,
           },
-          generationConfig: { temperature: 0.1, maxOutputTokens: queueTool ? 200 : 50 },
-          contents: [{ role: "user", parts: [{ text: input }] }],
-        }),
+        },
+        generationConfig: { temperature: 0.1, maxOutputTokens: queueTool ? 200 : 50 },
+        contents: [{ role: "user", parts: [{ text: input }] }],
       },
-    );
+      timeoutMs: 30_000,
+      ledger: classifierLedger,
+    });
     if (classifyRes.ok) {
-      const classifyData = (await classifyRes.json()) as {
-        candidates?: Array<{ content?: { parts?: GeminiPart[] } }>;
-        usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
-      };
-      const tokensInDelta = classifyData.usageMetadata?.promptTokenCount ?? 0;
-      const tokensOutDelta = classifyData.usageMetadata?.candidatesTokenCount ?? 0;
+      track(classifyRes.usage, classifyRes.costUsd);
+      const classifyData = classifyRes.data;
+      const tokensInDelta = classifyRes.usage.input;
+      const tokensOutDelta = classifyRes.usage.output + classifyRes.usage.thinking;
       const classifyParts = classifyData.candidates?.[0]?.content?.parts ?? [];
       const classifyCall = classifyParts.flatMap((p) =>
         "functionCall" in p && p.functionCall ? [p.functionCall] : [],
@@ -501,8 +533,12 @@ export async function runClassifierFallback(
         tokensOutDelta,
       };
     }
+    // Błąd sieci (bez statusu) idzie ścieżką wyjątku, jak dotąd.
+    if (classifyRes.status === null) {
+      throw new Error(classifyRes.error ?? classifyRes.message);
+    }
     // HTTP-level failure — surface status + body instead of swallowing it.
-    const bodyText = await classifyRes.text().catch(() => "");
+    const bodyText = classifyRes.bodyText;
     await logEvent("warn", AGENT_SLUGS.JARVIS, `classifier HTTP ${classifyRes.status}`, {
       run_id: runId,
       body_preview: bodyText.slice(0, 200),
@@ -849,6 +885,34 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     );
   }
 
+  // Zużycie runu (etap 2): suma wywołań, każde wycenione po SWOIM modelu
+  // (A20), z tokenami myślenia (A11). Poza `try`, żeby run zakończony błędem
+  // też zapisał to, co zużył do chwili awarii (A4).
+  const runLedger: LedgerContext = {
+    db: supabase,
+    ownerId: userId,
+    module: "agents",
+    purpose: "turn",
+    runId,
+  };
+  let runUsage: LlmUsage = ZERO_USAGE;
+  let runCostUsd = 0;
+  let runUnpriced = false;
+  const meter = (usage: LlmUsage, costUsd: number | null) => {
+    runUsage = addUsage(runUsage, usage);
+    if (costUsd === null) runUnpriced = true;
+    else runCostUsd += costUsd;
+  };
+  // NULL = któreś wywołanie spoza cennika („nie wiem”), nie „za darmo”.
+  const runCost = () => (runUnpriced ? null : Math.round(runCostUsd * 1_000_000) / 1_000_000);
+  const runUsageColumns = () => ({
+    tokens_input: runUsage.input || null,
+    tokens_output: runUsage.output + runUsage.thinking || null,
+    cache_read_tokens: runUsage.cacheRead || null,
+    cache_write_tokens: runUsage.cacheWrite || null,
+    cost_usd: runCost(),
+  });
+
   // 4. Call Gemini with function-calling loop.
   try {
     const contents: GeminiContent[] = [
@@ -943,11 +1007,6 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // nowych, więc to dokładnie lista tego, co model widział w tej turze.
     const declaredToolNames = new Set(toolDeclarations.map((d) => d.name));
 
-    let totalTokensIn = 0;
-    let totalTokensOut = 0;
-    // Osobno, bo rozliczają się po innych stawkach niż zwykłe wejście.
-    let totalCacheRead = 0;
-    let totalCacheWrite = 0;
     let finalText = "";
     let uiAction: UiAction | null = null;
     const toolCallLog: Array<{
@@ -1012,11 +1071,9 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
             forceToolName: forceGenerateDocument ? GENERATE_DOCUMENT_TOOL : undefined,
             temperature,
             maxOutputTokens,
+            ledger: runLedger,
           });
-          totalTokensIn += claudeResult.tokensIn;
-          totalTokensOut += claudeResult.tokensOut;
-          totalCacheRead += claudeResult.cacheReadTokens ?? 0;
-          totalCacheWrite += claudeResult.cacheWriteTokens ?? 0;
+          meter(claudeResult.usage, claudeResult.costUsd);
           functionCalls = claudeResult.functionCalls;
           textOut = claudeResult.text;
           if (functionCalls.length === 0 && !textOut) {
@@ -1087,57 +1144,35 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
             // can't reliably handle our tool-calling shape (it 400s on
             // delegate_to_agent), so exhausting a quick retry against Gemini is
             // far more likely to succeed than switching providers.
-            let res: Response | null = null;
-            for (let attempt = 0; attempt <= GEMINI_MAX_RETRIES; attempt++) {
-              const ctrl = new AbortController();
-              const timer = setTimeout(() => ctrl.abort(), 45_000);
-              try {
-                res = await fetch(
-                  `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-                  {
-                    method: "POST",
-                    signal: ctrl.signal,
-                    headers: { "Content-Type": "application/json" },
-                    body: requestBody,
-                  },
-                );
-              } finally {
-                clearTimeout(timer);
-              }
-              if (
-                res.ok ||
-                !GEMINI_RETRYABLE_STATUS.has(res.status) ||
-                attempt === GEMINI_MAX_RETRIES
-              ) {
-                break;
-              }
-              await logEvent(
-                "warn",
-                AGENT_SLUGS.JARVIS,
-                `gemini HTTP ${res.status}, retry ${attempt + 1}/${GEMINI_MAX_RETRIES}`,
-                { run_id: runId, iter } as Json,
-              );
-              await new Promise((r) => setTimeout(r, GEMINI_RETRY_BACKOFF_MS * (attempt + 1)));
-            }
-
-            if (!res || !res.ok) {
-              const bodyText = res ? await res.text().catch(() => "") : "";
-              throw new Error(`Gemini HTTP ${res?.status ?? "network"}: ${bodyText.slice(0, 300)}`);
-            }
-
-            const data = (await res.json()) as {
+            const res = await callGemini<{
               candidates?: Array<{
                 content?: { role?: string; parts?: GeminiPart[] };
                 finishReason?: string;
               }>;
               promptFeedback?: { blockReason?: string };
-              usageMetadata?: {
-                promptTokenCount?: number;
-                candidatesTokenCount?: number;
-              };
-            };
-            totalTokensIn += data.usageMetadata?.promptTokenCount ?? 0;
-            totalTokensOut += data.usageMetadata?.candidatesTokenCount ?? 0;
+              usageMetadata?: GeminiUsageMetadata;
+            }>({
+              apiKey,
+              model,
+              body: requestBody,
+              timeoutMs: 45_000,
+              retries: GEMINI_MAX_RETRIES,
+              backoffMs: GEMINI_RETRY_BACKOFF_MS,
+              onRetry: (status, attempt, retries) =>
+                logEvent(
+                  "warn",
+                  AGENT_SLUGS.JARVIS,
+                  `gemini HTTP ${status}, retry ${attempt}/${retries}`,
+                  {
+                    run_id: runId,
+                    iter,
+                  } as Json,
+                ),
+              ledger: runLedger,
+            });
+            if (!res.ok) throw new Error(res.message);
+            const data = res.data;
+            meter(res.usage, res.costUsd);
 
             const parts = data.candidates?.[0]?.content?.parts ?? [];
             functionCalls = parts.flatMap((p) =>
@@ -1181,7 +1216,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         // network) — retry this exact turn against the free Groq tier
         // instead of failing the whole run, when a key is configured. The
         // running `contents` array stays in Gemini's canonical shape either
-        // way (see providers/groq.ts), so subsequent iterations still try
+        // way (see llm/groq.ts), so subsequent iterations still try
         // Gemini first — this is a per-turn retry, not a permanent switch.
         const geminiMsg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
 
@@ -1233,9 +1268,9 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
             forceToolName: forceGenerateDocument ? GENERATE_DOCUMENT_TOOL : undefined,
             temperature,
             maxOutputTokens,
+            ledger: withPurpose(runLedger, "turn_failover"),
           });
-          totalTokensIn += groqResult.tokensIn;
-          totalTokensOut += groqResult.tokensOut;
+          meter(groqResult.usage, groqResult.costUsd);
           functionCalls = groqResult.functionCalls;
           textOut = groqResult.text;
           await logEvent("info", AGENT_SLUGS.JARVIS, "failover to groq succeeded", {
@@ -1520,10 +1555,10 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         userId,
         agentId: agent.id,
         queueDocumentJobEnabled: toolDeclarations.some((d) => d.name === "queue_document_job"),
+        ledger: runLedger,
         logEvent,
       });
-      totalTokensIn += classifierResult.tokensInDelta;
-      totalTokensOut += classifierResult.tokensOutDelta;
+      meter(classifierResult.usage, classifierResult.costUsd);
       if (classifierResult.toolCallLogEntry) toolCallLog.push(classifierResult.toolCallLogEntry);
       if (classifierResult.uiAction) {
         uiAction = classifierResult.uiAction;
@@ -1611,20 +1646,11 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       .update({
         status: "done",
         output: { text: finalText, tool_calls: toolCallLog } as Json,
-        tokens_input: totalTokensIn || null,
-        tokens_output: totalTokensOut || null,
         model,
-        cache_read_tokens: totalCacheRead || null,
-        cache_write_tokens: totalCacheWrite || null,
         // Koszt liczony TERAZ, po dzisiejszym cenniku, i zapisany przy
         // przebiegu — historia ma zostać tym, czym była, nawet gdy stawki
-        // się zmienią. `null` znaczy „model spoza cennika", nie „za darmo".
-        cost_usd: costUsd(model, {
-          input: totalTokensIn,
-          output: totalTokensOut,
-          cacheRead: totalCacheRead,
-          cacheWrite: totalCacheWrite,
-        }),
+        // się zmienią. Suma wywołań, każde po swoim modelu (A20).
+        ...runUsageColumns(),
         latency_ms: latencyMs,
         finished_at: new Date().toISOString(),
       })
@@ -1647,8 +1673,8 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       `run done · ${toolCallLog.length} tool calls · ${latencyMs}ms`,
       {
         run_id: runId,
-        tokens_in: totalTokensIn,
-        tokens_out: totalTokensOut,
+        tokens_in: runUsage.input,
+        tokens_out: runUsage.output + runUsage.thinking,
       } as Json,
     );
 
@@ -1700,8 +1726,8 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
       output: finalText,
       action: uiAction ?? undefined,
       conversationId: resolvedConversationId,
-      tokensIn: totalTokensIn || undefined,
-      tokensOut: totalTokensOut || undefined,
+      tokensIn: runUsage.input || undefined,
+      tokensOut: runUsage.output + runUsage.thinking || undefined,
       latencyMs,
       attachments: attachments.length > 0 ? attachments : undefined,
       openDocument: openDocument ?? undefined,
@@ -1718,6 +1744,9 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         error: msg,
         finished_at: new Date().toISOString(),
         latency_ms: Date.now() - startedAt,
+        // A4: zużycie do chwili awarii też jest rachunkiem.
+        model,
+        ...runUsageColumns(),
       })
       .eq("id", runId);
     await supabase

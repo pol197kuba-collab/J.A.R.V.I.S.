@@ -9,6 +9,9 @@
 // the memory embeddings stay Gemini-only — those are Gemini-specific
 // capabilities, not something Groq can substitute).
 import type { GeminiContent, ModelTurnResult, ToolDeclaration } from "./types";
+import { requestJson } from "./http";
+import { recordLlmUsage, type LedgerContext } from "./ledger";
+import { ZERO_USAGE, type LlmUsage } from "./usage";
 
 const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -107,6 +110,10 @@ export type CallGroqOptions = {
   temperature?: number;
   maxOutputTokens?: number;
   timeoutMs?: number;
+  /** Gdzie zapisać zużycie (księga llm_usage). */
+  ledger?: LedgerContext;
+  /** Ponowienia po 429/5xx (domyślnie 1). */
+  retries?: number;
 };
 
 // ── self-healing model choice ──────────────────────────────────────────────
@@ -169,56 +176,60 @@ export async function callGroq(opts: CallGroqOptions): Promise<ModelTurnResult> 
 }
 
 async function callGroqOnce(opts: CallGroqOptions): Promise<ModelTurnResult> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 30_000);
-  try {
-    const tools = opts.toolDeclarations?.length ? toOpenAiTools(opts.toolDeclarations) : undefined;
-    const res = await fetch(GROQ_ENDPOINT, {
-      method: "POST",
-      signal: ctrl.signal,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${opts.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: opts.model,
-        messages: toOpenAiMessages(opts.systemPrompt, opts.contents),
-        temperature: opts.temperature,
-        max_tokens: opts.maxOutputTokens,
-        ...(tools
-          ? {
-              tools,
-              tool_choice: opts.forceToolName
-                ? { type: "function", function: { name: opts.forceToolName } }
-                : opts.forceAnyTool
-                  ? "required"
-                  : "auto",
-            }
-          : {}),
-      }),
-    });
-    if (!res.ok) {
-      const bodyText = await res.text().catch(() => "");
-      throw new Error(`Groq HTTP ${res.status}: ${bodyText.slice(0, 300)}`);
+  const tools = opts.toolDeclarations?.length ? toOpenAiTools(opts.toolDeclarations) : undefined;
+  const res = await requestJson<{
+    choices?: Array<{
+      message?: { content?: string | null; tool_calls?: OpenAiToolCall[] };
+    }>;
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  }>({
+    url: GROQ_ENDPOINT,
+    headers: { Authorization: `Bearer ${opts.apiKey}` },
+    body: {
+      model: opts.model,
+      messages: toOpenAiMessages(opts.systemPrompt, opts.contents),
+      temperature: opts.temperature,
+      max_tokens: opts.maxOutputTokens,
+      ...(tools
+        ? {
+            tools,
+            tool_choice: opts.forceToolName
+              ? { type: "function", function: { name: opts.forceToolName } }
+              : opts.forceAnyTool
+                ? "required"
+                : "auto",
+          }
+        : {}),
+    },
+    timeoutMs: opts.timeoutMs ?? 30_000,
+    retries: opts.retries ?? 1,
+  });
+  if (!res.ok) {
+    if (res.status === null) {
+      // Surowy komunikat błędu sieci — trafia do logów bez zmian, jak dotąd.
+      throw new Error(res.timedOut ? "Groq: przekroczony czas" : (res.error ?? "network"));
     }
-    const data = (await res.json()) as {
-      choices?: Array<{
-        message?: { content?: string | null; tool_calls?: OpenAiToolCall[] };
-      }>;
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
-    const msg = data.choices?.[0]?.message;
-    const functionCalls = (msg?.tool_calls ?? []).map((tc) => ({
-      name: tc.function.name,
-      args: safeJsonParse(tc.function.arguments),
-    }));
-    return {
-      text: functionCalls.length > 0 ? "" : (msg?.content ?? "").trim(),
-      functionCalls,
-      tokensIn: data.usage?.prompt_tokens ?? 0,
-      tokensOut: data.usage?.completion_tokens ?? 0,
-    };
-  } finally {
-    clearTimeout(timer);
+    throw new Error(`Groq HTTP ${res.status}: ${res.bodyText.slice(0, 300)}`);
   }
+  const data = res.data;
+  const usage: LlmUsage = {
+    ...ZERO_USAGE,
+    input: data.usage?.prompt_tokens ?? 0,
+    output: data.usage?.completion_tokens ?? 0,
+  };
+  // A20: zapis i koszt po FAKTYCZNYM modelu Groq, nie po modelu runu.
+  const costUsd = await recordLlmUsage(opts.ledger, { provider: "groq", model: opts.model, usage });
+  const msg = data.choices?.[0]?.message;
+  const functionCalls = (msg?.tool_calls ?? []).map((tc) => ({
+    name: tc.function.name,
+    args: safeJsonParse(tc.function.arguments),
+  }));
+  return {
+    text: functionCalls.length > 0 ? "" : (msg?.content ?? "").trim(),
+    functionCalls,
+    tokensIn: usage.input,
+    tokensOut: usage.output,
+    usage,
+    costUsd,
+  };
 }

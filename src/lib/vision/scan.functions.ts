@@ -22,8 +22,9 @@ import {
 } from "./modes";
 import { documentMarkdown, fridgeNote } from "./route";
 import { sanitizeFilename } from "@/lib/documents/chunking";
+import { callGemini } from "@/lib/ai/llm/gemini";
+import type { GeminiUsageMetadata } from "@/lib/ai/llm/usage";
 
-const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 // A 1600px receipt JPEG is ~300–600 kB of base64; this is the backstop.
 const MAX_BASE64_LENGTH = 3_000_000;
 const BUCKET = "scans";
@@ -66,67 +67,62 @@ export const extractScan = createServerFn({ method: "POST" })
     };
 
     const model = DEFAULT_GEMINI_MODEL;
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 45_000);
-    let res: Response;
-    try {
-      res = await fetch(
-        `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-        {
-          method: "POST",
-          signal: ctrl.signal,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            systemInstruction: {
-              parts: [
-                {
-                  text:
-                    "Jesteś precyzyjnym czytnikiem dokumentów J.A.R.V.I.S. Zwracasz wyłącznie JSON " +
-                    "zgodny ze schematem. Teksty po polsku. " +
-                    MODE_PROMPT[data.mode],
-                },
-              ],
+    const res = await callGemini<{
+      candidates?: Array<{ finishReason?: string; content?: { parts?: Array<{ text?: string }> } }>;
+      usageMetadata?: GeminiUsageMetadata;
+    }>({
+      apiKey,
+      model: model,
+      body: {
+        systemInstruction: {
+          parts: [
+            {
+              text:
+                "Jesteś precyzyjnym czytnikiem dokumentów J.A.R.V.I.S. Zwracasz wyłącznie JSON " +
+                "zgodny ze schematem. Teksty po polsku. " +
+                MODE_PROMPT[data.mode],
             },
-            generationConfig: {
-              temperature: 0.1,
-              // Reading, not reasoning — thinking would only eat the budget
-              // a long receipt needs (see analyzeScan).
-              thinkingConfig: { thinkingBudget: 0 },
-              maxOutputTokens: data.mode === "document" ? 8192 : 4096,
-              responseMimeType: "application/json",
-              responseSchema: MODE_RESPONSE_SCHEMA[data.mode],
-            },
-            contents: [
-              {
-                role: "user",
-                parts: [
-                  { inlineData: { mimeType: data.mimeType, data: data.imageBase64 } },
-                  { text: "Odczytaj to zdjęcie." },
-                ],
-              },
-            ],
-          }),
+          ],
         },
-      );
-    } catch (err) {
+        generationConfig: {
+          temperature: 0.1,
+          // Reading, not reasoning — thinking would only eat the budget
+          // a long receipt needs (see analyzeScan).
+          thinkingConfig: { thinkingBudget: 0 },
+          maxOutputTokens: data.mode === "document" ? 8192 : 4096,
+          responseMimeType: "application/json",
+          responseSchema: MODE_RESPONSE_SCHEMA[data.mode],
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { inlineData: { mimeType: data.mimeType, data: data.imageBase64 } },
+              { text: "Odczytaj to zdjęcie." },
+            ],
+          },
+        ],
+      },
+      timeoutMs: 45_000,
+      retries: 1,
+      ledger: { db: supabase, ownerId: userId, module: "vision", purpose: "scan_extract" },
+    });
+    if (!res.ok && res.status === null) {
+      const err = new Error(res.error ?? res.message);
       const msg = err instanceof Error ? err.message : String(err);
       await logEvent("error", `extract ${data.mode} failed: ${msg}`);
       throw new Error("Odczyt nie powiódł się — problem z połączeniem do rdzenia AI.");
-    } finally {
-      clearTimeout(timer);
     }
 
     if (!res.ok) {
-      const body = await res.text().catch(() => "");
+      const body = res.bodyText;
       await logEvent("error", `extract ${data.mode} HTTP ${res.status}`, {
         body: body.slice(0, 300),
       } as Json);
       throw new Error(`Odczyt odrzucony przez rdzeń AI (HTTP ${res.status}).`);
     }
 
-    const payload = (await res.json()) as {
-      candidates?: Array<{ finishReason?: string; content?: { parts?: Array<{ text?: string }> } }>;
-    };
+    const payload = res.data;
     const candidate = payload.candidates?.[0];
     const text = (candidate?.content?.parts ?? []).map((p) => p.text ?? "").join("");
     let raw: unknown = null;

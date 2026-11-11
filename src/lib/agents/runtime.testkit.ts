@@ -44,6 +44,12 @@ export function makeDb(resolve: Resolver) {
       );
       return proxy;
     },
+    // rpc(name, params) — zapisane jako tabela `rpc:<name>`.
+    rpc(name: string, params: unknown) {
+      const call: DbCall = { table: `rpc:${name}`, ops: [{ method: "rpc", args: [name, params] }] };
+      calls.push(call);
+      return Promise.resolve(resolve(call.table, call.ops) ?? EMPTY);
+    },
   } as unknown as SupabaseClient<Database>;
   return { db, calls };
 }

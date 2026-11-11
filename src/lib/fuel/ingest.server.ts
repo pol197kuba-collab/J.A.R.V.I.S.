@@ -287,7 +287,12 @@ export type NewsIngestSummary = {
 /** Ile newsów oceniamy jednym wywołaniem modelu — reszta czeka na kolejny przebieg. */
 const NEWS_CLASSIFY_LIMIT = 30;
 
-export async function ingestNews(db: Db, geminiKey: string | null): Promise<NewsIngestSummary> {
+export async function ingestNews(
+  db: Db,
+  geminiKey: string | null,
+  /** Właściciel klucza Gemini — do księgi llm_usage; brak = bez zapisu. */
+  ownerId?: string | null,
+): Promise<NewsIngestSummary> {
   try {
     const settled = await Promise.allSettled(
       FEEDS.map(async (feed) => parseRss(await fetchText(feed.url), feed)),
@@ -319,7 +324,11 @@ export async function ingestNews(db: Db, geminiKey: string | null): Promise<News
       };
     }
 
-    const verdicts = await classifyNewsImpact(fresh, geminiKey);
+    const verdicts = await classifyNewsImpact(
+      fresh,
+      geminiKey,
+      ownerId ? { db, ownerId, module: "fuel", purpose: "news" } : undefined,
+    );
     const rows = fresh.map((item, i) => ({
       guid: item.guid,
       title: item.title,

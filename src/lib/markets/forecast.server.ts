@@ -11,9 +11,9 @@
 // osobno. Dzięki temu panel skuteczności odpowiada na pytanie, które ma
 // znaczenie: czy model bije prostą arytmetykę, czy tylko ładniej ją opisuje.
 import { DEFAULT_GEMINI_MODEL } from "@/lib/agents/models";
-import { callAnthropic } from "@/lib/agents/providers/anthropic";
-import { callGeminiText } from "@/lib/agents/providers/geminiText";
-import type { GeminiContent } from "@/lib/agents/providers/types";
+import { callAnthropic } from "@/lib/ai/llm/anthropic";
+import { callGeminiText } from "@/lib/ai/llm/geminiText";
+import type { GeminiContent } from "@/lib/ai/llm/types";
 import { stripMarkers } from "@/lib/darwin/prompt";
 import type { MarketAsset } from "./assets";
 import type { SignalDirection, TechnicalOutlook } from "./signals";
@@ -358,6 +358,7 @@ export async function forecastWithModel(
         maxOutputTokens: claudeMaxTokens,
         effort: "low",
         timeoutMs: MODEL_TIMEOUT_MS,
+        ledger: budget.ledger?.(purpose),
       });
       text = result.text || null;
       await budget.record(purpose, {
@@ -383,6 +384,7 @@ export async function forecastWithModel(
       system,
       user,
       timeoutMs: MODEL_TIMEOUT_MS,
+      ledger: budget.ledger?.(purpose),
     });
     if (gemini.ok) {
       text = gemini.text;

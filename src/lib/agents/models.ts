@@ -8,7 +8,7 @@
 //     Generative Language API accepts.
 //   * Anthropic Claude — IDs carry an "anthropic:" prefix
 //     ("anthropic:claude-opus-5"). The prefix is what routes a turn to the
-//     Anthropic adapter (providers/anthropic.ts); everything after it is
+//     Anthropic adapter (llm/anthropic.ts); everything after it is
 //     passed to the Messages API verbatim.
 //
 // A bare ID always means Gemini — that keeps every model value written
@@ -171,7 +171,7 @@ export const RECOMMENDED_AGENT_MODELS: Readonly<Record<string, string>> = {
 };
 
 // Groq — free-tier only, used internally for the UI-action classifier pass
-// and emergency failover (see providers/groq.ts). Not user-selectable as a
+// and emergency failover (see llm/groq.ts). Not user-selectable as a
 // primary agent model, so no provider-prefix parsing is needed here; these
 // are plain Groq model IDs passed straight to their API.
 export const DEFAULT_GROQ_CLASSIFIER_MODEL = "llama-3.1-8b-instant";

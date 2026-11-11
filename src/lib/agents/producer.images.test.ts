@@ -95,3 +95,37 @@ describe("generateDocImages — meldunek o nieudanym szukaniu", () => {
     expect(warn).toContain("openverse: HTTP 503");
   });
 });
+
+// Etap 2: wyszukiwanie zdjęcia przez grounding Gemini idzie przez klienta modeli.
+describe("fetchWebSearchOgImage — klient modeli i księga", () => {
+  it("klucz w nagłówku, wiersz documents/image_search", async () => {
+    const { makeDb } = await import("./runtime.testkit");
+    const { fetchWebSearchOgImage } = await import("./producer.server");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{ groundingMetadata: { groundingChunks: [] } }],
+        usageMetadata: { promptTokenCount: 30, candidatesTokenCount: 5 },
+      }),
+      text: async () => "",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { db, calls } = makeDb(() => undefined);
+    const notes: string[] = [];
+
+    const img = await fetchWebSearchOgImage("Warsaw Old Town", "tajny", (m) => notes.push(m), {
+      db,
+      ownerId: "u1",
+      module: "documents",
+      purpose: "image_search",
+    });
+    vi.unstubAllGlobals();
+
+    expect(img).toBeNull();
+    expect(notes).toContain("og-image: wyszukiwarka nie zwróciła stron");
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain("tajny");
+    const row = calls.find((c) => c.table === "llm_usage")?.ops[0].args[0];
+    expect(row).toMatchObject({ module: "documents", purpose: "image_search", tokens_input: 30 });
+  });
+});
