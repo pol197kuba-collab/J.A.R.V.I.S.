@@ -15,6 +15,7 @@ import {
   type ToolContext,
   FETCH_MAX_BYTES,
   FETCH_TIMEOUT_MS,
+  SIGNED_URL_TTL_SECONDS,
 } from "./tools.server";
 import { makeDb } from "./runtime.testkit";
 
@@ -464,5 +465,11 @@ describe("fetch_url — limity", () => {
     );
     const res = await getToolByName("fetch_url")!.execute({ url: URL_PUBLIC }, ctx());
     expect(res).toMatchObject({ status: 200, text: "Cześć świat", truncated: false });
+  });
+});
+
+describe("A21 — ważność linku do wygenerowanego pliku", () => {
+  it("podpisany link żyje 24 h", () => {
+    expect(SIGNED_URL_TTL_SECONDS).toBe(24 * 3600);
   });
 });

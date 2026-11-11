@@ -2153,7 +2153,11 @@ const readGeneratedFileTool: Tool = {
 // dynamically imported so they only load when a document is actually being
 // generated, not on every runtime start.
 
-const SIGNED_URL_TTL_SECONDS = 7 * 24 * 3600; // 7 days
+// A21: link w czacie / powiadomieniu żyje dobę. Starszy plik otwiera się
+// z /documents, który przy każdym otwarciu podpisuje świeży link
+// (getGeneratedFileUrlFn), więc dłuższa ważność tylko wydłużała okno, w
+// którym przeklejony link daje dostęp do pliku bez logowania.
+export const SIGNED_URL_TTL_SECONDS = 24 * 3600;
 
 // ---------------------------------------------------------------------------
 // queue_document_job — background Insight → Forge pipeline
