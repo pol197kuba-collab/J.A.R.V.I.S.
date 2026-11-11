@@ -40,7 +40,7 @@
       rejestracją.
 - [ ] **W2. Którą ścieżką chodzi czat.** SQL: `select chat_routing from
       user_settings;` — wynik wpisać tutaj: `______`. Potrzebne w etapie 5.
-- [ ] **W3. Klucz service role na hostingu.** Potwierdzić, że
+- [x] **W3. Klucz service role na hostingu.** (potwierdzone przez właściciela 2026-11-11: ustawiony) Potwierdzić, że
       `JARVIS_SUPABASE_SERVICE_ROLE_KEY` jest ustawiony w sekretach Lovable
       (używa go moduł paliw). Bez tego etap 5 nie ruszy.
 - [x] **W4. Token GitHub w Ustawieniach.** (ustawienia GitHuba sprawdzone przez właściciela 2026-11-11) Wymienić na fine-grained PAT tylko
