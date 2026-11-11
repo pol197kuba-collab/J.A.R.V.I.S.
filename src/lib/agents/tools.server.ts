@@ -202,6 +202,65 @@ const webSearch: Tool = {
 
 const MAX_FETCH_BYTES = 12_000;
 
+// A13: jeden limit czasu na całe pobranie (nagłówki I treść) i limit bajtów
+// czytanych ze strumienia. Wcześniej timer kończył się po nagłówkach, a
+// `res.text()` czytało dowolnie dużą (albo nigdy niekończącą się) odpowiedź.
+export const FETCH_TIMEOUT_MS = 10_000;
+export const FETCH_MAX_BYTES = 512 * 1024;
+
+/** Czy odpowiedź to tekst, który ma sens czytać (HTML, tekst, JSON, XML). */
+export function isTextualContentType(contentType: string | null): boolean {
+  // Brak nagłówka: spróbuj jako tekst — i tak chroni limit bajtów.
+  if (!contentType) return true;
+  const mime = contentType.split(";")[0].trim().toLowerCase();
+  return (
+    mime.startsWith("text/") ||
+    mime === "application/json" ||
+    mime === "application/xml" ||
+    mime === "application/xhtml+xml" ||
+    mime.endsWith("+json") ||
+    mime.endsWith("+xml")
+  );
+}
+
+/**
+ * Czyta treść strumieniem do `maxBytes`; resztę porzuca. Przerwanie sygnału
+ * anuluje czytanie (także w trakcie oczekiwania na kolejny fragment).
+ */
+async function readBodyCapped(
+  res: Response,
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<{ text: string; capped: boolean }> {
+  if (!res.body) return { text: "", capped: false };
+  const reader = res.body.getReader();
+  const onAbort = () => void reader.cancel().catch(() => {});
+  signal.addEventListener("abort", onAbort, { once: true });
+  const decoder = new TextDecoder();
+  let text = "";
+  let bytes = 0;
+  let capped = false;
+  try {
+    while (!signal.aborted) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const room = maxBytes - bytes;
+      if (value.byteLength >= room) {
+        text += decoder.decode(value.subarray(0, room), { stream: true });
+        capped = true;
+        break;
+      }
+      bytes += value.byteLength;
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+    if (capped) await reader.cancel().catch(() => {});
+  }
+  return { text, capped };
+}
+
 // SSRF guard: the agent decides what URL to fetch (often steered by search
 // results or page content it just read), so a prompt injection could try to
 // point it at cloud metadata endpoints or other internal services. Block
@@ -289,19 +348,24 @@ const fetchUrl: Tool = {
   async execute(args, ctx) {
     const url = String(args.url ?? "").trim();
     if (!/^https?:\/\//i.test(url)) return { error: "invalid_url" };
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
     try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 10_000);
-      let res: Response;
-      try {
-        res = await safeFetch(url, {
-          signal: ctrl.signal,
-          headers: { "user-agent": "JARVIS-Agent/1.0 (+https://jarvisbyjacob.lovable.app)" },
-        });
-      } finally {
-        clearTimeout(timer);
+      const res = await safeFetch(url, {
+        signal: ctrl.signal,
+        headers: { "user-agent": "JARVIS-Agent/1.0 (+https://jarvisbyjacob.lovable.app)" },
+      });
+      const contentType = res.headers.get("content-type");
+      if (!isTextualContentType(contentType)) {
+        await res.body?.cancel().catch(() => {});
+        await ctx.logEvent("warn", "tool.fetch_url", `${url}: nietekstowa treść (${contentType})`, {
+          url,
+          content_type: contentType,
+        } as Json);
+        return { error: "unsupported_content_type", content_type: contentType };
       }
-      const raw = await res.text();
+      const { text: raw, capped } = await readBodyCapped(res, FETCH_MAX_BYTES, ctrl.signal);
+      if (ctrl.signal.aborted) throw new Error("timeout");
       const stripped = raw
         .replace(/<script[\s\S]*?<\/script>/gi, "")
         .replace(/<style[\s\S]*?<\/style>/gi, "")
@@ -314,11 +378,22 @@ const fetchUrl: Tool = {
         status: res.status,
         length: text.length,
       } as Json);
-      return { url, status: res.status, text, truncated: stripped.length > MAX_FETCH_BYTES };
+      return {
+        url,
+        status: res.status,
+        text,
+        truncated: capped || stripped.length > MAX_FETCH_BYTES,
+      };
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = ctrl.signal.aborted
+        ? "timeout"
+        : err instanceof Error
+          ? err.message
+          : String(err);
       await ctx.logEvent("error", "tool.fetch_url", `${url}: ${message}`, { url } as Json);
       return { error: message };
+    } finally {
+      clearTimeout(timer);
     }
   },
 };

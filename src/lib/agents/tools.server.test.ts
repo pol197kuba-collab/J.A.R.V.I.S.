@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // isBlockedTarget resolves hostnames via dns.lookup — stub it so tests are
 // deterministic and never touch the network.
@@ -13,6 +13,8 @@ import {
   toolRisk,
   bringsUntrustedContent,
   type ToolContext,
+  FETCH_MAX_BYTES,
+  FETCH_TIMEOUT_MS,
 } from "./tools.server";
 import { makeDb } from "./runtime.testkit";
 
@@ -367,5 +369,100 @@ describe("remember / recall — pochodzenie wpisu", () => {
       memories: Array<Record<string, unknown>>;
     };
     expect(res.memories[0]).toMatchObject({ value: "Właściciel lubi espresso.", origin: "tool" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A13 — fetch_url: limit czasu i rozmiaru, tylko treść tekstowa
+// ---------------------------------------------------------------------------
+
+describe("fetch_url — limity", () => {
+  const ctx = (): ToolContext => ({
+    supabase: makeDb(() => undefined).db,
+    userId: "u1",
+    agentId: "a1",
+    runId: "r1",
+    apiKey: "",
+    model: "m",
+    logEvent: async () => {},
+  });
+  // Adres IP z puli publicznej — strażnik SSRF przepuszcza go bez DNS.
+  const URL_PUBLIC = "http://93.184.216.34/strona";
+
+  function streamResponse(contentType: string | null, body: ReadableStream<Uint8Array>) {
+    return new Response(body, {
+      status: 200,
+      headers: contentType ? { "content-type": contentType } : {},
+    });
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it("odrzuca treść nietekstową bez czytania jej", async () => {
+    // highWaterMark 0: strumień nie napełnia bufora sam, więc `pull` = próba czytania.
+    const pull = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          streamResponse("application/pdf", new ReadableStream({ pull }, { highWaterMark: 0 })),
+        ),
+    );
+    const res = await getToolByName("fetch_url")!.execute({ url: URL_PUBLIC }, ctx());
+    expect(res).toMatchObject({
+      error: "unsupported_content_type",
+      content_type: "application/pdf",
+    });
+    expect(pull).not.toHaveBeenCalled();
+  });
+
+  it("czyta strumieniem i przerywa po limicie bajtów", async () => {
+    let served = 0;
+    const chunk = new TextEncoder().encode("a".repeat(64 * 1024));
+    const endless = new ReadableStream<Uint8Array>({
+      pull(c) {
+        served += chunk.length;
+        c.enqueue(chunk);
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(streamResponse("text/plain", endless)));
+    const res = await getToolByName("fetch_url")!.execute({ url: URL_PUBLIC }, ctx());
+    expect(res).toMatchObject({ status: 200, truncated: true });
+    expect(served).toBeLessThanOrEqual(FETCH_MAX_BYTES + 2 * chunk.length);
+  });
+
+  it("jeden limit czasu obejmuje także czytanie treści", async () => {
+    vi.useFakeTimers();
+    const stalled = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode("<p>początek</p>"));
+        // potem nic — serwer wisi
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(streamResponse("text/html", stalled)));
+    const pending = getToolByName("fetch_url")!.execute({ url: URL_PUBLIC }, ctx());
+    await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS + 10);
+    expect(await pending).toEqual({ error: "timeout" });
+  });
+
+  it("zwykła strona HTML: tekst bez znaczników", async () => {
+    const html = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(
+          new TextEncoder().encode("<html><script>x()</script><p>Cześć <b>świat</b></p></html>"),
+        );
+        c.close();
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(streamResponse("text/html; charset=utf-8", html)),
+    );
+    const res = await getToolByName("fetch_url")!.execute({ url: URL_PUBLIC }, ctx());
+    expect(res).toMatchObject({ status: 200, text: "Cześć świat", truncated: false });
   });
 });
