@@ -38,9 +38,9 @@
       endpoint Supabase jest publiczny niezależnie od interfejsu. Dotyczy też
       logowania przez OAuth (`StarkLogin.tsx:115`): nowe konto Google też jest
       rejestracją.
-- [ ] **W2. Którą ścieżką chodzi czat.** SQL: `select chat_routing from
-      user_settings;` — wynik wpisać tutaj: `______`. Potrzebne w etapie 5.
-- [ ] **W3. Klucz service role na hostingu.** Potwierdzić, że
+- [x] **W2. Którą ścieżką chodzi czat.** (sprawdzone przez właściciela 2026-11-11) SQL: `select chat_routing from
+      user_settings;` — wynik wpisać tutaj: `server` (1 wiersz). Potrzebne w etapie 5.
+- [x] **W3. Klucz service role na hostingu.** (potwierdzone przez właściciela 2026-11-11: ustawiony) Potwierdzić, że
       `JARVIS_SUPABASE_SERVICE_ROLE_KEY` jest ustawiony w sekretach Lovable
       (używa go moduł paliw). Bez tego etap 5 nie ruszy.
 - [x] **W4. Token GitHub w Ustawieniach.** (ustawienia GitHuba sprawdzone przez właściciela 2026-11-11) Wymienić na fine-grained PAT tylko
