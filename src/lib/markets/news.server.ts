@@ -157,6 +157,7 @@ export async function classifyMarketNews(
           contents,
           maxOutputTokens: 8192,
           timeoutMs: MODEL_TIMEOUT_MS,
+          ledger: budget.ledger?.("news"),
           // klasyfikacja nagłówków — długie myślenie tylko zjada budżet
           effort: "low",
         });
@@ -185,6 +186,7 @@ export async function classifyMarketNews(
         system,
         user: userPrompt(batch),
         timeoutMs: MODEL_TIMEOUT_MS,
+        ledger: budget.ledger?.("news"),
       });
       text = gemini.ok ? gemini.text : null;
       if (gemini.ok) {

@@ -65,6 +65,7 @@ export async function askAlarm(
         contents: [{ role: "user", parts: [{ text: user }] }],
         maxOutputTokens: 300,
         timeoutMs: 30_000,
+        ledger: budget.ledger?.("alarm"),
         // krótka decyzja „trzymaj / zamknij” — bez myślenia, żeby nie zjadło limitu
         noThinking: true,
       });
@@ -88,6 +89,7 @@ export async function askAlarm(
       system: ALARM_SYSTEM,
       user,
       timeoutMs: 30_000,
+      ledger: budget.ledger?.("alarm"),
     });
     if (g.ok) {
       await budget.record("alarm", {

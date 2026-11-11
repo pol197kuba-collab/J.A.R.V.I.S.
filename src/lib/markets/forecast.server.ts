@@ -358,6 +358,7 @@ export async function forecastWithModel(
         maxOutputTokens: claudeMaxTokens,
         effort: "low",
         timeoutMs: MODEL_TIMEOUT_MS,
+        ledger: budget.ledger?.(purpose),
       });
       text = result.text || null;
       await budget.record(purpose, {
@@ -383,6 +384,7 @@ export async function forecastWithModel(
       system,
       user,
       timeoutMs: MODEL_TIMEOUT_MS,
+      ledger: budget.ledger?.(purpose),
     });
     if (gemini.ok) {
       text = gemini.text;
