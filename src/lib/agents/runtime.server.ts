@@ -35,6 +35,7 @@ import type { GeminiContent, GeminiPart } from "@/lib/ai/llm/types";
 import { AGENT_SLUGS, isToolForcedForAgent } from "@/lib/constants/agentSlugs";
 import { UI_ACTIONS, type UiAction } from "@/lib/constants/uiActions";
 import { COMMAND_REGISTRY } from "@/lib/commands/registry";
+import { looksLikeDocumentRequest, looksLikeUiCommand } from "@/lib/commands/intentGate";
 import { raiseProviderAlarm } from "@/lib/system/providerAlarm.server";
 
 export { UI_ACTIONS };
@@ -726,7 +727,11 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     timeZone: "Europe/Warsaw",
   })}, ${now.toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Warsaw" })} (ISO: ${now.toISOString()}). Używaj TEJ daty jako punktu odniesienia dla wszelkich względnych określeń czasu ("jutro", "za tydzień", "w przyszły poniedziałek" itp.) — nigdy nie zgaduj daty z pamięci.`;
 
-  const systemPrompt = `${basePrompt}${rosterBlock}${uiActionInstructions}${dateInstructions}`;
+  // Etap 3 (A10): stała część promptu osobno, data i godzina osobno, ZA nią.
+  // Godzina zmienia się co minutę — doklejona do całości unieważniała cache
+  // promptu przy każdej turze.
+  const systemPrompt = `${basePrompt}${rosterBlock}${uiActionInstructions}`;
+  const systemSuffix = dateInstructions;
 
   // Model resolution: agent override → user default → hardcoded fallback.
   let modelRef = agent.model?.trim() ?? "";
@@ -1066,6 +1071,8 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
             apiKey: anthropicApiKey as string,
             model,
             systemPrompt,
+            systemSuffix,
+            cacheSystem: true,
             contents,
             toolDeclarations: toolDeclarations.length > 0 ? toolDeclarations : undefined,
             forceToolName: forceGenerateDocument ? GENERATE_DOCUMENT_TOOL : undefined,
@@ -1097,7 +1104,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           for (let emptyRetry = 0; emptyRetry < 2; emptyRetry++) {
             const thinkingOff = forceGenerateDocument || (emptyRetry > 0 && /flash/i.test(model));
             const requestBody = JSON.stringify({
-              systemInstruction: { parts: [{ text: systemPrompt }] },
+              systemInstruction: { parts: [{ text: systemPrompt }, { text: systemSuffix }] },
               generationConfig: {
                 temperature,
                 maxOutputTokens,
@@ -1259,7 +1266,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
           const groqResult = await callGroq({
             apiKey: groqApiKey,
             model: DEFAULT_GROQ_FALLBACK_MODEL,
-            systemPrompt,
+            systemPrompt: `${systemPrompt}${systemSuffix}`,
             contents,
             toolDeclarations: toolDeclarations.length > 0 ? toolDeclarations : undefined,
             // Carry the producer's forced-tool-call through to the failover
@@ -1535,7 +1542,15 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // them. Classifying task text without context is exactly how delegated
     // Herald/Metric runs ended up with phantom open_dashboard entries
     // (their real answers overwritten by a navigation confirmation).
-    if (!isDelegatedRun && !uiAction && toolCallLog.length === 0) {
+    //
+    // Etap 3 (A9): klasyfikator to drugie płatne wywołanie modelu. Wołamy go
+    // tylko wtedy, gdy wypowiedź w ogóle wygląda na polecenie dla interfejsu
+    // (krótka, nie pytanie, pasuje do słownika komend) albo na prośbę o nowy
+    // plik, którą klasyfikator potrafi zlecić przez queue_document_job.
+    const queueDocumentJobEnabled = toolDeclarations.some((d) => d.name === "queue_document_job");
+    const worthClassifying =
+      looksLikeUiCommand(input) || (queueDocumentJobEnabled && looksLikeDocumentRequest(input));
+    if (!isDelegatedRun && !uiAction && toolCallLog.length === 0 && worthClassifying) {
       // Model nie zwrócił NIC (nawet po powtórce pustej tury) — wtedy akcja UI
       // z klasyfikatora nie może udawać odpowiedzi. Mówimy wprost, że raportu
       // nie ma, i dopiero potem, co otwieramy.
@@ -1554,7 +1569,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         supabase,
         userId,
         agentId: agent.id,
-        queueDocumentJobEnabled: toolDeclarations.some((d) => d.name === "queue_document_job"),
+        queueDocumentJobEnabled,
         ledger: runLedger,
         logEvent,
       });

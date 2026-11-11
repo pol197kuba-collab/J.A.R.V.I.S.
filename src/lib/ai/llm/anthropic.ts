@@ -138,6 +138,21 @@ export type CallAnthropicOptions = {
    * odrzucają to 400 — tam steruje się samym `effort`.
    */
   noThinking?: boolean;
+  /**
+   * Zmienna końcówka promptu systemowego (np. data i godzina). Przy
+   * `cacheSystem` idzie osobnym blokiem ZA punktem cache, więc jej zmiana nie
+   * unieważnia cache stałej części; bez niego jest dopisana na końcu.
+   */
+  systemSuffix?: string;
+  /**
+   * Etap 3 (A10): cache promptu. Stały blok systemowy dostaje cache_control
+   * (punkt obejmuje też definicje narzędzi — kolejność renderowania to
+   * narzędzia → system → wiadomości), a ogon rozmowy automatyczne cache'owanie
+   * na poziomie żądania, żeby kolejne kroki pętli narzędziowej czytały z cache.
+   * Zweryfikowane w dokumentacji Claude API 2026-11-11: minimalny prefiks 512
+   * tokenów (modele 5.x), zapis ×1,25, odczyt ×0,1 (×0,05 Opus/Sonnet 5.5).
+   */
+  cacheSystem?: boolean;
   /** Gdzie zapisać zużycie (księga llm_usage). */
   ledger?: LedgerContext;
   /** Ponowienia po 429/5xx (domyślnie 1). */
@@ -171,7 +186,13 @@ export async function callAnthropic(opts: CallAnthropicOptions): Promise<ModelTu
       // clamped to 8192 upstream, which is well inside every current model's
       // output cap.
       max_tokens: opts.maxOutputTokens ?? 4096,
-      system: opts.systemPrompt,
+      system: opts.cacheSystem
+        ? [
+            { type: "text", text: opts.systemPrompt, cache_control: { type: "ephemeral" } },
+            ...(opts.systemSuffix ? [{ type: "text", text: opts.systemSuffix }] : []),
+          ]
+        : `${opts.systemPrompt}${opts.systemSuffix ?? ""}`,
+      ...(opts.cacheSystem ? { cache_control: { type: "ephemeral" } } : {}),
       messages: toAnthropicMessages(opts.contents),
       ...(opts.effort ? { output_config: { effort: opts.effort } } : {}),
       ...(opts.noThinking ? { thinking: { type: "disabled" } } : {}),

@@ -21,6 +21,7 @@ import {
   toConversationMessage,
   type ConversationMessage,
 } from "@/lib/ai/chatHistory";
+import { HISTORY_FETCH_LIMIT, trimHistory, type HistoryTurn } from "./history";
 
 // Accept any Gemini model id — the enum used to be a small whitelist which
 // made every new Gemini release require a code change. The Google API itself
@@ -893,13 +894,35 @@ export const runAgent = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<AgentRunResult> => {
     const { supabase, userId } = context;
 
+    // Etap 3 (A10): w istniejącym wątku historia pochodzi z bazy, nie od
+    // klienta — klient wysyłał do 30 wiadomości po 8000 znaków przy każdej
+    // turze. Pole `history` zostaje tylko dla rozmowy bez wątku. W obu
+    // przypadkach przycięcie do budżetu tokenów (najnowsze w całości).
+    let history: HistoryTurn[] = data.history ?? [];
+    if (data.conversationId) {
+      const { data: rows } = await supabase
+        .from("messages")
+        .select("role, content")
+        .eq("conversation_id", data.conversationId)
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(HISTORY_FETCH_LIMIT);
+      history = (rows ?? [])
+        .reverse()
+        .flatMap((r) =>
+          (r.role === "user" || r.role === "jarvis") && typeof r.content === "string"
+            ? [{ role: r.role, text: r.content } as HistoryTurn]
+            : [],
+        );
+    }
+
     const { runOrchestrator } = await import("./runtime.server");
     return runOrchestrator({
       supabase,
       userId,
       agentSlug: data.agentSlug,
       input: data.input,
-      history: data.history ?? [],
+      history: trimHistory(history),
       conversationId: data.conversationId ?? null,
     });
   });

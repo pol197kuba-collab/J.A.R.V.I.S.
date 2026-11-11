@@ -86,7 +86,7 @@ describe("runOrchestrator — księga llm_usage", () => {
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
-      input: "Hej",
+      input: "pokaż zadania",
       history: [],
     });
 
@@ -122,5 +122,63 @@ describe("runOrchestrator — księga llm_usage", () => {
     });
 
     expect(ledgerRows(calls).map((r) => r.provider)).toEqual(["gemini"]);
+  });
+});
+
+// Etap 3 (A10): stabilny prefiks promptu — data i godzina poza częścią stałą.
+describe("runOrchestrator — stabilny prefiks i cache promptu", () => {
+  it("Gemini: data w osobnej, ostatniej części instrukcji systemowej", async () => {
+    const { geminiBodies } = await import("./runtime.testkit");
+    const fetchMock = providerFetch({ gemini: [geminiText("Hej.")] });
+    vi.stubGlobal("fetch", fetchMock);
+    const { db } = worldDb({ agents: [HERALD], secrets: KEYS_GEMINI_ONLY });
+
+    await runOrchestrator({
+      supabase: db,
+      userId: "u1",
+      agentSlug: AGENT_SLUGS.HERALD,
+      input: "Hej",
+      history: [],
+      delegationDepth: 1,
+      parentRunId: "run-parent",
+    });
+
+    const parts = (geminiBodies(fetchMock)[0].systemInstruction as { parts: { text: string }[] })
+      .parts;
+    expect(parts).toHaveLength(2);
+    expect(parts[0].text).not.toContain("AKTUALNA DATA");
+    expect(parts[1].text).toContain("AKTUALNA DATA I CZAS");
+  });
+
+  it("Claude: stały prompt z cache_control, data w bloku za nim", async () => {
+    const fetchMock = providerFetch({
+      anthropic: [
+        json(200, {
+          content: [{ type: "text", text: "Hej." }],
+          usage: { input_tokens: 10, output_tokens: 2 },
+        }),
+      ],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { db } = worldDb({
+      agents: [{ ...HERALD, model: "anthropic:claude-opus-5-5" }],
+      secrets: { ...KEYS_GEMINI_ONLY, anthropic_api_key: "sk" },
+    });
+
+    await runOrchestrator({
+      supabase: db,
+      userId: "u1",
+      agentSlug: AGENT_SLUGS.HERALD,
+      input: "Hej",
+      history: [],
+      delegationDepth: 1,
+      parentRunId: "run-parent",
+    });
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.system[0].cache_control).toEqual({ type: "ephemeral" });
+    expect(body.system[0].text).not.toContain("AKTUALNA DATA");
+    expect(body.system[1].text).toContain("AKTUALNA DATA I CZAS");
+    expect(body.system[1].cache_control).toBeUndefined();
   });
 });

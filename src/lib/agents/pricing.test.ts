@@ -82,3 +82,23 @@ describe("cennik po etapie 2 (księga llm_usage)", () => {
     expect(costUsd("gemini-embedding-001", { input: 1_000_000, output: 0 })).toBeCloseTo(0.15, 6);
   });
 });
+
+describe("odczyt z cache po stawce modelu (etap 3)", () => {
+  it("Opus 5.5 i Sonnet 5.5: odczyt z cache 0,05× stawki wejściowej", () => {
+    expect(costUsd("claude-opus-5-5", { input: 0, output: 0, cacheRead: 1_000_000 })).toBeCloseTo(
+      0.2,
+      6,
+    );
+    expect(costUsd("claude-sonnet-5-5", { input: 0, output: 0, cacheRead: 1_000_000 })).toBeCloseTo(
+      0.1,
+      6,
+    );
+  });
+
+  it("pozostałe modele bez zmian: 0,1×", () => {
+    expect(costUsd("claude-opus-5", { input: 0, output: 0, cacheRead: 1_000_000 })).toBeCloseTo(
+      0.5,
+      6,
+    );
+  });
+});
