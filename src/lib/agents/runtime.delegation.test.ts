@@ -124,7 +124,9 @@ describe("runOrchestrator — delegated sub-runs get no UI control", () => {
       supabase: makeSupabaseStub(baseResponses()),
       userId: "user-1",
       agentSlug: AGENT_SLUGS.HERALD,
-      input: "Przygotuj tekst kampanii dla pulpitu klienta.",
+      // Etap 3: klasyfikator rusza tylko dla wypowiedzi wyglądających na
+      // polecenie UI — stąd polecenie nawigacji zamiast prośby o treść.
+      input: "pokaż mi pulpit",
       history: [],
     });
 

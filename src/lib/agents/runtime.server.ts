@@ -35,6 +35,7 @@ import type { GeminiContent, GeminiPart } from "@/lib/ai/llm/types";
 import { AGENT_SLUGS, isToolForcedForAgent } from "@/lib/constants/agentSlugs";
 import { UI_ACTIONS, type UiAction } from "@/lib/constants/uiActions";
 import { COMMAND_REGISTRY } from "@/lib/commands/registry";
+import { looksLikeDocumentRequest, looksLikeUiCommand } from "@/lib/commands/intentGate";
 import { raiseProviderAlarm } from "@/lib/system/providerAlarm.server";
 
 export { UI_ACTIONS };
@@ -1535,7 +1536,15 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // them. Classifying task text without context is exactly how delegated
     // Herald/Metric runs ended up with phantom open_dashboard entries
     // (their real answers overwritten by a navigation confirmation).
-    if (!isDelegatedRun && !uiAction && toolCallLog.length === 0) {
+    //
+    // Etap 3 (A9): klasyfikator to drugie płatne wywołanie modelu. Wołamy go
+    // tylko wtedy, gdy wypowiedź w ogóle wygląda na polecenie dla interfejsu
+    // (krótka, nie pytanie, pasuje do słownika komend) albo na prośbę o nowy
+    // plik, którą klasyfikator potrafi zlecić przez queue_document_job.
+    const queueDocumentJobEnabled = toolDeclarations.some((d) => d.name === "queue_document_job");
+    const worthClassifying =
+      looksLikeUiCommand(input) || (queueDocumentJobEnabled && looksLikeDocumentRequest(input));
+    if (!isDelegatedRun && !uiAction && toolCallLog.length === 0 && worthClassifying) {
       // Model nie zwrócił NIC (nawet po powtórce pustej tury) — wtedy akcja UI
       // z klasyfikatora nie może udawać odpowiedzi. Mówimy wprost, że raportu
       // nie ma, i dopiero potem, co otwieramy.
@@ -1554,7 +1563,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         supabase,
         userId,
         agentId: agent.id,
-        queueDocumentJobEnabled: toolDeclarations.some((d) => d.name === "queue_document_job"),
+        queueDocumentJobEnabled,
         ledger: runLedger,
         logEvent,
       });

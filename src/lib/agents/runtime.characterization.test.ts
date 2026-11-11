@@ -42,7 +42,7 @@ afterEach(() => {
 // ---------- scenariusze ----------
 
 describe("runOrchestrator — charakterystyka (etap 0)", () => {
-  it("1. zwykła odpowiedź bez narzędzi: tekst modelu, klasyfikator Groq mówi „none”", async () => {
+  it("1. zwykła odpowiedź bez narzędzi: tekst modelu, bez klasyfikatora (etap 3, A9)", async () => {
     const fetchMock = providerFetch({
       gemini: [geminiText("Dzień dobry, Panie Sławiński.", { in: 1000, out: 200 })],
       groq: [groqCall("perform_ui_action", { action: "none" })],
@@ -63,17 +63,17 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
     expect(result.action).toBeUndefined();
     expect(result.conversationId).toBe("conv-1");
 
+    // Etap 3 (A9): powitanie nie wygląda na polecenie UI — klasyfikator
+    // (drugie wywołanie modelu) w ogóle nie rusza.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     const row = finalRunRow(calls, "run-1")!;
     expect(row.status).toBe("done");
-    // Wpis klasyfikatora ląduje na liście wywołań narzędzi.
-    expect(toolNames(row.output)).toEqual(["classifier_none"]);
+    expect(toolNames(row.output)).toEqual([]);
     expect((row.output as { text: string }).text).toBe(result.output);
-    // Etap 2 (A20): klasyfikator Groq liczy się do runu, po stawce Groq.
-    expect(row.tokens_input).toBe(1040);
-    expect(row.tokens_output).toBe(205);
+    expect(row.tokens_input).toBe(1000);
+    expect(row.tokens_output).toBe(200);
     expect(row.model).toBe("gemini-2.5-flash");
-    // Gemini 1000 × $0,3/M + 200 × $2,5/M = 0,0008; Groq 8B 40/5 tokenów ≈ 0,000002.
-    expect(row.cost_usd).toBeCloseTo(0.000802, 6);
+    expect(row.cost_usd).toBeCloseTo(0.0008, 6); // 1000 × $0,3/M + 200 × $2,5/M
 
     // Tura trafia do historii rozmowy: wiadomość użytkownika + odpowiedź.
     const msgs = writes(calls, "messages", "insert")[0].payload as unknown as Array<{
@@ -449,12 +449,9 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
     expect(row.cost_usd).toBeCloseTo(0.000347, 6);
   });
 
-  it("9b. klasyfikator UI bez Groq: druga płatna tura Gemini, jej tokeny wchodzą do runu", async () => {
+  it("9b. pytanie merytoryczne: klasyfikator pominięty, jedna tura (etap 3, A9)", async () => {
     const fetchMock = providerFetch({
-      gemini: [
-        geminiText("Zwykła odpowiedź.", { in: 900, out: 30 }),
-        geminiCall("perform_ui_action", { action: "none" }, { in: 120, out: 3 }),
-      ],
+      gemini: [geminiText("Zwykła odpowiedź.", { in: 900, out: 30 })],
     });
     vi.stubGlobal("fetch", fetchMock);
     const { db, calls } = worldDb({ agents: [HERALD], secrets: KEYS_GEMINI_ONLY });
@@ -467,15 +464,36 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
       history: [],
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.output).toBe("Zwykła odpowiedź.");
     expect(result.action).toBeUndefined();
+    const row = finalRunRow(calls, "run-1")!;
+    expect(toolNames(row.output)).toEqual([]);
+    expect(row.tokens_input).toBe(900);
+  });
 
+  it("9c. polecenie nawigacji bez Groq: klasyfikator na Gemini, jego tokeny w runie", async () => {
+    const fetchMock = providerFetch({
+      gemini: [
+        geminiText("Zwykła odpowiedź.", { in: 900, out: 30 }),
+        geminiCall("perform_ui_action", { action: "none" }, { in: 120, out: 3 }),
+      ],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { db, calls } = worldDb({ agents: [HERALD], secrets: KEYS_GEMINI_ONLY });
+
+    await runOrchestrator({
+      supabase: db,
+      userId: "u1",
+      agentSlug: AGENT_SLUGS.HERALD,
+      input: "przełącz mnie na rynki",
+      history: [],
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     const classifierBody = geminiBodies(fetchMock)[1];
     expect(classifierBody.toolConfig).toMatchObject({ functionCallingConfig: { mode: "ANY" } });
-
     const row = finalRunRow(calls, "run-1")!;
-    expect(row.status).toBe("done");
     expect(toolNames(row.output)).toEqual(["classifier_none"]);
     expect(row.tokens_input).toBe(1020);
     expect(row.tokens_output).toBe(33);

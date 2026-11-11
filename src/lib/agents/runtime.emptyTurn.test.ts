@@ -135,12 +135,33 @@ describe("runOrchestrator — empty Gemini turn", () => {
       supabase: makeSupabaseStub(baseResponses()),
       userId: "u1",
       agentSlug: AGENT_SLUGS.JARVIS,
-      input: "co się ostatnio wywaliło?",
+      // Etap 3: klasyfikator rusza tylko dla wypowiedzi wyglądających na
+      // polecenie UI — tu polecenie, na które model nic nie odpowiedział.
+      input: "pokaż logi",
       history: [],
     });
 
     expect(result.output).toMatch(/^Nie udało mi się przygotować odpowiedzi/);
     expect(result.output).toContain("Otwieram dziennik systemu.");
+  });
+
+  it("pytanie, na które model milczy: bez klasyfikatora, bez fałszywej akcji UI (etap 3)", async () => {
+    // Oryginalny błąd z 2026-10-09: na „co się ostatnio wywaliło?” klasyfikator
+    // dokładał „Otwieram dziennik systemu.” Pytanie nie trafia już do niego.
+    const fetchMock = vi.fn().mockResolvedValue(emptyTurn);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await runOrchestrator({
+      supabase: makeSupabaseStub(baseResponses()),
+      userId: "u1",
+      agentSlug: AGENT_SLUGS.JARVIS,
+      input: "co się ostatnio wywaliło?",
+      history: [],
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2); // tura + jedna powtórka pustej tury
+    expect(result.action).toBeUndefined();
+    expect(result.output).not.toContain("Otwieram");
   });
 });
 

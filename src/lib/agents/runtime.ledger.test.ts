@@ -86,7 +86,7 @@ describe("runOrchestrator — księga llm_usage", () => {
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
-      input: "Hej",
+      input: "pokaż zadania",
       history: [],
     });
 
