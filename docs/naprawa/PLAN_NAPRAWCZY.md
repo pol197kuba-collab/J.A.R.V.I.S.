@@ -53,7 +53,7 @@
 
 Bez tego kolejne etapy nie mają jak wykryć regresji w rdzeniu agentów.
 
-- [ ] Testy charakteryzujące `runOrchestrator` na zamockowanym `fetch`
+- [x] Testy charakteryzujące `runOrchestrator` na zamockowanym `fetch`
       i zamockowanym kliencie bazy (wzorzec: `runtime.delegation.test.ts`).
       Minimum scenariuszy: zwykła odpowiedź bez narzędzi; jedno narzędzie
       i odpowiedź; delegacja do kolegi; wymuszony `generate_document` u Forge;
@@ -61,9 +61,12 @@ Bez tego kolejne etapy nie mają jak wykryć regresji w rdzeniu agentów.
       Gemini; pusta tura i powtórka; klasyfikator UI po turze bez narzędzi.
       Każdy sprawdza: tekst końcowy, listę wywołań narzędzi, co zapisano
       w `agent_runs` (status, tokeny, koszt).
-- [ ] Pokrycie: `vitest --coverage` jako osobny skrypt `test:coverage`
+      → `src/lib/agents/runtime.characterization.test.ts` (11 testów: 9 scenariuszy
+      + failover na Groq + klasyfikator na Gemini). Znane usterki A4, A9, A20
+      utrwalone jako „STAN OBECNY” — etap, który je naprawia, zmienia te asercje.
+- [x] Pokrycie: `vitest --coverage` jako osobny skrypt `test:coverage`
       (bez progu w CI). Zapisać w Dzienniku pokrycie `src/lib/agents`.
-- [ ] `README.md`: co to jest, jak uruchomić lokalnie, lista sekretów
+- [x] `README.md`: co to jest, jak uruchomić lokalnie, lista sekretów
       (hosting, GitHub Actions, `user_secrets`), mapa workflowów i pg_cron.
       Krótko; szczegóły zostają w `CLAUDE.md`.
 
@@ -303,13 +306,15 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 
 | Data | Gdzie | Opis | Znalezione w etapie | Naprawione w (PR) |
 |---|---|---|---|---|
-| | | | | |
+| 2026-11-11 | `runtime.server.ts`, koniec pętli narzędziowej | Komunikat po wyczerpaniu limitu iteracji jest po angielsku („I have completed several tool calls but ran out of orchestration cycles…”), reszta odpowiedzi jest po polsku. Utrwalony w teście charakteryzującym nr 5. | 0 | |
+| 2026-11-11 | `bun.lock` | Rejestr Lovable (`europe-west*-npm.pkg.dev`) jest niedostępny z sesji Claude Code w chmurze, więc `bun install` tam nie działa. Nowe wpisy (`@vitest/coverage-v8` i zależności) mają pusty adres, czyli domyślny rejestr npm, zamiast adresu cache Lovable. Sprawdzić, czy build w Lovable przechodzi. | 0 | |
 
 ## Dziennik
 
 | Data | Etap | PR | Wynik kontroli (typecheck / testy / lint) | Uwagi, pomiary |
 |---|---|---|---|---|
 | 2026-11-11 | — | — | czysty / 981 zielonych / 0 błędów, 15 ostrzeżeń | stan wyjściowy |
+| 2026-11-11 | 0 | (PR nieotwarty) | czysty / 992 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Pokrycie `src/lib/agents`: linie 40,06% (1002/2501), instrukcje 38,57%, gałęzie 33,66%, funkcje 36,09%; `runtime.server.ts` linie 80,7% / gałęzie 67,7% (bez nowych testów 73,5% / 59,0%); `tools.server.ts` linie 20,1%. Całe `src`: linie 23,46%. Mutacja kontrolna (+1 token w zapisie, klasyfikator mimo wywołań narzędzi) wywraca 10 z 11 nowych testów. |
 
 ## Załącznik: znaleziska z rewizji (skrót)
 
