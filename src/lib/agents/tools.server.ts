@@ -15,6 +15,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { embedText, noteEmbeddingText, toVectorLiteral } from "@/lib/ai/embed";
+import { callGemini } from "@/lib/ai/llm/gemini";
+import type { LedgerContext } from "@/lib/ai/llm/ledger";
+import type { GeminiUsageMetadata } from "@/lib/ai/llm/usage";
 import { buildTraceItems, type TraceItem } from "@/lib/brain/trace";
 import { keywordStems, stemsOrFilter } from "@/lib/ai/keywords";
 
@@ -46,6 +49,15 @@ export type ToolDeclaration = {
 };
 
 export type ToolResult = Record<string, unknown>;
+
+/** Księga zużycia modeli dla wywołań z narzędzia (moduł agents, run z kontekstu). */
+const toolLedger = (ctx: ToolContext, purpose: string): LedgerContext => ({
+  db: ctx.supabase,
+  ownerId: ctx.userId,
+  module: "agents",
+  purpose,
+  runId: ctx.runId || null,
+});
 
 /**
  * Klasa ryzyka narzędzia (plan naprawczy, A2a):
@@ -97,6 +109,17 @@ type GroundingChunk = {
   web?: { uri?: string; title?: string };
 };
 
+type WebSearchResponse = {
+  candidates?: Array<{
+    content?: { parts?: Array<{ text?: string }> };
+    groundingMetadata?: {
+      groundingChunks?: GroundingChunk[];
+      webSearchQueries?: string[];
+    };
+  }>;
+  usageMetadata?: GeminiUsageMetadata;
+};
+
 const webSearch: Tool = {
   risk: "read",
   untrustedOutput: true,
@@ -119,48 +142,33 @@ const webSearch: Tool = {
     const query = String(args.query ?? "").trim();
     if (!query) return { error: "empty_query" };
     try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 15_000);
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-          ctx.model,
-        )}:generateContent?key=${encodeURIComponent(ctx.apiKey)}`,
-        {
-          method: "POST",
-          signal: ctrl.signal,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            systemInstruction: {
-              parts: [
-                {
-                  text: "You are a factual web research helper. Answer the query concisely in the same language it was asked. Cite specific facts, numbers, dates, and names. Do NOT add commentary or roleplay.",
-                },
-              ],
-            },
-            generationConfig: { temperature: 0.2, maxOutputTokens: 900 },
-            tools: [{ google_search: {} }],
-            contents: [{ role: "user", parts: [{ text: query }] }],
-          }),
+      const res = await callGemini<WebSearchResponse>({
+        apiKey: ctx.apiKey,
+        model: ctx.model,
+        body: {
+          systemInstruction: {
+            parts: [
+              {
+                text: "You are a factual web research helper. Answer the query concisely in the same language it was asked. Cite specific facts, numbers, dates, and names. Do NOT add commentary or roleplay.",
+              },
+            ],
+          },
+          generationConfig: { temperature: 0.2, maxOutputTokens: 900 },
+          tools: [{ google_search: {} }],
+          contents: [{ role: "user", parts: [{ text: query }] }],
         },
-      );
-      clearTimeout(timer);
+        timeoutMs: 15_000,
+        ledger: toolLedger(ctx, "web_search"),
+      });
       if (!res.ok) {
-        const body = await res.text().catch(() => "");
+        if (res.status === null) throw new Error(res.error ?? res.message);
         await ctx.logEvent("error", "tool.web_search", `HTTP ${res.status}`, {
           query,
-          body: body.slice(0, 300),
+          body: res.bodyText.slice(0, 300),
         } as Json);
         return { error: `google_search_http_${res.status}` };
       }
-      const data = (await res.json()) as {
-        candidates?: Array<{
-          content?: { parts?: Array<{ text?: string }> };
-          groundingMetadata?: {
-            groundingChunks?: GroundingChunk[];
-            webSearchQueries?: string[];
-          };
-        }>;
-      };
+      const data = res.data;
       const cand = data.candidates?.[0];
       const answer = (cand?.content?.parts ?? [])
         .flatMap((p) => (p.text ? [p.text] : []))
@@ -439,6 +447,7 @@ const saveNote: Tool = {
       noteEmbeddingText(title, body),
       ctx.apiKey,
       "RETRIEVAL_DOCUMENT",
+      { ledger: toolLedger(ctx, "embed") },
     );
     const { data, error } = await ctx.supabase
       .from("notes")
@@ -597,7 +606,9 @@ const remember: Tool = {
 
     // Embed the value so `recall` can find it by meaning. Best-effort: a null
     // embedding just means this row is keyword-only searchable for now.
-    const embedding = await embedText(value, ctx.apiKey, "RETRIEVAL_DOCUMENT");
+    const embedding = await embedText(value, ctx.apiKey, "RETRIEVAL_DOCUMENT", {
+      ledger: toolLedger(ctx, "embed"),
+    });
     const embeddingPatch = embedding ? { embedding: toVectorLiteral(embedding) } : {};
 
     // Upsert-by-key: a stable key means "this is the same fact, update it"
@@ -755,7 +766,9 @@ const recall: Tool = {
     const notes: NoteHit[] = [];
     let semanticUsed = false;
     if (rawQuery && ctx.apiKey) {
-      const queryEmbedding = await embedText(rawQuery, ctx.apiKey, "RETRIEVAL_QUERY");
+      const queryEmbedding = await embedText(rawQuery, ctx.apiKey, "RETRIEVAL_QUERY", {
+        ledger: toolLedger(ctx, "embed"),
+      });
       if (queryEmbedding && tags.length === 0) {
         // Notatki tylko bez filtra tagów — tagi w `recall` dotyczą wspomnień.
         const { data: semNotes, error: notesErr } = await ctx.supabase.rpc("match_notes", {
@@ -1891,7 +1904,9 @@ const searchDocumentsTool: Tool = {
     //    query, skip silently (fall through to keyword pass) on any
     //    failure (no key, quota, network).
     let semanticUsed = false;
-    const queryEmbedding = await embedText(query, ctx.apiKey, "RETRIEVAL_QUERY");
+    const queryEmbedding = await embedText(query, ctx.apiKey, "RETRIEVAL_QUERY", {
+      ledger: toolLedger(ctx, "embed"),
+    });
     if (queryEmbedding) {
       const { data: sem, error: semErr } = await ctx.supabase.rpc("match_document_chunks", {
         query_embedding: toVectorLiteral(queryEmbedding),
