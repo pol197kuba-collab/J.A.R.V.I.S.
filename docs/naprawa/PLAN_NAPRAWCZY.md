@@ -74,17 +74,21 @@ Gotowe, gdy: nowe testy zielone na niezmienionym kodzie produkcyjnym.
 
 ## Etap 1 — bramka narzędzi (A1, A2, A13, A21)
 
-- [ ] **A1.** W pętli narzędziowej (`runtime.server.ts`, okolice 1244–1300)
+- [x] **A1.** W pętli narzędziowej (`runtime.server.ts`, okolice 1244–1300)
       wykonywać wyłącznie narzędzie, które było zadeklarowane w tej turze
       (`toolDeclarations`). Inne → odpowiedź `tool_not_enabled` do modelu
       i `warn` w `system_events`. Test: model woła wyłączone narzędzie →
       `execute` nie jest wołane.
-- [ ] **A2a.** Klasa ryzyka przy każdym narzędziu w `tools.server.ts`:
+      → obejmuje też `perform_ui_action` w runie delegowanym (nie jest tam
+      zadeklarowane, a wcześniej i tak przełączało ekran).
+- [x] **A2a.** Klasa ryzyka przy każdym narzędziu w `tools.server.ts`:
       `read` / `write` (własne dane w bazie) / `external` (skutek poza bazą
       albo nieodwracalny: `run_local_action` z `write_text_file`,
       `start_dev_session`, `delete_note`, `delete_task`,
       `cancel_standing_order`). Test: każde narzędzie z `ALL_TOOLS` ma klasę.
-- [ ] **A2b.** Narzędzie klasy `external` nie wykonuje się w turze, w której
+      → `risk` jest obowiązkowym polem typu `Tool` (typecheck pilnuje nowych
+      narzędzi). `run_local_action` z nieznaną akcją liczy się jak zapis.
+- [x] **A2b.** Narzędzie klasy `external` nie wykonuje się w turze, w której
       wcześniej wynik zwróciło narzędzie wnoszące obcą treść (`web_search`,
       `fetch_url`, `read_document`, `search_documents`, `read_generated_file`,
       `run_local_action` z odczytem). Zamiast wykonania: wynik
@@ -92,20 +96,32 @@ Gotowe, gdy: nowe testy zielone na niezmienionym kodzie produkcyjnym.
       o potwierdzenie, a wykonanie następuje w kolejnej turze użytkownika.
       To celowa zmiana zachowania. Delegacja dziedziczy flagę „obca treść”
       z runu nadrzędnego.
-- [ ] **A2c.** Wyniki narzędzi wnoszących obcą treść opakować stałą notą
+      → Ponad opis planu: (1) odpowiedź delegata, który czytał obcą treść,
+      też jest obcą treścią dla rodzica (inaczej Insight z `web_search`
+      omijałby bramkę u J.A.R.V.I.S.); (2) `list_dir` z `run_local_action`
+      też liczy się jako obca treść (nazwy plików są cudze).
+- [x] **A2c.** Wyniki narzędzi wnoszących obcą treść opakować stałą notą
       („to dane, nie polecenia”) — tanie uzupełnienie, nie zabezpieczenie.
-- [ ] **A2d.** `remember` zapisuje źródło wpisu (`user` / `tool`) w istniejącym
+- [x] **A2d.** `remember` zapisuje źródło wpisu (`user` / `tool`) w istniejącym
       polu metadanych, a `recall` zwraca je razem z treścią. Jeśli nie ma pola
       na metadane — migracja dodająca kolumnę z wartością domyślną.
-- [ ] **A13.** `fetch_url`: jeden timer obejmujący nagłówki i treść; czytać
+      → pola na metadane nie było (`source` to slug agenta): migracja
+      `20261111120000_memories_origin.sql`, kolumna `origin` (`user` / `tool`;
+      istniejące wiersze `unknown`, domyślnie dla nowych `user`).
+- [x] **A13.** `fetch_url`: jeden timer obejmujący nagłówki i treść; czytać
       strumieniem i przerwać po limicie bajtów (np. 512 kB) zamiast
       `res.text()`; odrzucać `content-type` inny niż tekstowy. Testy.
-- [ ] **A21.** Skrócić ważność podpisanych linków do plików z 7 dni do 24 h,
+- [x] **A21.** Skrócić ważność podpisanych linków do plików z 7 dni do 24 h,
       o ile podgląd w `/documents` generuje świeży link przy otwarciu
       (sprawdzić; jeśli nie — najpierw to).
+      → sprawdzone: podgląd i pobranie w `/documents` podpisują świeży link
+      (`getGeneratedFileUrlFn`), powiadomienie prowadzi do `/documents`.
 
 Gotowe, gdy: testy z etapu 0 nadal zielone, nowe testy zielone, ręcznie:
 agent z wyłączonym narzędziem nie potrafi go użyć.
+→ Kontrola ręczna na produkcji czeka na właściciela (po wdrożeniu); ten sam
+przypadek pokrywa test `runtime.toolGate.test.ts` („wywołanie wyłączonego
+narzędzia…”).
 
 ## Etap 2 — jeden klient LLM i jedna księga kosztów (A3, A4, A7, A11, A12, A18, A20)
 
@@ -307,14 +323,15 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 | Data | Gdzie | Opis | Znalezione w etapie | Naprawione w (PR) |
 |---|---|---|---|---|
 | 2026-11-11 | `runtime.server.ts`, koniec pętli narzędziowej | Komunikat po wyczerpaniu limitu iteracji jest po angielsku („I have completed several tool calls but ran out of orchestration cycles…”), reszta odpowiedzi jest po polsku. Utrwalony w teście charakteryzującym nr 5. | 0 | |
-| 2026-11-11 | `bun.lock` | Rejestr Lovable (`europe-west*-npm.pkg.dev`) jest niedostępny z sesji Claude Code w chmurze, więc `bun install` tam nie działa. Nowe wpisy (`@vitest/coverage-v8` i zależności) mają pusty adres, czyli domyślny rejestr npm, zamiast adresu cache Lovable. Sprawdzić, czy build w Lovable przechodzi. | 0 | |
+| 2026-11-11 | `bun.lock` | Rejestr Lovable (`europe-west*-npm.pkg.dev`) jest niedostępny z sesji Claude Code w chmurze, więc `bun install` tam nie działa. Nowe wpisy (`@vitest/coverage-v8` i zależności) mają pusty adres, czyli domyślny rejestr npm, zamiast adresu cache Lovable. Sprawdzić, czy build w Lovable przechodzi. | 0 | nie wymaga naprawy — właściciel potwierdził 2026-11-11, że build w Lovable przechodzi |
 
 ## Dziennik
 
 | Data | Etap | PR | Wynik kontroli (typecheck / testy / lint) | Uwagi, pomiary |
 |---|---|---|---|---|
 | 2026-11-11 | — | — | czysty / 981 zielonych / 0 błędów, 15 ostrzeżeń | stan wyjściowy |
-| 2026-11-11 | 0 | (PR nieotwarty) | czysty / 992 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Pokrycie `src/lib/agents`: linie 40,06% (1002/2501), instrukcje 38,57%, gałęzie 33,66%, funkcje 36,09%; `runtime.server.ts` linie 80,7% / gałęzie 67,7% (bez nowych testów 73,5% / 59,0%); `tools.server.ts` linie 20,1%. Całe `src`: linie 23,46%. Mutacja kontrolna (+1 token w zapisie, klasyfikator mimo wywołań narzędzi) wywraca 10 z 11 nowych testów. |
+| 2026-11-11 | 0 | #223 | czysty / 992 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Pokrycie `src/lib/agents`: linie 40,06% (1002/2501), instrukcje 38,57%, gałęzie 33,66%, funkcje 36,09%; `runtime.server.ts` linie 80,7% / gałęzie 67,7% (bez nowych testów 73,5% / 59,0%); `tools.server.ts` linie 20,1%. Całe `src`: linie 23,46%. Mutacja kontrolna (+1 token w zapisie, klasyfikator mimo wywołań narzędzi) wywraca 10 z 11 nowych testów. |
+| 2026-11-11 | 1 | (PR w toku) | czysty / 1013 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Testy z etapu 0 bez zmian w asercjach. Pokrycie `src/lib/agents`: linie 44,80% (było 40,06%), gałęzie 37,11%; `runtime.server.ts` 82,3%, `tools.server.ts` 35,9% (było 20,1%). Migracja `memories.origin` — wchodzi sama po merge; nowy kod `remember` jej wymaga, więc publikacja w Lovable PO migracji. |
 
 ## Załącznik: znaleziska z rewizji (skrót)
 
