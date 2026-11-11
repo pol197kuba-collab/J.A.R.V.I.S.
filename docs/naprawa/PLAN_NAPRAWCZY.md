@@ -33,7 +33,7 @@
 
 ## Co wymaga właściciela (nie da się zrobić z kodu)
 
-- [ ] **W1. Rejestracja kont.** Supabase → Authentication → Sign In / Providers →
+- [x] **W1. Rejestracja kont.** (potwierdzone przez właściciela 2026-11-11: zablokowana) Supabase → Authentication → Sign In / Providers →
       wyłączyć „Allow new users to sign up”. W kodzie nie ma `signUp`, ale
       endpoint Supabase jest publiczny niezależnie od interfejsu. Dotyczy też
       logowania przez OAuth (`StarkLogin.tsx:115`): nowe konto Google też jest
@@ -43,10 +43,11 @@
 - [ ] **W3. Klucz service role na hostingu.** Potwierdzić, że
       `JARVIS_SUPABASE_SERVICE_ROLE_KEY` jest ustawiony w sekretach Lovable
       (używa go moduł paliw). Bez tego etap 5 nie ruszy.
-- [ ] **W4. Token GitHub w Ustawieniach.** Wymienić na fine-grained PAT tylko
+- [x] **W4. Token GitHub w Ustawieniach.** (ustawienia GitHuba sprawdzone przez właściciela 2026-11-11) Wymienić na fine-grained PAT tylko
       dla tego repo, uprawnienia: Actions (read/write) + Issues (read/write),
       nic więcej. Robi się to raz, w dowolnym momencie.
-- [ ] **W5. Decyzje o usunięciu modułów** — tabela w etapie 8.
+- [x] **W5. Decyzje o usunięciu modułów** — podjęte 2026-11-11, tabela w etapie 8.
+- [x] **W6. Playwright** jako devDependency do testu dymnego (etap 9) — zgoda 2026-11-11.
 
 ## Etap 0 — siatka bezpieczeństwa (bez zmiany zachowania)
 
@@ -255,19 +256,32 @@ Bezwarunkowo:
 - [ ] Ostrzeżenia lint (15) — naprawić albo uzasadnić komentarzem.
 - [ ] Kolumna `user_settings.chat_routing` — usunąć (po etapie 5).
 
-Do decyzji właściciela (W5) — wykonać tylko pozycje oznaczone „usuń”:
+Decyzje właściciela z 2026-11-11 (W5):
 
 | Moduł | Decyzja | Co obejmuje usunięcie |
 |---|---|---|
-| `/sub-systems` | ______ | trasa, `components/jarvis/subsystems/`, `data/subSystems.ts`, wpis w rejestrze komend i menu |
-| `/schema` | ______ | trasa, `lib/schema/`, komenda `open_schema` (tryb STRUKTURA w `/mozg` zostaje) |
-| `/commands` | ______ | trasa, `CommandDirectory`, `data/commandDirectory.ts` |
-| `/feed` | ______ | trasa, `lib/feed/` (zostają `/system-logs` i podgląd w `/jarvis`) |
-| Serwer MCP | ______ | `lib/mcp/`, trasy `mcp`, `[.mcp]`, `[.well-known]`, `@lovable.dev/mcp-js`, wtyczka w `vite.config.ts`, `.lovable/mcp` |
-| Darwin w runtime | ______ | wywołanie `chooseVariant` w orkiestratorze (kod `lib/darwin` i tabele mogą zostać uśpione) |
-| Lokalny worker | ______ | `local-worker/`, narzędzie `run_local_action`, tabela `local_jobs` |
-| Dev Wing | ______ | `start_dev_session`, `check_dev_session`, `lib/dev/`, `claude-dev.yml`, tabele `dev_sessions`/`projects` |
-| Dane demo Mózgu | ______ | `brain-demo.yml`, `scripts/brain-demo.ts`, `lib/brain/demoSeed.ts` |
+| `/sub-systems` | usuń | trasa, `components/jarvis/subsystems/`, `data/subSystems.ts`, wpis w rejestrze komend i menu |
+| `/schema` | usuń | trasa, `lib/schema/`, komenda `open_schema` (tryb STRUKTURA w `/mozg` zostaje) |
+| `/commands` | usuń | trasa, `CommandDirectory`, `data/commandDirectory.ts` |
+| `/feed` | usuń | trasa, `lib/feed/` (zostają `/system-logs` i podgląd w `/jarvis`) |
+| Serwer MCP | usuń | `lib/mcp/`, trasy `mcp`, `[.mcp]`, `[.well-known]`, `@lovable.dev/mcp-js`, wtyczka w `vite.config.ts`, `.lovable/mcp` |
+| Darwin w runtime | odepnij | wywołanie `chooseVariant` w orkiestratorze (kod `lib/darwin` i tabele mogą zostać uśpione) |
+| Lokalny worker | usuń | `local-worker/`, narzędzie `run_local_action`, tabela `local_jobs` |
+| Dev Wing | usuń | `start_dev_session`, `check_dev_session`, `lib/dev/`, `claude-dev.yml`, tabele `dev_sessions`/`projects` |
+| Dane demo Mózgu | usuń | `brain-demo.yml`, `scripts/brain-demo.ts`, `lib/brain/demoSeed.ts` |
+
+Uwagi do wykonania:
+
+- **Dane demo Mózgu:** przed usunięciem workflowu właściciel uruchamia go raz
+  z akcją `remove` (Actions → Brain Demo), inaczej wiersze z tagiem
+  „demo-mozg” zostaną w bazie bez narzędzia do ich usunięcia.
+- **Lokalny worker i Dev Wing:** najpierw znikają narzędzia agentów, kod
+  i workflow; tabele `local_jobs`, `dev_sessions`, `projects` — osobną
+  migracją po potwierdzeniu właściciela w sesji (w `projects` i `tasks.project_id`
+  mogą być jego dane).
+- **Serwer MCP:** trasy są generowane przez wtyczkę Vite — najpierw usunąć
+  wtyczkę z `vite.config.ts`, potem pliki, inaczej wrócą przy buildzie.
+- **Dev Wing:** po usunięciu `claude-dev.yml` pozycja A14 z etapu 5 odpada.
 
 Przy każdym usunięciu: trasa, wpisy w `commands/registry.ts`, `MODULE_ITEMS`,
 `MODULE_AGENT`, `cockpitMenu`, `dockWidgets`, komendy głosowe, narzędzia
@@ -276,8 +290,7 @@ z danymi właściciela usuwamy osobną migracją dopiero po jego potwierdzeniu.
 
 ## Etap 9 — testy przepływów (A26)
 
-- [ ] Jeden test dymny w przeglądarce (Playwright jest w środowisku CI do
-      doinstalowania jako devDependency — zapytać właściciela przed dodaniem):
+- [ ] Jeden test dymny w przeglądarce (Playwright jako devDependency — zgoda właściciela W6):
       logowanie kontem testowym → czat → odpowiedź → notatka widoczna
       w `/notes`. Model zamockowany na poziomie sieci.
 - [ ] Próg pokrycia dla `src/lib/agents` w CI ustawiony na poziomie
