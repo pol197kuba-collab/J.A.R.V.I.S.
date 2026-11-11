@@ -923,6 +923,10 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         },
       });
     }
+    // Zbiór zamknięty po złożeniu deklaracji — pętla niżej nie dokłada już
+    // nowych, więc to dokładnie lista tego, co model widział w tej turze.
+    const declaredToolNames = new Set(toolDeclarations.map((d) => d.name));
+
     let totalTokensIn = 0;
     let totalTokensOut = 0;
     // Osobno, bo rozliczają się po innych stawkach niż zwykłe wejście.
@@ -1243,7 +1247,16 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         toolCallLog.push({ name: call.name, args: call.args ?? {} });
         const tool = getToolByName(call.name);
         let response: Record<string, unknown>;
-        if (call.name === UI_ACTION_TOOL_NAME) {
+        if (!declaredToolNames.has(call.name)) {
+          // A1: wykonujemy wyłącznie to, co model dostał w deklaracjach tej
+          // tury. Narzędzie wyłączone w Ustawieniach (albo niedostępne w runie
+          // delegowanym, jak perform_ui_action) bywa i tak „wywoływane” —
+          // z pamięci nazwy w prompcie albo pod wpływem treści ze strony.
+          response = { error: "tool_not_enabled", tool: call.name };
+          await logEvent("warn", agent.slug, `narzędzie spoza deklaracji: ${call.name}`, {
+            run_id: runId,
+          } as Json);
+        } else if (call.name === UI_ACTION_TOOL_NAME) {
           const requested = String((call.args as Record<string, unknown>)?.action ?? "");
           if ((UI_ACTIONS as readonly string[]).includes(requested)) {
             uiAction = requested as UiAction;
