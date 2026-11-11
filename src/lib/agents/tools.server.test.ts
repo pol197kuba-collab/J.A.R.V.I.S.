@@ -5,7 +5,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
 
 import { lookup } from "node:dns/promises";
-import { isPrivateIp, isBlockedTarget, ALL_TOOLS, getToolByName } from "./tools.server";
+import {
+  isPrivateIp,
+  isBlockedTarget,
+  ALL_TOOLS,
+  getToolByName,
+  toolRisk,
+  bringsUntrustedContent,
+} from "./tools.server";
 
 const lookupMock = vi.mocked(lookup);
 
@@ -220,5 +227,71 @@ describe("open_document tool", () => {
     const res = await tool.execute({ file_id: "f2" }, makeCtx([], single));
     expect(res.found).toBe(1);
     expect(res.open).toEqual({ id: "f2", filename: "b.pptx" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A2a — klasa ryzyka i „obca treść” (plan naprawczy, etap 1)
+// ---------------------------------------------------------------------------
+
+describe("klasa ryzyka narzędzi", () => {
+  it("każde narzędzie z ALL_TOOLS ma klasę read / write / external", () => {
+    for (const tool of ALL_TOOLS) {
+      expect(["read", "write", "external"], tool.declaration.name).toContain(toolRisk(tool, {}));
+    }
+  });
+
+  it("akcje z skutkiem poza bazą albo nieodwracalne są external", () => {
+    for (const name of [
+      "start_dev_session",
+      "delete_note",
+      "delete_task",
+      "cancel_standing_order",
+    ]) {
+      expect(toolRisk(getToolByName(name)!, {}), name).toBe("external");
+    }
+  });
+
+  it("zapisy własnych danych są write, odczyty read", () => {
+    for (const name of [
+      "save_note",
+      "remember",
+      "create_task",
+      "update_task",
+      "generate_document",
+    ]) {
+      expect(toolRisk(getToolByName(name)!, {}), name).toBe("write");
+    }
+    for (const name of ["list_notes", "recall", "web_search", "fetch_url", "read_document"]) {
+      expect(toolRisk(getToolByName(name)!, {}), name).toBe("read");
+    }
+  });
+
+  it("run_local_action: zapis pliku jest external, odczyt i lista to read", () => {
+    const local = getToolByName("run_local_action")!;
+    expect(toolRisk(local, { action: "write_text_file" })).toBe("external");
+    expect(toolRisk(local, { action: "read_text_file" })).toBe("read");
+    expect(toolRisk(local, { action: "list_dir" })).toBe("read");
+    // Nieznana akcja: ostrożnie, jak zapis.
+    expect(toolRisk(local, { action: "rm" })).toBe("external");
+  });
+
+  it("obcą treść wnoszą dokładnie narzędzia z listy planu", () => {
+    const untrusted = ALL_TOOLS.filter((t) => bringsUntrustedContent(t, {})).map(
+      (t) => t.declaration.name,
+    );
+    expect(untrusted.sort()).toEqual(
+      [
+        "fetch_url",
+        "read_document",
+        "read_generated_file",
+        "search_documents",
+        "web_search",
+      ].sort(),
+    );
+    const local = getToolByName("run_local_action")!;
+    expect(bringsUntrustedContent(local, { action: "read_text_file" })).toBe(true);
+    expect(bringsUntrustedContent(local, { action: "list_dir" })).toBe(true);
+    expect(bringsUntrustedContent(local, { action: "write_text_file" })).toBe(false);
   });
 });
