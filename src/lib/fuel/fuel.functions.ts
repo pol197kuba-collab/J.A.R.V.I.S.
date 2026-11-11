@@ -454,7 +454,11 @@ export const getFuelNews = createServerFn({ method: "GET" })
         .maybeSingle();
 
       const { ingestNews } = await import("./ingest.server");
-      newsInFlight ??= ingestNews(writer.db, secret?.gemini_api_key?.trim() || null).finally(() => {
+      newsInFlight ??= ingestNews(
+        writer.db,
+        secret?.gemini_api_key?.trim() || null,
+        userId,
+      ).finally(() => {
         newsInFlight = null;
         lastNewsIngest = Date.now();
       });
