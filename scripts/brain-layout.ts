@@ -191,6 +191,7 @@ async function main(): Promise<void> {
       temperature: 0.3,
       maxOutputTokens: 2048,
       timeoutMs: NAMING_TIMEOUT_MS,
+      ledger: { db, ownerId, module: "brain", purpose: "cluster_names" },
     });
     if (result.ok) {
       const names = parseClusterNames(result.text, clusters.length);
@@ -312,7 +313,9 @@ async function backfillNotes(db: Db, ownerId: string, apiKey: string) {
     .limit(BACKFILL_LIMIT);
   if (error) throw new Error(`notatki: ${error.message}`);
   return inBatches(data ?? [], async (n) => {
-    const v = await embedText(noteEmbeddingText(n.title, n.body), apiKey, "RETRIEVAL_DOCUMENT");
+    const v = await embedText(noteEmbeddingText(n.title, n.body), apiKey, "RETRIEVAL_DOCUMENT", {
+      ledger: { db, ownerId, module: "brain", purpose: "embed" },
+    });
     if (!v) return false;
     const { error: upd } = await db
       .from("notes")
@@ -333,7 +336,9 @@ async function backfillMemories(db: Db, ownerId: string, apiKey: string) {
   if (error) throw new Error(`wspomnienia: ${error.message}`);
   // Ten sam tekst co w narzędziu `remember` — wartość wspomnienia.
   return inBatches(data ?? [], async (m) => {
-    const v = await embedText(m.value, apiKey, "RETRIEVAL_DOCUMENT");
+    const v = await embedText(m.value, apiKey, "RETRIEVAL_DOCUMENT", {
+      ledger: { db, ownerId, module: "brain", purpose: "embed" },
+    });
     if (!v) return false;
     const { error: upd } = await db
       .from("memories")
