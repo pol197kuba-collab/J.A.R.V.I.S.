@@ -30,7 +30,15 @@ export type GeminiCall = {
 
 export type GeminiResult<T> =
   | { ok: true; data: T; usage: LlmUsage; costUsd: number | null }
-  | { ok: false; status: number | null; bodyText: string; timedOut: boolean; message: string };
+  | {
+      ok: false;
+      status: number | null;
+      bodyText: string;
+      timedOut: boolean;
+      message: string;
+      /** Surowy komunikat błędu sieci (status null). */
+      error?: string;
+    };
 
 const failMessage = (status: number | null, bodyText: string, timedOut: boolean, error?: string) =>
   timedOut
@@ -59,6 +67,7 @@ export async function callGemini<T extends { usageMetadata?: GeminiUsageMetadata
       bodyText: res.bodyText,
       timedOut: res.timedOut,
       message: failMessage(res.status, res.bodyText, res.timedOut, res.error),
+      error: res.error,
     };
   }
   const usage = geminiUsage(res.data?.usageMetadata);
