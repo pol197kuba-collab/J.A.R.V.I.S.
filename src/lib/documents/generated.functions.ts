@@ -128,6 +128,7 @@ export async function enrichGeneratedFileImages(
         file_id: row.id,
       } as Json),
     googleCse,
+    { db: supabase, ownerId: userId, module: "documents", purpose: "image_search" },
   );
   const imageCount = (images.hero ? 1 : 0) + images.sections.size;
 
