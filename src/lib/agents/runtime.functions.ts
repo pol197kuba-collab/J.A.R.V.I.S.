@@ -87,6 +87,9 @@ export type AgentRunResult = {
    *  (success or failure) arrives later as a row in public.notifications,
    *  not in this turn's reply. */
   documentJob?: { id: string };
+  /** Run (albo jego delegat) widział obcą treść — strona, dokument, plik.
+   *  Rodzic delegacji traktuje wtedy odpowiedź jak obcą treść (A2b). */
+  untrustedContent?: boolean;
 };
 
 // ---------------------------------------------------------------------------
