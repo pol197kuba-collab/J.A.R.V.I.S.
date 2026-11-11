@@ -39,6 +39,7 @@ async function noteEmbeddingPatch(
   if (!apiKey) return {};
   const embedding = await embedText(noteEmbeddingText(title, body), apiKey, "RETRIEVAL_DOCUMENT", {
     timeoutMs: 5_000,
+    ledger: { db: supabase, ownerId: userId, module: "notes", purpose: "embed" },
   });
   return embedding ? { embedding: toVectorLiteral(embedding) } : {};
 }
