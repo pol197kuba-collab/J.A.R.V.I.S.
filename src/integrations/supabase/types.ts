@@ -1635,6 +1635,7 @@ export type Database = {
           importance: number
           key: string | null
           kind: string
+          origin: string
           source: string | null
           tags: string[]
           updated_at: string
@@ -1649,6 +1650,7 @@ export type Database = {
           importance?: number
           key?: string | null
           kind?: string
+          origin?: string
           source?: string | null
           tags?: string[]
           updated_at?: string
@@ -1663,6 +1665,7 @@ export type Database = {
           importance?: number
           key?: string | null
           kind?: string
+          origin?: string
           source?: string | null
           tags?: string[]
           updated_at?: string

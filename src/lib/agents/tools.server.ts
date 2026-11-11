@@ -26,6 +26,11 @@ export type ToolContext = {
   runId: string;
   apiKey: string;
   model: string;
+  /**
+   * Model widział w tej turze obcą treść (strona, dokument, plik). `remember`
+   * zapisuje wtedy wpis jako origin = "tool" (A2d).
+   */
+  untrustedContent?: boolean;
   logEvent: (
     level: "info" | "warn" | "error",
     source: string,
@@ -42,10 +47,41 @@ export type ToolDeclaration = {
 
 export type ToolResult = Record<string, unknown>;
 
+/**
+ * Klasa ryzyka narzędzia (plan naprawczy, A2a):
+ * - `read` — tylko odczyt;
+ * - `write` — zapis własnych danych właściciela w bazie, odwracalny;
+ * - `external` — skutek poza bazą albo nieodwracalny (usunięcie, zapis na
+ *   dysku, zlecenie pracy w GitHubie). Takie narzędzie nie wykona się w
+ *   turze, w której model widział już obcą treść (A2b, runtime.server.ts).
+ */
+export type ToolRisk = "read" | "write" | "external";
+
+type ByArgs<T> = T | ((args: Record<string, unknown>) => T);
+
 export type Tool = {
   declaration: ToolDeclaration;
   execute: (args: Record<string, unknown>, ctx: ToolContext) => Promise<ToolResult>;
+  /** Klasa ryzyka; funkcja, gdy zależy od argumentów (run_local_action). */
+  risk: ByArgs<ToolRisk>;
+  /**
+   * Czy wynik niesie treść spoza właściciela (strony WWW, wgrane dokumenty,
+   * pliki z dysku). Taka treść może zawierać wstrzyknięte polecenia, więc po
+   * niej narzędzia `external` czekają na potwierdzenie użytkownika.
+   */
+  untrustedOutput?: ByArgs<boolean>;
 };
+
+const resolveByArgs = <T>(value: ByArgs<T>, args: Record<string, unknown>): T =>
+  typeof value === "function" ? (value as (a: Record<string, unknown>) => T)(args) : value;
+
+export function toolRisk(tool: Tool, args: Record<string, unknown>): ToolRisk {
+  return resolveByArgs(tool.risk, args);
+}
+
+export function bringsUntrustedContent(tool: Tool, args: Record<string, unknown>): boolean {
+  return tool.untrustedOutput === undefined ? false : resolveByArgs(tool.untrustedOutput, args);
+}
 
 // ---------------------------------------------------------------------------
 // web_search — Gemini native Google Search grounding
@@ -62,6 +98,8 @@ type GroundingChunk = {
 };
 
 const webSearch: Tool = {
+  risk: "read",
+  untrustedOutput: true,
   declaration: {
     name: "web_search",
     description:
@@ -164,6 +202,65 @@ const webSearch: Tool = {
 
 const MAX_FETCH_BYTES = 12_000;
 
+// A13: jeden limit czasu na całe pobranie (nagłówki I treść) i limit bajtów
+// czytanych ze strumienia. Wcześniej timer kończył się po nagłówkach, a
+// `res.text()` czytało dowolnie dużą (albo nigdy niekończącą się) odpowiedź.
+export const FETCH_TIMEOUT_MS = 10_000;
+export const FETCH_MAX_BYTES = 512 * 1024;
+
+/** Czy odpowiedź to tekst, który ma sens czytać (HTML, tekst, JSON, XML). */
+export function isTextualContentType(contentType: string | null): boolean {
+  // Brak nagłówka: spróbuj jako tekst — i tak chroni limit bajtów.
+  if (!contentType) return true;
+  const mime = contentType.split(";")[0].trim().toLowerCase();
+  return (
+    mime.startsWith("text/") ||
+    mime === "application/json" ||
+    mime === "application/xml" ||
+    mime === "application/xhtml+xml" ||
+    mime.endsWith("+json") ||
+    mime.endsWith("+xml")
+  );
+}
+
+/**
+ * Czyta treść strumieniem do `maxBytes`; resztę porzuca. Przerwanie sygnału
+ * anuluje czytanie (także w trakcie oczekiwania na kolejny fragment).
+ */
+async function readBodyCapped(
+  res: Response,
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<{ text: string; capped: boolean }> {
+  if (!res.body) return { text: "", capped: false };
+  const reader = res.body.getReader();
+  const onAbort = () => void reader.cancel().catch(() => {});
+  signal.addEventListener("abort", onAbort, { once: true });
+  const decoder = new TextDecoder();
+  let text = "";
+  let bytes = 0;
+  let capped = false;
+  try {
+    while (!signal.aborted) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const room = maxBytes - bytes;
+      if (value.byteLength >= room) {
+        text += decoder.decode(value.subarray(0, room), { stream: true });
+        capped = true;
+        break;
+      }
+      bytes += value.byteLength;
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+    if (capped) await reader.cancel().catch(() => {});
+  }
+  return { text, capped };
+}
+
 // SSRF guard: the agent decides what URL to fetch (often steered by search
 // results or page content it just read), so a prompt injection could try to
 // point it at cloud metadata endpoints or other internal services. Block
@@ -234,6 +331,8 @@ async function safeFetch(
 }
 
 const fetchUrl: Tool = {
+  risk: "read",
+  untrustedOutput: true,
   declaration: {
     name: "fetch_url",
     description:
@@ -249,19 +348,24 @@ const fetchUrl: Tool = {
   async execute(args, ctx) {
     const url = String(args.url ?? "").trim();
     if (!/^https?:\/\//i.test(url)) return { error: "invalid_url" };
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
     try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 10_000);
-      let res: Response;
-      try {
-        res = await safeFetch(url, {
-          signal: ctrl.signal,
-          headers: { "user-agent": "JARVIS-Agent/1.0 (+https://jarvisbyjacob.lovable.app)" },
-        });
-      } finally {
-        clearTimeout(timer);
+      const res = await safeFetch(url, {
+        signal: ctrl.signal,
+        headers: { "user-agent": "JARVIS-Agent/1.0 (+https://jarvisbyjacob.lovable.app)" },
+      });
+      const contentType = res.headers.get("content-type");
+      if (!isTextualContentType(contentType)) {
+        await res.body?.cancel().catch(() => {});
+        await ctx.logEvent("warn", "tool.fetch_url", `${url}: nietekstowa treść (${contentType})`, {
+          url,
+          content_type: contentType,
+        } as Json);
+        return { error: "unsupported_content_type", content_type: contentType };
       }
-      const raw = await res.text();
+      const { text: raw, capped } = await readBodyCapped(res, FETCH_MAX_BYTES, ctrl.signal);
+      if (ctrl.signal.aborted) throw new Error("timeout");
       const stripped = raw
         .replace(/<script[\s\S]*?<\/script>/gi, "")
         .replace(/<style[\s\S]*?<\/style>/gi, "")
@@ -274,11 +378,22 @@ const fetchUrl: Tool = {
         status: res.status,
         length: text.length,
       } as Json);
-      return { url, status: res.status, text, truncated: stripped.length > MAX_FETCH_BYTES };
+      return {
+        url,
+        status: res.status,
+        text,
+        truncated: capped || stripped.length > MAX_FETCH_BYTES,
+      };
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = ctrl.signal.aborted
+        ? "timeout"
+        : err instanceof Error
+          ? err.message
+          : String(err);
       await ctx.logEvent("error", "tool.fetch_url", `${url}: ${message}`, { url } as Json);
       return { error: message };
+    } finally {
+      clearTimeout(timer);
     }
   },
 };
@@ -288,6 +403,7 @@ const fetchUrl: Tool = {
 // ---------------------------------------------------------------------------
 
 const saveNote: Tool = {
+  risk: "write",
   declaration: {
     name: "save_note",
     description:
@@ -350,6 +466,7 @@ const saveNote: Tool = {
 };
 
 const listNotesTool: Tool = {
+  risk: "read",
   declaration: {
     name: "list_notes",
     description:
@@ -385,6 +502,7 @@ const listNotesTool: Tool = {
 };
 
 const deleteNote: Tool = {
+  risk: "external",
   declaration: {
     name: "delete_note",
     description:
@@ -434,6 +552,7 @@ const clampInt = (v: unknown, min: number, max: number, fallback: number): numbe
 export { embedText, toVectorLiteral } from "@/lib/ai/embed";
 
 const remember: Tool = {
+  risk: "write",
   declaration: {
     name: "remember",
     description:
@@ -473,6 +592,8 @@ const remember: Tool = {
       .map((t) => t.trim().slice(0, 40))
       .slice(0, 20);
     const importance = clampInt(args.importance, 1, 5, 3);
+    // A2d: skąd wpis — od właściciela czy z tury z obcą treścią.
+    const origin = ctx.untrustedContent ? "tool" : "user";
 
     // Embed the value so `recall` can find it by meaning. Best-effort: a null
     // embedding just means this row is keyword-only searchable for now.
@@ -491,7 +612,14 @@ const remember: Tool = {
       if (existing) {
         const { error } = await ctx.supabase
           .from("memories")
-          .update({ value, tags, importance, source: AGENT_SLUGS.JARVIS, ...embeddingPatch })
+          .update({
+            value,
+            tags,
+            importance,
+            origin,
+            source: AGENT_SLUGS.JARVIS,
+            ...embeddingPatch,
+          })
           .eq("id", existing.id);
         if (error) {
           await ctx.logEvent("error", "tool.remember", error.message, { key } as Json);
@@ -516,6 +644,7 @@ const remember: Tool = {
         value,
         tags,
         importance,
+        origin,
         source: AGENT_SLUGS.JARVIS,
         ...embeddingPatch,
       })
@@ -571,6 +700,7 @@ async function recordBrainTrace(
 const RECALL_NOTE_BODY = 600;
 
 const recall: Tool = {
+  risk: "read",
   declaration: {
     name: "recall",
     description:
@@ -710,7 +840,21 @@ const recall: Tool = {
       for (const n of kwNotes ?? []) if (!seenNotes.has(n.id)) notes.push(n);
     }
 
-    const results = merged.slice(0, limit);
+    // A2d: pochodzenie wpisu wraca razem z treścią — także dla trafień
+    // semantycznych, których RPC nie zwraca tej kolumny. Brak odczytu → "unknown".
+    const picked = merged.slice(0, limit);
+    const origins = new Map<string, string>();
+    if (picked.length > 0) {
+      const { data: originRows } = await ctx.supabase
+        .from("memories")
+        .select("id, origin")
+        .in(
+          "id",
+          picked.map((m) => m.id),
+        );
+      for (const r of originRows ?? []) origins.set(r.id, r.origin);
+    }
+    const results = picked.map((m) => ({ ...m, origin: origins.get(m.id) ?? "unknown" }));
     const noteResults = notes.slice(0, limit).map((n) => ({
       id: n.id,
       title: n.title,
@@ -752,6 +896,7 @@ const recall: Tool = {
 const TASK_STATUSES = ["todo", "in_progress", "done", "cancelled"] as const;
 
 const createTask: Tool = {
+  risk: "write",
   declaration: {
     name: "create_task",
     description:
@@ -836,6 +981,7 @@ const createTask: Tool = {
 };
 
 const listTasks: Tool = {
+  risk: "read",
   declaration: {
     name: "list_tasks",
     description:
@@ -893,6 +1039,7 @@ const listTasks: Tool = {
 };
 
 const updateTask: Tool = {
+  risk: "write",
   declaration: {
     name: "update_task",
     description:
@@ -952,6 +1099,7 @@ const updateTask: Tool = {
 };
 
 const deleteTask: Tool = {
+  risk: "external",
   declaration: {
     name: "delete_task",
     description:
@@ -996,6 +1144,7 @@ const deleteTask: Tool = {
 // ---------------------------------------------------------------------------
 
 const createProject: Tool = {
+  risk: "write",
   declaration: {
     name: "create_project",
     description:
@@ -1062,6 +1211,7 @@ const createProject: Tool = {
 };
 
 const listProjects: Tool = {
+  risk: "read",
   declaration: {
     name: "list_projects",
     description:
@@ -1103,6 +1253,7 @@ async function getGithubToken(ctx: ToolContext): Promise<string | null> {
 }
 
 const startDevSession: Tool = {
+  risk: "external",
   declaration: {
     name: "start_dev_session",
     description:
@@ -1219,6 +1370,7 @@ const startDevSession: Tool = {
 };
 
 const checkDevSession: Tool = {
+  risk: "read",
   declaration: {
     name: "check_dev_session",
     description:
@@ -1366,6 +1518,7 @@ const checkDevSession: Tool = {
 // ---------------------------------------------------------------------------
 
 const scanErrors: Tool = {
+  risk: "read",
   declaration: {
     name: "guardian_scan_errors",
     description:
@@ -1431,6 +1584,7 @@ const scanErrors: Tool = {
 };
 
 const runStats: Tool = {
+  risk: "read",
   declaration: {
     name: "guardian_run_stats",
     description:
@@ -1498,6 +1652,7 @@ const runStats: Tool = {
 };
 
 const checkDelegation: Tool = {
+  risk: "read",
   declaration: {
     name: "guardian_check_delegation",
     description:
@@ -1568,6 +1723,11 @@ const LOCAL_JOB_TIMEOUT_MS = 20_000;
 const LOCAL_JOB_ACTIONS = ["list_dir", "read_text_file", "write_text_file"] as const;
 
 const runLocalAction: Tool = {
+  // Zapis na dysku jest nieodwracalny; nieznana akcja liczy się jak zapis.
+  risk: (args) =>
+    args.action === "list_dir" || args.action === "read_text_file" ? "read" : "external",
+  // Nazwy i treść plików z dysku to obca treść.
+  untrustedOutput: (args) => args.action === "list_dir" || args.action === "read_text_file",
   declaration: {
     name: "run_local_action",
     description:
@@ -1660,6 +1820,7 @@ const runLocalAction: Tool = {
 // ---------------------------------------------------------------------------
 
 const listDocumentsTool: Tool = {
+  risk: "read",
   declaration: {
     name: "list_documents",
     description:
@@ -1688,6 +1849,8 @@ const listDocumentsTool: Tool = {
 };
 
 const searchDocumentsTool: Tool = {
+  risk: "read",
+  untrustedOutput: true,
   declaration: {
     name: "search_documents",
     description:
@@ -1805,6 +1968,8 @@ const searchDocumentsTool: Tool = {
 };
 
 const readDocumentTool: Tool = {
+  risk: "read",
+  untrustedOutput: true,
   declaration: {
     name: "read_document",
     description:
@@ -1873,6 +2038,7 @@ const readDocumentTool: Tool = {
 // ---------------------------------------------------------------------------
 
 const listGeneratedFilesTool: Tool = {
+  risk: "read",
   declaration: {
     name: "list_generated_files",
     description:
@@ -1901,6 +2067,8 @@ const listGeneratedFilesTool: Tool = {
 };
 
 const readGeneratedFileTool: Tool = {
+  risk: "read",
+  untrustedOutput: true,
   declaration: {
     name: "read_generated_file",
     description:
@@ -1985,7 +2153,11 @@ const readGeneratedFileTool: Tool = {
 // dynamically imported so they only load when a document is actually being
 // generated, not on every runtime start.
 
-const SIGNED_URL_TTL_SECONDS = 7 * 24 * 3600; // 7 days
+// A21: link w czacie / powiadomieniu żyje dobę. Starszy plik otwiera się
+// z /documents, który przy każdym otwarciu podpisuje świeży link
+// (getGeneratedFileUrlFn), więc dłuższa ważność tylko wydłużała okno, w
+// którym przeklejony link daje dostęp do pliku bez logowania.
+export const SIGNED_URL_TTL_SECONDS = 24 * 3600;
 
 // ---------------------------------------------------------------------------
 // queue_document_job — background Insight → Forge pipeline
@@ -2002,6 +2174,7 @@ const SIGNED_URL_TTL_SECONDS = 7 * 24 * 3600; // 7 days
 // image-enrichment pass already uses. Completion (success OR failure) lands
 // as a row in public.notifications, which the HUD shows via Realtime.
 const queueDocumentJob: Tool = {
+  risk: "write",
   declaration: {
     name: "queue_document_job",
     description:
@@ -2052,6 +2225,7 @@ const queueDocumentJob: Tool = {
 };
 
 const generateDocumentTool: Tool = {
+  risk: "write",
   declaration: {
     name: "generate_document",
     description:
@@ -2296,6 +2470,7 @@ const generateDocumentTool: Tool = {
 //   - found >1 → `candidates: [...]` — the model lists them and asks which;
 //                the follow-up call passes `file_id` to disambiguate.
 const openDocumentTool: Tool = {
+  risk: "read",
   declaration: {
     name: "open_document",
     description:
@@ -2440,6 +2615,7 @@ const MAX_INSTRUMENTS_IN_REPLY = 6;
 const MAX_DRIVERS_IN_REPLY = 3;
 
 const marketOutlookTool: Tool = {
+  risk: "read",
   declaration: {
     name: "market_outlook",
     description:
@@ -2516,6 +2692,7 @@ const marketOutlookTool: Tool = {
 };
 
 const fuelOutlookTool: Tool = {
+  risk: "read",
   declaration: {
     name: "fuel_outlook",
     description:
@@ -2595,6 +2772,7 @@ const fuelOutlookTool: Tool = {
 // wyłącznie na instrumentach, które system faktycznie zaciąga.
 
 const createStandingOrderTool: Tool = {
+  risk: "write",
   declaration: {
     name: "create_standing_order",
     description:
@@ -2686,6 +2864,7 @@ const createStandingOrderTool: Tool = {
 };
 
 const listStandingOrdersTool: Tool = {
+  risk: "read",
   declaration: {
     name: "list_standing_orders",
     description:
@@ -2725,6 +2904,7 @@ const listStandingOrdersTool: Tool = {
 };
 
 const cancelStandingOrderTool: Tool = {
+  risk: "external",
   declaration: {
     name: "cancel_standing_order",
     description:
@@ -2774,6 +2954,7 @@ const cancelStandingOrderTool: Tool = {
 // dałoby trzy różne odpowiedzi tego samego ranka.
 
 const readDailyBriefTool: Tool = {
+  risk: "read",
   declaration: {
     name: "read_daily_brief",
     description:

@@ -14,7 +14,12 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
-      exclude: ["src/**/*.test.ts", "src/integrations/supabase/types.ts", "src/routeTree.gen.ts"],
+      exclude: [
+        "src/**/*.test.ts",
+        "src/**/*.testkit.ts",
+        "src/integrations/supabase/types.ts",
+        "src/routeTree.gen.ts",
+      ],
       reporter: ["text-summary", "json-summary", "html"],
     },
   },
