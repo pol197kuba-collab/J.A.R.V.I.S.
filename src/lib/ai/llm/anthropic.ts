@@ -1,6 +1,6 @@
 // Anthropic adapter — translates the canonical Gemini-shaped conversation
 // (see ./types.ts) into an Anthropic Messages API request, and translates the
-// response back. Same contract and same boundary as providers/groq.ts, so the
+// response back. Same contract and same boundary as llm/groq.ts, so the
 // tool-calling loop in runtime.server.ts never learns which provider served a
 // given turn and `contents` stays in one shape for the whole run.
 //
@@ -13,6 +13,9 @@
 // Search) and memory embeddings (gemini-embedding-001). Those are
 // Gemini-specific capabilities, not conversational turns.
 import type { GeminiContent, ModelTurnResult, ToolDeclaration } from "./types";
+import { requestJson } from "./http";
+import { recordLlmUsage, type LedgerContext } from "./ledger";
+import type { LlmUsage } from "./usage";
 
 const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
@@ -135,108 +138,122 @@ export type CallAnthropicOptions = {
    * odrzucają to 400 — tam steruje się samym `effort`.
    */
   noThinking?: boolean;
+  /** Gdzie zapisać zużycie (księga llm_usage). */
+  ledger?: LedgerContext;
+  /** Ponowienia po 429/5xx (domyślnie 1). */
+  retries?: number;
+};
+
+type AnthropicResponse = {
+  content?: AnthropicResponseBlock[];
+  stop_reason?: string;
+  stop_details?: { category?: string | null; explanation?: string | null };
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    // Rozliczane INACZEJ niż zwykłe wejście (odczyt ~0,1 stawki, zapis
+    // ~1,25). Pominięcie ich rozjeżdża licznik kosztów w obie strony,
+    // i to niezauważalnie — patrz src/lib/agents/pricing.ts.
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+  };
 };
 
 export async function callAnthropic(opts: CallAnthropicOptions): Promise<ModelTurnResult> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 120_000);
-  try {
-    const tools = opts.toolDeclarations?.length
-      ? toAnthropicTools(opts.toolDeclarations)
-      : undefined;
+  const tools = opts.toolDeclarations?.length ? toAnthropicTools(opts.toolDeclarations) : undefined;
 
-    const res = await fetch(ANTHROPIC_ENDPOINT, {
-      method: "POST",
-      signal: ctrl.signal,
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": opts.apiKey,
-        "anthropic-version": ANTHROPIC_VERSION,
-      },
-      body: JSON.stringify({
-        model: opts.model,
-        // max_tokens is required by the Messages API. The per-agent budget is
-        // clamped to 8192 upstream, which is well inside every current model's
-        // output cap.
-        max_tokens: opts.maxOutputTokens ?? 4096,
-        system: opts.systemPrompt,
-        messages: toAnthropicMessages(opts.contents),
-        ...(opts.effort ? { output_config: { effort: opts.effort } } : {}),
-        ...(opts.noThinking ? { thinking: { type: "disabled" } } : {}),
-        ...(opts.temperature !== undefined && supportsTemperature(opts.model)
-          ? { temperature: opts.temperature }
-          : {}),
-        ...(tools
-          ? {
-              tools,
-              ...(opts.forceToolName
-                ? { tool_choice: { type: "tool", name: opts.forceToolName } }
-                : {}),
-            }
-          : {}),
-      }),
-    });
+  const res = await requestJson<AnthropicResponse>({
+    url: ANTHROPIC_ENDPOINT,
+    headers: { "x-api-key": opts.apiKey, "anthropic-version": ANTHROPIC_VERSION },
+    body: {
+      model: opts.model,
+      // max_tokens is required by the Messages API. The per-agent budget is
+      // clamped to 8192 upstream, which is well inside every current model's
+      // output cap.
+      max_tokens: opts.maxOutputTokens ?? 4096,
+      system: opts.systemPrompt,
+      messages: toAnthropicMessages(opts.contents),
+      ...(opts.effort ? { output_config: { effort: opts.effort } } : {}),
+      ...(opts.noThinking ? { thinking: { type: "disabled" } } : {}),
+      ...(opts.temperature !== undefined && supportsTemperature(opts.model)
+        ? { temperature: opts.temperature }
+        : {}),
+      ...(tools
+        ? {
+            tools,
+            ...(opts.forceToolName
+              ? { tool_choice: { type: "tool", name: opts.forceToolName } }
+              : {}),
+          }
+        : {}),
+    },
+    timeoutMs: opts.timeoutMs ?? 120_000,
+    retries: opts.retries ?? 1,
+  });
 
-    if (!res.ok) {
-      const bodyText = await res.text().catch(() => "");
-      throw new Error(`Anthropic HTTP ${res.status}: ${bodyText.slice(0, 300)}`);
+  if (!res.ok) {
+    if (res.status === null) {
+      // Surowy komunikat błędu sieci — trafia do logów bez zmian, jak dotąd.
+      throw new Error(res.timedOut ? "Anthropic: przekroczony czas" : (res.error ?? "network"));
     }
-
-    const data = (await res.json()) as {
-      content?: AnthropicResponseBlock[];
-      stop_reason?: string;
-      stop_details?: { category?: string | null; explanation?: string | null };
-      usage?: {
-        input_tokens?: number;
-        output_tokens?: number;
-        // Rozliczane INACZEJ niż zwykłe wejście (odczyt ~0,1 stawki, zapis
-        // ~1,25). Pominięcie ich rozjeżdża licznik kosztów w obie strony,
-        // i to niezauważalnie — patrz src/lib/agents/pricing.ts.
-        cache_read_input_tokens?: number;
-        cache_creation_input_tokens?: number;
-      };
-    };
-
-    const blocks = data.content ?? [];
-    const functionCalls = blocks.flatMap((b) =>
-      b.type === "tool_use"
-        ? [
-            {
-              name: b.name,
-              // Claude may vary JSON escaping inside tool inputs; the API
-              // already hands it back parsed, but a non-object (or null) input
-              // would break every downstream `args.foo` read.
-              args:
-                b.input && typeof b.input === "object" && !Array.isArray(b.input)
-                  ? (b.input as Record<string, unknown>)
-                  : {},
-            },
-          ]
-        : [],
-    );
-    const text = blocks
-      .flatMap((b) => (b.type === "text" ? [b.text] : []))
-      .join("")
-      .trim();
-
-    // A safety decline comes back HTTP 200 with no usable content — surfacing
-    // it as an empty turn would read as "the model chose to stop". Make it an
-    // error so the run's existing failover + logging path handles it like any
-    // other provider failure.
-    if (data.stop_reason === "refusal" && functionCalls.length === 0 && !text) {
-      const category = data.stop_details?.category ?? "unknown";
-      throw new Error(`Anthropic refusal (${category})`);
-    }
-
-    return {
-      text,
-      functionCalls,
-      tokensIn: data.usage?.input_tokens ?? 0,
-      tokensOut: data.usage?.output_tokens ?? 0,
-      cacheReadTokens: data.usage?.cache_read_input_tokens ?? 0,
-      cacheWriteTokens: data.usage?.cache_creation_input_tokens ?? 0,
-    };
-  } finally {
-    clearTimeout(timer);
+    throw new Error(`Anthropic HTTP ${res.status}: ${res.bodyText.slice(0, 300)}`);
   }
+  const data = res.data;
+
+  // Myślenie Claude wlicza się do output_tokens — osobnego pola nie ma.
+  const usage: LlmUsage = {
+    input: data.usage?.input_tokens ?? 0,
+    output: data.usage?.output_tokens ?? 0,
+    thinking: 0,
+    cacheRead: data.usage?.cache_read_input_tokens ?? 0,
+    cacheWrite: data.usage?.cache_creation_input_tokens ?? 0,
+  };
+  // Zużycie zapisujemy przed oceną treści: odmowa też jest płatna.
+  const costUsd = await recordLlmUsage(opts.ledger, {
+    provider: "anthropic",
+    model: opts.model,
+    usage,
+  });
+
+  const blocks = data.content ?? [];
+  const functionCalls = blocks.flatMap((b) =>
+    b.type === "tool_use"
+      ? [
+          {
+            name: b.name,
+            // Claude may vary JSON escaping inside tool inputs; the API
+            // already hands it back parsed, but a non-object (or null) input
+            // would break every downstream `args.foo` read.
+            args:
+              b.input && typeof b.input === "object" && !Array.isArray(b.input)
+                ? (b.input as Record<string, unknown>)
+                : {},
+          },
+        ]
+      : [],
+  );
+  const text = blocks
+    .flatMap((b) => (b.type === "text" ? [b.text] : []))
+    .join("")
+    .trim();
+
+  // A safety decline comes back HTTP 200 with no usable content — surfacing
+  // it as an empty turn would read as "the model chose to stop". Make it an
+  // error so the run's existing failover + logging path handles it like any
+  // other provider failure.
+  if (data.stop_reason === "refusal" && functionCalls.length === 0 && !text) {
+    const category = data.stop_details?.category ?? "unknown";
+    throw new Error(`Anthropic refusal (${category})`);
+  }
+
+  return {
+    text,
+    functionCalls,
+    tokensIn: usage.input,
+    tokensOut: usage.output,
+    cacheReadTokens: usage.cacheRead,
+    cacheWriteTokens: usage.cacheWrite,
+    usage,
+    costUsd,
+  };
 }

@@ -24,12 +24,12 @@ import {
   parseModelRef,
   ANTHROPIC_PREFIX,
 } from "./models";
-import { callAnthropic } from "./providers/anthropic";
-import { callGroq } from "./providers/groq";
+import { callAnthropic } from "@/lib/ai/llm/anthropic";
+import { callGroq } from "@/lib/ai/llm/groq";
 import { costUsd } from "./pricing";
 import { chooseModel } from "./budget";
 import { currentBudget } from "./budget.server";
-import type { GeminiContent, GeminiPart } from "./providers/types";
+import type { GeminiContent, GeminiPart } from "@/lib/ai/llm/types";
 import { AGENT_SLUGS, isToolForcedForAgent } from "@/lib/constants/agentSlugs";
 import { UI_ACTIONS, type UiAction } from "@/lib/constants/uiActions";
 import { COMMAND_REGISTRY } from "@/lib/commands/registry";
@@ -1181,7 +1181,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         // network) — retry this exact turn against the free Groq tier
         // instead of failing the whole run, when a key is configured. The
         // running `contents` array stays in Gemini's canonical shape either
-        // way (see providers/groq.ts), so subsequent iterations still try
+        // way (see llm/groq.ts), so subsequent iterations still try
         // Gemini first — this is a per-turn retry, not a permanent switch.
         const geminiMsg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
 

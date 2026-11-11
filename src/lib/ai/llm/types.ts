@@ -1,3 +1,5 @@
+import type { LlmUsage } from "./usage";
+
 // Shared conversation-turn shape for the J.A.R.V.I.S. core's model loop.
 //
 // Gemini's request/response format is the canonical in-memory representation
@@ -28,4 +30,8 @@ export type ModelTurnResult = {
   cacheReadTokens?: number;
   /** Tokeny zapisane do cache'u — rozliczane DROŻEJ niż wejście. */
   cacheWriteTokens?: number;
+  /** Pełne zużycie tego wywołania (to samo, co poszło do księgi). */
+  usage: LlmUsage;
+  /** Koszt TEGO wywołania po jego faktycznym modelu (null = spoza cennika). */
+  costUsd: number | null;
 };

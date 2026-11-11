@@ -37,12 +37,9 @@ async function noteEmbeddingPatch(
     .maybeSingle();
   const apiKey = data?.gemini_api_key?.trim();
   if (!apiKey) return {};
-  const embedding = await embedText(
-    noteEmbeddingText(title, body),
-    apiKey,
-    "RETRIEVAL_DOCUMENT",
-    5_000,
-  );
+  const embedding = await embedText(noteEmbeddingText(title, body), apiKey, "RETRIEVAL_DOCUMENT", {
+    timeoutMs: 5_000,
+  });
   return embedding ? { embedding: toVectorLiteral(embedding) } : {};
 }
 

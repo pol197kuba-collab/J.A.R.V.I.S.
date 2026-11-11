@@ -14,8 +14,8 @@
 // z liczb — i to jest jedyny sposób, w jaki model może tu zaszkodzić.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
-import { callAnthropic } from "@/lib/agents/providers/anthropic";
-import type { GeminiContent } from "@/lib/agents/providers/types";
+import { callAnthropic } from "@/lib/ai/llm/anthropic";
+import type { GeminiContent } from "@/lib/ai/llm/types";
 import { notifyOwner } from "@/lib/notifications/notify.server";
 import type { PushResult } from "@/lib/notifications/push.server";
 import { composeBrief, sectionsToSpoken } from "./compose";

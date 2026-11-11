@@ -206,36 +206,36 @@ describe("forecastWithModel", () => {
   });
 
   it("falls back to Gemini and names it when Claude fails", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn()
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 500,
-          json: async () => ({}),
-          text: async () => "",
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: async () => ({
-            candidates: [
-              {
-                content: {
-                  parts: [{ text: '[{"symbol":"BTC","direction":"flat","confidence":20}]' }],
+    // Odpowiedź po adresie, nie po kolejności: klient modeli ponawia raz po 5xx.
+    const fetchMock = vi.fn(async (url: unknown) =>
+      String(url).includes("api.anthropic.com")
+        ? { ok: false, status: 500, json: async () => ({}), text: async () => "" }
+        : {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              candidates: [
+                {
+                  content: {
+                    parts: [{ text: '[{"symbol":"BTC","direction":"flat","confidence":20}]' }],
+                  },
                 },
-              },
-            ],
-          }),
-          text: async () => "",
-        }),
+              ],
+            }),
+            text: async () => "",
+          },
     );
+    vi.stubGlobal("fetch", fetchMock);
     const result = await forecastWithModel([input("BTC")], {
       anthropicApiKey: "sk-test",
       geminiApiKey: "gem",
     });
     expect(result.model).toBe("gemini-2.5-flash");
+    // Claude: pierwsza próba + jedno ponowienie po 500, potem Gemini.
+    const claudeCalls = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).includes("api.anthropic.com"),
+    );
+    expect(claudeCalls).toHaveLength(2);
     expect(result.verdicts[0].direction).toBe("flat");
   });
 

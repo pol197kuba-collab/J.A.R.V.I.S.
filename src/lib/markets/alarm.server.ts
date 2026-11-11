@@ -6,8 +6,8 @@
 // i tak pilnuje pozycji mechanicznie).
 
 import { DEFAULT_GEMINI_MODEL } from "@/lib/agents/models";
-import { callAnthropic } from "@/lib/agents/providers/anthropic";
-import { callGeminiText } from "@/lib/agents/providers/geminiText";
+import { callAnthropic } from "@/lib/ai/llm/anthropic";
+import { callGeminiText } from "@/lib/ai/llm/geminiText";
 import { estimateTokens, type ModelBudget } from "./budget";
 import { parseAlarmReply, type AlarmCandidate } from "./live";
 import type { ModelKeys } from "./ingest.server";
