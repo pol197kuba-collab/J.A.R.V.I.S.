@@ -30,6 +30,9 @@ import type { AgentRunResult } from "./runtime.functions";
 import type { OrchestratorInput } from "./runtime.server";
 import { blocksOf } from "./docSpec";
 import type { ProducerSpec } from "./producer.server";
+import { callGemini } from "@/lib/ai/llm/gemini";
+import type { LedgerContext } from "@/lib/ai/llm/ledger";
+import type { GeminiUsageMetadata } from "@/lib/ai/llm/usage";
 
 const RunInput = z.object({ jobId: z.string().uuid() });
 
@@ -140,44 +143,42 @@ export function buildDigest(spec: ProducerSpec): string {
   return lines.join("\n").slice(0, 6000);
 }
 
-async function judgeDocument(apiKey: string, brief: string, digest: string): Promise<QaVerdict> {
+export async function judgeDocument(
+  apiKey: string,
+  brief: string,
+  digest: string,
+  ledger?: LedgerContext,
+): Promise<QaVerdict> {
   const prompt =
     `ZADANIE UŻYTKOWNIKA:\n${brief}\n\n` +
     `TREŚĆ WYBUDOWANEGO DOKUMENTU (nagłówki + skrót treści każdej sekcji):\n${digest}\n\n` +
     `Czy ten dokument realnie i wystarczająco szczegółowo spełnia zadanie użytkownika? ` +
     `Odpowiedz WYŁĄCZNIE surowym JSON: {"ok": boolean, "reason": "krótkie uzasadnienie po polsku, max 200 znaków"}.`;
   try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 15_000);
-    let res: Response;
-    try {
-      res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
-        {
-          method: "POST",
-          signal: ctrl.signal,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.2,
-              maxOutputTokens: 150,
-              responseMimeType: "application/json",
-            },
-          }),
+    const res = await callGemini<{
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      usageMetadata?: GeminiUsageMetadata;
+    }>({
+      apiKey,
+      model: DEFAULT_GEMINI_MODEL,
+      body: {
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 150,
+          responseMimeType: "application/json",
         },
-      );
-    } finally {
-      clearTimeout(timer);
-    }
+      },
+      timeoutMs: 15_000,
+      ledger,
+    });
+    if (!res.ok && res.status === null) throw new Error(res.error ?? res.message);
     if (!res.ok)
       return {
         ok: true,
         reason: `QA niedostępne (HTTP ${res.status}) — plik dostarczony bez weryfikacji`,
       };
-    const data = (await res.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
+    const data = res.data;
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
     const parsed = JSON.parse(text) as { ok?: unknown; reason?: unknown };
     if (typeof parsed.ok !== "boolean") throw new Error("malformed QA response");
@@ -347,7 +348,13 @@ export async function runDocumentJobCore(
       // judge it with — otherwise the file still ships (fail open), just
       // without this extra check.
       if (apiKey && digest) {
-        let verdict = await judgeDocument(apiKey, job.brief, digest);
+        const qaLedger: LedgerContext = {
+          db: supabase,
+          ownerId: userId,
+          module: "documents",
+          purpose: "qa",
+        };
+        let verdict = await judgeDocument(apiKey, job.brief, digest, qaLedger);
         if (!verdict.ok) {
           await logServerWarn(
             supabase,
@@ -369,7 +376,7 @@ export async function runDocumentJobCore(
             forgeResult = retryBuild.forgeResult;
             attachment = retryBuild.attachment;
             digest = retryBuild.digest;
-            verdict = digest ? await judgeDocument(apiKey, job.brief, digest) : verdict;
+            verdict = digest ? await judgeDocument(apiKey, job.brief, digest, qaLedger) : verdict;
           }
           if (!verdict.ok) {
             warnings.push(`może nie w pełni spełniać wymagania: ${verdict.reason}`);
