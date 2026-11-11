@@ -26,7 +26,7 @@ import {
   parseVectorLiteral,
   toVectorLiteral,
 } from "../src/lib/ai/embed";
-import { callGeminiText } from "../src/lib/agents/providers/geminiText";
+import { callGeminiText } from "../src/lib/ai/llm/geminiText";
 import { DEFAULT_GEMINI_MODEL } from "../src/lib/agents/models";
 import {
   applyModelNames,
