@@ -138,7 +138,15 @@ export async function sendPushToOwner(
 
   if (!subs || subs.length === 0) return empty("no_subscriptions");
 
-  const vapid = await loadVapidKeys(db, ownerId);
+  // Push nie przerywa meldunku (patrz nagłówek), ale nieudany odczyt kluczy
+  // to co innego niż ich brak — job widzi osobny powód i może zgłosić błąd.
+  let vapid: Vapid | null;
+  try {
+    vapid = await loadVapidKeys(db, ownerId);
+  } catch (err) {
+    console.warn(`[push] ${err instanceof Error ? err.message : String(err)}`);
+    return empty("secrets_read_failed");
+  }
   if (!vapid) return empty("no_vapid_keys");
 
   const webpush = await loadWebPush();

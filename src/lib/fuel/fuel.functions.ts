@@ -27,7 +27,7 @@ import type { Impact } from "./news";
 // ingest.server.ts do bundla klienta.
 import type { Db } from "./ingest.server";
 import { fetchAllPages } from "@/lib/db/paginate";
-import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
+import { readOwnerSecretsOrNone } from "@/lib/secrets/ownerSecrets.server";
 
 // ------------------------------------------------------------- typy ----
 
@@ -448,7 +448,7 @@ export const getFuelNews = createServerFn({ method: "GET" })
       const writer = await resolveWriter({ supabase, userId });
       // Klucz Gemini jest BYOK (user_secrets) — bez niego newsy dalej
       // działają, tylko z oceną heurystyczną zamiast streszczeń po polsku.
-      const { data: secret } = await readOwnerSecrets(userId, "gemini_api_key");
+      const secret = await readOwnerSecretsOrNone(userId, "gemini_api_key", "fuel.news");
 
       const { ingestNews } = await import("./ingest.server");
       newsInFlight ??= ingestNews(
