@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_ATTEMPTS,
+  QUEUED_GRACE_MS,
   STALE_AFTER_MS,
   classifyJob,
   exhaustedReason,
@@ -63,5 +64,29 @@ describe("exhaustedReason", () => {
     const reason = exhaustedReason(3);
     expect(reason).toContain("3 razy");
     expect(reason).toContain("uśpienie aplikacji");
+  });
+});
+
+describe("classifyJob — kolejka w tle (etap 6)", () => {
+  it("podejmuje zadanie `queued`, którego nikt nie ruszył dłużej niż 90 s", () => {
+    // Przeglądarka nie wysłała startu (uśpiona karta) — nie czekamy 15 min.
+    expect(
+      classifyJob({ status: "queued", updatedAt: agoMs(QUEUED_GRACE_MS + 1000), attempts: 0 }, NOW),
+    ).toBe("resumable");
+  });
+
+  it("zostawia świeże `queued` przeglądarce, która właśnie je startuje", () => {
+    expect(classifyJob({ status: "queued", updatedAt: agoMs(30_000), attempts: 0 }, NOW)).toBe(
+      "healthy",
+    );
+  });
+
+  it("`running` dalej dostaje pełne 15 minut — potok trwa kilka minut", () => {
+    expect(
+      classifyJob(
+        { status: "running", updatedAt: agoMs(QUEUED_GRACE_MS + 1000), attempts: 1 },
+        NOW,
+      ),
+    ).toBe("healthy");
   });
 });

@@ -229,10 +229,20 @@ export async function runDocumentJobCore(
     // połowie, ma zostawić po sobie ślad, że ktoś już do niego podchodził.
     // Bez tego zerwane podejście byłoby niewidzialne i ratownik wskrzeszałby
     // je w nieskończoność.
-    await supabase
+    //
+    // Przejęcie to JEDEN warunkowy UPDATE (plan naprawczy, etap 6): zadanie
+    // podnosi przeglądarka i kolejka w tle, więc dwa przebiegi mogą wystartować
+    // naraz. Warunek na status i licznik podejść przepuszcza tylko pierwszego —
+    // drugi nie dostaje wiersza i nie rusza potoku (nie płaci drugi raz).
+    const { data: claimed } = await supabase
       .from("document_jobs")
       .update({ status: "running", attempts: (job.attempts ?? 0) + 1 })
-      .eq("id", job.id);
+      .eq("id", job.id)
+      .eq("status", job.status)
+      .eq("attempts", job.attempts ?? 0)
+      .select("id")
+      .maybeSingle();
+    if (!claimed) return { ok: false, reason: "not_queued" };
 
     try {
       const { data: secret } = await readOwnerSecrets(userId, "gemini_api_key");

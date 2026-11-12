@@ -293,19 +293,29 @@ Wymaga W2 i W3.
 
 ## Etap 6 — zadania w tle bez przeglądarki (A16)
 
-- [ ] Potok dokumentów (`runDocumentJobFn`) i dogrywanie grafik
+- [x] Potok dokumentów (`runDocumentJobFn`) i dogrywanie grafik
       (`enrichDocumentImagesFn`) podnoszone przez pg_cron →
       `workflow_dispatch`, tym samym wzorcem co briefing
       (`dispatch_github_workflow`): zadanie w stanie `queued` starsze niż
       1–2 min uruchamia workflow, który je wykonuje. Klient może dalej
       odpalać je od razu — kolejka jest gwarancją, nie zamiennikiem.
-- [ ] Zabezpieczenie przed podwójnym wykonaniem: przejęcie zadania jednym
+      Zrobione: migracja `20261112170000_document_jobs_dispatch.sql`
+      (`dispatch_document_jobs`, pg_cron co minutę, najwyżej raz na 5 min
+      i 40 razy na dobę), workflow `document-jobs.yml`, skrypt
+      `scripts/document-jobs.ts`. Progi: `queued` > 90 s, `running` bez
+      ruchu > 15 min, grafiki `pending` > 90 s bez żywego przejęcia.
+- [x] Zabezpieczenie przed podwójnym wykonaniem: przejęcie zadania jednym
       `UPDATE ... WHERE status = 'queued'` (sprawdzić, czy już tak jest).
+      Nie było: zadanie przejmował odczyt + UPDATE bez warunku, grafiki nie
+      miały przejęcia. Teraz warunkowy UPDATE (status + licznik podejść)
+      i znacznik `generated_files.image_claimed_at` (wygasa po 10 min).
 - [ ] Usunąć ratowanie porzuconych zadań z `scripts/morning-brief.ts`, gdy
-      nowa droga działa tydzień bez usterek.
+      nowa droga działa tydzień bez usterek. Czeka: najwcześniej 2026-11-19,
+      po potwierdzeniu właściciela.
 - [ ] Sprawdzić w logach hostingu, czy długie funkcje serwerowe są ucinane;
       wynik wpisać do Dziennika. Jeśli tak — klient przestaje odpalać potok
-      sam i zostaje tylko kolejka.
+      sam i zostaje tylko kolejka. Czeka na właściciela (logi Lovable —
+      nie mam do nich dostępu z sesji).
 
 ## Etap 7 — odpytywanie → realtime (A15)
 
@@ -410,7 +420,8 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 | 2026-11-11 | 3 | #227 | czysty / 1068 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Pomiar przed/po niewykonany (brak dostępu do bazy, księga od dziś) — zapytanie w etapie 3. Oczekiwany efekt: klasyfikator tylko dla poleceń UI (zamiast po każdej turze bez narzędzi), historia ≤ ~6000 tokenów zamiast do 30×8000 znaków, cache promptu dla agentów na Claude. |
 | 2026-11-12 | 4 | #228 | czysty / 1086 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Testy z etapu 0 bez zmian. Pokrycie `src/lib/agents`: linie 51,82% (było 45,33%), `runtime/` 83,8%, `tools/` 49,8%. Ten poziom to próg dla etapu 9. |
 | 2026-11-12 | 5 (5a) | #229 | czysty / 1098 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | A8, A5 (kod), A14. Z Ustawień znika przełącznik „Czat przez serwer” — czat zawsze idzie przez serwer. Migracja REVOKE (5b) dopiero po potwierdzeniu przez właściciela, że 5a działa po publikacji w Lovable. |
-| 2026-11-12 | 5 (5b) | (PR w toku) | czysty / 1104 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Migracja REVOKE na `user_secrets`. Po drodze (zgłoszenia właściciela): #230 (prośba „dwa razy”), #231 (wątek czatu — regresja z A8), #232 (nieistniejący agent; stare nazwy agentów w kodzie), #233 (narzędzia `guardian_*` → `shield_*`). Etap 5 zamknięty. |
+| 2026-11-12 | 5 (5b) | #234 | czysty / 1104 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Migracja REVOKE na `user_secrets`. Po drodze (zgłoszenia właściciela): #230 (prośba „dwa razy”), #231 (wątek czatu — regresja z A8), #232 (nieistniejący agent; stare nazwy agentów w kodzie), #233 (narzędzia `guardian_*` → `shield_*`). Etap 5 zamknięty. |
+| 2026-11-12 | 6 | (PR w toku) | czysty / 1116 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Kolejka w tle (pg_cron → `document-jobs.yml`) i warunkowe przejęcie zadań/grafik. Migracja sprawdzona na lokalnym Postgresie 16 (atrapy `net`/`cron`): wywołanie tylko przy czekającej pracy, blokada 5 min, drugi przebieg bez błędu. Otwarte: usunięcie ratownika z briefingu (po tygodniu), sprawdzenie ucinania w logach Lovable. |
 
 ## Załącznik: znaleziska z rewizji (skrót)
 
