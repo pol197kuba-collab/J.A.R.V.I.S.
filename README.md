@@ -51,14 +51,30 @@ Funkcje serwerowe, które potrzebują klucza service role, czytają
 
 ### GitHub Actions (repo → Settings → Secrets and variables → Actions)
 
-| Nazwa                                                                   | Używają                                                   |
-| ----------------------------------------------------------------------- | --------------------------------------------------------- |
-| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_PUBLISHABLE_KEY` | wszystkie joby danych                                     |
-| `JARVIS_OWNER_ID`, `JARVIS_EMAIL`, `JARVIS_PASSWORD`                    | joby działające w imieniu właściciela                     |
-| `GEMINI_API_KEY`                                                        | Morning Brief, Market Grid/Live, Orlen, Brain Layout/Demo |
-| `ANTHROPIC_API_KEY`                                                     | Morning Brief, Market Grid/Live, Claude Dev Wing          |
-| `TOMTOM_API_KEY`                                                        | Commute Watch                                             |
-| `SUPABASE_DB_URL`                                                       | DB Migrations                                             |
+Jedna droga uwierzytelnienia jobów: klucz service role + właściciel
+(`src/lib/jobs/jobRun.ts`, etap 6b). Od etapu 5 klucze z `user_secrets` czyta
+tylko service role, więc logowania e-mailem i hasłem nie ma — bez wymaganych
+sekretów job kończy się na czerwono (`::error::`), a nie po cichu bez pracy.
+
+**Wymagane** — bez nich nie działa żaden job danych:
+
+| Nazwa                       | Co przestaje działać bez niego                                                                                       |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `SUPABASE_URL`              | wszystkie joby danych (czerwone od pierwszej linii)                                                                  |
+| `SUPABASE_SERVICE_ROLE_KEY` | wszystkie joby danych; to też jedyna droga do kluczy z `user_secrets` (TomTom, VAPID dla pushy, Gemini dla Mózgu 3D) |
+| `JARVIS_OWNER_ID`           | wszystkie joby danych — wskazuje, czyje dane (watchlista, briefing, dojazd, dokumenty) job obsługuje                 |
+| `SUPABASE_DB_URL`           | DB Migrations — migracje nie wchodzą do bazy po merge                                                                |
+
+**Opcjonalne** — job działa bez nich, z opisaną degradacją (`::warning::`):
+
+| Nazwa               | Używają                                      | Bez niego                                                                                                   |
+| ------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `GEMINI_API_KEY`    | Morning Brief, Market Grid/Live, Orlen, Mózg | briefing z samych liczb, newsy z oceną heurystyczną, prognoza tylko sygnałowa; Mózg bierze klucz z Ustawień |
+| `ANTHROPIC_API_KEY` | Morning Brief, Market Grid/Live, Claude Dev  | jak wyżej (gdy brak też Gemini); Claude Dev Wing nie ruszy                                                  |
+| `TOMTOM_API_KEY`    | Commute Watch                                | zapas — pierwszeństwo ma klucz z Ustawień; bez obu job jest **czerwony** (alert o korku nie może działać)   |
+
+`JARVIS_EMAIL`, `JARVIS_PASSWORD` i `SUPABASE_PUBLISHABLE_KEY` nie są już
+czytane przez żaden workflow (lokalny worker ma własny `.env`).
 
 ### Klucze użytkownika (tabela `user_secrets`, Ustawienia → Klucze API)
 
@@ -80,6 +96,7 @@ z niego baza uruchamia workflowy), `vapid_public_key` / `vapid_private_key` /
 | `commute-watch.yml` | alert o korku na trasie dom ↔ praca (`scripts/commute-watch.ts`)       | pg_cron `commute-watch-dispatch`; zapasowy cron w dni robocze      |
 | `orlen-prices.yml`  | cennik hurtowy Orlenu, Brent, USD/PLN (`scripts/orlen-daily.ts`)       | cron GitHuba (pn–pt 07:30 i 15:30 CEST)                            |
 | `brain-layout.yml`  | pełny układ Mózgu 3D (`scripts/brain-layout.ts`)                       | cron GitHuba (03:40 CEST)                                          |
+| `document-jobs.yml` | dokończenie dokumentów i grafik w tle (`scripts/document-jobs.ts`)     | pg_cron `document-jobs-dispatch`, tylko gdy coś czeka              |
 | `brain-demo.yml`    | wgranie / usunięcie danych demo Mózgu 3D                               | ręcznie                                                            |
 | `claude-dev.yml`    | Claude Code na issue / PR                                              | komentarz `@claude`, przypisanie, review                           |
 
@@ -91,6 +108,7 @@ z niego baza uruchamia workflowy), `vapid_public_key` / `vapid_private_key` /
 | `market-grid-dispatch`   | co 5 min             | uruchamia `market-grid.yml` o czasie                                                                    | `20261020120000_market_grid_dispatch.sql`   |
 | `market-live-dispatch`   | co 15 min            | uruchamia `market-live.yml`                                                                             | `20261102090000_market_live.sql`            |
 | `commute-watch-dispatch` | co 5 min             | uruchamia `commute-watch.yml` w oknie wyjazdu i powrotu                                                 | `20261110091000_commute_watch_dispatch.sql` |
+| `document-jobs-dispatch` | co minutę            | uruchamia `document-jobs.yml`, gdy zadanie lub grafiki czekają (najwyżej raz na 5 min, 40 na dobę)      | `20261112170000_document_jobs_dispatch.sql` |
 | `brain-sync`             | co 10 min            | `brain_sync_all()` — nowe gwiazdy Mózgu 3D                                                              | `20261017090000_brain_points.sql`           |
 | `brain-traces-cleanup`   | codziennie 03:20 UTC | kasuje ślady Mózgu starsze niż 30 dni                                                                   | `20261017120000_brain_traces.sql`           |
 

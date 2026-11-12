@@ -342,7 +342,7 @@ przy pierwszym wywołaniu. Wszystkie te przebiegi były **zielone**, więc
 nikt tego nie zauważył. Sekrety są już dodane (W7); ten etap usuwa
 przyczynę, dla której awaria była niewidoczna.
 
-- [ ] **Joby głośno o braku kluczy.** W każdym skrypcie z `scripts/`
+- [x] **Joby głośno o braku kluczy.** W każdym skrypcie z `scripts/`
       (commute-watch, morning-brief, markets-daily, markets-live,
       brain-layout, orlen-daily, document-jobs): brak klucza albo błąd
       odczytu sekretów potrzebnych do GŁÓWNEJ pracy joba kończy go kodem
@@ -352,7 +352,13 @@ przyczynę, dla której awaria była niewidoczna.
       z `::warning::` nazywającym, czego zabrakło. `readOwnerSecrets` ma
       rozróżniać „nie ma takiego klucza” od „nie udało się odczytać”; dziś
       oba wyglądają tak samo dla wywołującego. Testy na oba przypadki.
-- [ ] **Jedna droga uwierzytelnienia jobów.** Skoro klucze wymagają service
+      Zrobione: `readOwnerSecrets` rzuca `SecretsReadError` przy nieudanym
+      odczycie (brak wiersza → `data: null`); `readOwnerSecretsOrNone` tam,
+      gdzie klucz jest dodatkiem (embedding notatki, newsy paliw); push
+      zwraca powód `secrets_read_failed`. Joby: `src/lib/jobs/jobRun.ts`
+      (`JobRun.fail` → `::error::` + `system_events`, kod 1). Klucze modeli
+      z sekretów Actions zostają świadomą degradacją z `::warning::`.
+- [x] **Jedna droga uwierzytelnienia jobów.** Skoro klucze wymagają service
       role, ścieżka logowania e-mailem i hasłem w skryptach jest martwym
       zapasem, który ukrył tę usterkę. Skrypty wymagają
       `SUPABASE_SERVICE_ROLE_KEY` + `JARVIS_OWNER_ID`; ścieżkę e-mail/hasło
@@ -361,16 +367,19 @@ przyczynę, dla której awaria była niewidoczna.
       Sekretów `JARVIS_EMAIL` / `JARVIS_PASSWORD` w GitHubie nie da się
       usunąć z kodu: po merge i jednym zielonym dniu wpisać właścicielowi
       w podsumowaniu, że może je skasować (lokalny worker ma własny `.env`
-      i znika w etapie 8).
-- [ ] **Jedno zdanie na koniec każdego joba.** Każdy przebieg kończy się
+      i znika w etapie 8). Zrobione dla wszystkich skryptów (także
+      `brain-demo`); żaden job nie potrzebuje RLS — wyjątków brak.
+- [x] **Jedno zdanie na koniec każdego joba.** Każdy przebieg kończy się
       `::notice::` mówiącym, co zrobił albo dlaczego nic nie zrobił (np.
       „poza oknem dojazdu — nic do sprawdzenia”). Przebieg Commute Watch
       z 2026-11-12 16:08 UTC nie wypisał ani jednej linii.
-- [ ] **README:** tabela sekretów GitHub Actions z podziałem na wymagane
+- [x] **README:** tabela sekretów GitHub Actions z podziałem na wymagane
       i opcjonalne oraz co przestaje działać bez każdego z nich.
 - [ ] **W8.** Odczytać logi Morning Brief i Commute Watch z 2026-11-13
       (albo najnowsze): pushe wychodzą, klucz TomTom się czyta. Jeśli nie —
       to pierwsza rzecz do naprawy w tym etapie.
+      Stan 2026-11-12: logów z 13.11 jeszcze nie ma; ostatnie przebiegi po W7
+      (Commute Watch 16:08 UTC, Morning Brief 12:54 UTC) zielone.
 - [ ] **`recall` a obca treść (luka w A2d).** Wpis pamięci o pochodzeniu
       `tool` albo `unknown` zwrócony przez `recall` jest obcą treścią:
       ustawia `untrustedSeen` i dostaje notę, tak jak wynik `fetch_url`.
