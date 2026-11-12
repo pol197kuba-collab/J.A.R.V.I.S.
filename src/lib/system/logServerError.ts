@@ -1,6 +1,6 @@
 // Shared helper for the one thing almost every server function's error
 // branch was missing: a trace left in public.system_events so S.H.I.E.L.D.
-// can actually see it. guardian_scan_errors scans this table
+// can actually see it. shield_scan_errors scans this table
 // for `level IN ('warn','error')` across every `source` with no filter —
 // so any call site using this helper is picked up automatically, no
 // S.H.I.E.L.D.-side changes needed.
