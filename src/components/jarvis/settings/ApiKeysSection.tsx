@@ -29,13 +29,10 @@ import { MODEL_CATALOG_QUERY_KEY } from "@/lib/agents/useModelCatalog";
 import { testProviderKeys, type KeyCheck } from "@/lib/system/keyCheck.functions";
 import { providerInfo, type ProviderId } from "@/lib/system/providerKeys";
 
-// Przeglądarkowa kopia klucza Gemini — czyta ją tylko czat w trybie
-// „przeglądarka" (jarvisBrain.ts). Zapis klucza aktualizuje ją razem z
-// serwerem, żeby oba tryby zawsze miały ten sam klucz.
-const GEMINI_LS_KEY = "jarvis_gemini_api_key";
-// Dawne kopie kluczy Groq/Anthropic w przeglądarce — nikt ich nie czytał,
-// służyły tylko do wypełniania pola. Sprzątamy je przy wejściu.
-const STALE_LS_KEYS = ["jarvis_groq_api_key", "jarvis_anthropic_api_key"];
+// Dawne kopie kluczy w przeglądarce. Groq/Anthropic nikt nie czytał; kopię
+// Gemini czytał czat w trybie „przeglądarka”, który zniknął (plan naprawczy,
+// etap 5, A8) — klucze żyją wyłącznie na serwerze. Sprzątamy je przy wejściu.
+const STALE_LS_KEYS = ["jarvis_groq_api_key", "jarvis_anthropic_api_key", "jarvis_gemini_api_key"];
 
 type Stored = { state: "loading" | "linked" | "empty" | "error"; preview: string | null };
 
@@ -321,15 +318,6 @@ export function ApiKeysSection({ onGeminiLinked }: { onGeminiLinked: (linked: bo
     if (id === "gemini" || id === "anthropic") await refreshModelCatalog();
   };
 
-  const mirrorGemini = (key: string | null) => {
-    try {
-      if (key) window.localStorage.setItem(GEMINI_LS_KEY, key);
-      else window.localStorage.removeItem(GEMINI_LS_KEY);
-    } catch {
-      /* ignore — czat w trybie serwera i tak bierze klucz z bazy */
-    }
-  };
-
   const handleTest = async () => {
     setTesting(true);
     setTestError(null);
@@ -377,12 +365,10 @@ export function ApiKeysSection({ onGeminiLinked }: { onGeminiLinked: (linked: bo
       fields={[{ name: "key", placeholder }]}
       onSave={async ({ key }) => {
         await fns[id].save({ data: { key } });
-        if (id === "gemini") mirrorGemini(key);
         await afterChange(id);
       }}
       onDelete={async () => {
         await fns[id].del();
-        if (id === "gemini") mirrorGemini(null);
         await afterChange(id);
       }}
     >

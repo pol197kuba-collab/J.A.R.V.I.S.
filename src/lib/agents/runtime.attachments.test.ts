@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
-import { runOrchestrator } from "./runtime.server";
+import { runAgentLoop } from "./runtime.server";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
+import { testSecretsDb } from "@/test/secretsDb";
 
 // Regression test for download-link delivery.
 //
-// Observed live (2026-07-22, first flagship-demo test): the producer persona
+// Observed live (2026-07-22, first flagship-demo test): the F.O.R.G.E. persona
 // was told to paste generate_document's download_url VERBATIM into its
 // reply. An LLM retyping a ~300-char signed-URL token reliably introduces
 // typos — the pptx link failed with InvalidJWT "signature verification
@@ -20,7 +21,7 @@ const SIGNED_URL =
 
 function makeSupabaseStub(responses: Record<string, CannedResponse[]>) {
   const counts: Record<string, number> = {};
-  return {
+  const stub = {
     from(table: string) {
       const list = responses[table] ?? [{ data: null, error: null }];
       const idx = Math.min(counts[table] ?? 0, list.length - 1);
@@ -45,6 +46,9 @@ function makeSupabaseStub(responses: Record<string, CannedResponse[]>) {
       }),
     },
   } as unknown as SupabaseClient<Database>;
+  // Etap 5 (A5): user_secrets czyta klient service role — w testach ta sama atrapa.
+  testSecretsDb.current = stub;
+  return stub;
 }
 
 const MODEL_REPLY = "Gotowe — plik czeka na pobranie poniżej, Panie Sławiński.";
@@ -101,8 +105,8 @@ function baseResponses(): Record<string, CannedResponse[]> {
     ],
     user_secrets: [{ data: { gemini_api_key: "test-key", groq_api_key: null }, error: null }],
     agent_runs: [{ data: { id: "run-under-test" }, error: null }],
-    // DELIBERATELY no generate_document binding in the DB — the producer must
-    // still get the tool in-memory (runtime.server injects it for the producer
+    // DELIBERATELY no generate_document binding in the DB — F.O.R.G.E. must
+    // still get the tool in-memory (runtime.server injects it for F.O.R.G.E.
     // agent), which is what keeps the forced-tool-call path working even when
     // the migration/binding is missing (the live 0-tool-calls failure).
     agent_tools: [{ data: [], error: null }],
@@ -115,12 +119,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("runOrchestrator — generate_document link delivery", () => {
+describe("runAgentLoop — generate_document link delivery", () => {
   it("appends the signed URL from the TOOL RESULT to the final reply and returns it as an attachment", async () => {
     const fetchMock = makeGeminiFetchMock();
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: makeSupabaseStub(baseResponses()),
       userId: "user-1",
       agentSlug: AGENT_SLUGS.FORGE,
@@ -134,7 +138,7 @@ describe("runOrchestrator — generate_document link delivery", () => {
     expect(result.output).toContain(`⬇ ${SIGNED_URL}`);
     expect(result.attachments).toEqual([{ filename: "raport.docx", url: SIGNED_URL }]);
 
-    // Producer's FIRST turn must force the generate_document call (mode ANY),
+    // F.O.R.G.E.'s FIRST turn must force the generate_document call (mode ANY),
     // so it can't end its run in prose with 0 tool calls (the live failure).
     const firstBody = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
     expect(firstBody.toolConfig?.functionCallingConfig?.mode).toBe("ANY");

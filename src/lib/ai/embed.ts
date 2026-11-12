@@ -2,6 +2,9 @@
 // Mózgu 3D. Wydzielone z tools.server.ts, żeby nocny skrypt Mózgu
 // (scripts/brain-layout.ts) nie musiał ładować całego rejestru narzędzi.
 
+import { embedWithGemini } from "./llm/gemini";
+import type { LedgerContext } from "./llm/ledger";
+
 // Dimensionality of the vector(768) columns (memories, document_chunks,
 // notes). Must match the migrations and the value requested from Gemini.
 export const EMBED_DIMS = 768;
@@ -11,43 +14,26 @@ const EMBED_MODEL = "gemini-embedding-001";
 // effort by design: any failure (no quota, network, HTTP error, malformed
 // response) returns null so the caller falls back to keyword search instead
 // of failing the whole tool. `taskType` steers Gemini to produce embeddings
-// tuned for either the stored document or the search query.
+// tuned for either the stored document or the search query. `ledger` — gdzie
+// zapisać zużycie (księga llm_usage); bez niego wywołanie nie zostawia śladu.
 export async function embedText(
   text: string,
   apiKey: string,
   taskType: "RETRIEVAL_DOCUMENT" | "RETRIEVAL_QUERY",
-  timeoutMs = 10_000,
+  opts: { timeoutMs?: number; ledger?: LedgerContext } = {},
 ): Promise<number[] | null> {
   const trimmed = text.trim();
   if (!trimmed) return null;
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${EMBED_MODEL}:embedContent?key=${encodeURIComponent(
-        apiKey,
-      )}`,
-      {
-        method: "POST",
-        signal: ctrl.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: `models/${EMBED_MODEL}`,
-          content: { parts: [{ text: trimmed.slice(0, 8_000) }] },
-          taskType,
-          outputDimensionality: EMBED_DIMS,
-        }),
-      },
-    );
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    const data = (await res.json()) as { embedding?: { values?: number[] } };
-    const values = data.embedding?.values;
-    if (!Array.isArray(values) || values.length !== EMBED_DIMS) return null;
-    return values;
-  } catch {
-    return null;
-  }
+  const values = await embedWithGemini({
+    apiKey,
+    model: EMBED_MODEL,
+    text: trimmed.slice(0, 8_000),
+    taskType,
+    outputDimensionality: EMBED_DIMS,
+    timeoutMs: opts.timeoutMs ?? 10_000,
+    ledger: opts.ledger,
+  });
+  return values && values.length === EMBED_DIMS ? values : null;
 }
 
 // supabase-js serialises a vector column value as a JSON-array string, e.g.

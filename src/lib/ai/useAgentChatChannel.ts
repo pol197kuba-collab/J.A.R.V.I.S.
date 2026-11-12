@@ -12,11 +12,10 @@ import {
   setActiveAgent as setActiveAgentFn,
   getActiveAgentSlug,
   getGeminiKeyStatus,
-  getUserSettings,
   importChatHistory,
   type AgentSummary,
 } from "@/lib/agents/runtime.functions";
-import { setServerRuntimePreference } from "./jarvisBrain";
+import { setServerKeyLinked } from "./jarvisBrain";
 import { CHAT_HISTORY_LIMIT } from "./chatHistory";
 import { speak } from "@/lib/audio/speak";
 import { setAgentBusy, reportOutcome } from "./agentActivity";
@@ -24,11 +23,11 @@ import { requestOpenDocument } from "@/lib/documents/openDocumentBus";
 import { enrichDocumentImagesFn } from "@/lib/documents/generated.functions";
 import { runDocumentJobFn } from "@/lib/agents/documentJobs.functions";
 import { ACTIVE_AGENT_LS_KEY } from "@/routes/agent-hub";
-import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
+import { AGENT_SLUGS, isAgentSlug } from "@/lib/constants/agentSlugs";
 
 // Single source of truth for "send a message to an agent and handle the
 // reply" — extracted out of the Dashboard ChatPanel so the /jarvis matrix
-// console (MatrixChatConsole) can talk to the exact same backend/orchestrator
+// console (MatrixChatConsole) can talk to the exact same J.A.R.V.I.S. backend
 // without re-implementing conversation sync, active-agent tracking, UI-action
 // dispatch, or error handling. Consumers differ only in how they RENDER
 // `messages`/`typing`/`activeAgent` — never in how a message actually gets
@@ -50,7 +49,12 @@ function readActiveAgent(): ActiveAgent {
     const raw = window.localStorage.getItem(ACTIVE_AGENT_LS_KEY);
     if (!raw) return DEFAULT_AGENT;
     const parsed = JSON.parse(raw) as ActiveAgent;
-    return parsed.slug && parsed.name ? parsed : DEFAULT_AGENT;
+    if (isAgentSlug(parsed.slug) && parsed.name) return parsed;
+    // Zapamiętany agent nie istnieje (np. slug sprzed zmiany nazw agentów
+    // w sierpniu) — wysłanie do niego kończyło się „Agent not found”.
+    // Wracamy do J.A.R.V.I.S. i nadpisujemy wpis, żeby nie wracał.
+    window.localStorage.setItem(ACTIVE_AGENT_LS_KEY, JSON.stringify(DEFAULT_AGENT));
+    return DEFAULT_AGENT;
   } catch {
     return DEFAULT_AGENT;
   }
@@ -116,7 +120,6 @@ export function useAgentChatChannel(): AgentChatChannel {
   const fetchActiveAgentSlug = useServerFn(getActiveAgentSlug);
   const importHistory = useServerFn(importChatHistory);
   const fetchKeyStatus = useServerFn(getGeminiKeyStatus);
-  const fetchSettings = useServerFn(getUserSettings);
   const enrichImages = useServerFn(enrichDocumentImagesFn);
   const runDocumentJob = useServerFn(runDocumentJobFn);
 
@@ -190,7 +193,7 @@ export function useAgentChatChannel(): AgentChatChannel {
     let cancelled = false;
     fetchActiveAgentSlug()
       .then((res) => {
-        if (cancelled || !res.agentSlug) return;
+        if (cancelled || !isAgentSlug(res.agentSlug)) return;
         setActiveAgent((prev) =>
           prev.slug === res.agentSlug ? prev : { slug: res.agentSlug, name: res.agentSlug },
         );
@@ -215,16 +218,15 @@ export function useAgentChatChannel(): AgentChatChannel {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agents]);
 
-  // Flagi "klucz Gemini jest na serwerze" / "routing przez serwer" żyją w
-  // localStorage i dotąd ustawiała je tylko strona Ustawień. Na nowym
-  // urządzeniu albo w incognito czat szedł więc ścieżką lokalną i nic nie
-  // trafiało do bazy. Odświeżamy je z konta przy każdym montowaniu.
+  // Flaga „klucz Gemini jest na serwerze” (dla komunikatu „rdzeń offline”)
+  // odświeżana z konta przy każdym montowaniu. Czat zawsze idzie przez
+  // serwer (plan naprawczy, etap 5, A8).
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchKeyStatus(), fetchSettings()])
-      .then(([status, settings]) => {
+    fetchKeyStatus()
+      .then((status) => {
         if (cancelled) return;
-        setServerRuntimePreference({ routing: settings.chatRouting, keyLinked: status.linked });
+        setServerKeyLinked(status.linked);
       })
       .catch(() => {
         /* offline — zostają dotychczasowe flagi */
@@ -232,7 +234,7 @@ export function useAgentChatChannel(): AgentChatChannel {
     return () => {
       cancelled = true;
     };
-  }, [fetchKeyStatus, fetchSettings]);
+  }, [fetchKeyStatus]);
 
   // Za każdym razem, gdy zmienia się aktywny agent, wczytaj JEGO wątek z
   // serwera — to jest właściwa synchronizacja historii między urządzeniami.
@@ -298,8 +300,10 @@ export function useAgentChatChannel(): AgentChatChannel {
       setTyping(true);
       try {
         if (hasServerKey()) {
-          emitChat("user", text);
+          // Historia PRZED dopisaniem bieżącej wiadomości — inaczej model
+          // dostaje tę samą prośbę dwa razy (historia + input).
           const history = getRecentHistory(3);
+          emitChat("user", text);
           setAgentBusy(true);
           try {
             const result = await runAgentFn({

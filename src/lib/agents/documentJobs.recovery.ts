@@ -42,6 +42,15 @@ export const STALE_AFTER_MS = 15 * 60_000;
  */
 export const MAX_ATTEMPTS = 3;
 
+/**
+ * Po jakim czasie zadanie `queued`, którego nikt nie wystartował, podejmuje
+ * kolejka w tle (plan naprawczy, etap 6). Przeglądarka startuje zadanie
+ * zaraz po turze czatu, więc `queued` starsze niż półtorej minuty znaczy, że
+ * start nie doszedł (uśpiona karta) — nie ma sensu czekać pełnych 15 minut.
+ * Ta sama wartość stoi w SQL (dispatch_document_jobs) — zmieniać razem.
+ */
+export const QUEUED_GRACE_MS = 90_000;
+
 export type JobSnapshot = {
   status: string;
   /** Znacznik ostatniej zmiany wiersza — nasz jedyny puls zadania. */
@@ -62,7 +71,8 @@ export function classifyJob(job: JobSnapshot, now: Date = new Date()): JobVerdic
   if (job.status !== "running" && job.status !== "queued") return "healthy";
 
   const age = now.getTime() - Date.parse(job.updatedAt);
-  if (!Number.isFinite(age) || age < STALE_AFTER_MS) return "healthy";
+  const threshold = job.status === "queued" ? QUEUED_GRACE_MS : STALE_AFTER_MS;
+  if (!Number.isFinite(age) || age < threshold) return "healthy";
 
   return job.attempts >= MAX_ATTEMPTS ? "exhausted" : "resumable";
 }
@@ -72,7 +82,7 @@ export function exhaustedReason(attempts: number): string {
   return (
     `przerwane ${attempts} ${attempts === 1 ? "raz" : "razy"} bez dokończenia — ` +
     "najczęstsza przyczyna to zamknięcie lub uśpienie aplikacji w trakcie " +
-    "generowania. Poproś o ten dokument jeszcze raz i zostaw aplikację otwartą, " +
-    "albo poczekaj na nocny przebieg, który dokańcza zadania w tle."
+    "generowania, a dokończenie w tle też się nie udało. Poproś o ten dokument " +
+    "jeszcze raz — jeśli powtórzy się, zajrzyj do Logów systemu."
   );
 }

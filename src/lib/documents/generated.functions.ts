@@ -13,6 +13,8 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { logServerError, logServerWarn } from "@/lib/system/logServerError";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
+import { ENRICH_CLAIM_TTL_MS } from "./enrichQueue";
 
 // Short-lived on purpose: these are re-minted per preview/download click, so
 // there's no reason to hand out a week-long URL the way the chat link does.
@@ -91,8 +93,8 @@ export async function enrichGeneratedFileImages(
   fileId: string,
 ): Promise<EnrichResult> {
   const { generateDocImages, buildDocument, CONTENT_TYPES } =
-    await import("@/lib/agents/producer.server");
-  type ProducerDocSpec = import("@/lib/agents/producer.server").ProducerSpec;
+    await import("@/lib/agents/forgeDocument.server");
+  type ForgeDocSpec = import("@/lib/agents/forgeDocument.server").ForgeSpec;
 
   const { data: row, error } = await supabase
     .from("generated_files")
@@ -104,13 +106,28 @@ export async function enrichGeneratedFileImages(
   if (row.image_status !== "pending") return { ok: false, reason: "not_pending" };
   if (!row.spec) return { ok: false, reason: "no_spec" };
 
-  const spec = row.spec as unknown as ProducerDocSpec;
-
-  const { data: secret } = await supabase
-    .from("user_secrets")
-    .select("gemini_api_key, google_cse_api_key, google_cse_cx")
-    .eq("owner_id", userId)
+  // Przejęcie to JEDEN warunkowy UPDATE (plan naprawczy, etap 6): grafiki
+  // dogrywa przeglądarka i kolejka w tle, więc dwa przebiegi mogą ruszyć
+  // naraz. Przechodzi tylko pierwszy; znacznik starszy niż ENRICH_CLAIM_TTL_MS
+  // znaczy, że poprzedni przebieg zginął (uśpiona karta) i wolno podjąć znowu.
+  const now = new Date();
+  const staleBefore = new Date(now.getTime() - ENRICH_CLAIM_TTL_MS).toISOString();
+  const { data: claimed } = await supabase
+    .from("generated_files")
+    .update({ image_claimed_at: now.toISOString() })
+    .eq("id", row.id)
+    .eq("image_status", "pending")
+    .or(`image_claimed_at.is.null,image_claimed_at.lt.${staleBefore}`)
+    .select("id")
     .maybeSingle();
+  if (!claimed) return { ok: false, reason: "not_pending" };
+
+  const spec = row.spec as unknown as ForgeDocSpec;
+
+  const { data: secret } = await readOwnerSecrets(
+    userId,
+    "gemini_api_key, google_cse_api_key, google_cse_cx",
+  );
   const apiKey = secret?.gemini_api_key?.trim();
   if (!apiKey) {
     await supabase.from("generated_files").update({ image_status: "failed" }).eq("id", row.id);
@@ -128,6 +145,7 @@ export async function enrichGeneratedFileImages(
         file_id: row.id,
       } as Json),
     googleCse,
+    { db: supabase, ownerId: userId, module: "documents", purpose: "image_search" },
   );
   const imageCount = (images.hero ? 1 : 0) + images.sections.size;
 

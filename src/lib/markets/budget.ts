@@ -11,6 +11,7 @@
 // Brak budżetu = model nie jest wołany, działa sama arytmetyka. Nigdy nie
 // przekraczamy limitu „na kredyt”.
 
+import type { LedgerContext } from "@/lib/ai/llm/ledger";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -89,6 +90,11 @@ export type ModelBudget = {
     purpose: BudgetPurpose,
     usage: { model: string | null; tokensIn: number; tokensOut: number; estimated: boolean },
   ): Promise<void>;
+  /**
+   * Kontekst księgi llm_usage (etap 2) — klient modeli zapisuje tam każde
+   * wywołanie RÓWNOLEGLE do market_model_usage. Brak = bez zapisu (testy).
+   */
+  ledger?(purpose: BudgetPurpose): LedgerContext;
 };
 
 /** Bez limitu — testy i miejsca bez bazy. */
@@ -121,6 +127,7 @@ export function createModelBudget(
     return budgetState(data ?? [], day);
   };
   return {
+    ledger: (purpose) => ({ db, ownerId, module: "markets", purpose }),
     async check(purpose, estimate) {
       return denyReason(await load(), purpose, estimate);
     },

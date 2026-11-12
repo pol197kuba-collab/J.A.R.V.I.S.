@@ -364,7 +364,7 @@ Strażnik (as already tested) and watch this widget while it happens.
 Live-tested after merge — worked, but three things came back from real
 usage:
 
-1. **"CLASSIFIER NO FUNCTION CALL" chip.** `runOrchestrator`'s internal
+1. **"CLASSIFIER NO FUNCTION CALL" chip.** `runAgentLoop`'s internal
    fallback UI-action classifier (a second Gemini call on every turn that
    doesn't already call `perform_ui_action`) logs its own outcome into the
    same `tool_calls` array as real tool invocations. The tree rendered
@@ -424,7 +424,7 @@ tools land later.
 
 Real architectural constraint found before writing anything: `agent_runs.
 output.tool_calls` was written exactly once, in bulk, at the very end of
-`runOrchestrator` — so the tree could show "running" (pulsing) but
+`runAgentLoop` — so the tree could show "running" (pulsing) but
 literally nothing about what was happening until the whole run finished.
 "What is it doing right now" was structurally impossible with the old
 write pattern, not just a missing frontend feature.
@@ -1467,7 +1467,7 @@ made at build time, as this section left open:
 filename?, sections[])`; the input shape (title + sections of
   heading/content/bullets) turned out identical across all three formats,
   so per-format tools would have been three copies of the same schema.
-- **Builders** in `src/lib/agents/producer.server.ts` (pure functions,
+- **Builders** in `src/lib/agents/forgeDocument.server.ts` (pure functions,
   unit-tested — 9 new tests): pptxgenjs (16:9, dark title slide + accent
   bar; one slide per section), docx (Title/Heading1 + bullets), pdf-lib
   (A4, manual word-wrap + pagination). All pure JS, dynamically imported
@@ -1801,7 +1801,7 @@ The AI image model stayed chronically 503-throttled (decks kept coming
 out "grafiki niedostępne"), so real photos are now the preferred, reliable
 source. generate_document accepts `image_query` / `hero_image_query`
 (English search phrases for a real thing); the async enrichment pass
-(producer.server.ts `fetchWebImage`) looks them up on **Openverse**
+(forgeDocument.server.ts `fetchWebImage`) looks them up on **Openverse**
 (keyless Creative-Commons image API — verified live: 240 hits for "Samsung
 Galaxy smartphone", real Flickr JPEGs), fetches the photo (https-only, 5MB
 cap, content-type checked), and embeds it. AI-prompt fields

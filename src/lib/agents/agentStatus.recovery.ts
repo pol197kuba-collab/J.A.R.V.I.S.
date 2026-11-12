@@ -6,7 +6,7 @@
 // tak wyglądał WIERSZ, którego nikt nie posprzątał.
 //
 // MECHANIZM, DOKŁADNIE TEN SAM CO PRZY ZADANIACH DOKUMENTOWYCH, TYLKO INNA
-// TABELA. `runOrchestrator` na starcie ustawia `agents.status = 'busy'`,
+// TABELA. `runAgentLoop` na starcie ustawia `agents.status = 'busy'`,
 // a zeruje to w ścieżce sukcesu albo w `catch`. Obie leżą WEWNĄTRZ tego
 // samego wywołania serwera. Gdy przeglądarka zostanie uśpiona, wywołanie
 // ginie w połowie — i nie wykonuje się ani jedna, ani druga. Wiersz zostaje

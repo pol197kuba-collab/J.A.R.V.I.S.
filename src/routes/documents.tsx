@@ -189,7 +189,7 @@ function DocumentsPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <HudPanel index={0} title="ANALITYK // DOCUMENT ARCHIVE" className="p-5">
+      <HudPanel index={0} title="M.E.T.R.I.C. // DOCUMENT ARCHIVE" className="p-5">
         <h1 className="font-display mt-2 text-3xl font-bold tracking-[0.18em]">DOCUMENTS</h1>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <input
@@ -292,7 +292,7 @@ function DocumentsPage() {
         </div>
       </HudPanel>
 
-      <HudPanel index={2} title="PRODUCER // GENERATED" className="overflow-hidden">
+      <HudPanel index={2} title="F.O.R.G.E. // GENERATED" className="overflow-hidden">
         <div className="flex items-center justify-between px-4 pt-3">
           <h2 className="font-display text-sm font-bold tracking-[0.18em] text-primary">
             WYGENEROWANE PLIKI

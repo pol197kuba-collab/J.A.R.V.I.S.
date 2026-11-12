@@ -11,8 +11,9 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { DEFAULT_GEMINI_MODEL } from "@/lib/agents/models";
 import type { Json } from "@/integrations/supabase/types";
-
-const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+import { callGemini } from "@/lib/ai/llm/gemini";
+import type { GeminiUsageMetadata } from "@/lib/ai/llm/usage";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 // ~1.5MB of raw base64 ≈ a 1024px JPEG with plenty of headroom. The client
 // downscales before sending; this cap is the server-side backstop so a
@@ -55,11 +56,7 @@ export const analyzeScan = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const startedAt = Date.now();
 
-    const { data: secret } = await supabase
-      .from("user_secrets")
-      .select("gemini_api_key")
-      .eq("owner_id", userId)
-      .maybeSingle();
+    const { data: secret } = await readOwnerSecrets(userId, "gemini_api_key");
     const apiKey = secret?.gemini_api_key?.trim();
     if (!apiKey) {
       throw new Error(
@@ -80,60 +77,55 @@ export const analyzeScan = createServerFn({ method: "POST" })
     const model = DEFAULT_GEMINI_MODEL;
     const language = data.language?.trim() || "pl-PL";
 
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 25_000);
-    let res: Response;
-    try {
-      res = await fetch(
-        `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-        {
-          method: "POST",
-          signal: ctrl.signal,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: scanSystemPrompt(language) }] },
-            generationConfig: {
-              temperature: 0.5,
-              // gemini-2.5-flash is a "thinking" model: reasoning tokens count
-              // against maxOutputTokens. Describing a frame needs no chain of
-              // thought, so disable thinking (budget 0) — otherwise it ate most
-              // of the budget and the visible answer was truncated mid-sentence
-              // (finishReason MAX_TOKENS). Headroom bumped too as a backstop.
-              thinkingConfig: { thinkingBudget: 0 },
-              maxOutputTokens: 1024,
-            },
-            contents: [
-              {
-                role: "user",
-                parts: [
-                  { inlineData: { mimeType: data.mimeType, data: data.imageBase64 } },
-                  { text: "Analyse this frame from my optical sensor." },
-                ],
-              },
-            ],
-          }),
-        },
-      );
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      await logEvent("error", `scan failed: ${msg}`);
-      throw new Error("Analiza obrazu nie powiodła się — problem z połączeniem do rdzenia AI.");
-    } finally {
-      clearTimeout(timer);
-    }
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      await logEvent("error", `scan HTTP ${res.status}`, { body: body.slice(0, 300) } as Json);
-      throw new Error(`Analiza obrazu odrzucona przez rdzeń AI (HTTP ${res.status}).`);
-    }
-
-    const payload = (await res.json()) as {
+    const res = await callGemini<{
       candidates?: Array<{
         finishReason?: string;
         content?: { parts?: Array<{ text?: string }> };
       }>;
-    };
+      usageMetadata?: GeminiUsageMetadata;
+    }>({
+      apiKey,
+      model: model,
+      body: {
+        systemInstruction: { parts: [{ text: scanSystemPrompt(language) }] },
+        generationConfig: {
+          temperature: 0.5,
+          // gemini-2.5-flash is a "thinking" model: reasoning tokens count
+          // against maxOutputTokens. Describing a frame needs no chain of
+          // thought, so disable thinking (budget 0) — otherwise it ate most
+          // of the budget and the visible answer was truncated mid-sentence
+          // (finishReason MAX_TOKENS). Headroom bumped too as a backstop.
+          thinkingConfig: { thinkingBudget: 0 },
+          maxOutputTokens: 1024,
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { inlineData: { mimeType: data.mimeType, data: data.imageBase64 } },
+              { text: "Analyse this frame from my optical sensor." },
+            ],
+          },
+        ],
+      },
+      timeoutMs: 25_000,
+      retries: 1,
+      ledger: { db: supabase, ownerId: userId, module: "vision", purpose: "scan_analyze" },
+    });
+    if (!res.ok && res.status === null) {
+      const err = new Error(res.error ?? res.message);
+      const msg = err instanceof Error ? err.message : String(err);
+      await logEvent("error", `scan failed: ${msg}`);
+      throw new Error("Analiza obrazu nie powiodła się — problem z połączeniem do rdzenia AI.");
+    }
+
+    if (!res.ok) {
+      const body = res.bodyText;
+      await logEvent("error", `scan HTTP ${res.status}`, { body: body.slice(0, 300) } as Json);
+      throw new Error(`Analiza obrazu odrzucona przez rdzeń AI (HTTP ${res.status}).`);
+    }
+
+    const payload = res.data;
     const candidate = payload.candidates?.[0];
     const description = (candidate?.content?.parts ?? [])
       .flatMap((p) => (p.text ? [p.text] : []))

@@ -208,7 +208,7 @@ export function iconForTool(name: string): string {
   if (/search|fetch|lookup|find/.test(name)) return "search";
   if (/outlook|market|fuel|stats|metric|price/.test(name)) return "chart";
   if (/generate|create_project|forge|build|start_dev/.test(name)) return "hammer";
-  if (/guardian|scan|check|security/.test(name)) return "shield";
+  if (/shield|scan|check|security/.test(name)) return "shield";
   if (/recall|remember|note/.test(name)) return "bulb";
   if (/task|order|brief/.test(name)) return "pin";
   if (/document|read|list|open|file/.test(name)) return "doc";

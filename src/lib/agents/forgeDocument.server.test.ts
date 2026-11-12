@@ -22,7 +22,7 @@ import {
   type DocImages,
   type DeckSpec,
   type DocSpec,
-} from "./producer.server";
+} from "./forgeDocument.server";
 import { vi, afterEach } from "vitest";
 
 // 1x1 opaque PNG — enough for every embed path (pptx data-URI, docx

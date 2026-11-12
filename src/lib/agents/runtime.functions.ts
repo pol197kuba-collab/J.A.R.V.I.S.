@@ -1,6 +1,6 @@
 // Agent Runtime — server-side functions.
 //
-// Zgodnie z CODEX.md: to jest fundament pod Orchestratora. Na tym etapie
+// Zgodnie z CODEX.md: to jest fundament pod rdzeń J.A.R.V.I.S.. Na tym etapie
 // obsługujemy jednego agenta ("jarvis") i pojedynczy krok wywołania
 // LLM (bez multi-step tool loopu). Pamięć krótkoterminowa przekazywana jest
 // w polu `history`, żeby nie budować jeszcze konwersacji w DB.
@@ -21,6 +21,9 @@ import {
   toConversationMessage,
   type ConversationMessage,
 } from "@/lib/ai/chatHistory";
+import { HISTORY_FETCH_LIMIT, trimHistory, withoutCurrentInput, type HistoryTurn } from "./history";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
+import { clearOwnerSecrets, writeOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 // Accept any Gemini model id — the enum used to be a small whitelist which
 // made every new Gemini release require a code change. The Google API itself
@@ -87,6 +90,9 @@ export type AgentRunResult = {
    *  (success or failure) arrives later as a row in public.notifications,
    *  not in this turn's reply. */
   documentJob?: { id: string };
+  /** Run (albo jego delegat) widział obcą treść — strona, dokument, plik.
+   *  Rodzic delegacji traktuje wtedy odpowiedź jak obcą treść (A2b). */
+  untrustedContent?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -190,11 +196,7 @@ export const getGeminiKeyStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { data, error } = await supabase
-      .from("user_secrets")
-      .select("gemini_api_key")
-      .eq("owner_id", userId)
-      .maybeSingle();
+    const { data, error } = await readOwnerSecrets(userId, "gemini_api_key");
     if (error) throw new Error(error.message);
     const key = data?.gemini_api_key?.trim() ?? "";
     return {
@@ -211,9 +213,7 @@ export const saveGeminiKey = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => SaveKeyInput.parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase
-      .from("user_secrets")
-      .upsert({ owner_id: userId, gemini_api_key: data.key.trim() }, { onConflict: "owner_id" });
+    const { error } = await writeOwnerSecrets(userId, { gemini_api_key: data.key.trim() });
     if (error) {
       await logServerError(supabase, userId, "settings.gemini_key", error);
       throw new Error(error.message);
@@ -228,10 +228,7 @@ export const deleteGeminiKey = createServerFn({ method: "POST" })
     // Clears only this column, not the whole row — user_secrets now also
     // holds groq_api_key, and a full row delete would silently wipe that
     // too even though the user only asked to clear their Gemini key.
-    const { error } = await supabase
-      .from("user_secrets")
-      .update({ gemini_api_key: null })
-      .eq("owner_id", userId);
+    const { error } = await clearOwnerSecrets(userId, ["gemini_api_key"]);
     if (error) {
       await logServerError(supabase, userId, "settings.gemini_key", error);
       throw new Error(error.message);
@@ -247,11 +244,7 @@ export const getGroqKeyStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { data, error } = await supabase
-      .from("user_secrets")
-      .select("groq_api_key")
-      .eq("owner_id", userId)
-      .maybeSingle();
+    const { data, error } = await readOwnerSecrets(userId, "groq_api_key");
     if (error) throw new Error(error.message);
     const key = data?.groq_api_key?.trim() ?? "";
     return {
@@ -265,9 +258,7 @@ export const saveGroqKey = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => SaveKeyInput.parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase
-      .from("user_secrets")
-      .upsert({ owner_id: userId, groq_api_key: data.key.trim() }, { onConflict: "owner_id" });
+    const { error } = await writeOwnerSecrets(userId, { groq_api_key: data.key.trim() });
     if (error) {
       await logServerError(supabase, userId, "settings.groq_key", error);
       throw new Error(error.message);
@@ -279,10 +270,7 @@ export const deleteGroqKey = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase
-      .from("user_secrets")
-      .update({ groq_api_key: null })
-      .eq("owner_id", userId);
+    const { error } = await clearOwnerSecrets(userId, ["groq_api_key"]);
     if (error) {
       await logServerError(supabase, userId, "settings.groq_key", error);
       throw new Error(error.message);
@@ -299,11 +287,7 @@ export const getTomtomKeyStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { data, error } = await supabase
-      .from("user_secrets")
-      .select("tomtom_api_key")
-      .eq("owner_id", userId)
-      .maybeSingle();
+    const { data, error } = await readOwnerSecrets(userId, "tomtom_api_key");
     if (error) throw new Error(error.message);
     const key = data?.tomtom_api_key?.trim() ?? "";
     return {
@@ -317,9 +301,7 @@ export const saveTomtomKey = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => SaveKeyInput.parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase
-      .from("user_secrets")
-      .upsert({ owner_id: userId, tomtom_api_key: data.key.trim() }, { onConflict: "owner_id" });
+    const { error } = await writeOwnerSecrets(userId, { tomtom_api_key: data.key.trim() });
     if (error) {
       await logServerError(supabase, userId, "settings.tomtom_key", error);
       throw new Error(error.message);
@@ -331,10 +313,7 @@ export const deleteTomtomKey = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase
-      .from("user_secrets")
-      .update({ tomtom_api_key: null })
-      .eq("owner_id", userId);
+    const { error } = await clearOwnerSecrets(userId, ["tomtom_api_key"]);
     if (error) {
       await logServerError(supabase, userId, "settings.tomtom_key", error);
       throw new Error(error.message);
@@ -351,11 +330,7 @@ export const getAnthropicKeyStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { data, error } = await supabase
-      .from("user_secrets")
-      .select("anthropic_api_key")
-      .eq("owner_id", userId)
-      .maybeSingle();
+    const { data, error } = await readOwnerSecrets(userId, "anthropic_api_key");
     if (error) throw new Error(error.message);
     const key = data?.anthropic_api_key?.trim() ?? "";
     return {
@@ -369,9 +344,7 @@ export const saveAnthropicKey = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => SaveKeyInput.parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase
-      .from("user_secrets")
-      .upsert({ owner_id: userId, anthropic_api_key: data.key.trim() }, { onConflict: "owner_id" });
+    const { error } = await writeOwnerSecrets(userId, { anthropic_api_key: data.key.trim() });
     if (error) {
       await logServerError(supabase, userId, "settings.anthropic_key", error);
       throw new Error(error.message);
@@ -383,10 +356,7 @@ export const deleteAnthropicKey = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase
-      .from("user_secrets")
-      .update({ anthropic_api_key: null })
-      .eq("owner_id", userId);
+    const { error } = await clearOwnerSecrets(userId, ["anthropic_api_key"]);
     if (error) {
       await logServerError(supabase, userId, "settings.anthropic_key", error);
       throw new Error(error.message);
@@ -447,11 +417,7 @@ export const getGoogleCseStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { data, error } = await supabase
-      .from("user_secrets")
-      .select("google_cse_api_key, google_cse_cx")
-      .eq("owner_id", userId)
-      .maybeSingle();
+    const { data, error } = await readOwnerSecrets(userId, "google_cse_api_key, google_cse_cx");
     if (error) throw new Error(error.message);
     const key = data?.google_cse_api_key?.trim() ?? "";
     const cx = data?.google_cse_cx?.trim() ?? "";
@@ -472,14 +438,10 @@ export const saveGoogleCseCredentials = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => SaveGoogleCseInput.parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase.from("user_secrets").upsert(
-      {
-        owner_id: userId,
-        google_cse_api_key: data.key.trim(),
-        google_cse_cx: data.cx.trim(),
-      },
-      { onConflict: "owner_id" },
-    );
+    const { error } = await writeOwnerSecrets(userId, {
+      google_cse_api_key: data.key.trim(),
+      google_cse_cx: data.cx.trim(),
+    });
     if (error) {
       await logServerError(supabase, userId, "settings.google_cse", error);
       throw new Error(error.message);
@@ -491,10 +453,7 @@ export const deleteGoogleCseCredentials = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase
-      .from("user_secrets")
-      .update({ google_cse_api_key: null, google_cse_cx: null })
-      .eq("owner_id", userId);
+    const { error } = await clearOwnerSecrets(userId, ["google_cse_api_key", "google_cse_cx"]);
     if (error) {
       await logServerError(supabase, userId, "settings.google_cse", error);
       throw new Error(error.message);
@@ -511,11 +470,7 @@ export const getGithubTokenStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { data, error } = await supabase
-      .from("user_secrets")
-      .select("github_token")
-      .eq("owner_id", userId)
-      .maybeSingle();
+    const { data, error } = await readOwnerSecrets(userId, "github_token");
     if (error) throw new Error(error.message);
     const key = data?.github_token?.trim() ?? "";
     return {
@@ -529,9 +484,7 @@ export const saveGithubToken = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => SaveKeyInput.parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase
-      .from("user_secrets")
-      .upsert({ owner_id: userId, github_token: data.key.trim() }, { onConflict: "owner_id" });
+    const { error } = await writeOwnerSecrets(userId, { github_token: data.key.trim() });
     if (error) {
       await logServerError(supabase, userId, "settings.github_token", error);
       throw new Error(error.message);
@@ -543,10 +496,7 @@ export const deleteGithubToken = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { error } = await supabase
-      .from("user_secrets")
-      .update({ github_token: null })
-      .eq("owner_id", userId);
+    const { error } = await clearOwnerSecrets(userId, ["github_token"]);
     if (error) {
       await logServerError(supabase, userId, "settings.github_token", error);
       throw new Error(error.message);
@@ -890,14 +840,63 @@ export const runAgent = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<AgentRunResult> => {
     const { supabase, userId } = context;
 
-    const { runOrchestrator } = await import("./runtime.server");
-    return runOrchestrator({
+    // Etap 3 (A10): w istniejącym wątku historia pochodzi z bazy, nie od
+    // klienta — klient wysyłał do 30 wiadomości po 8000 znaków przy każdej
+    // turze. Pole `history` zostaje tylko dla rozmowy bez wątku. W obu
+    // przypadkach przycięcie do budżetu tokenów (najnowsze w całości).
+    let history: HistoryTurn[] = data.history ?? [];
+
+    // Bez conversationId (wiadomość wysłana, zanim czat wczytał wątek; głos;
+    // przełączenie agenta) dopisujemy do OSTATNIEGO wątku agenta — tego
+    // samego, który pokazuje getActiveConversation. Wcześniej każda taka
+    // wiadomość zakładała nowy wątek: czat pokazywał potem tylko jego,
+    // a stara rozmowa znikała z widoku. Nowy wątek tylko, gdy żadnego nie ma.
+    let conversationId = data.conversationId ?? null;
+    if (!conversationId) {
+      const { data: agentRow } = await supabase
+        .from("agents")
+        .select("id")
+        .eq("owner_id", userId)
+        .eq("slug", data.agentSlug)
+        .maybeSingle();
+      if (agentRow) {
+        const { data: conv } = await supabase
+          .from("conversations")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("agent_id", agentRow.id)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        conversationId = conv?.id ?? null;
+      }
+    }
+
+    if (conversationId) {
+      const { data: rows } = await supabase
+        .from("messages")
+        .select("role, content")
+        .eq("conversation_id", conversationId)
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(HISTORY_FETCH_LIMIT);
+      history = (rows ?? [])
+        .reverse()
+        .flatMap((r) =>
+          (r.role === "user" || r.role === "jarvis") && typeof r.content === "string"
+            ? [{ role: r.role, text: r.content } as HistoryTurn]
+            : [],
+        );
+    }
+
+    const { runAgentLoop } = await import("./runtime.server");
+    return runAgentLoop({
       supabase,
       userId,
       agentSlug: data.agentSlug,
       input: data.input,
-      history: data.history ?? [],
-      conversationId: data.conversationId ?? null,
+      history: trimHistory(withoutCurrentInput(history, data.input)),
+      conversationId,
     });
   });
 

@@ -114,7 +114,7 @@ export function BudgetPanel({ index = 0 }: { index?: number }) {
                   {formatUsd(data.spentUsd)}
                 </p>
                 <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                  w tym miesiącu · {data.runs} przebiegów
+                  w tym miesiącu · {data.runs} wywołań modeli
                   {data.limitUsd > 0 && ` · limit ${formatUsd(data.limitUsd)}`}
                 </p>
               </div>
@@ -143,8 +143,8 @@ export function BudgetPanel({ index = 0 }: { index?: number }) {
             )}
 
             <div className="mt-5 grid grid-cols-2 gap-5 @max-[520px]:grid-cols-1">
+              <SpendList title="Wg modułu" rows={data.byModule} total={data.spentUsd} />
               <SpendList title="Wg modelu" rows={data.byModel} total={data.spentUsd} />
-              <SpendList title="Wg agenta" rows={data.byAgent} total={data.spentUsd} />
             </div>
 
             {data.unpricedRuns > 0 && (
@@ -155,8 +155,8 @@ export function BudgetPanel({ index = 0 }: { index?: number }) {
                   "font-mono text-[10px] leading-relaxed text-muted-foreground",
                 )}
               >
-                {data.unpricedRuns} przebiegów bez stawki w cenniku — nie są wliczone w sumę.
-                Pominięte świadomie: policzenie ich jako zera zaniżyłoby budżet.
+                {data.unpricedRuns} wywołań bez stawki w cenniku — nie są wliczone w sumę. Pominięte
+                świadomie: policzenie ich jako zera zaniżyłoby budżet.
               </p>
             )}
 

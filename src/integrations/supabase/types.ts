@@ -1206,6 +1206,7 @@ export type Database = {
           filename: string
           format: string
           id: string
+          image_claimed_at: string | null
           image_count: number | null
           image_status: string
           preview_path: string | null
@@ -1222,6 +1223,7 @@ export type Database = {
           filename: string
           format: string
           id?: string
+          image_claimed_at?: string | null
           image_count?: number | null
           image_status?: string
           preview_path?: string | null
@@ -1238,6 +1240,7 @@ export type Database = {
           filename?: string
           format?: string
           id?: string
+          image_claimed_at?: string | null
           image_count?: number | null
           image_status?: string
           preview_path?: string | null
@@ -1307,6 +1310,68 @@ export type Database = {
           workflow?: string
         }
         Relationships: []
+      }
+      llm_usage: {
+        Row: {
+          cache_read: number
+          cache_write: number
+          cost_usd: number | null
+          created_at: string
+          estimated: boolean
+          id: string
+          model: string
+          module: string
+          owner_id: string
+          provider: string
+          purpose: string
+          run_id: string | null
+          tokens_input: number
+          tokens_output: number
+          tokens_thinking: number
+        }
+        Insert: {
+          cache_read?: number
+          cache_write?: number
+          cost_usd?: number | null
+          created_at?: string
+          estimated?: boolean
+          id?: string
+          model: string
+          module: string
+          owner_id: string
+          provider: string
+          purpose: string
+          run_id?: string | null
+          tokens_input?: number
+          tokens_output?: number
+          tokens_thinking?: number
+        }
+        Update: {
+          cache_read?: number
+          cache_write?: number
+          cost_usd?: number | null
+          created_at?: string
+          estimated?: boolean
+          id?: string
+          model?: string
+          module?: string
+          owner_id?: string
+          provider?: string
+          purpose?: string
+          run_id?: string | null
+          tokens_input?: number
+          tokens_output?: number
+          tokens_thinking?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "llm_usage_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "agent_runs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       local_jobs: {
         Row: {
@@ -1635,6 +1700,7 @@ export type Database = {
           importance: number
           key: string | null
           kind: string
+          origin: string
           source: string | null
           tags: string[]
           updated_at: string
@@ -1649,6 +1715,7 @@ export type Database = {
           importance?: number
           key?: string | null
           kind?: string
+          origin?: string
           source?: string | null
           tags?: string[]
           updated_at?: string
@@ -1663,6 +1730,7 @@ export type Database = {
           importance?: number
           key?: string | null
           kind?: string
+          origin?: string
           source?: string | null
           tags?: string[]
           updated_at?: string
@@ -2505,6 +2573,17 @@ export type Database = {
           tags: string[]
           title: string
           updated_at: string
+        }[]
+      }
+      llm_spend_by_module: {
+        Args: { p_owner: string; p_since: string }
+        Returns: {
+          calls: number
+          cost_usd: number
+          model: string
+          module: string
+          today_usd: number
+          unpriced: number
         }[]
       }
       match_memories: {

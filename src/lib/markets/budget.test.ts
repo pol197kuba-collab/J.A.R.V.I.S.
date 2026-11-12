@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { budgetState, DAILY_TOKEN_BUDGET, denyReason, warsawDay } from "./budget";
+import {
+  budgetState,
+  createModelBudget,
+  DAILY_TOKEN_BUDGET,
+  denyReason,
+  warsawDay,
+} from "./budget";
+import { makeDb } from "@/lib/agents/runtime.testkit";
 
 describe("budżet tokenów", () => {
   it("doba liczona w Warszawie", () => {
@@ -24,5 +31,19 @@ describe("budżet tokenów", () => {
       "d",
     );
     expect(denyReason(full, "forecast", 200)).toContain("budżet dzienny");
+  });
+});
+
+// Etap 2: moduł rynków pisze równolegle do księgi llm_usage.
+describe("createModelBudget — księga llm_usage", () => {
+  it("podaje kontekst księgi z modułem markets i celem budżetu", async () => {
+    const { db } = makeDb(() => undefined);
+    const budget = createModelBudget(db, "owner-1");
+    expect(budget.ledger?.("forecast")).toMatchObject({
+      db,
+      ownerId: "owner-1",
+      module: "markets",
+      purpose: "forecast",
+    });
   });
 });

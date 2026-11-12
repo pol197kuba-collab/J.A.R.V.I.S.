@@ -24,6 +24,7 @@ import { z } from "zod";
 import type { Json } from "@/integrations/supabase/types";
 import { logServerError, logServerWarn } from "@/lib/system/logServerError";
 import { CHUNK_SIZE_CHARS, CHUNK_OVERLAP_CHARS, chunkText, sanitizeFilename } from "./chunking";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 // tools.server.ts is a .server.ts module — this file is a *.functions.ts
 // file, which ships to the client bundle (see client.server.ts's own
 // comment on this). Load it dynamically inside the handler, same pattern
@@ -184,11 +185,7 @@ export const processDocumentFn = createServerFn({ method: "POST" })
       );
     }
 
-    const { data: secret } = await supabase
-      .from("user_secrets")
-      .select("gemini_api_key")
-      .eq("owner_id", userId)
-      .maybeSingle();
+    const { data: secret } = await readOwnerSecrets(userId, "gemini_api_key");
     const apiKey = secret?.gemini_api_key?.trim();
     if (!apiKey) {
       return fail("no Gemini key linked — add one in Settings to process documents");
@@ -202,7 +199,11 @@ export const processDocumentFn = createServerFn({ method: "POST" })
     for (let i = 0; i < chunks.length; i += EMBED_BATCH_SIZE) {
       const batch = chunks.slice(i, i + EMBED_BATCH_SIZE);
       const batchResults = await Promise.all(
-        batch.map((c) => embedText(c, apiKey, "RETRIEVAL_DOCUMENT")),
+        batch.map((c) =>
+          embedText(c, apiKey, "RETRIEVAL_DOCUMENT", {
+            ledger: { db: supabase, ownerId: userId, module: "documents", purpose: "embed" },
+          }),
+        ),
       );
       embeddings.push(...batchResults);
     }

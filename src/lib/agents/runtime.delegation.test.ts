@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
-import { runOrchestrator } from "./runtime.server";
+import { runAgentLoop } from "./runtime.server";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
+import { testSecretsDb } from "@/test/secretsDb";
 
 // Regression tests for UI control leaking into delegated sub-runs.
 //
@@ -23,7 +24,7 @@ type CannedResponse = { data: unknown; error: { message: string } | null };
 // one repeats (covers repeated event-log inserts and run updates).
 function makeSupabaseStub(responses: Record<string, CannedResponse[]>) {
   const counts: Record<string, number> = {};
-  return {
+  const stub = {
     from(table: string) {
       const list = responses[table] ?? [{ data: null, error: null }];
       const idx = Math.min(counts[table] ?? 0, list.length - 1);
@@ -42,6 +43,9 @@ function makeSupabaseStub(responses: Record<string, CannedResponse[]>) {
       return proxy;
     },
   } as unknown as SupabaseClient<Database>;
+  // Etap 5 (A5): user_secrets czyta klient service role — w testach ta sama atrapa.
+  testSecretsDb.current = stub;
+  return stub;
 }
 
 const MODEL_REPLY = "Szkic kampanii gotowy, Panie Sławiński.";
@@ -87,12 +91,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("runOrchestrator — delegated sub-runs get no UI control", () => {
+describe("runAgentLoop — delegated sub-runs get no UI control", () => {
   it("delegated run: no perform_ui_action declaration, no UI prompt block, no classifier pass", async () => {
     const fetchMock = makeGeminiFetchMock();
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: makeSupabaseStub(baseResponses()),
       userId: "user-1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -120,11 +124,13 @@ describe("runOrchestrator — delegated sub-runs get no UI control", () => {
     const fetchMock = makeGeminiFetchMock();
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: makeSupabaseStub(baseResponses()),
       userId: "user-1",
       agentSlug: AGENT_SLUGS.HERALD,
-      input: "Przygotuj tekst kampanii dla pulpitu klienta.",
+      // Etap 3: klasyfikator rusza tylko dla wypowiedzi wyglądających na
+      // polecenie UI — stąd polecenie nawigacji zamiast prośby o treść.
+      input: "pokaż mi pulpit",
       history: [],
     });
 

@@ -27,9 +27,13 @@ import { notifyOwner } from "@/lib/notifications/notify.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import type { AgentRunResult } from "./runtime.functions";
-import type { OrchestratorInput } from "./runtime.server";
+import type { AgentLoopInput } from "./runtime.server";
 import { blocksOf } from "./docSpec";
-import type { ProducerSpec } from "./producer.server";
+import type { ForgeSpec } from "./forgeDocument.server";
+import { callGemini } from "@/lib/ai/llm/gemini";
+import type { LedgerContext } from "@/lib/ai/llm/ledger";
+import type { GeminiUsageMetadata } from "@/lib/ai/llm/usage";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 const RunInput = z.object({ jobId: z.string().uuid() });
 
@@ -44,12 +48,12 @@ export type RunDocumentJobResult = { ok: true } | { ok: false; reason: string };
 const AGENT_RETRY_ATTEMPTS = 2;
 const AGENT_RETRY_BACKOFF_MS = 2000;
 
-async function runOrchestratorWithRetry(args: OrchestratorInput): Promise<AgentRunResult> {
-  const { runOrchestrator } = await import("./runtime.server");
+async function runAgentLoopWithRetry(args: AgentLoopInput): Promise<AgentRunResult> {
+  const { runAgentLoop } = await import("./runtime.server");
   let last: AgentRunResult | null = null;
   for (let attempt = 1; attempt <= AGENT_RETRY_ATTEMPTS; attempt++) {
     try {
-      const result = await runOrchestrator(args);
+      const result = await runAgentLoop(args);
       if (result.status === "done" && result.output.trim()) return result;
       last = result;
     } catch (err) {
@@ -117,7 +121,7 @@ type QaVerdict = { ok: boolean; reason: string };
  * Bez nich sędzia widziałby puste pozycje i mógł odrzucić poprawną
  * prezentację — a odrzucenie kosztuje ponowny przebieg Forge'a.
  */
-export function buildDigest(spec: ProducerSpec): string {
+export function buildDigest(spec: ForgeSpec): string {
   const lines = [`Tytuł: ${spec.title}`];
   if (spec.subtitle) lines.push(`Podtytuł: ${spec.subtitle}`);
   for (const [i, block] of blocksOf(spec).entries()) {
@@ -140,44 +144,42 @@ export function buildDigest(spec: ProducerSpec): string {
   return lines.join("\n").slice(0, 6000);
 }
 
-async function judgeDocument(apiKey: string, brief: string, digest: string): Promise<QaVerdict> {
+export async function judgeDocument(
+  apiKey: string,
+  brief: string,
+  digest: string,
+  ledger?: LedgerContext,
+): Promise<QaVerdict> {
   const prompt =
     `ZADANIE UŻYTKOWNIKA:\n${brief}\n\n` +
     `TREŚĆ WYBUDOWANEGO DOKUMENTU (nagłówki + skrót treści każdej sekcji):\n${digest}\n\n` +
     `Czy ten dokument realnie i wystarczająco szczegółowo spełnia zadanie użytkownika? ` +
     `Odpowiedz WYŁĄCZNIE surowym JSON: {"ok": boolean, "reason": "krótkie uzasadnienie po polsku, max 200 znaków"}.`;
   try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 15_000);
-    let res: Response;
-    try {
-      res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
-        {
-          method: "POST",
-          signal: ctrl.signal,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.2,
-              maxOutputTokens: 150,
-              responseMimeType: "application/json",
-            },
-          }),
+    const res = await callGemini<{
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      usageMetadata?: GeminiUsageMetadata;
+    }>({
+      apiKey,
+      model: DEFAULT_GEMINI_MODEL,
+      body: {
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 150,
+          responseMimeType: "application/json",
         },
-      );
-    } finally {
-      clearTimeout(timer);
-    }
+      },
+      timeoutMs: 15_000,
+      ledger,
+    });
+    if (!res.ok && res.status === null) throw new Error(res.error ?? res.message);
     if (!res.ok)
       return {
         ok: true,
         reason: `QA niedostępne (HTTP ${res.status}) — plik dostarczony bez weryfikacji`,
       };
-    const data = (await res.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
+    const data = res.data;
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
     const parsed = JSON.parse(text) as { ok?: unknown; reason?: unknown };
     if (typeof parsed.ok !== "boolean") throw new Error("malformed QA response");
@@ -227,20 +229,26 @@ export async function runDocumentJobCore(
     // połowie, ma zostawić po sobie ślad, że ktoś już do niego podchodził.
     // Bez tego zerwane podejście byłoby niewidzialne i ratownik wskrzeszałby
     // je w nieskończoność.
-    await supabase
+    //
+    // Przejęcie to JEDEN warunkowy UPDATE (plan naprawczy, etap 6): zadanie
+    // podnosi przeglądarka i kolejka w tle, więc dwa przebiegi mogą wystartować
+    // naraz. Warunek na status i licznik podejść przepuszcza tylko pierwszego —
+    // drugi nie dostaje wiersza i nie rusza potoku (nie płaci drugi raz).
+    const { data: claimed } = await supabase
       .from("document_jobs")
       .update({ status: "running", attempts: (job.attempts ?? 0) + 1 })
-      .eq("id", job.id);
+      .eq("id", job.id)
+      .eq("status", job.status)
+      .eq("attempts", job.attempts ?? 0)
+      .select("id")
+      .maybeSingle();
+    if (!claimed) return { ok: false, reason: "not_queued" };
 
     try {
-      const { data: secret } = await supabase
-        .from("user_secrets")
-        .select("gemini_api_key")
-        .eq("owner_id", userId)
-        .maybeSingle();
+      const { data: secret } = await readOwnerSecrets(userId, "gemini_api_key");
       const apiKey = secret?.gemini_api_key?.trim();
 
-      const insightResult = await runOrchestratorWithRetry({
+      const insightResult = await runAgentLoopWithRetry({
         supabase,
         userId,
         agentSlug: AGENT_SLUGS.INSIGHT,
@@ -272,7 +280,7 @@ export async function runDocumentJobCore(
         attachment: { filename: string; url: string } | undefined;
         digest: string | null;
       }> => {
-        const forgeResult = await runOrchestratorWithRetry({
+        const forgeResult = await runAgentLoopWithRetry({
           supabase,
           userId,
           agentSlug: AGENT_SLUGS.FORGE,
@@ -312,7 +320,7 @@ export async function runDocumentJobCore(
             .eq("id", fileId)
             .eq("user_id", userId)
             .maybeSingle();
-          if (fileRow?.spec) digest = buildDigest(fileRow.spec as unknown as ProducerSpec);
+          if (fileRow?.spec) digest = buildDigest(fileRow.spec as unknown as ForgeSpec);
         }
 
         return { forgeResult, attachment, digest };
@@ -347,7 +355,13 @@ export async function runDocumentJobCore(
       // judge it with — otherwise the file still ships (fail open), just
       // without this extra check.
       if (apiKey && digest) {
-        let verdict = await judgeDocument(apiKey, job.brief, digest);
+        const qaLedger: LedgerContext = {
+          db: supabase,
+          ownerId: userId,
+          module: "documents",
+          purpose: "qa",
+        };
+        let verdict = await judgeDocument(apiKey, job.brief, digest, qaLedger);
         if (!verdict.ok) {
           await logServerWarn(
             supabase,
@@ -369,7 +383,7 @@ export async function runDocumentJobCore(
             forgeResult = retryBuild.forgeResult;
             attachment = retryBuild.attachment;
             digest = retryBuild.digest;
-            verdict = digest ? await judgeDocument(apiKey, job.brief, digest) : verdict;
+            verdict = digest ? await judgeDocument(apiKey, job.brief, digest, qaLedger) : verdict;
           }
           if (!verdict.ok) {
             warnings.push(`może nie w pełni spełniać wymagania: ${verdict.reason}`);

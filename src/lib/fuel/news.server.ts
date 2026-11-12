@@ -5,8 +5,10 @@
 // oddzielnych żądań to kilkadziesiąt okazji do rate-limitu i kilkadziesiąt
 // razy dłuższe odświeżenie, a model i tak ocenia każdy tytuł niezależnie.
 import { heuristicImpact, type ImpactVerdict, type NewsItem } from "./news";
+import { callGemini } from "@/lib/ai/llm/gemini";
+import type { LedgerContext } from "@/lib/ai/llm/ledger";
+import type { GeminiUsageMetadata } from "@/lib/ai/llm/usage";
 
-const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const MODEL = "gemini-2.5-flash";
 const TIMEOUT_MS = 25_000;
 
@@ -64,48 +66,38 @@ function normalizeVerdict(raw: unknown, fallbackTitle: string): ImpactVerdict {
 export async function classifyNewsImpact(
   items: NewsItem[],
   apiKey: string | null,
+  ledger?: LedgerContext,
 ): Promise<ImpactVerdict[]> {
   if (items.length === 0) return [];
   if (!apiKey) return items.map((i) => heuristicImpact(i.title));
 
   const numbered = items.map((item, i) => `${i + 1}. [${item.feedTag}] ${item.title}`).join("\n");
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const response = await fetch(
-      `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(MODEL)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: "POST",
-        signal: controller.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: [{ role: "user", parts: [{ text: numbered }] }],
-          generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 4096,
-            responseMimeType: "application/json",
-          },
-        }),
+  const res = await callGemini<{
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    usageMetadata?: GeminiUsageMetadata;
+  }>({
+    apiKey,
+    model: MODEL,
+    body: {
+      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents: [{ role: "user", parts: [{ text: numbered }] }],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 4096,
+        responseMimeType: "application/json",
       },
-    );
+    },
+    timeoutMs: TIMEOUT_MS,
+    ledger,
+  });
+  if (!res.ok) return items.map((i) => heuristicImpact(i.title));
 
-    if (!response.ok) return items.map((i) => heuristicImpact(i.title));
+  const text = res.data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+  const parsed = extractJsonArray(text);
+  if (!Array.isArray(parsed)) return items.map((i) => heuristicImpact(i.title));
 
-    const payload = (await response.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    const text = payload.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-    const parsed = extractJsonArray(text);
-    if (!Array.isArray(parsed)) return items.map((i) => heuristicImpact(i.title));
-
-    return items.map((item, i) =>
-      i < parsed.length ? normalizeVerdict(parsed[i], item.title) : heuristicImpact(item.title),
-    );
-  } catch {
-    return items.map((i) => heuristicImpact(i.title));
-  } finally {
-    clearTimeout(timer);
-  }
+  return items.map((item, i) =>
+    i < parsed.length ? normalizeVerdict(parsed[i], item.title) : heuristicImpact(item.title),
+  );
 }

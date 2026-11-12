@@ -10,6 +10,7 @@ export default tseslint.config(
     ignores: [
       "dist",
       ".output",
+      "coverage",
       ".vinxi",
       // Generowane w całości przez Supabase/Lovable — regenerowane przy
       // każdej edycji w edytorze, więc żadna reguła (nie tylko

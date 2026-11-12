@@ -8,7 +8,7 @@
 //     Generative Language API accepts.
 //   * Anthropic Claude — IDs carry an "anthropic:" prefix
 //     ("anthropic:claude-opus-5"). The prefix is what routes a turn to the
-//     Anthropic adapter (providers/anthropic.ts); everything after it is
+//     Anthropic adapter (llm/anthropic.ts); everything after it is
 //     passed to the Messages API verbatim.
 //
 // A bare ID always means Gemini — that keeps every model value written
@@ -149,29 +149,23 @@ export const RECOMMENDED_AGENT_MODELS: Readonly<Record<string, string>> = {
   // Rdzeń: rozmowa, routing, delegacja do zespołu — najdłuższe łańcuchy
   // narzędziowe w całej aplikacji.
   jarvis: `${ANTHROPIC_PREFIX}claude-opus-5`,
-  orchestrator: `${ANTHROPIC_PREFIX}claude-opus-5`,
   // Research wieloźródłowy i analiza dokumentów — tu jakość wnioskowania
   // przekłada się bezpośrednio na wynik.
   insight: `${ANTHROPIC_PREFIX}claude-opus-5`,
-  researcher: `${ANTHROPIC_PREFIX}claude-opus-5`,
   metric: `${ANTHROPIC_PREFIX}claude-opus-5`,
-  analityk: `${ANTHROPIC_PREFIX}claude-opus-5`,
   // Kod i sesje deweloperskie.
   droid: `${ANTHROPIC_PREFIX}claude-opus-5`,
   // Diagnostyka logów — dużo czytania, wnioski proste.
   shield: `${ANTHROPIC_PREFIX}claude-sonnet-5`,
-  guardian: `${ANTHROPIC_PREFIX}claude-sonnet-5`,
   // Budowa plików: praca w dużej mierze mechaniczna (struktura slajdów),
   // ale treść nadal pisana przez model.
   forge: `${ANTHROPIC_PREFIX}claude-sonnet-5`,
-  producer: `${ANTHROPIC_PREFIX}claude-sonnet-5`,
   // Copy / marketing.
   herald: `${ANTHROPIC_PREFIX}claude-sonnet-5`,
-  marketer: `${ANTHROPIC_PREFIX}claude-sonnet-5`,
 };
 
 // Groq — free-tier only, used internally for the UI-action classifier pass
-// and emergency failover (see providers/groq.ts). Not user-selectable as a
+// and emergency failover (see llm/groq.ts). Not user-selectable as a
 // primary agent model, so no provider-prefix parsing is needed here; these
 // are plain Groq model IDs passed straight to their API.
 export const DEFAULT_GROQ_CLASSIFIER_MODEL = "llama-3.1-8b-instant";

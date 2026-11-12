@@ -54,3 +54,51 @@ describe("formatUsd", () => {
     expect(formatUsd(1.27)).toBe("$1,27");
   });
 });
+
+describe("cennik po etapie 2 (księga llm_usage)", () => {
+  it("zna modele, które aplikacja faktycznie woła poza czatem", () => {
+    for (const m of [
+      "gemini-2.5-flash-lite",
+      "gemini-embedding-001",
+      "llama-3.1-8b-instant",
+      "llama-3.3-70b-versatile",
+    ]) {
+      expect(hasPricing(m), m).toBe(true);
+    }
+  });
+
+  it("Groq liczy się po własnej stawce, nie po stawce Gemini (A20)", () => {
+    expect(costUsd("llama-3.3-70b-versatile", { input: 1_000_000, output: 1_000_000 })).toBeCloseTo(
+      0.59 + 0.79,
+      6,
+    );
+    expect(costUsd("llama-3.1-8b-instant", { input: 1_000_000, output: 1_000_000 })).toBeCloseTo(
+      0.05 + 0.08,
+      6,
+    );
+  });
+
+  it("embedding: płaci się tylko za wejście", () => {
+    expect(costUsd("gemini-embedding-001", { input: 1_000_000, output: 0 })).toBeCloseTo(0.15, 6);
+  });
+});
+
+describe("odczyt z cache po stawce modelu (etap 3)", () => {
+  it("Opus 5.5 i Sonnet 5.5: odczyt z cache 0,05× stawki wejściowej", () => {
+    expect(costUsd("claude-opus-5-5", { input: 0, output: 0, cacheRead: 1_000_000 })).toBeCloseTo(
+      0.2,
+      6,
+    );
+    expect(costUsd("claude-sonnet-5-5", { input: 0, output: 0, cacheRead: 1_000_000 })).toBeCloseTo(
+      0.1,
+      6,
+    );
+  });
+
+  it("pozostałe modele bez zmian: 0,1×", () => {
+    expect(costUsd("claude-opus-5", { input: 0, output: 0, cacheRead: 1_000_000 })).toBeCloseTo(
+      0.5,
+      6,
+    );
+  });
+});

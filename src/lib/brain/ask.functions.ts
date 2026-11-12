@@ -14,6 +14,9 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { logServerError } from "@/lib/system/logServerError";
 import type { Json } from "@/integrations/supabase/types";
 import type { TraceItem } from "./trace";
+import { callGemini } from "@/lib/ai/llm/gemini";
+import type { GeminiUsageMetadata } from "@/lib/ai/llm/usage";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 const ANSWER_MODEL = "gemini-flash-latest";
 const ANSWER_TIMEOUT_MS = 20_000;
@@ -46,11 +49,7 @@ export const askBrain = createServerFn({ method: "POST" })
     const question = data.question.trim();
     const { getToolByName } = await import("@/lib/agents/tools.server");
 
-    const { data: secret } = await supabase
-      .from("user_secrets")
-      .select("gemini_api_key")
-      .eq("owner_id", userId)
-      .maybeSingle();
+    const { data: secret } = await readOwnerSecrets(userId, "gemini_api_key");
     const apiKey = secret?.gemini_api_key?.trim() ?? "";
 
     const ctx = {
@@ -122,24 +121,21 @@ export const askBrain = createServerFn({ method: "POST" })
     ].join("\n");
 
     try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), ANSWER_TIMEOUT_MS);
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${ANSWER_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
-        {
-          method: "POST",
-          signal: ctrl.signal,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.3, maxOutputTokens: 600 },
-          }),
-        },
-      ).finally(() => clearTimeout(timer));
-      if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text()).slice(0, 200)}`);
-      const json = (await res.json()) as {
+      const res = await callGemini<{
         candidates?: { content?: { parts?: { text?: string }[] } }[];
-      };
+        usageMetadata?: GeminiUsageMetadata;
+      }>({
+        apiKey,
+        model: ANSWER_MODEL,
+        body: {
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.3, maxOutputTokens: 600 },
+        },
+        timeoutMs: ANSWER_TIMEOUT_MS,
+        ledger: { db: supabase, ownerId: userId, module: "brain", purpose: "ask" },
+      });
+      if (!res.ok) throw new Error(res.message.slice(0, 220));
+      const json = res.data;
       const answer = (json.candidates?.[0]?.content?.parts ?? [])
         .map((p) => p.text ?? "")
         .join("")

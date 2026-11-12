@@ -37,3 +37,45 @@ describe("isUsableGreeting", () => {
     expect(isUsableGreeting("- Witam, Panie Sławiński.")).toBe(false);
   });
 });
+
+// Etap 2: przepisanie briefingu przez model zostawia wiersz w księdze.
+describe("polishBrief — księga llm_usage", () => {
+  it("Gemini: klucz w nagłówku, wiersz z modułem brief", async () => {
+    const { vi } = await import("vitest");
+    const { makeDb } = await import("@/lib/agents/runtime.testkit");
+    const { polishBrief } = await import("./build.server");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: "POWITANIE: Dzień dobry, Panie Sławiński.\nBRIEFING: Rynki spokojne, paliwo bez zmian.",
+                },
+              ],
+            },
+          },
+        ],
+        usageMetadata: { promptTokenCount: 200, candidatesTokenCount: 30 },
+      }),
+      text: async () => "",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { db, calls } = makeDb(() => undefined);
+
+    const got = await polishBrief(
+      { greeting: "Dzień dobry.", body: "Rynki spokojne, paliwo bez zmian." },
+      { anthropicApiKey: null, geminiApiKey: "tajny" },
+      { db, ownerId: "u1", module: "brief", purpose: "polish" },
+    );
+    vi.unstubAllGlobals();
+
+    expect(got.generatedBy).toBe("model:gemini-2.5-flash");
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain("tajny");
+    const row = calls.find((c) => c.table === "llm_usage")?.ops[0].args[0];
+    expect(row).toMatchObject({ module: "brief", purpose: "polish", tokens_input: 200 });
+  });
+});

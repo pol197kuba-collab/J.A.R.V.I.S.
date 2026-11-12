@@ -33,7 +33,7 @@ function statusColor(status: string): string {
 
 // The most recent tool call is what the agent is doing right now (or just
 // finished, one poll's worth of lag behind) — `output.tool_calls` is now
-// written incrementally by runOrchestrator after every iteration, not only
+// written incrementally by runAgentLoop after every iteration, not only
 // once at the very end, so this is real live progress, not a guess.
 function currentActionLine(run: FlowRun): string | null {
   if (run.toolCalls.length === 0) return null;
@@ -389,9 +389,9 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
     return out;
   }, [activeBySlug]);
 
-  const orchestrator = agents.find((a) => a.slug === AGENT_SLUGS.JARVIS);
+  const jarvisAgent = agents.find((a) => a.slug === AGENT_SLUGS.JARVIS);
   const teammates = agents.filter((a) => a.slug !== AGENT_SLUGS.JARVIS);
-  const orchestratorRun = activeBySlug.get(AGENT_SLUGS.JARVIS);
+  const jarvisRun = activeBySlug.get(AGENT_SLUGS.JARVIS);
 
   // Layout: horizontal spacing and vertical drop are computed independently
   // of each other (NOT a shared radius/angle pair) — an earlier version
@@ -458,7 +458,7 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
       }
       className="p-4 landscape:max-md:p-2"
     >
-      {!orchestrator ? (
+      {!jarvisAgent ? (
         <div className="flex min-h-[120px] items-center justify-center">
           <p className="font-display text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
             ▸ Ładowanie zespołu agentów…
@@ -489,8 +489,8 @@ export function AgentFlowTree({ index = 0 }: { index?: number }) {
               style={{ top: anchorY }}
             >
               <FlowNode
-                name={orchestrator.name}
-                run={orchestratorRun}
+                name={jarvisAgent.name}
+                run={jarvisRun}
                 badgeSize={orchRadius * 2}
                 selected={selectedSlug === AGENT_SLUGS.JARVIS}
                 onClick={() =>

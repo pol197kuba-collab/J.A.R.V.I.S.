@@ -1,0 +1,23 @@
+-- =========================================================================
+-- KLUCZE API TYLKO DLA SERWERA (plan naprawczy, etap 5, A5 — PR 5b).
+--
+-- Od PR 5a (#229) aplikacja czyta i zapisuje user_secrets wyłącznie po
+-- stronie serwera klientem service role (src/lib/secrets/ownerSecrets.server.ts),
+-- po weryfikacji tokenu użytkownika. Właściciel potwierdził 2026-11-12, że
+-- 5a działa w produkcji (klucze, czat, komendy). Teraz zamykamy drogę
+-- z przeglądarki: zalogowany użytkownik (i anon) nie ma już żadnych praw do
+-- tabeli, nawet do własnego wiersza — token z przeglądarki nie wyciągnie
+-- kluczy, a błąd w RLS nie może ich wystawić.
+--
+-- REVOKE ALL zamiast samego SELECT/INSERT/UPDATE/DELETE: Supabase nadaje
+-- nowym tabelom w public domyślnie wszystkie prawa także dla anon
+-- (TRUNCATE, REFERENCES, TRIGGER) — zamykamy całość.
+--
+-- Bez wpływu na: service_role (serwer, skrypty GitHub Actions), funkcje
+-- SECURITY DEFINER czytające tabelę (dispatch_* — sprawdzone w etapie 5),
+-- kaskadowe usunięcie konta. Polityka RLS zostaje (nieszkodliwa; gdyby ktoś
+-- kiedyś przywrócił GRANT, nadal ogranicza do własnego wiersza).
+-- Danych nie zmienia.
+-- =========================================================================
+
+REVOKE ALL ON public.user_secrets FROM anon, authenticated;

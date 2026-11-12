@@ -8,6 +8,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { ensureVapidKeys } from "./push.server";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 const ConfigInput = z
   .object({
@@ -158,7 +159,7 @@ export const getBriefDelivery = createServerFn({ method: "GET" })
     const { supabase, userId } = context;
     const [{ data: secret }, { data: brief }, { data: dispatches }, { data: market }] =
       await Promise.all([
-        supabase.from("user_secrets").select("github_token").eq("owner_id", userId).maybeSingle(),
+        readOwnerSecrets(userId, "github_token"),
         supabase
           .from("daily_briefs")
           .select("brief_date, created_at")

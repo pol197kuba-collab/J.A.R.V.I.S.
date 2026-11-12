@@ -3,7 +3,7 @@ import { runClassifierFallback } from "./runtime.server";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
 // Regression test for the extraction of runClassifierFallback out of
-// runOrchestrator (previously two near-identical Groq/Gemini blocks inline).
+// runAgentLoop (previously two near-identical Groq/Gemini blocks inline).
 // Pins down the side effects the refactor must not alter: which endpoint is
 // hit, forceToolName/toolConfig reaching the request, logEvent's exact
 // arguments per branch, and — critically — that Groq's classifier tokens are
@@ -29,7 +29,7 @@ function groqResponse(action: string) {
           },
         },
       ],
-      // Groq DOES report usage — the helper must still discard it (asymmetry #1).
+      // Groq reports usage — since etap 2 it counts toward the run (A9/A20).
       usage: { prompt_tokens: 111, completion_tokens: 22 },
     }),
     text: async () => "",
@@ -64,7 +64,7 @@ const baseDeps = {
 };
 
 describe("runClassifierFallback", () => {
-  it("with a Groq key: calls Groq only, forces the tool via tool_choice, doesn't count tokens", async () => {
+  it("with a Groq key: calls Groq only, forces the tool via tool_choice, counts its tokens", async () => {
     const fetchMock = vi.fn().mockResolvedValue(groqResponse("open_dashboard"));
     vi.stubGlobal("fetch", fetchMock);
     const logEvent = vi.fn().mockResolvedValue(undefined);
@@ -81,9 +81,10 @@ describe("runClassifierFallback", () => {
       name: "perform_ui_action",
       args: { action: "open_dashboard", via: "classifier_fallback_groq" },
     });
-    // Asymmetry #1: Groq's usage is ignored, never added to the run totals.
-    expect(result.tokensInDelta).toBe(0);
-    expect(result.tokensOutDelta).toBe(0);
+    // Etap 2: Groq's usage counts toward the run (was ignored before).
+    expect(result.tokensInDelta).toBe(111);
+    expect(result.tokensOutDelta).toBe(22);
+    expect(result.usage).toMatchObject({ input: 111, output: 22 });
 
     // Only the Groq endpoint was hit — Gemini must never run when Groq succeeds.
     expect(fetchMock).toHaveBeenCalledTimes(1);

@@ -5,7 +5,7 @@ import { JARVIS_ACTIONS } from "@/lib/ai/jarvisBrain";
 // The UI-action vocabulary lives in two places by design: the JarvisAction
 // union (client: voice + chat + fallback path) and UI_ACTIONS (server:
 // perform_ui_action tool). They drifted twice already (PRs #43/#44 —
-// system_check shadowing the Guardian agent), so this test turns any future
+// system_check shadowing the S.H.I.E.L.D. agent), so this test turns any future
 // drift into a red build instead of a live incident.
 describe("UI action vocabulary sync", () => {
   it("UI_ACTIONS + 'none' is exactly the JarvisAction vocabulary", () => {

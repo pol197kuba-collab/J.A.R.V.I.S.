@@ -162,7 +162,7 @@ async function main(): Promise<void> {
 
   // ---------- 3. Newsy ----------
   try {
-    const news = await ingestNews(db, geminiKey);
+    const news = await ingestNews(db, geminiKey, ownerId);
     if (news.error) await report("newsy", news.error);
     else
       notice(

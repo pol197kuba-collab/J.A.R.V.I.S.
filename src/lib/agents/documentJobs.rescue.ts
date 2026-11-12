@@ -8,8 +8,11 @@
 //   1. Przy wejściu do aplikacji — bo najczęstszy scenariusz to „wróciłem i
 //      zastanawiam się, gdzie moja prezentacja". Wznowienie następuje wtedy
 //      od razu, bez czekania na harmonogram.
-//   2. W godzinnym przebiegu briefingu — bo użytkownik może nie wrócić przez
-//      dobę, a zadanie ma się dokończyć samo.
+//   2. W kolejce w tle (scripts/document-jobs.ts, uruchamiany przez pg_cron,
+//      plan naprawczy etap 6) — kilka minut po tym, jak przeglądarka nie
+//      dokończyła zadania, bez czekania na powrót użytkownika.
+//   3. W godzinnym przebiegu briefingu — zapas, do usunięcia, gdy kolejka
+//      przepracuje tydzień bez usterek.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { notifyOwner } from "@/lib/notifications/notify.server";
@@ -103,5 +106,53 @@ export async function rescueDocumentJobs(
     else summary.errors.push(`wznowienie ${row.id}: ${result.reason}`);
   }
 
+  return summary;
+}
+
+export type ImageSweepSummary = { enriched: number; skipped: number; errors: string[] };
+
+/** Ile plików dogrywamy w jednym przebiegu — każdy to kilka wywołań modelu obrazów. */
+const MAX_IMAGES_PER_SWEEP = 3;
+
+/**
+ * Dogrywa grafiki plików, których przeglądarka nie dokończyła (plan
+ * naprawczy, etap 6). Decyzja w enrichQueue.ts (czysta, z testami); przejęcie
+ * pliku jest warunkowe w enrichGeneratedFileImages, więc równoległa
+ * przeglądarka nie zrobi tego samego drugi raz.
+ */
+export async function sweepPendingImages(
+  db: Db,
+  ownerId: string,
+  now: Date = new Date(),
+): Promise<ImageSweepSummary> {
+  const summary: ImageSweepSummary = { enriched: 0, skipped: 0, errors: [] };
+  const { data: rows, error } = await db
+    .from("generated_files")
+    .select("id, image_status, created_at, image_claimed_at")
+    .eq("user_id", ownerId)
+    .eq("image_status", "pending")
+    .order("created_at", { ascending: true })
+    .limit(20);
+  if (error) {
+    summary.errors.push(`odczyt plików: ${error.message}`);
+    return summary;
+  }
+
+  const { imageNeedsEnrich } = await import("@/lib/documents/enrichQueue");
+  for (const row of rows ?? []) {
+    const due = imageNeedsEnrich(
+      { imageStatus: row.image_status, createdAt: row.created_at, claimedAt: row.image_claimed_at },
+      now,
+    );
+    if (!due || summary.enriched >= MAX_IMAGES_PER_SWEEP) {
+      summary.skipped += 1;
+      continue;
+    }
+    const { enrichGeneratedFileImages } = await import("@/lib/documents/generated.functions");
+    const result = await enrichGeneratedFileImages(db, ownerId, row.id);
+    if (result.ok) summary.enriched += 1;
+    else if (result.reason !== "not_pending")
+      summary.errors.push(`grafiki ${row.id}: ${result.reason}`);
+  }
   return summary;
 }

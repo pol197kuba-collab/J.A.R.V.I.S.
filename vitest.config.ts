@@ -9,5 +9,19 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
+    setupFiles: ["src/test/setup.ts"],
+    // `npm run test:coverage` — pomiar bez progu (plan naprawczy, etap 0).
+    // Próg dla src/lib/agents dochodzi w etapie 9.
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: [
+        "src/**/*.test.ts",
+        "src/**/*.testkit.ts",
+        "src/integrations/supabase/types.ts",
+        "src/routeTree.gen.ts",
+      ],
+      reporter: ["text-summary", "json-summary", "html"],
+    },
   },
 });

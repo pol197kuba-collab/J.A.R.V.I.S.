@@ -41,6 +41,7 @@ import {
 // Tylko typ — import jest wymazywany, więc ten plik nie wciąga
 // ingest.server.ts (ani kluczy API) do bundla klienta.
 import type { Db, ModelKeys, OutlookRow } from "./ingest.server";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 export type { OutlookRow };
 
@@ -82,11 +83,7 @@ export type MarketGrid = {
 
 /** Klucze modeli tego użytkownika — BYOK, nigdy nie opuszczają serwera. */
 async function loadModelKeys(supabase: Db, userId: string): Promise<ModelKeys> {
-  const { data } = await supabase
-    .from("user_secrets")
-    .select("gemini_api_key, anthropic_api_key")
-    .eq("owner_id", userId)
-    .maybeSingle();
+  const { data } = await readOwnerSecrets(userId, "gemini_api_key, anthropic_api_key");
   return {
     anthropicApiKey: data?.anthropic_api_key?.trim() || null,
     geminiApiKey: data?.gemini_api_key?.trim() || null,

@@ -2,7 +2,7 @@
 // budget.ts i jest pokryta testami bez bazy.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
-import { budgetStatus, type BudgetStatus } from "./budget";
+import { budgetStatus, summarizeSpend, type BudgetStatus, type SpendByModuleRow } from "./budget";
 
 type Db = SupabaseClient<Database>;
 
@@ -15,14 +15,45 @@ export function monthStart(now: Date = new Date()): string {
 }
 
 /**
+ * Wydatki z księgi od początku miesiąca, zsumowane PO STRONIE BAZY
+ * (funkcja llm_spend_by_module — etap 2, A3/A12). Księga obejmuje każde
+ * wywołanie modelu w aplikacji, nie tylko czat.
+ *
+ * Wiersze z `cost_usd = NULL` (model spoza cennika) nie wchodzą do sumy, ale
+ * są policzone osobno (`unpriced`) — panel mówi o nich wprost.
+ */
+export async function monthSpendRows(
+  db: Db,
+  ownerId: string,
+  now: Date = new Date(),
+): Promise<{ rows: SpendByModuleRow[]; error: string | null }> {
+  const { data, error } = await db.rpc("llm_spend_by_module", {
+    p_owner: ownerId,
+    p_since: monthStart(now),
+  });
+  if (error) return { rows: [], error: error.message };
+  return { rows: (data ?? []) as SpendByModuleRow[], error: null };
+}
+
+/**
  * Wydatki właściciela od początku miesiąca.
  *
- * Sumujemy WYŁĄCZNIE przebiegi z policzonym kosztem. Przebieg modelu spoza
- * cennika ma `cost_usd = NULL` i jest tu pomijany — to celowe i nie jest
- * cichym zaniżaniem, bo panel pokazuje takie przebiegi osobno. Wliczenie ich
- * jako zera byłoby dopiero kłamstwem.
+ * Źródło: księga llm_usage. Gdy funkcji w bazie jeszcze nie ma (aplikacja
+ * wdrożona przed migracją), wracamy do starego liczenia z agent_runs, żeby
+ * budżet nie spadł do zera.
  */
 export async function monthSpendUsd(db: Db, ownerId: string, now: Date = new Date()) {
+  const ledger = await monthSpendRows(db, ownerId, now);
+  if (!ledger.error) {
+    const s = summarizeSpend(ledger.rows);
+    return {
+      spentUsd: s.spentUsd,
+      runs: s.calls - s.unpriced,
+      error: null as string | null,
+      source: "ledger" as const,
+    };
+  }
+
   const { data, error } = await db
     .from("agent_runs")
     .select("cost_usd")
@@ -30,11 +61,16 @@ export async function monthSpendUsd(db: Db, ownerId: string, now: Date = new Dat
     .gte("created_at", monthStart(now))
     .not("cost_usd", "is", null);
 
-  if (error) return { spentUsd: 0, runs: 0, error: error.message };
+  if (error) return { spentUsd: 0, runs: 0, error: error.message, source: "agent_runs" as const };
 
   const rows = data ?? [];
   const spentUsd = rows.reduce((sum, r) => sum + Number(r.cost_usd ?? 0), 0);
-  return { spentUsd, runs: rows.length, error: null as string | null };
+  return {
+    spentUsd,
+    runs: rows.length,
+    error: null as string | null,
+    source: "agent_runs" as const,
+  };
 }
 
 /** Limit miesięczny właściciela; 0 znaczy „nie pilnuj". */

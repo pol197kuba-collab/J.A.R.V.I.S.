@@ -17,6 +17,16 @@ export const AGENT_SLUGS = {
 
 export type AgentSlug = (typeof AGENT_SLUGS)[keyof typeof AGENT_SLUGS];
 
+// Wszyscy agenci, którzy istnieją w bazie. D.R.O.I.D. (migracja
+// 20260817220000_droid_agent) nie ma wpisu w AGENT_SLUGS, bo od niego zależy
+// typ TownSlug, a Town nie ma jeszcze dla niego pokoju.
+const KNOWN_SLUGS: ReadonlySet<string> = new Set([...Object.values(AGENT_SLUGS), "droid"]);
+
+/** Czy to slug istniejącego agenta (zestaw agentów jest stały — patrz wyżej). */
+export function isAgentSlug(slug: unknown): slug is string {
+  return typeof slug === "string" && KNOWN_SLUGS.has(slug);
+}
+
 // Tools an agent must always have declared to the model in-memory,
 // regardless of its DB tool bindings (public.agent_tools) — e.g. F.O.R.G.E.
 // is useless without generate_document, and J.A.R.V.I.S. needs

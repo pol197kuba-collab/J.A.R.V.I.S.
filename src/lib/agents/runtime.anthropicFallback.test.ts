@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
-import { runOrchestrator } from "./runtime.server";
+import { runAgentLoop } from "./runtime.server";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
+import { testSecretsDb } from "@/test/secretsDb";
 
 // Regresja na realną sytuację właściciela instalacji: klucz Anthropic
 // zapisany, ale konto bez środków (płatność odrzucana przez operatora), więc
@@ -14,7 +15,7 @@ type CannedResponse = { data: unknown; error: { message: string } | null };
 
 function makeSupabaseStub(responses: Record<string, CannedResponse[]>) {
   const counts: Record<string, number> = {};
-  return {
+  const stub = {
     from(table: string) {
       const list = responses[table] ?? [{ data: null, error: null }];
       const idx = Math.min(counts[table] ?? 0, list.length - 1);
@@ -33,6 +34,9 @@ function makeSupabaseStub(responses: Record<string, CannedResponse[]>) {
       return proxy;
     },
   } as unknown as SupabaseClient<Database>;
+  // Etap 5 (A5): user_secrets czyta klient service role — w testach ta sama atrapa.
+  testSecretsDb.current = stub;
+  return stub;
 }
 
 function responsesForClaudeAgent(): Record<string, CannedResponse[]> {
@@ -74,7 +78,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("runOrchestrator — Claude niedostępny, run schodzi na Gemini", () => {
+describe("runAgentLoop — Claude niedostępny, run schodzi na Gemini", () => {
   it("kończy run na Gemini, gdy Claude odrzuca każde wywołanie", async () => {
     const fetchMock = vi.fn().mockImplementation(async (url: unknown) => {
       if (String(url).includes("api.anthropic.com")) {
@@ -95,7 +99,7 @@ describe("runOrchestrator — Claude niedostępny, run schodzi na Gemini", () =>
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: makeSupabaseStub(responsesForClaudeAgent()),
       userId: "u1",
       agentSlug: AGENT_SLUGS.JARVIS,
@@ -122,7 +126,7 @@ describe("runOrchestrator — Claude niedostępny, run schodzi na Gemini", () =>
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: makeSupabaseStub(responsesForClaudeAgent()),
       userId: "u1",
       agentSlug: AGENT_SLUGS.JARVIS,

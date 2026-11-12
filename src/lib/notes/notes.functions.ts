@@ -10,6 +10,7 @@ import { logServerError } from "@/lib/system/logServerError";
 import { embedText, noteEmbeddingText, toVectorLiteral } from "@/lib/ai/embed";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 export type Note = {
   id: string;
@@ -30,19 +31,13 @@ async function noteEmbeddingPatch(
   title: string,
   body: string,
 ): Promise<{ embedding?: string }> {
-  const { data } = await supabase
-    .from("user_secrets")
-    .select("gemini_api_key")
-    .eq("owner_id", userId)
-    .maybeSingle();
+  const { data } = await readOwnerSecrets(userId, "gemini_api_key");
   const apiKey = data?.gemini_api_key?.trim();
   if (!apiKey) return {};
-  const embedding = await embedText(
-    noteEmbeddingText(title, body),
-    apiKey,
-    "RETRIEVAL_DOCUMENT",
-    5_000,
-  );
+  const embedding = await embedText(noteEmbeddingText(title, body), apiKey, "RETRIEVAL_DOCUMENT", {
+    timeoutMs: 5_000,
+    ledger: { db: supabase, ownerId: userId, module: "notes", purpose: "embed" },
+  });
   return embedding ? { embedding: toVectorLiteral(embedding) } : {};
 }
 

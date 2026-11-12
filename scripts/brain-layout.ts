@@ -26,7 +26,7 @@ import {
   parseVectorLiteral,
   toVectorLiteral,
 } from "../src/lib/ai/embed";
-import { callGeminiText } from "../src/lib/agents/providers/geminiText";
+import { callGeminiText } from "../src/lib/ai/llm/geminiText";
 import { DEFAULT_GEMINI_MODEL } from "../src/lib/agents/models";
 import {
   applyModelNames,
@@ -42,6 +42,7 @@ import {
 } from "../src/lib/brain/labels";
 import type { Vec3 } from "../src/lib/brain/projection";
 import { computeInsights } from "../src/lib/brain/insights";
+import { readOwnerSecrets } from "../src/lib/secrets/ownerSecrets.server";
 
 const args = new Set(process.argv.slice(2));
 const DRY_RUN = args.has("--dry-run");
@@ -132,11 +133,7 @@ async function main(): Promise<void> {
   // Klucz Gemini: sekret joba albo klucz użytkownika z aplikacji.
   let geminiKey = process.env.GEMINI_API_KEY?.trim() || null;
   if (!geminiKey) {
-    const { data } = await db
-      .from("user_secrets")
-      .select("gemini_api_key")
-      .eq("owner_id", ownerId)
-      .maybeSingle();
+    const { data } = await readOwnerSecrets(ownerId, "gemini_api_key");
     geminiKey = data?.gemini_api_key?.trim() || null;
   }
   if (!geminiKey) {
@@ -191,6 +188,7 @@ async function main(): Promise<void> {
       temperature: 0.3,
       maxOutputTokens: 2048,
       timeoutMs: NAMING_TIMEOUT_MS,
+      ledger: { db, ownerId, module: "brain", purpose: "cluster_names" },
     });
     if (result.ok) {
       const names = parseClusterNames(result.text, clusters.length);
@@ -312,7 +310,9 @@ async function backfillNotes(db: Db, ownerId: string, apiKey: string) {
     .limit(BACKFILL_LIMIT);
   if (error) throw new Error(`notatki: ${error.message}`);
   return inBatches(data ?? [], async (n) => {
-    const v = await embedText(noteEmbeddingText(n.title, n.body), apiKey, "RETRIEVAL_DOCUMENT");
+    const v = await embedText(noteEmbeddingText(n.title, n.body), apiKey, "RETRIEVAL_DOCUMENT", {
+      ledger: { db, ownerId, module: "brain", purpose: "embed" },
+    });
     if (!v) return false;
     const { error: upd } = await db
       .from("notes")
@@ -333,7 +333,9 @@ async function backfillMemories(db: Db, ownerId: string, apiKey: string) {
   if (error) throw new Error(`wspomnienia: ${error.message}`);
   // Ten sam tekst co w narzędziu `remember` — wartość wspomnienia.
   return inBatches(data ?? [], async (m) => {
-    const v = await embedText(m.value, apiKey, "RETRIEVAL_DOCUMENT");
+    const v = await embedText(m.value, apiKey, "RETRIEVAL_DOCUMENT", {
+      ledger: { db, ownerId, module: "brain", purpose: "embed" },
+    });
     if (!v) return false;
     const { error: upd } = await db
       .from("memories")

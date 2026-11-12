@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
-import { runOrchestrator } from "./runtime.server";
-import { callGroq, chooseGroqModel } from "./providers/groq";
+import { runAgentLoop } from "./runtime.server";
+import { callGroq, chooseGroqModel } from "@/lib/ai/llm/groq";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
+import { testSecretsDb } from "@/test/secretsDb";
 
 // Live failure (2026-10-09): with Claude out of credits the run fell back to
 // gemini-2.5-flash, which returned an EMPTY turn (no text, no function call,
@@ -16,7 +17,7 @@ type CannedResponse = { data: unknown; error: { message: string } | null };
 
 function makeSupabaseStub(responses: Record<string, CannedResponse[]>) {
   const counts: Record<string, number> = {};
-  return {
+  const stub = {
     from(table: string) {
       const list = responses[table] ?? [{ data: null, error: null }];
       const idx = Math.min(counts[table] ?? 0, list.length - 1);
@@ -35,6 +36,9 @@ function makeSupabaseStub(responses: Record<string, CannedResponse[]>) {
       return proxy;
     },
   } as unknown as SupabaseClient<Database>;
+  // Etap 5 (A5): user_secrets czyta klient service role — w testach ta sama atrapa.
+  testSecretsDb.current = stub;
+  return stub;
 }
 
 function baseResponses(): Record<string, CannedResponse[]> {
@@ -77,7 +81,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("runOrchestrator — empty Gemini turn", () => {
+describe("runAgentLoop — empty Gemini turn", () => {
   it("retries an empty turn once, without thinking, and returns the real answer", async () => {
     let n = 0;
     const fetchMock = vi.fn().mockImplementation(async () => {
@@ -97,7 +101,7 @@ describe("runOrchestrator — empty Gemini turn", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: makeSupabaseStub(baseResponses()),
       userId: "u1",
       agentSlug: AGENT_SLUGS.JARVIS,
@@ -131,7 +135,27 @@ describe("runOrchestrator — empty Gemini turn", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
+      supabase: makeSupabaseStub(baseResponses()),
+      userId: "u1",
+      agentSlug: AGENT_SLUGS.JARVIS,
+      // Etap 3: klasyfikator rusza tylko dla wypowiedzi wyglądających na
+      // polecenie UI — tu polecenie, na które model nic nie odpowiedział.
+      input: "pokaż logi",
+      history: [],
+    });
+
+    expect(result.output).toMatch(/^Nie udało mi się przygotować odpowiedzi/);
+    expect(result.output).toContain("Otwieram dziennik systemu.");
+  });
+
+  it("pytanie, na które model milczy: bez klasyfikatora, bez fałszywej akcji UI (etap 3)", async () => {
+    // Oryginalny błąd z 2026-10-09: na „co się ostatnio wywaliło?” klasyfikator
+    // dokładał „Otwieram dziennik systemu.” Pytanie nie trafia już do niego.
+    const fetchMock = vi.fn().mockResolvedValue(emptyTurn);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await runAgentLoop({
       supabase: makeSupabaseStub(baseResponses()),
       userId: "u1",
       agentSlug: AGENT_SLUGS.JARVIS,
@@ -139,8 +163,9 @@ describe("runOrchestrator — empty Gemini turn", () => {
       history: [],
     });
 
-    expect(result.output).toMatch(/^Nie udało mi się przygotować odpowiedzi/);
-    expect(result.output).toContain("Otwieram dziennik systemu.");
+    expect(fetchMock).toHaveBeenCalledTimes(2); // tura + jedna powtórka pustej tury
+    expect(result.action).toBeUndefined();
+    expect(result.output).not.toContain("Otwieram");
   });
 });
 
