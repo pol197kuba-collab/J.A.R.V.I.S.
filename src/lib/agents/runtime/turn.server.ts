@@ -255,8 +255,8 @@ export async function runModelTurn(
         systemPrompt: `${systemPrompt}${systemSuffix}`,
         contents: state.contents,
         toolDeclarations: state.toolDeclarations.length > 0 ? state.toolDeclarations : undefined,
-        // Carry the producer's forced-tool-call through to the failover
-        // path too — otherwise a Gemini outage lets producer answer in
+        // Carry F.O.R.G.E.'s forced-tool-call through to the failover
+        // path too — otherwise a Gemini outage lets F.O.R.G.E. answer in
         // prose on Groq and end with 0 tool calls (no file, no link).
         forceToolName: forceGenerateDocument ? GENERATE_DOCUMENT_TOOL : undefined,
         temperature,

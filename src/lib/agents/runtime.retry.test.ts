@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
-import { runOrchestrator } from "./runtime.server";
+import { runAgentLoop } from "./runtime.server";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { testSecretsDb } from "@/test/secretsDb";
 
@@ -68,7 +68,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("runOrchestrator — Gemini 503 retry before failover", () => {
+describe("runAgentLoop — Gemini 503 retry before failover", () => {
   it("retries a transient 503 and succeeds without a Groq key", async () => {
     let call = 0;
     const fetchMock = vi.fn().mockImplementation(async () => {
@@ -90,7 +90,7 @@ describe("runOrchestrator — Gemini 503 retry before failover", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: makeSupabaseStub(baseResponses()),
       userId: "u1",
       agentSlug: AGENT_SLUGS.JARVIS,

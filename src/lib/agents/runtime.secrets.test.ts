@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { runOrchestrator } from "./runtime.server";
+import { runAgentLoop } from "./runtime.server";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import {
   HERALD,
@@ -16,7 +16,7 @@ import {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("runOrchestrator — klucze przez klienta sekretów", () => {
+describe("runAgentLoop — klucze przez klienta sekretów", () => {
   it("klient użytkownika nie dotyka user_secrets", async () => {
     vi.stubGlobal("fetch", providerFetch({ gemini: [geminiText("ok")] }));
     // Świat użytkownika BEZ kluczy…
@@ -31,7 +31,7 @@ describe("runOrchestrator — klucze przez klienta sekretów", () => {
       t === "user_secrets" ? { data: KEYS_GEMINI_ONLY, error: null } : undefined,
     );
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: user.db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,

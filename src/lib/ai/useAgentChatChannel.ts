@@ -27,7 +27,7 @@ import { AGENT_SLUGS, isAgentSlug } from "@/lib/constants/agentSlugs";
 
 // Single source of truth for "send a message to an agent and handle the
 // reply" — extracted out of the Dashboard ChatPanel so the /jarvis matrix
-// console (MatrixChatConsole) can talk to the exact same backend/orchestrator
+// console (MatrixChatConsole) can talk to the exact same J.A.R.V.I.S. backend
 // without re-implementing conversation sync, active-agent tracking, UI-action
 // dispatch, or error handling. Consumers differ only in how they RENDER
 // `messages`/`typing`/`activeAgent` — never in how a message actually gets

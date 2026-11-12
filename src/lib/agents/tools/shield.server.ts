@@ -1,4 +1,4 @@
-// Narzędzia agentów — guardian. Wydzielone z tools.server.ts (plan naprawczy, etap 4);
+// Narzędzia agentów — S.H.I.E.L.D. Wydzielone z tools.server.ts (plan naprawczy, etap 4);
 // lista wszystkich narzędzi i rejestr z bazy: tools.server.ts.
 
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
@@ -35,7 +35,7 @@ export const scanErrors: Tool = {
     const limit = clampInt(args.limit, 1, 50, 20);
     const since = new Date(Date.now() - hours * 3_600_000).toISOString();
 
-    // NOTE: the live runtime (runOrchestrator's logEvent, every ctx.logEvent
+    // NOTE: the live runtime (runAgentLoop's logEvent, every ctx.logEvent
     // call in this file) writes to system_events, not the older event_log
     // table — event_log has no writer anywhere in the current codebase.
     // This originally queried event_log and would have silently returned
@@ -170,10 +170,10 @@ export const checkDelegation: Tool = {
       .from("agents")
       .select("id, slug")
       .eq("owner_id", ctx.userId);
-    const nonOrchestratorIds = (agentRows ?? [])
+    const nonJarvisIds = (agentRows ?? [])
       .filter((a) => a.slug !== AGENT_SLUGS.JARVIS)
       .map((a) => a.id);
-    if (nonOrchestratorIds.length === 0) {
+    if (nonJarvisIds.length === 0) {
       return { checked: 0, linked: 0, unlinked: 0, note: "no delegated agents exist yet" };
     }
 
@@ -181,7 +181,7 @@ export const checkDelegation: Tool = {
       .from("agent_runs")
       .select("id, agent_id, parent_run_id, created_at")
       .eq("user_id", ctx.userId)
-      .in("agent_id", nonOrchestratorIds)
+      .in("agent_id", nonJarvisIds)
       .order("created_at", { ascending: false })
       .limit(limit);
     if (error) {

@@ -135,7 +135,7 @@ describe("callAnthropic", () => {
     expect(result.tokensOut).toBe(4);
   });
 
-  it("pins the forced tool when the producer requires it", async () => {
+  it("pins the forced tool when F.O.R.G.E. requires it", async () => {
     const fetchMock = mockFetchOnce({ content: [], usage: {} });
     await callAnthropic({
       ...base,

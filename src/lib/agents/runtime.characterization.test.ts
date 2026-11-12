@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { runOrchestrator, UI_ACTION_CONFIRMATIONS } from "./runtime.server";
+import { runAgentLoop, UI_ACTION_CONFIRMATIONS } from "./runtime.server";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import {
   FORGE,
@@ -24,7 +24,7 @@ import {
   writes,
 } from "./runtime.testkit";
 
-// TESTY CHARAKTERYZUJĄCE runOrchestrator (plan naprawczy, etap 0).
+// TESTY CHARAKTERYZUJĄCE runAgentLoop (plan naprawczy, etap 0).
 //
 // Opisują zachowanie rdzenia agentów TAKIM, JAKIE JEST (commit 4260049),
 // żeby kolejne etapy (bramka narzędzi, księga kosztów, rozbicie rdzenia)
@@ -41,7 +41,7 @@ afterEach(() => {
 
 // ---------- scenariusze ----------
 
-describe("runOrchestrator — charakterystyka (etap 0)", () => {
+describe("runAgentLoop — charakterystyka (etap 0)", () => {
   it("1. zwykła odpowiedź bez narzędzi: tekst modelu, bez klasyfikatora (etap 3, A9)", async () => {
     const fetchMock = providerFetch({
       gemini: [geminiText("Dzień dobry, Panie Sławiński.", { in: 1000, out: 200 })],
@@ -50,7 +50,7 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { db, calls } = worldDb({ agents: [HERALD], secrets: KEYS_WITH_GROQ });
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -99,7 +99,7 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
       notes: [{ id: "n1", title: "Zakupy", body: "mleko", tags: [], created_at: "2026-11-01" }],
     });
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -145,7 +145,7 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { db, calls } = worldDb({ agents: [JARVIS, HERALD], secrets: KEYS_GEMINI_ONLY });
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.JARVIS,
@@ -200,7 +200,7 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
     // Brak powiązań w bazie: narzędzie i tak jest deklarowane w pamięci.
     const { db, calls } = worldDb({ agents: [FORGE], secrets: KEYS_GEMINI_ONLY });
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.FORGE,
@@ -244,7 +244,7 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
       toolSlugs: ["list_notes"],
     });
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -279,7 +279,7 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
       toolSlugs: ["list_notes"],
     });
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -315,7 +315,7 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { db, calls } = worldDb({ agents: [HERALD], secrets: KEYS_WITH_GROQ });
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -349,7 +349,7 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
       secrets: { ...KEYS_GEMINI_ONLY, anthropic_api_key: "sk-ant" },
     });
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -386,7 +386,7 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { db, calls } = worldDb({ agents: [HERALD], secrets: KEYS_GEMINI_ONLY });
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -420,7 +420,7 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { db, calls } = worldDb({ agents: [HERALD], secrets: KEYS_WITH_GROQ });
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -456,7 +456,7 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { db, calls } = worldDb({ agents: [HERALD], secrets: KEYS_GEMINI_ONLY });
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -482,7 +482,7 @@ describe("runOrchestrator — charakterystyka (etap 0)", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { db, calls } = worldDb({ agents: [HERALD], secrets: KEYS_GEMINI_ONLY });
 
-    await runOrchestrator({
+    await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,

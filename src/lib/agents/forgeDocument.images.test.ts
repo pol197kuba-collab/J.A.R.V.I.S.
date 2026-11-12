@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { generateDocImages } from "./producer.server";
+import { generateDocImages } from "./forgeDocument.server";
 import type { DeckSpec } from "./docSpec";
 
 // Warstwy szukania obrazu mogą odpaść z czterech różnych powodów, a do logu
@@ -100,7 +100,7 @@ describe("generateDocImages — meldunek o nieudanym szukaniu", () => {
 describe("fetchWebSearchOgImage — klient modeli i księga", () => {
   it("klucz w nagłówku, wiersz documents/image_search", async () => {
     const { makeDb } = await import("./runtime.testkit");
-    const { fetchWebSearchOgImage } = await import("./producer.server");
+    const { fetchWebSearchOgImage } = await import("./forgeDocument.server");
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,

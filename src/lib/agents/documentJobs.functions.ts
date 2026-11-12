@@ -27,9 +27,9 @@ import { notifyOwner } from "@/lib/notifications/notify.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import type { AgentRunResult } from "./runtime.functions";
-import type { OrchestratorInput } from "./runtime.server";
+import type { AgentLoopInput } from "./runtime.server";
 import { blocksOf } from "./docSpec";
-import type { ProducerSpec } from "./producer.server";
+import type { ForgeSpec } from "./forgeDocument.server";
 import { callGemini } from "@/lib/ai/llm/gemini";
 import type { LedgerContext } from "@/lib/ai/llm/ledger";
 import type { GeminiUsageMetadata } from "@/lib/ai/llm/usage";
@@ -48,12 +48,12 @@ export type RunDocumentJobResult = { ok: true } | { ok: false; reason: string };
 const AGENT_RETRY_ATTEMPTS = 2;
 const AGENT_RETRY_BACKOFF_MS = 2000;
 
-async function runOrchestratorWithRetry(args: OrchestratorInput): Promise<AgentRunResult> {
-  const { runOrchestrator } = await import("./runtime.server");
+async function runAgentLoopWithRetry(args: AgentLoopInput): Promise<AgentRunResult> {
+  const { runAgentLoop } = await import("./runtime.server");
   let last: AgentRunResult | null = null;
   for (let attempt = 1; attempt <= AGENT_RETRY_ATTEMPTS; attempt++) {
     try {
-      const result = await runOrchestrator(args);
+      const result = await runAgentLoop(args);
       if (result.status === "done" && result.output.trim()) return result;
       last = result;
     } catch (err) {
@@ -121,7 +121,7 @@ type QaVerdict = { ok: boolean; reason: string };
  * Bez nich sędzia widziałby puste pozycje i mógł odrzucić poprawną
  * prezentację — a odrzucenie kosztuje ponowny przebieg Forge'a.
  */
-export function buildDigest(spec: ProducerSpec): string {
+export function buildDigest(spec: ForgeSpec): string {
   const lines = [`Tytuł: ${spec.title}`];
   if (spec.subtitle) lines.push(`Podtytuł: ${spec.subtitle}`);
   for (const [i, block] of blocksOf(spec).entries()) {
@@ -238,7 +238,7 @@ export async function runDocumentJobCore(
       const { data: secret } = await readOwnerSecrets(userId, "gemini_api_key");
       const apiKey = secret?.gemini_api_key?.trim();
 
-      const insightResult = await runOrchestratorWithRetry({
+      const insightResult = await runAgentLoopWithRetry({
         supabase,
         userId,
         agentSlug: AGENT_SLUGS.INSIGHT,
@@ -270,7 +270,7 @@ export async function runDocumentJobCore(
         attachment: { filename: string; url: string } | undefined;
         digest: string | null;
       }> => {
-        const forgeResult = await runOrchestratorWithRetry({
+        const forgeResult = await runAgentLoopWithRetry({
           supabase,
           userId,
           agentSlug: AGENT_SLUGS.FORGE,
@@ -310,7 +310,7 @@ export async function runDocumentJobCore(
             .eq("id", fileId)
             .eq("user_id", userId)
             .maybeSingle();
-          if (fileRow?.spec) digest = buildDigest(fileRow.spec as unknown as ProducerSpec);
+          if (fileRow?.spec) digest = buildDigest(fileRow.spec as unknown as ForgeSpec);
         }
 
         return { forgeResult, attachment, digest };

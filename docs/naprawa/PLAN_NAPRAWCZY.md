@@ -53,7 +53,7 @@
 
 Bez tego kolejne etapy nie mają jak wykryć regresji w rdzeniu agentów.
 
-- [x] Testy charakteryzujące `runOrchestrator` na zamockowanym `fetch`
+- [x] Testy charakteryzujące `runAgentLoop` na zamockowanym `fetch`
       i zamockowanym kliencie bazy (wzorzec: `runtime.delegation.test.ts`).
       Minimum scenariuszy: zwykła odpowiedź bez narzędzi; jedno narzędzie
       i odpowiedź; delegacja do kolegi; wymuszony `generate_document` u Forge;
@@ -148,7 +148,7 @@ narzędzia…”).
       wyszukiwanie zdjęć bez ponowień (czas rzeczywisty / własny limit czasu).
 - [x] **Migracja wywołań**, po jednym module na commit, każdy z testem:
       `runtime.server.ts` (pętla i klasyfikator), `tools.server.ts`
-      (`web_search`), `producer.server.ts`, `documentJobs.functions.ts`,
+      (`web_search`), `forgeDocument.server.ts`, `documentJobs.functions.ts`,
       `brief/build.server.ts`, `fuel/news.server.ts`, `vision/*` (3 pliki),
       `brain/ask.functions.ts`, `ai/embed.ts`, moduł rynków, skrypty.
       Na końcu `grep generativelanguage.googleapis.com src scripts` zwraca
@@ -224,7 +224,7 @@ Dopiero po etapie 2, żeby efekt było widać w liczbach.
 
 Czysta refaktoryzacja: testy z etapu 0 nie mogą się zmienić.
 
-- [x] `runOrchestrator` podzielić na moduły w `src/lib/agents/runtime/`:
+- [x] `runAgentLoop` podzielić na moduły w `src/lib/agents/runtime/`:
       przygotowanie kontekstu (agent, klucze, zespół, prompt, model, budżet);
       jedna tura modelu (wybór dostawcy, failover) — po etapie 2 to cienka
       warstwa nad klientem; wykonanie narzędzi (bramka z etapu 1, delegacja,
@@ -233,7 +233,7 @@ Czysta refaktoryzacja: testy z etapu 0 nie mogą się zmienić.
       tych kroków.
       → `runtime/context.server.ts`, `turn.server.ts`, `tools.server.ts`,
       `finalize.server.ts` (+ `classifier.server.ts`, `constants.ts`,
-      `prompt.ts`, `usage.ts`, `types.ts`); `runOrchestrator` ma ~70 linii.
+      `prompt.ts`, `usage.ts`, `types.ts`); `runAgentLoop` ma ~70 linii.
       Kod i komentarze przeniesione dosłownie (porównane linia po linii).
 - [x] Prompt systemowy i blok zespołu przenieść do osobnego pliku jako
       nazwane sekcje (bez zmiany treści — porównać wynikowy string testem).

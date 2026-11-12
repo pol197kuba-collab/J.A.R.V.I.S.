@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { runOrchestrator } from "./runtime.server";
+import { runAgentLoop } from "./runtime.server";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import {
   HERALD,
@@ -34,13 +34,13 @@ const geminiWithThinking = (text: string, inTok: number, outTok: number, thought
     },
   });
 
-describe("runOrchestrator — księga llm_usage", () => {
+describe("runAgentLoop — księga llm_usage", () => {
   it("tura Gemini: wiersz z runem i tokenami myślenia; myślenie wlicza się do kosztu (A11)", async () => {
     const fetchMock = providerFetch({ gemini: [geminiWithThinking("Gotowe.", 1000, 100, 400)] });
     vi.stubGlobal("fetch", fetchMock);
     const { db, calls } = worldDb({ agents: [HERALD], secrets: KEYS_GEMINI_ONLY });
 
-    await runOrchestrator({
+    await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -82,7 +82,7 @@ describe("runOrchestrator — księga llm_usage", () => {
     );
     const { db, calls } = worldDb({ agents: [HERALD], secrets: KEYS_WITH_GROQ });
 
-    await runOrchestrator({
+    await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -111,7 +111,7 @@ describe("runOrchestrator — księga llm_usage", () => {
       secrets: { ...KEYS_GEMINI_ONLY, anthropic_api_key: "sk" },
     });
 
-    await runOrchestrator({
+    await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -126,14 +126,14 @@ describe("runOrchestrator — księga llm_usage", () => {
 });
 
 // Etap 3 (A10): stabilny prefiks promptu — data i godzina poza częścią stałą.
-describe("runOrchestrator — stabilny prefiks i cache promptu", () => {
+describe("runAgentLoop — stabilny prefiks i cache promptu", () => {
   it("Gemini: data w osobnej, ostatniej części instrukcji systemowej", async () => {
     const { geminiBodies } = await import("./runtime.testkit");
     const fetchMock = providerFetch({ gemini: [geminiText("Hej.")] });
     vi.stubGlobal("fetch", fetchMock);
     const { db } = worldDb({ agents: [HERALD], secrets: KEYS_GEMINI_ONLY });
 
-    await runOrchestrator({
+    await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -165,7 +165,7 @@ describe("runOrchestrator — stabilny prefiks i cache promptu", () => {
       secrets: { ...KEYS_GEMINI_ONLY, anthropic_api_key: "sk" },
     });
 
-    await runOrchestrator({
+    await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,

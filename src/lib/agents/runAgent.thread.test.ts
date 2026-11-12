@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { makeDb } from "./runtime.testkit";
-import type { OrchestratorInput } from "./runtime/types";
+import type { AgentLoopInput } from "./runtime/types";
 
 // Zgłoszenie właściciela (2026-11-12): wiadomość wysłana, zanim czat wczytał
 // swój wątek (conversationId jeszcze null), zakładała NOWY wątek. Czat
@@ -17,12 +17,12 @@ vi.mock("@tanstack/react-start", () => {
 });
 vi.mock("@/integrations/supabase/auth-middleware", () => ({ requireSupabaseAuth: {} }));
 
-const orchestrator = vi.fn(async (_args: OrchestratorInput) => ({
+const agentLoop = vi.fn(async (_args: AgentLoopInput) => ({
   runId: "r1",
   status: "done" as const,
   output: "ok",
 }));
-vi.mock("./runtime.server", () => ({ runOrchestrator: orchestrator }));
+vi.mock("./runtime.server", () => ({ runAgentLoop: agentLoop }));
 
 type Handler = (a: { data: unknown; context: unknown }) => Promise<unknown>;
 
@@ -31,7 +31,7 @@ const OLD_THREAD = [
   { role: "user", content: "Pytanie sprzed tygodnia" },
 ];
 
-beforeEach(() => orchestrator.mockClear());
+beforeEach(() => agentLoop.mockClear());
 
 async function callRunAgent(data: Record<string, unknown>, conversations: unknown[]) {
   const { db } = makeDb((table) => {
@@ -42,7 +42,7 @@ async function callRunAgent(data: Record<string, unknown>, conversations: unknow
   });
   const { runAgent } = await import("./runtime.functions");
   await (runAgent as unknown as Handler)({ data, context: { supabase: db, userId: "u1" } });
-  return orchestrator.mock.calls[0][0];
+  return agentLoop.mock.calls[0][0];
 }
 
 describe("runAgent bez conversationId", () => {

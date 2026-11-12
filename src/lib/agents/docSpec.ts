@@ -136,9 +136,9 @@ export type DeckSpec = SpecCommon & { format: "pptx"; slides: DeckSlide[] };
 export type DocSpec = SpecCommon & { format: "docx"; sections: DocSection[] };
 
 /** Cokolwiek Forge potrafi zbudować. */
-export type ProducerSpec = DeckSpec | DocSpec;
+export type ForgeSpec = DeckSpec | DocSpec;
 
-export const isDeck = (spec: ProducerSpec): spec is DeckSpec => spec.format === "pptx";
+export const isDeck = (spec: ForgeSpec): spec is DeckSpec => spec.format === "pptx";
 
 /**
  * Bloki treści niezależnie od formatu — slajdy albo sekcje.
@@ -148,7 +148,7 @@ export const isDeck = (spec: ProducerSpec): spec is DeckSpec => spec.format === 
  * miejsce, które zna oba kształty; reszta kodu albo jest rendererem
  * konkretnego formatu, albo woła to.
  */
-export const blocksOf = (spec: ProducerSpec): readonly (DeckSlide | DocSection)[] =>
+export const blocksOf = (spec: ForgeSpec): readonly (DeckSlide | DocSection)[] =>
   isDeck(spec) ? spec.slides : spec.sections;
 
 export const CONTENT_TYPES: Record<DocFormat, string> = {
@@ -254,7 +254,7 @@ function resolveLayout(
   return layout;
 }
 
-export type NormalizeResult = { ok: true; spec: ProducerSpec } | { ok: false; error: string };
+export type NormalizeResult = { ok: true; spec: ForgeSpec } | { ok: false; error: string };
 
 /** Waliduje i sprowadza do postaci kanonicznej surowe argumenty narzędzia.
  *  Pochodzą od modelu, więc nie ufamy tu niczemu. */
@@ -337,6 +337,6 @@ export function normalizeDocSpec(args: Record<string, unknown>): NormalizeResult
 
 /** Czy ten opis w ogóle prosi o jakiekolwiek zdjęcie? Steruje asynchronicznym
  *  dociąganiem obrazów po oddaniu pliku. */
-export function specHasImagePrompts(spec: ProducerSpec): boolean {
+export function specHasImagePrompts(spec: ForgeSpec): boolean {
   return !!spec.heroImageQuery || blocksOf(spec).some((b) => !!b.imageQuery);
 }

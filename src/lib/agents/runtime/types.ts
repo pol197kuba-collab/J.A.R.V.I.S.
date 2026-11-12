@@ -7,7 +7,7 @@ import type { LlmUsage } from "@/lib/ai/llm/usage";
 import type { UiAction } from "@/lib/constants/uiActions";
 import type { Teammate } from "./prompt";
 
-export type OrchestratorInput = {
+export type AgentLoopInput = {
   supabase: SupabaseClient<Database>;
   userId: string;
   agentSlug: string;
@@ -78,8 +78,8 @@ export type RunState = {
   /** Zbiór zamknięty po złożeniu deklaracji — dokładnie to, co widział model. */
   declaredToolNames: Set<string>;
   allowDelegate: boolean;
-  isProducer: boolean;
-  producerCalledGenerate: boolean;
+  isForge: boolean;
+  forgeCalledGenerate: boolean;
   finalText: string;
   uiAction: UiAction | null;
   toolCallLog: ToolCallLogEntry[];

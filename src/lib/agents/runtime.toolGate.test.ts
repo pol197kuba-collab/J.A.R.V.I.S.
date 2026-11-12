@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { runOrchestrator } from "./runtime.server";
+import { runAgentLoop } from "./runtime.server";
 import { getToolByName } from "./tools.server";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import {
@@ -46,7 +46,7 @@ describe("A1 — tylko zadeklarowane narzędzia", () => {
     // Herald nie ma w bazie żadnego narzędzia — delete_note nie jest zadeklarowane.
     const { db, calls } = worldDb({ agents: [HERALD], secrets: KEYS_GEMINI_ONLY });
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -80,7 +80,7 @@ describe("A1 — tylko zadeklarowane narzędzia", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { db } = worldDb({ agents: [HERALD], secrets: KEYS_GEMINI_ONLY });
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -107,7 +107,7 @@ describe("A1 — tylko zadeklarowane narzędzia", () => {
       toolSlugs: ["list_notes"],
     });
 
-    await runOrchestrator({
+    await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -151,7 +151,7 @@ describe("A2b — potwierdzenie akcji external po obcej treści", () => {
       toolSlugs: ["web_search", "delete_note"],
     });
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -207,7 +207,7 @@ describe("A2b — potwierdzenie akcji external po obcej treści", () => {
       toolSlugs: ["web_search", "delete_note"],
     });
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -242,7 +242,7 @@ describe("A2b — potwierdzenie akcji external po obcej treści", () => {
       toolSlugs: ["web_search", "save_note"],
     });
 
-    await runOrchestrator({
+    await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -272,7 +272,7 @@ describe("A2b — potwierdzenie akcji external po obcej treści", () => {
       toolSlugs: ["delete_note"],
     });
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -308,7 +308,7 @@ describe("A2b — potwierdzenie akcji external po obcej treści", () => {
       toolSlugs: ["web_search", "delete_note"],
     });
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: db,
       userId: "u1",
       agentSlug: AGENT_SLUGS.JARVIS,

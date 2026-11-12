@@ -143,7 +143,7 @@ export function dateSection(now: Date): string {
   })}, ${now.toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Warsaw" })} (ISO: ${now.toISOString()}). Używaj TEJ daty jako punktu odniesienia dla wszelkich względnych określeń czasu ("jutro", "za tydzień", "w przyszły poniedziałek" itp.) — nigdy nie zgaduj daty z pamięci.`;
 }
 
-// Only the JARVIS orchestrator itself — the voice the user actually talks
+// Only J.A.R.V.I.S. itself — the voice the user actually talks
 // to — gets the Tony Stark/Iron-Man persona. Every teammate (Insight,
 // Forge, Herald, Metric, Shield) has its own complete, self-contained
 // system_prompt already establishing who it is; prepending JARVIS_PERSONA
