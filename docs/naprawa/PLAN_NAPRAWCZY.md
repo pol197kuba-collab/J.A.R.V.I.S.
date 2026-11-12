@@ -224,23 +224,35 @@ Dopiero po etapie 2, żeby efekt było widać w liczbach.
 
 Czysta refaktoryzacja: testy z etapu 0 nie mogą się zmienić.
 
-- [ ] `runOrchestrator` podzielić na moduły w `src/lib/agents/runtime/`:
+- [x] `runOrchestrator` podzielić na moduły w `src/lib/agents/runtime/`:
       przygotowanie kontekstu (agent, klucze, zespół, prompt, model, budżet);
       jedna tura modelu (wybór dostawcy, failover) — po etapie 2 to cienka
       warstwa nad klientem; wykonanie narzędzi (bramka z etapu 1, delegacja,
       wyłuskanie załączników); finalizacja (klasyfikator, tekst zastępczy,
       zapis runu, wiadomości). Funkcja główna ma zostać czytelną sekwencją
       tych kroków.
-- [ ] Prompt systemowy i blok zespołu przenieść do osobnego pliku jako
+      → `runtime/context.server.ts`, `turn.server.ts`, `tools.server.ts`,
+      `finalize.server.ts` (+ `classifier.server.ts`, `constants.ts`,
+      `prompt.ts`, `usage.ts`, `types.ts`); `runOrchestrator` ma ~70 linii.
+      Kod i komentarze przeniesione dosłownie (porównane linia po linii).
+- [x] Prompt systemowy i blok zespołu przenieść do osobnego pliku jako
       nazwane sekcje (bez zmiany treści — porównać wynikowy string testem).
-- [ ] `tools.server.ts` rozbić na pliki per obszar (web, notatki, pamięć,
+      → `runtime/prompt.ts`; snapshot `runtime.prompt.test.ts` zapisany przed
+      przeniesieniem (prompt J.A.R.V.I.S. z zespołem, agent z własnym promptem,
+      deklaracje narzędzi z i bez S.H.I.E.L.D.).
+- [x] `tools.server.ts` rozbić na pliki per obszar (web, notatki, pamięć,
       zadania, projekty/dev, strażnik, lokalne, dokumenty, rynki/paliwa,
       zlecenia stałe) z jednym `index` eksportującym `ALL_TOOLS`.
-- [ ] Testy narzędzi zapisujących (`save_note`, `delete_note`, `create_task`,
+      → `src/lib/agents/tools/*.server.ts` (13 plików); indeksem został
+      `tools.server.ts` (to samo publiczne API, importy w aplikacji bez zmian).
+- [x] Testy narzędzi zapisujących (`save_note`, `delete_note`, `create_task`,
       `update_task`, `remember`, zlecenia stałe) na zamockowanym kliencie bazy.
-- [ ] **A19.** Status agenta: „idle” ustawiać tylko, gdy nie ma innego runu
+- [x] **A19.** Status agenta: „idle” ustawiać tylko, gdy nie ma innego runu
       `running` tego agenta (albo wyliczać status z `agent_runs` przy
       odczycie i przestać go zapisywać) — wybrać prostsze, opisać w PR.
+      → pierwsza opcja: status nie jest nadpisywany (idle ani error), gdy ten
+      agent ma inny run `running` z ostatnich 15 minut (okno chroni przed
+      runem, który padł bez zapisu).
 
 ## Etap 5 — sekrety (A5, A8, A14)
 
@@ -378,7 +390,8 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 | 2026-11-11 | 0 | #223 | czysty / 992 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Pokrycie `src/lib/agents`: linie 40,06% (1002/2501), instrukcje 38,57%, gałęzie 33,66%, funkcje 36,09%; `runtime.server.ts` linie 80,7% / gałęzie 67,7% (bez nowych testów 73,5% / 59,0%); `tools.server.ts` linie 20,1%. Całe `src`: linie 23,46%. Mutacja kontrolna (+1 token w zapisie, klasyfikator mimo wywołań narzędzi) wywraca 10 z 11 nowych testów. |
 | 2026-11-11 | 1 | #225 | czysty / 1013 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Testy z etapu 0 bez zmian w asercjach. Pokrycie `src/lib/agents`: linie 44,80% (było 40,06%), gałęzie 37,11%; `runtime.server.ts` 82,3%, `tools.server.ts` 35,9% (było 20,1%). Migracja `memories.origin` — wchodzi sama po merge; nowy kod `remember` jej wymaga, więc publikacja w Lovable PO migracji. |
 | 2026-11-11 | 2 | #226 | czysty / 1046 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Pokrycie `src/lib/agents`: linie 45,33% (było 44,80%), `src/lib/ai/llm` 88,8%. Build OK, w bundlu przeglądarki brak księgi i klucza. Migracja `llm_usage` i funkcja sumująca sprawdzone na lokalnym Postgresie 16 (dwa przebiegi, przejście z `agent_runs`). Kolejność wdrożenia: migracja (sama po merge) → publikacja w Lovable. |
-| 2026-11-11 | 3 | (PR w toku) | czysty / 1068 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Pomiar przed/po niewykonany (brak dostępu do bazy, księga od dziś) — zapytanie w etapie 3. Oczekiwany efekt: klasyfikator tylko dla poleceń UI (zamiast po każdej turze bez narzędzi), historia ≤ ~6000 tokenów zamiast do 30×8000 znaków, cache promptu dla agentów na Claude. |
+| 2026-11-11 | 3 | #227 | czysty / 1068 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Pomiar przed/po niewykonany (brak dostępu do bazy, księga od dziś) — zapytanie w etapie 3. Oczekiwany efekt: klasyfikator tylko dla poleceń UI (zamiast po każdej turze bez narzędzi), historia ≤ ~6000 tokenów zamiast do 30×8000 znaków, cache promptu dla agentów na Claude. |
+| 2026-11-12 | 4 | (PR w toku) | czysty / 1086 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Testy z etapu 0 bez zmian. Pokrycie `src/lib/agents`: linie 51,82% (było 45,33%), `runtime/` 83,8%, `tools/` 49,8%. Ten poziom to próg dla etapu 9. |
 
 ## Załącznik: znaleziska z rewizji (skrót)
 
