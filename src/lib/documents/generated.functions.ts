@@ -14,6 +14,7 @@ import { z } from "zod";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { logServerError, logServerWarn } from "@/lib/system/logServerError";
 import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
+import { ENRICH_CLAIM_TTL_MS } from "./enrichQueue";
 
 // Short-lived on purpose: these are re-minted per preview/download click, so
 // there's no reason to hand out a week-long URL the way the chat link does.
@@ -104,6 +105,22 @@ export async function enrichGeneratedFileImages(
   if (error || !row) return { ok: false, reason: "not_found" };
   if (row.image_status !== "pending") return { ok: false, reason: "not_pending" };
   if (!row.spec) return { ok: false, reason: "no_spec" };
+
+  // Przejęcie to JEDEN warunkowy UPDATE (plan naprawczy, etap 6): grafiki
+  // dogrywa przeglądarka i kolejka w tle, więc dwa przebiegi mogą ruszyć
+  // naraz. Przechodzi tylko pierwszy; znacznik starszy niż ENRICH_CLAIM_TTL_MS
+  // znaczy, że poprzedni przebieg zginął (uśpiona karta) i wolno podjąć znowu.
+  const now = new Date();
+  const staleBefore = new Date(now.getTime() - ENRICH_CLAIM_TTL_MS).toISOString();
+  const { data: claimed } = await supabase
+    .from("generated_files")
+    .update({ image_claimed_at: now.toISOString() })
+    .eq("id", row.id)
+    .eq("image_status", "pending")
+    .or(`image_claimed_at.is.null,image_claimed_at.lt.${staleBefore}`)
+    .select("id")
+    .maybeSingle();
+  if (!claimed) return { ok: false, reason: "not_pending" };
 
   const spec = row.spec as unknown as ForgeDocSpec;
 

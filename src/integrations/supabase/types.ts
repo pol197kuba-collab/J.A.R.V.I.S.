@@ -1206,6 +1206,7 @@ export type Database = {
           filename: string
           format: string
           id: string
+          image_claimed_at: string | null
           image_count: number | null
           image_status: string
           preview_path: string | null
@@ -1222,6 +1223,7 @@ export type Database = {
           filename: string
           format: string
           id?: string
+          image_claimed_at?: string | null
           image_count?: number | null
           image_status?: string
           preview_path?: string | null
@@ -1238,6 +1240,7 @@ export type Database = {
           filename?: string
           format?: string
           id?: string
+          image_claimed_at?: string | null
           image_count?: number | null
           image_status?: string
           preview_path?: string | null
