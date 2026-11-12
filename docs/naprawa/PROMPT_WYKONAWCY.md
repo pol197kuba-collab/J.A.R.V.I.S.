@@ -99,6 +99,7 @@ NA KONIEC ETAPU
   mówi prawdę, a rdzeń ma testy, na których opierają się etapy 3–4.
 - Etap 5 ma dwa PR-y (kod, potem migracja). Drugi mergujesz dopiero, gdy
   po pierwszym aplikacja i wszystkie zaplanowane joby przeszły pełną dobę.
-- Etapy 6, 7 i 8 są od siebie niezależne — kolejność dowolna.
+- Po etapie 6 kolejność to: 6b → 9 → 7 → 8 (uzasadnienie na końcu etapu 6b
+  w planie). Numer etapu w prompcie wpisujesz dosłownie, np. `6b`.
 - Jeśli sesja się urwie w połowie etapu, uruchom nową z tym samym promptem
   i numerem: wykonawca odczyta stan z odhaczonych pól i Dziennika.

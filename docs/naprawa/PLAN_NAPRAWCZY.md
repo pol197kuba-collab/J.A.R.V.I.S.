@@ -48,6 +48,15 @@
       nic więcej. Robi się to raz, w dowolnym momencie.
 - [x] **W5. Decyzje o usunięciu modułów** — podjęte 2026-11-11, tabela w etapie 8.
 - [x] **W6. Playwright** jako devDependency do testu dymnego (etap 9) — zgoda 2026-11-11.
+- [x] **W7. Sekrety GitHub Actions dla jobów.** `SUPABASE_SERVICE_ROLE_KEY`
+      i `JARVIS_OWNER_ID` dodane przez właściciela 2026-11-12 (wcześniej puste;
+      plan pytał w W3 tylko o Lovable). Przebieg Commute Watch z 16:08 UTC
+      widzi oba, błąd braku klucza zniknął.
+- [ ] **W8. Potwierdzenie po W7.** Czy 2026-11-13 rano przyszedł push
+      z briefingu i czy log Commute Watch z okna 6:00 jest bez ostrzeżeń.
+      Wynik wpisać tutaj: `______`. Sprawdza etap 6b.
+- [ ] **W9. Pomiar etapu 3.** Uruchomić w Supabase zapytanie pomiarowe
+      z etapu 3 i wpisać wynik do Dziennika.
 
 ## Etap 0 — siatka bezpieczeństwa (bez zmiany zachowania)
 
@@ -317,6 +326,91 @@ Wymaga W2 i W3.
       sam i zostaje tylko kolejka. Czeka na właściciela (logi Lovable —
       nie mam do nich dostępu z sesji).
 
+## Etap 6b — poprawki po przeglądzie etapów 0–6
+
+Dopisany 2026-11-12 po niezależnym przeglądzie stanu `main` (commit
+`53461c4`). Robi się **przed etapem 7**. To naprawy tego, co już jest —
+bez nowych funkcji.
+
+**Co się stało.** Od etapu 5a klucze z `user_secrets` czyta tylko service
+role, a joby w GitHub Actions logowały się kontem właściciela (e-mail
+i hasło), bo sekrety `SUPABASE_SERVICE_ROLE_KEY` i `JARVIS_OWNER_ID` były
+puste. Skutek: Commute Watch od 5a nie miał klucza TomTom („brak klucza
+TomTom” w logu z 2026-11-12 13:50 UTC), odczyt kluczy VAPID do pushy szedł
+tą samą drogą, a `scripts/document-jobs.ts` (etap 6) kończyłby się błędem
+przy pierwszym wywołaniu. Wszystkie te przebiegi były **zielone**, więc
+nikt tego nie zauważył. Sekrety są już dodane (W7); ten etap usuwa
+przyczynę, dla której awaria była niewidoczna.
+
+- [ ] **Joby głośno o braku kluczy.** W każdym skrypcie z `scripts/`
+      (commute-watch, morning-brief, markets-daily, markets-live,
+      brain-layout, orlen-daily, document-jobs): brak klucza albo błąd
+      odczytu sekretów potrzebnych do GŁÓWNEJ pracy joba kończy go kodem
+      błędu i wpisem `error` w `system_events` (S.H.I.E.L.D. to widzi).
+      Zielono kończy się tylko to, co plan joba opisuje jako świadomą
+      degradację (np. rynki bez klucza modelu → sama arytmetyka) — i wtedy
+      z `::warning::` nazywającym, czego zabrakło. `readOwnerSecrets` ma
+      rozróżniać „nie ma takiego klucza” od „nie udało się odczytać”; dziś
+      oba wyglądają tak samo dla wywołującego. Testy na oba przypadki.
+- [ ] **Jedna droga uwierzytelnienia jobów.** Skoro klucze wymagają service
+      role, ścieżka logowania e-mailem i hasłem w skryptach jest martwym
+      zapasem, który ukrył tę usterkę. Skrypty wymagają
+      `SUPABASE_SERVICE_ROLE_KEY` + `JARVIS_OWNER_ID`; ścieżkę e-mail/hasło
+      usunąć ze skryptów i z `env:` w workflowach. Wyjątek: jeśli któryś job
+      świadomie ma działać pod RLS — zostawić i opisać w README dlaczego.
+      Sekretów `JARVIS_EMAIL` / `JARVIS_PASSWORD` w GitHubie nie da się
+      usunąć z kodu: po merge i jednym zielonym dniu wpisać właścicielowi
+      w podsumowaniu, że może je skasować (lokalny worker ma własny `.env`
+      i znika w etapie 8).
+- [ ] **Jedno zdanie na koniec każdego joba.** Każdy przebieg kończy się
+      `::notice::` mówiącym, co zrobił albo dlaczego nic nie zrobił (np.
+      „poza oknem dojazdu — nic do sprawdzenia”). Przebieg Commute Watch
+      z 2026-11-12 16:08 UTC nie wypisał ani jednej linii.
+- [ ] **README:** tabela sekretów GitHub Actions z podziałem na wymagane
+      i opcjonalne oraz co przestaje działać bez każdego z nich.
+- [ ] **W8.** Odczytać logi Morning Brief i Commute Watch z 2026-11-13
+      (albo najnowsze): pushe wychodzą, klucz TomTom się czyta. Jeśli nie —
+      to pierwsza rzecz do naprawy w tym etapie.
+- [ ] **`recall` a obca treść (luka w A2d).** Wpis pamięci o pochodzeniu
+      `tool` albo `unknown` zwrócony przez `recall` jest obcą treścią:
+      ustawia `untrustedSeen` i dostaje notę, tak jak wynik `fetch_url`.
+      Wpisy `user` — nie. Dziś `recall` zwraca pochodzenie, ale bramka A2b
+      go nie czyta, więc zatruty wpis działa w następnej rozmowie bez
+      potwierdzenia. Test: `recall` z wpisem `tool`, potem `delete_note`
+      w tej samej turze → `needs_confirmation`.
+      Uwaga: wpisy sprzed migracji mają `unknown`; sprawdzić, ile ich jest,
+      i jeśli potwierdzenia byłyby przez to nagminne — zapytać właściciela,
+      czy oznaczyć stare wpisy jako `user` jednorazową migracją.
+- [ ] **Wymuszenie narzędzia u Claude** (Rejestr, etap 3):
+      `tool_choice: {type: "tool"}` zwraca 400 na Opus 5.5 / Sonnet 5.5,
+      więc F.O.R.G.E. na tych modelach zawsze pada i schodzi na Gemini.
+      Sprawdzić w aktualnej dokumentacji Claude API, co te modele
+      przyjmują, i dobrać sposób per model w `src/lib/ai/llm/anthropic.ts`.
+      Jeśli wymuszenia nie da się uzyskać — dla `generate_document` od razu
+      iść na Gemini, z jednym `info` w logu zamiast błędu i failoveru.
+- [ ] **Katalog modeli** (Rejestr, etap 2): usunąć `gemini-2.0-flash`
+      i `gemini-2.0-flash-lite` z `models.ts` po sprawdzeniu u źródła, że
+      są wyłączone; agent z takim modelem w bazie ma zejść na domyślny
+      z ostrzeżeniem (sprawdzić, czy już tak jest).
+- [ ] **Stawki Groq** (Rejestr, etap 2): zweryfikować na stronie Groq;
+      jeśli z sesji nadal niedostępna — poprosić właściciela o zrzut cennika.
+- [ ] **Komunikat po limicie iteracji** (Rejestr, etap 0): po polsku,
+      w tonie reszty odpowiedzi.
+- [ ] **Porządek w planie:** pozycje Rejestru naprawione w tym etapie
+      oznaczyć numerem PR.
+
+Poza zakresem (zapisane, żeby nie robić „przy okazji”): rozbicie
+`runtime.functions.ts` (1535 linii) — etap 8; testy ścieżki czatu
+i głosu — etap 9.
+
+Gotowe, gdy: job uruchomiony bez wymaganego sekretu jest czerwony
+(pokazać w teście skryptu albo opisać ręczną próbę), a każdy przebieg
+zostawia w logu jedno zdanie o tym, co zrobił.
+
+**Kolejność po 6b:** najpierw etap 9, potem 7 i 8. Regresje z etapu 5
+(#230–#232) złapał właściciel, nie testy — czat i ścieżka głosowa nie mają
+testów, a etapy 7 i 8 dotkną tych samych miejsc.
+
 ## Etap 7 — odpytywanie → realtime (A15)
 
 - [ ] Wspólny hook: subskrypcja zmian tabeli unieważnia klucz zapytania;
@@ -422,6 +516,7 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 | 2026-11-12 | 5 (5a) | #229 | czysty / 1098 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | A8, A5 (kod), A14. Z Ustawień znika przełącznik „Czat przez serwer” — czat zawsze idzie przez serwer. Migracja REVOKE (5b) dopiero po potwierdzeniu przez właściciela, że 5a działa po publikacji w Lovable. |
 | 2026-11-12 | 5 (5b) | #234 | czysty / 1104 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Migracja REVOKE na `user_secrets`. Po drodze (zgłoszenia właściciela): #230 (prośba „dwa razy”), #231 (wątek czatu — regresja z A8), #232 (nieistniejący agent; stare nazwy agentów w kodzie), #233 (narzędzia `guardian_*` → `shield_*`). Etap 5 zamknięty. |
 | 2026-11-12 | 6 | #235 | czysty / 1116 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Kolejka w tle (pg_cron → `document-jobs.yml`) i warunkowe przejęcie zadań/grafik. Migracja sprawdzona na lokalnym Postgresie 16 (atrapy `net`/`cron`): wywołanie tylko przy czekającej pracy, blokada 5 min, drugi przebieg bez błędu. Otwarte: usunięcie ratownika z briefingu (po tygodniu), sprawdzenie ucinania w logach Lovable. |
+| 2026-11-12 | przegląd | — | czysty / 1116 zielonych / 0 błędów, 15 ostrzeżeń | Niezależny przegląd `main` po etapach 0–6: kierunek zgodny z planem; znaleziona usterka z sekretami jobów (W7, etap 6b). Dopisany etap 6b, zmieniona kolejność: 6b → 9 → 7 → 8. |
 
 ## Załącznik: znaleziska z rewizji (skrót)
 
