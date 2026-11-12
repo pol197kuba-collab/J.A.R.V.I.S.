@@ -391,6 +391,7 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 | 2026-11-11 | build (`npm run build`) | 31 ostrzeżeń „externalized for browser compatibility”, m.in. `node:dns`/`node:net` z `tools.server.ts` i `web-push` — kod serwerowy jest w grafie importów klienta. Identycznie na `main` przed etapem 2; build przechodzi, nic z tego nie trafia do bundla przeglądarki (sprawdzone). | 2 | |
 | 2026-11-11 | `src/lib/agents/pricing.ts` | Stawki Groq niezweryfikowane u źródła (strona Groq niedostępna z sesji, agregatory sprzeczne — część mówi o przejściu tych modeli na „contact sales”). Sprawdzić ręcznie na groq.com/pricing. | 2 | |
 | 2026-11-11 | `src/lib/ai/llm/anthropic.ts` (`forceToolName`) | Wymuszenie narzędzia przez `tool_choice: {type: "tool"}` (F.O.R.G.E. → `generate_document`) według dokumentacji Claude API zwraca 400 na Claude Opus 5.5 i Sonnet 5.5. Agent ustawiony na te modele padnie przy wymuszeniu (potem zejdzie na Gemini). | 3 | |
+| 2026-11-12 | `useAgentChatChannel.ts`, `VoiceCommandContext.tsx` (historia czatu) | Klient dopisywał wiadomość do transkryptu PRZED pobraniem historii, więc model dostawał tę samą prośbę dwa razy (historia + input) i odpowiadał „prośba padła dwa razy”. Od etapu 3 tylko przy pierwszej wiadomości w nowym/wyczyszczonym wątku i w ścieżce głosowej; wcześniej przy każdej turze. Zgłosił właściciel. | 0 | naprawione 2026-11-12: historia pobierana przed dopisaniem + `withoutCurrentInput` na serwerze (test) |
 
 ## Dziennik
 

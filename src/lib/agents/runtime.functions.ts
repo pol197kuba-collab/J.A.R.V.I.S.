@@ -21,7 +21,7 @@ import {
   toConversationMessage,
   type ConversationMessage,
 } from "@/lib/ai/chatHistory";
-import { HISTORY_FETCH_LIMIT, trimHistory, type HistoryTurn } from "./history";
+import { HISTORY_FETCH_LIMIT, trimHistory, withoutCurrentInput, type HistoryTurn } from "./history";
 import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 import { clearOwnerSecrets, writeOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
@@ -868,7 +868,7 @@ export const runAgent = createServerFn({ method: "POST" })
       userId,
       agentSlug: data.agentSlug,
       input: data.input,
-      history: trimHistory(history),
+      history: trimHistory(withoutCurrentInput(history, data.input)),
       conversationId: data.conversationId ?? null,
     });
   });

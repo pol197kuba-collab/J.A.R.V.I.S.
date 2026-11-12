@@ -36,3 +36,18 @@ export function trimHistory(
   }
   return kept.reverse();
 }
+
+/**
+ * Historia BEZ bieżącej wiadomości. Klient zapisuje wiadomość użytkownika do
+ * swojego transkryptu, zanim wyśle zapytanie, więc w rozmowie bez wątku
+ * (pierwsza wiadomość, nowy lub wyczyszczony wątek) ostatnia tura historii
+ * to ta sama prośba, którą orkiestrator dokłada jako `input`. Model widział
+ * ją wtedy dwa razy i odpowiadał „prośba padła dwa razy”.
+ */
+export function withoutCurrentInput(turns: readonly HistoryTurn[], input: string): HistoryTurn[] {
+  const last = turns[turns.length - 1];
+  if (last && last.role === "user" && last.text.trim() === input.trim()) {
+    return turns.slice(0, -1);
+  }
+  return [...turns];
+}

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { estimateHistoryTokens, trimHistory, type HistoryTurn } from "./history";
+import {
+  estimateHistoryTokens,
+  trimHistory,
+  withoutCurrentInput,
+  type HistoryTurn,
+} from "./history";
 
 // Etap 3 (A10): historia rozmowy z serwera, przycięta do budżetu tokenów —
 // najnowsze wiadomości w całości, starsze odcinane.
@@ -45,5 +50,29 @@ describe("trimHistory", () => {
 
   it("szacunek tokenów: ~4 znaki na token", () => {
     expect(estimateHistoryTokens([turn("user", 400)])).toBe(100);
+  });
+});
+
+describe("withoutCurrentInput", () => {
+  it("usuwa ostatnią turę, gdy to ta sama prośba co input", () => {
+    const turns: HistoryTurn[] = [
+      { role: "jarvis", text: "Dzień dobry." },
+      { role: "user", text: "Otwórz jarvisa" },
+    ];
+    expect(withoutCurrentInput(turns, " Otwórz jarvisa ")).toEqual([
+      { role: "jarvis", text: "Dzień dobry." },
+    ]);
+  });
+
+  it("zostawia historię, gdy ostatnia tura jest inna albo od J.A.R.V.I.S.", () => {
+    const turns: HistoryTurn[] = [
+      { role: "user", text: "Otwórz jarvisa" },
+      { role: "jarvis", text: "Otwarte." },
+    ];
+    expect(withoutCurrentInput(turns, "Otwórz jarvisa")).toEqual(turns);
+    expect(withoutCurrentInput([{ role: "user", text: "Coś innego" }], "Otwórz jarvisa")).toEqual([
+      { role: "user", text: "Coś innego" },
+    ]);
+    expect(withoutCurrentInput([], "x")).toEqual([]);
   });
 });
