@@ -12,6 +12,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { MAX_DETECTIONS, normalizeDetections, type Detection } from "./live";
 import { callGemini } from "@/lib/ai/llm/gemini";
 import type { GeminiUsageMetadata } from "@/lib/ai/llm/usage";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 const DetectInput = z.object({
   imageBase64: z.string().min(100).max(800_000),
@@ -42,11 +43,7 @@ export const detectObjects = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<LiveDetections> => {
     const { supabase, userId } = context;
     const startedAt = Date.now();
-    const { data: secret } = await supabase
-      .from("user_secrets")
-      .select("gemini_api_key")
-      .eq("owner_id", userId)
-      .maybeSingle();
+    const { data: secret } = await readOwnerSecrets(userId, "gemini_api_key");
     const apiKey = secret?.gemini_api_key?.trim();
     if (!apiKey) throw new Error("Brak klucza Gemini. Wpisz go w Settings → AI Core.");
 

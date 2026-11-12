@@ -258,7 +258,7 @@ Czysta refaktoryzacja: testy z etapu 0 nie mogą się zmienić.
 
 Wymaga W2 i W3.
 
-- [ ] **A8.** Usunąć ścieżkę przeglądarkową czatu: `askJarvis` w
+- [x] **A8.** Usunąć ścieżkę przeglądarkową czatu: `askJarvis` w
       `jarvisBrain.ts` zawsze idzie przez `runAgent`; klucz znika z
       `localStorage` (także sprzątanie starego wpisu przy starcie);
       `chat_routing` przestaje być czytane. Zachować gotowe kwestie
@@ -272,9 +272,19 @@ Wymaga W2 i W3.
       UPDATE, DELETE ON user_secrets FROM authenticated`.
       Kolejność wdrożenia: najpierw kod (PR 5a), po potwierdzeniu działania
       migracja (PR 5b).
-- [ ] Sprawdzić, że żadna funkcja serwerowa nie zwraca pełnego klucza
-      (dziś zwracają podgląd 4 znaków — utrzymać).
-- [ ] **A14.** `claude-dev.yml`: dopisać warunek na autora zdarzenia
+      - [x] Kod (PR 5a): helpery `readOwnerSecrets` / `writeOwnerSecrets` /
+        `clearOwnerSecrets` w `src/lib/secrets/ownerSecrets.server.ts`; żaden
+        klient użytkownika nie dotyka tabeli (test `runtime.secrets.test.ts`).
+        Skrypty z `scripts/` czytają klucze tą samą drogą (service role ze
+        zmiennych Actions — wszystkie workflowy go mają). Funkcje SQL
+        czytające tabelę są SECURITY DEFINER, więc REVOKE ich nie dotknie.
+      - [ ] Migracja REVOKE (PR 5b) — czeka na potwierdzenie właściciela, że
+        5a działa w produkcji (Ustawienia → klucze, czat, brief).
+- [x] Sprawdzić, że żadna funkcja serwerowa nie zwraca pełnego klucza
+      (dziś zwracają podgląd 4 znaków — utrzymać). Test
+      `src/lib/secrets/noKeyLeak.test.ts`; `google_cse_cx` (jawny
+      identyfikator wyszukiwarki) Ustawienia pokazują w całości — celowo.
+- [x] **A14.** `claude-dev.yml`: dopisać warunek na autora zdarzenia
       (właściciel repo). Repo jest prywatne, więc to pas bezpieczeństwa.
 
 ## Etap 6 — zadania w tle bez przeglądarki (A16)
@@ -391,7 +401,8 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 | 2026-11-11 | 1 | #225 | czysty / 1013 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Testy z etapu 0 bez zmian w asercjach. Pokrycie `src/lib/agents`: linie 44,80% (było 40,06%), gałęzie 37,11%; `runtime.server.ts` 82,3%, `tools.server.ts` 35,9% (było 20,1%). Migracja `memories.origin` — wchodzi sama po merge; nowy kod `remember` jej wymaga, więc publikacja w Lovable PO migracji. |
 | 2026-11-11 | 2 | #226 | czysty / 1046 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Pokrycie `src/lib/agents`: linie 45,33% (było 44,80%), `src/lib/ai/llm` 88,8%. Build OK, w bundlu przeglądarki brak księgi i klucza. Migracja `llm_usage` i funkcja sumująca sprawdzone na lokalnym Postgresie 16 (dwa przebiegi, przejście z `agent_runs`). Kolejność wdrożenia: migracja (sama po merge) → publikacja w Lovable. |
 | 2026-11-11 | 3 | #227 | czysty / 1068 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Pomiar przed/po niewykonany (brak dostępu do bazy, księga od dziś) — zapytanie w etapie 3. Oczekiwany efekt: klasyfikator tylko dla poleceń UI (zamiast po każdej turze bez narzędzi), historia ≤ ~6000 tokenów zamiast do 30×8000 znaków, cache promptu dla agentów na Claude. |
-| 2026-11-12 | 4 | (PR w toku) | czysty / 1086 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Testy z etapu 0 bez zmian. Pokrycie `src/lib/agents`: linie 51,82% (było 45,33%), `runtime/` 83,8%, `tools/` 49,8%. Ten poziom to próg dla etapu 9. |
+| 2026-11-12 | 4 | #228 | czysty / 1086 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Testy z etapu 0 bez zmian. Pokrycie `src/lib/agents`: linie 51,82% (było 45,33%), `runtime/` 83,8%, `tools/` 49,8%. Ten poziom to próg dla etapu 9. |
+| 2026-11-12 | 5 (5a) | (PR w toku) | czysty / 1098 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | A8, A5 (kod), A14. Z Ustawień znika przełącznik „Czat przez serwer” — czat zawsze idzie przez serwer. Migracja REVOKE (5b) dopiero po potwierdzeniu przez właściciela, że 5a działa po publikacji w Lovable. |
 
 ## Załącznik: znaleziska z rewizji (skrót)
 

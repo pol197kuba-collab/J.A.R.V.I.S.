@@ -16,6 +16,7 @@ import type { Json } from "@/integrations/supabase/types";
 import type { TraceItem } from "./trace";
 import { callGemini } from "@/lib/ai/llm/gemini";
 import type { GeminiUsageMetadata } from "@/lib/ai/llm/usage";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 const ANSWER_MODEL = "gemini-flash-latest";
 const ANSWER_TIMEOUT_MS = 20_000;
@@ -48,11 +49,7 @@ export const askBrain = createServerFn({ method: "POST" })
     const question = data.question.trim();
     const { getToolByName } = await import("@/lib/agents/tools.server");
 
-    const { data: secret } = await supabase
-      .from("user_secrets")
-      .select("gemini_api_key")
-      .eq("owner_id", userId)
-      .maybeSingle();
+    const { data: secret } = await readOwnerSecrets(userId, "gemini_api_key");
     const apiKey = secret?.gemini_api_key?.trim() ?? "";
 
     const ctx = {

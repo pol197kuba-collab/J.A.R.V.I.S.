@@ -13,6 +13,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { logServerError, logServerWarn } from "@/lib/system/logServerError";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 // Short-lived on purpose: these are re-minted per preview/download click, so
 // there's no reason to hand out a week-long URL the way the chat link does.
@@ -106,11 +107,10 @@ export async function enrichGeneratedFileImages(
 
   const spec = row.spec as unknown as ProducerDocSpec;
 
-  const { data: secret } = await supabase
-    .from("user_secrets")
-    .select("gemini_api_key, google_cse_api_key, google_cse_cx")
-    .eq("owner_id", userId)
-    .maybeSingle();
+  const { data: secret } = await readOwnerSecrets(
+    userId,
+    "gemini_api_key, google_cse_api_key, google_cse_cx",
+  );
   const apiKey = secret?.gemini_api_key?.trim();
   if (!apiKey) {
     await supabase.from("generated_files").update({ image_status: "failed" }).eq("id", row.id);

@@ -42,6 +42,7 @@ import {
 } from "../src/lib/brain/labels";
 import type { Vec3 } from "../src/lib/brain/projection";
 import { computeInsights } from "../src/lib/brain/insights";
+import { readOwnerSecrets } from "../src/lib/secrets/ownerSecrets.server";
 
 const args = new Set(process.argv.slice(2));
 const DRY_RUN = args.has("--dry-run");
@@ -132,11 +133,7 @@ async function main(): Promise<void> {
   // Klucz Gemini: sekret joba albo klucz użytkownika z aplikacji.
   let geminiKey = process.env.GEMINI_API_KEY?.trim() || null;
   if (!geminiKey) {
-    const { data } = await db
-      .from("user_secrets")
-      .select("gemini_api_key")
-      .eq("owner_id", ownerId)
-      .maybeSingle();
+    const { data } = await readOwnerSecrets(ownerId, "gemini_api_key");
     geminiKey = data?.gemini_api_key?.trim() || null;
   }
   if (!geminiKey) {

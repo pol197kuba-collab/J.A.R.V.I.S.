@@ -7,6 +7,7 @@ import { vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
+import { testSecretsDb } from "@/test/secretsDb";
 
 // ---------- atrapa klienta bazy z zapisem wywołań ----------
 
@@ -51,6 +52,8 @@ export function makeDb(resolve: Resolver) {
       return Promise.resolve(resolve(call.table, call.ops) ?? EMPTY);
     },
   } as unknown as SupabaseClient<Database>;
+  // Etap 5 (A5): user_secrets czyta klient service role — w testach ta sama atrapa.
+  testSecretsDb.current = db;
   return { db, calls };
 }
 

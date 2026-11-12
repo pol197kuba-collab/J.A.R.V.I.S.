@@ -33,6 +33,7 @@ import type { ProducerSpec } from "./producer.server";
 import { callGemini } from "@/lib/ai/llm/gemini";
 import type { LedgerContext } from "@/lib/ai/llm/ledger";
 import type { GeminiUsageMetadata } from "@/lib/ai/llm/usage";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 const RunInput = z.object({ jobId: z.string().uuid() });
 
@@ -234,11 +235,7 @@ export async function runDocumentJobCore(
       .eq("id", job.id);
 
     try {
-      const { data: secret } = await supabase
-        .from("user_secrets")
-        .select("gemini_api_key")
-        .eq("owner_id", userId)
-        .maybeSingle();
+      const { data: secret } = await readOwnerSecrets(userId, "gemini_api_key");
       const apiKey = secret?.gemini_api_key?.trim();
 
       const insightResult = await runOrchestratorWithRetry({

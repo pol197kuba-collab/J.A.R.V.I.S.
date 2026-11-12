@@ -18,6 +18,7 @@ import {
 } from "./constants";
 import { basePromptFor, dateSection, teamRosterSection, uiAccessSection } from "./prompt";
 import type { OrchestratorInput, RunContext } from "./types";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 export type PreparedRun = {
   ctx: RunContext;
@@ -60,11 +61,10 @@ export async function prepareRun(args: OrchestratorInput): Promise<PreparedRun> 
   // 2. Resolve Gemini API key (required) + Groq API key (optional — free-tier
   // fallback, used only for the UI-action classifier pass and emergency
   // failover, never as the primary reasoning engine) from user_secrets.
-  const { data: secret } = await supabase
-    .from("user_secrets")
-    .select("gemini_api_key, groq_api_key, anthropic_api_key")
-    .eq("owner_id", userId)
-    .maybeSingle();
+  const { data: secret } = await readOwnerSecrets(
+    userId,
+    "gemini_api_key, groq_api_key, anthropic_api_key",
+  );
   const apiKey = secret?.gemini_api_key?.trim();
   if (!apiKey) {
     throw new Error(

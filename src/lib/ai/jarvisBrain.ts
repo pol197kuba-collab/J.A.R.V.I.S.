@@ -1,60 +1,27 @@
-// JARVIS brain — dynamic line generation via Google Gemini.
+// JARVIS brain — krótkie kwestie i odpowiedzi J.A.R.V.I.S.-a dla głosu i UI.
 //
-// The model returns strict JSON: { action, speech }. The `action` field
-// maps to UI intents the app already handles; `speech` is enqueued into
-// the existing FIFO speak() pipeline (HUD chirp + en-GB voice).
-//
-// If the API key is missing or any call fails, we silently fall back to
-// short canned lines so the system never goes mute.
+// Plan naprawczy, etap 5 (A8): jedyna droga to serwer (runAgent → Agent
+// Runtime). Dawna ścieżka przeglądarkowa wołała Gemini prosto z przeglądarki
+// kluczem z localStorage (klucz w adresie żądania i w pamięci przeglądarki) —
+// usunięta razem z przełącznikiem trybu czatu. Gdy serwer nie odpowiada,
+// zostają gotowe kwestie zastępcze, żeby system nigdy nie zamilkł.
 
-import { JARVIS_PERSONA } from "./persona";
 import { setAgentBusy, reportOutcome } from "./agentActivity";
 import { logClientEvent } from "@/lib/system/logClientEvent";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { UI_ACTIONS } from "@/lib/constants/uiActions";
 
-const MODELS = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"];
-const endpointFor = (model: string) =>
-  `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-
-// Dev-only convenience: a key baked in via VITE_GEMINI_API_KEY ends up in the
-// shipped client bundle and every network request's query string, so it must
-// never be relied on in a production build — only the user's own per-browser
-// localStorage key (set from Settings) or the server-routed path may be used
-// once deployed.
-const ENV_KEY = import.meta.env.DEV
-  ? (import.meta.env.VITE_GEMINI_API_KEY as string | undefined)?.trim()
-  : undefined;
-const LS_KEY = "jarvis_gemini_api_key";
-// Cached mirror of user_settings.chat_routing so we can decide sync in the
-// hot path. Kept in sync by Settings page whenever the user toggles it.
-const SERVER_ROUTING_LS_KEY = "jarvis_chat_routing_server";
-// Cached mirror of "server has Gemini key" — set by Settings page after a
-// successful saveGeminiKey call. Lets us fall back gracefully if the server
-// key was cleared.
+// Wiadomość „czy serwer ma klucz Gemini” (tak/nie — nie sekret). Odświeża ją
+// useAgentChatChannel i Ustawienia; służy tylko komunikatowi „rdzeń offline”.
 const SERVER_KEY_LINKED_LS_KEY = "jarvis_server_gemini_linked";
+// Dawne wpisy: klucz Gemini w przeglądarce i tryb czatu. Sprzątane przy starcie.
+const STALE_LS_KEYS = ["jarvis_gemini_api_key", "jarvis_chat_routing_server"];
 
-function getKey(): string | undefined {
-  if (typeof window !== "undefined") {
-    try {
-      const v = window.localStorage.getItem(LS_KEY)?.trim();
-      if (v) return v;
-    } catch {
-      /* ignore */
-    }
-  }
-  return ENV_KEY || undefined;
-}
-
-function shouldUseServerRuntime(): boolean {
-  if (typeof window === "undefined") return false;
+if (typeof window !== "undefined") {
   try {
-    return (
-      window.localStorage.getItem(SERVER_ROUTING_LS_KEY) === "1" &&
-      window.localStorage.getItem(SERVER_KEY_LINKED_LS_KEY) === "1"
-    );
+    STALE_LS_KEYS.forEach((k) => window.localStorage.removeItem(k));
   } catch {
-    return false;
+    /* ignore */
   }
 }
 
@@ -101,76 +68,6 @@ export const JARVIS_ACTIONS = ["none", ...UI_ACTIONS] as const;
 export type JarvisAction = (typeof JARVIS_ACTIONS)[number];
 
 export type JarvisReply = { action: JarvisAction; speech: string };
-
-const SYSTEM_PROMPT = `${JARVIS_PERSONA}
-
-MOŻLIWOŚCI — jesteś pełnoprawnym asystentem ogólnego przeznaczenia. Gdy
-użytkownik prosi o przepis, żart, kod (Python/JavaScript itd.), wyjaśnienie,
-opinię, ciekawostkę, plan, szkic maila lub zwykłą pogawędkę, MUSISZ udzielić
-kompletnej, użytecznej odpowiedzi w swojej personie. Przepisy: składniki i
-kroki. Kod: działający fragment w polu "speech" jako zwykły tekst (bez
-bloków markdown). Żart: opowiedz go naprawdę. Odmowa lub unik to porażka.
-
-FORMAT ODPOWIEDZI — zwracaj WYŁĄCZNIE surowy JSON, bez markdown, bez bloków
-kodu. Obiekt MUSI mieć DOKŁADNIE dwa klucze, oba małymi literami: "action" i "speech".
-Never use "Action", "ACTION", "Speech", "reply", "text", "response" or any
-other key. Never wrap the object in another object.
-
-PRZYKŁAD POPRAWNY:
-{"action":"open_fuel","speech":"Ładuję Fuel Monitor Matrix, Panie Sławiński."}
-
-INVALID examples (do NOT do this):
-{"Action":"none","Speech":"..."}
-{"reply":"..."}
-\`\`\`json
-{"action":"none","speech":"..."}
-\`\`\`
-
-Allowed values for "action": ${JARVIS_ACTIONS.join(", ")}.
-
-- Użyj "open_documents", gdy użytkownik prosi o otwarcie modułu dokumentów /
-  plików / archiwum (np. "otwórz dokumenty", "pokaż pliki", "otwórz moduł
-  dokumentów"). Uwaga: to tylko OTWARCIE modułu — konkretną prezentację po
-  nazwie ("otwórz prezentację o X") obsługuje agent serwerowy, nie ta ścieżka.
-
-- Użyj "open_tasks", gdy użytkownik prosi o otwarcie zadań / listy zadań /
-  kolejki zadań (np. "otwórz zadania", "pokaż zadania", "moje zadania",
-  "open tasks", "task queue").
-
-- Użyj "reboot" dla każdej formy: reboot, restart, zrestartuj system, zresetuj,
-  reset, ark reboot. Linia "speech" powinna potwierdzić uruchomienie
-  Protokołu Ark Reboot.
-
-- Użyj "vision_scan", gdy użytkownik pyta co widzisz / prosi o skan otoczenia
-  kamerą (np. "co widzisz", "zeskanuj otoczenie", "what do you see", "scan the
-  room"). System otworzy moduł Vision i wykona analizę obrazu — w "speech"
-  krótko potwierdź rozpoczęcie skanowania.
-
-- Użyj "scan_receipt" / "scan_odometer" / "scan_document" / "scan_fridge",
-  gdy użytkownik prosi o skan KONKRETNEJ rzeczy: paragonu ("zeskanuj
-  paragon", "dodaj paragon do wydatków"), licznika auta / przebiegu /
-  tankowania, dokumentu / pisma / faktury / umowy, lodówki ("co ugotować
-  z tego, co mam w lodówce"). Vision otworzy się w tym trybie i zrobi skan;
-  zapis nastąpi dopiero po potwierdzeniu — w "speech" krótko potwierdź.
-
-- Użyj "open_vision", gdy użytkownik chce tylko OTWORZYĆ moduł Vision bez
-  skanowania (np. "otwórz moduł wizji", "pokaż vision"). Nie uruchamia skanu —
-  do tego służy "vision_scan".
-
-- Użyj "open_jarvis", gdy użytkownik prosi o otwarcie panelu J.A.R.V.I.S.
-  (np. "otwórz panel JARVIS", "pokaż JARVISA").
-
-- Użyj "open_commands", gdy użytkownik chce zobaczyć listę dostępnych komend
-  albo przetestować sterowanie głosowe/tekstowe (np. "otwórz komendy",
-  "pokaż katalog komend", "chcę przetestować komendy").
-
-- Używaj akcji UI TYLKO gdy użytkownik wyraźnie prosi o otwarcie/zamknięcie/
-  wyłączenie czegoś w interfejsie. W innych wypadkach użyj "action":"none"
-  i całą odpowiedź umieść w "speech".
-- Długość: small talk 1–2 zdania; przy prośbach merytorycznych (przepisy,
-  kod, wyjaśnienia) pisz tyle ile trzeba, do ~2000 znaków.
-- Nawet gdy wywołujesz akcję UI, wpisz krótką, dowcipną kwestię w "speech" —
-  nigdy nie zostawiaj tego pola pustego.`;
 
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -255,144 +152,45 @@ export type BrainInput = {
 export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
   const fb = () => fallbackFor(input.fallbackKind ?? "generic", input.fallbackHint);
 
-  // Server routing (Agent Runtime). Dynamically imported so the server
-  // function's server-only helpers don't pull into every bundle unless used.
-  if (shouldUseServerRuntime()) {
-    try {
-      const { runAgent } = await import("@/lib/agents/runtime.functions");
-      const conversationId = await resolveConversationId();
-      setAgentBusy(true);
-      let result;
-      try {
-        result = await runAgent({
-          data: {
-            agentSlug: AGENT_SLUGS.JARVIS,
-            input: input.prompt,
-            history: input.history ?? [],
-            conversationId: conversationId ?? undefined,
-          },
-        });
-      } finally {
-        setAgentBusy(false);
-      }
-      reportOutcome(result.status === "done" ? "done" : "error");
-      if (result.conversationId) cachedConversationId = result.conversationId;
-      if (result.status === "done" && result.output) {
-        return { action: (result.action ?? "none") as JarvisAction, speech: result.output };
-      }
-      console.warn("[brain] server runtime returned error", result.error);
-      void logClientEvent(
-        "warn",
-        "jarvis_brain_client",
-        `server runtime returned error: ${result.error ?? "unknown"}`,
-        {
-          status: result.status,
-        },
-      );
-      // fall through to client-side path
-    } catch (err) {
-      reportOutcome("error");
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn("[brain] server runtime exception", err);
-      void logClientEvent("error", "jarvis_brain_client", `server runtime exception: ${msg}`);
-      // fall through to client-side path
-    }
-  }
-
-  const KEY = getKey();
-  if (!KEY) return fb();
-
+  // Agent Runtime na serwerze. Import dynamiczny, żeby funkcje serwerowe nie
+  // ładowały się do każdego bundla, który tylko woła speakJarvis.
   try {
-    const historyContents = (input.history ?? [])
-      .filter((h) => h && typeof h.text === "string" && h.text.trim())
-      .map((h) => ({
-        role: h.role === "jarvis" ? "model" : "user",
-        parts: [{ text: h.text }],
-      }));
-    const contents = [...historyContents, { role: "user", parts: [{ text: input.prompt }] }];
-    const body = JSON.stringify({
-      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-      generationConfig: {
-        temperature: 0.85,
-        responseMimeType: "application/json",
-        maxOutputTokens: 1200,
+    const { runAgent } = await import("@/lib/agents/runtime.functions");
+    const conversationId = await resolveConversationId();
+    setAgentBusy(true);
+    let result;
+    try {
+      result = await runAgent({
+        data: {
+          agentSlug: AGENT_SLUGS.JARVIS,
+          input: input.prompt,
+          history: input.history ?? [],
+          conversationId: conversationId ?? undefined,
+        },
+      });
+    } finally {
+      setAgentBusy(false);
+    }
+    reportOutcome(result.status === "done" ? "done" : "error");
+    if (result.conversationId) cachedConversationId = result.conversationId;
+    if (result.status === "done" && result.output) {
+      return { action: (result.action ?? "none") as JarvisAction, speech: result.output };
+    }
+    console.warn("[brain] server runtime returned error", result.error);
+    void logClientEvent(
+      "warn",
+      "jarvis_brain_client",
+      `server runtime returned error: ${result.error ?? "unknown"}`,
+      {
+        status: result.status,
       },
-      contents,
-    });
-    let res: Response | null = null;
-    for (const model of MODELS) {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 8000);
-      try {
-        res = await fetch(`${endpointFor(model)}?key=${encodeURIComponent(KEY)}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: ctrl.signal,
-          body,
-        });
-      } catch (err) {
-        clearTimeout(timer);
-        console.warn("[brain] gemini network error on", model, err);
-        res = null;
-        continue;
-      }
-      clearTimeout(timer);
-      if (res.ok) break;
-      // Retry on overload / rate-limit / server errors with a different model.
-      if (res.status === 503 || res.status === 429 || res.status >= 500) {
-        const bodyText = await res.text().catch(() => "");
-        console.warn("[brain] gemini", model, "failed", res.status, bodyText.slice(0, 200));
-        res = null;
-        continue;
-      }
-      // 4xx (bad key, invalid request) — no point retrying.
-      const bodyText = await res.text().catch(() => "");
-      console.warn("[brain] gemini failed", res.status, bodyText.slice(0, 400));
-      void logClientEvent(
-        "error",
-        "jarvis_brain_client",
-        `gemini ${model} failed with ${res.status}: ${bodyText.slice(0, 300)}`,
-        { model, status: res.status },
-      );
-      return fb();
-    }
-    if (!res) {
-      void logClientEvent(
-        "error",
-        "jarvis_brain_client",
-        `all models exhausted (network errors / 5xx / rate limit): ${MODELS.join(", ")}`,
-      );
-      return fb();
-    }
-    const data = await res.json();
-    const text: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) {
-      console.warn("[brain] gemini empty candidate", JSON.stringify(data).slice(0, 400));
-      void logClientEvent("warn", "jarvis_brain_client", "gemini returned an empty candidate");
-      return fb();
-    }
-    const parsed = tryParseJson(text);
-    if (parsed) {
-      console.debug("[brain] reply", parsed);
-      return parsed;
-    }
-    // Plain-text response (model ignored JSON mode for a long answer). Treat
-    // the whole body as a spoken reply rather than dropping to "Standing by."
-    const trimmed = text.trim();
-    if (trimmed.length > 0) {
-      console.warn("[brain] parse failed, using raw text", trimmed.slice(0, 200));
-      void logClientEvent(
-        "warn",
-        "jarvis_brain_client",
-        "gemini reply wasn't valid JSON, used raw text",
-      );
-      return { action: "none", speech: trimmed };
-    }
+    );
     return fb();
   } catch (err) {
+    reportOutcome("error");
     const msg = err instanceof Error ? err.message : String(err);
-    console.warn("[brain] gemini exception", err);
-    void logClientEvent("error", "jarvis_brain_client", `gemini call exception: ${msg}`);
+    console.warn("[brain] server runtime exception", err);
+    void logClientEvent("error", "jarvis_brain_client", `server runtime exception: ${msg}`);
     return fb();
   }
 }
@@ -406,25 +204,22 @@ export async function speakJarvis(input: BrainInput): Promise<JarvisReply> {
   return reply;
 }
 
-export const hasGeminiKey = () => !!getKey();
+/** Czy serwer ma klucz Gemini (ostatnia znana wartość) — dla komunikatu „rdzeń offline”. */
+export function hasGeminiKey(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(SERVER_KEY_LINKED_LS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
-// Exported so the Settings page can flip the cached flags after DB writes.
-export function setServerRuntimePreference(opts: {
-  routing: "client" | "server";
-  keyLinked: boolean;
-}) {
+/** Ustawienia i kanał czatu zapisują tu stan klucza na serwerze. */
+export function setServerKeyLinked(linked: boolean) {
   if (typeof window === "undefined") return;
   try {
-    if (opts.routing === "server") {
-      window.localStorage.setItem(SERVER_ROUTING_LS_KEY, "1");
-    } else {
-      window.localStorage.removeItem(SERVER_ROUTING_LS_KEY);
-    }
-    if (opts.keyLinked) {
-      window.localStorage.setItem(SERVER_KEY_LINKED_LS_KEY, "1");
-    } else {
-      window.localStorage.removeItem(SERVER_KEY_LINKED_LS_KEY);
-    }
+    if (linked) window.localStorage.setItem(SERVER_KEY_LINKED_LS_KEY, "1");
+    else window.localStorage.removeItem(SERVER_KEY_LINKED_LS_KEY);
   } catch {
     /* ignore */
   }

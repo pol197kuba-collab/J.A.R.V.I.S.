@@ -12,16 +12,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { buildDailyBrief, parseSections, type BriefKeys } from "./build.server";
 import type { DailyBrief } from "./types";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 type Db = SupabaseClient<Database>;
 
 /** Klucze modeli tego użytkownika — BYOK, nigdy nie opuszczają serwera. */
 async function loadModelKeys(supabase: Db, userId: string): Promise<BriefKeys> {
-  const { data } = await supabase
-    .from("user_secrets")
-    .select("gemini_api_key, anthropic_api_key")
-    .eq("owner_id", userId)
-    .maybeSingle();
+  const { data } = await readOwnerSecrets(userId, "gemini_api_key, anthropic_api_key");
   return {
     anthropicApiKey: data?.anthropic_api_key ?? null,
     geminiApiKey: data?.gemini_api_key ?? null,

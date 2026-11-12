@@ -13,6 +13,7 @@ import { DEFAULT_GEMINI_MODEL } from "@/lib/agents/models";
 import type { Json } from "@/integrations/supabase/types";
 import { callGemini } from "@/lib/ai/llm/gemini";
 import type { GeminiUsageMetadata } from "@/lib/ai/llm/usage";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 // ~1.5MB of raw base64 ≈ a 1024px JPEG with plenty of headroom. The client
 // downscales before sending; this cap is the server-side backstop so a
@@ -55,11 +56,7 @@ export const analyzeScan = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const startedAt = Date.now();
 
-    const { data: secret } = await supabase
-      .from("user_secrets")
-      .select("gemini_api_key")
-      .eq("owner_id", userId)
-      .maybeSingle();
+    const { data: secret } = await readOwnerSecrets(userId, "gemini_api_key");
     const apiKey = secret?.gemini_api_key?.trim();
     if (!apiKey) {
       throw new Error(

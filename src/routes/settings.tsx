@@ -19,7 +19,7 @@ import {
   type AgentToolSummary,
   type UserSettings,
 } from "@/lib/agents/runtime.functions";
-import { setServerRuntimePreference } from "@/lib/ai/jarvisBrain";
+import { setServerKeyLinked } from "@/lib/ai/jarvisBrain";
 import { useModelCatalog } from "@/lib/agents/useModelCatalog";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { cn } from "@/lib/utils";
@@ -74,16 +74,13 @@ function Settings() {
     }
   };
 
-  // Czy serwer ma klucz Gemini — od tego zależy, czy czat może iść przez serwer.
-  // null = jeszcze nie wiadomo; wtedy nie ruszamy zapamiętanej preferencji.
+  // Czy serwer ma klucz Gemini — dla komunikatu „rdzeń offline” w czacie.
+  // null = jeszcze nie wiadomo; wtedy nie ruszamy zapamiętanej wartości.
+  // Czat zawsze idzie przez serwer (plan naprawczy, etap 5, A8).
   const [geminiLinked, setGeminiLinked] = useState<boolean | null>(null);
-  const fetchSettings = useServerFn(getUserSettings);
   useEffect(() => {
-    if (geminiLinked === null) return;
-    fetchSettings()
-      .then((s) => setServerRuntimePreference({ routing: s.chatRouting, keyLinked: geminiLinked }))
-      .catch((err) => console.warn("[settings] runtime preference refresh failed", err));
-  }, [fetchSettings, geminiLinked]);
+    if (geminiLinked !== null) setServerKeyLinked(geminiLinked);
+  }, [geminiLinked]);
 
   return (
     <div className="space-y-6 p-6">
@@ -119,7 +116,7 @@ function Settings() {
       <div hidden={tab !== "keys"}>
         <ApiKeysSection onGeminiLinked={setGeminiLinked} />
       </div>
-      {tab === "jarvis" && <JarvisSection geminiLinked={geminiLinked === true} />}
+      {tab === "jarvis" && <JarvisSection />}
       {tab === "commute" && <CommuteSettingsPanel onGoToKeys={() => pickTab("keys")} />}
       {tab === "notifications" && <NotificationsSection />}
       {tab === "look" && <LookSection />}
@@ -127,7 +124,7 @@ function Settings() {
   );
 }
 
-function JarvisSection({ geminiLinked }: { geminiLinked: boolean }) {
+function JarvisSection() {
   const catalog = useModelCatalog();
   const fetchSettings = useServerFn(getUserSettings);
   const persistSettings = useServerFn(updateUserSettings);
@@ -167,7 +164,6 @@ function JarvisSection({ geminiLinked }: { geminiLinked: boolean }) {
     try {
       const next = await persistSettings({ data: patch });
       setPrefs(next);
-      setServerRuntimePreference({ routing: next.chatRouting, keyLinked: geminiLinked });
       // Notify live consumers (VoiceCommandContext reads wake_word_enabled)
       // so the change applies without a page reload.
       window.dispatchEvent(new CustomEvent("jarvis:prefs-updated"));
@@ -208,31 +204,7 @@ function JarvisSection({ geminiLinked }: { geminiLinked: boolean }) {
     <div className="space-y-6">
       <HudPanel index={1} title="ROZMOWA" className="p-5">
         <div className="mt-4 space-y-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-sm text-foreground">Czat przez serwer</p>
-              <p className="text-xs text-muted-foreground">
-                Historia i logi w bazie, wspólne na wszystkich urządzeniach. Wymaga klucza Gemini.
-              </p>
-            </div>
-            <button
-              type="button"
-              disabled={busy || !prefs || !geminiLinked}
-              onClick={() =>
-                updatePref({
-                  chatRouting: prefs?.chatRouting === "server" ? "client" : "server",
-                })
-              }
-              className={toggleClass}
-              style={{
-                color:
-                  prefs?.chatRouting === "server" ? "var(--success)" : "var(--muted-foreground)",
-              }}
-            >
-              {prefs?.chatRouting === "server" ? "● SERWER" : "○ PRZEGLĄDARKA"}
-            </button>
-          </div>
-          <div className="flex flex-col gap-2 border-t border-primary/20 pt-3 @min-[560px]:flex-row @min-[560px]:items-start @min-[560px]:justify-between @min-[560px]:gap-4">
+          <div className="flex flex-col gap-2 @min-[560px]:flex-row @min-[560px]:items-start @min-[560px]:justify-between @min-[560px]:gap-4">
             <div className="min-w-0">
               <p className="text-sm text-foreground">Model J.A.R.V.I.S.-a</p>
               {/* Skąd pochodzi lista — bez tego „widzę stare modele" wygląda

@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { runOrchestrator } from "./runtime.server";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
+import { testSecretsDb } from "@/test/secretsDb";
 
 // Regresja na realną sytuację właściciela instalacji: klucz Anthropic
 // zapisany, ale konto bez środków (płatność odrzucana przez operatora), więc
@@ -14,7 +15,7 @@ type CannedResponse = { data: unknown; error: { message: string } | null };
 
 function makeSupabaseStub(responses: Record<string, CannedResponse[]>) {
   const counts: Record<string, number> = {};
-  return {
+  const stub = {
     from(table: string) {
       const list = responses[table] ?? [{ data: null, error: null }];
       const idx = Math.min(counts[table] ?? 0, list.length - 1);
@@ -33,6 +34,9 @@ function makeSupabaseStub(responses: Record<string, CannedResponse[]>) {
       return proxy;
     },
   } as unknown as SupabaseClient<Database>;
+  // Etap 5 (A5): user_secrets czyta klient service role — w testach ta sama atrapa.
+  testSecretsDb.current = stub;
+  return stub;
 }
 
 function responsesForClaudeAgent(): Record<string, CannedResponse[]> {
