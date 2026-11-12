@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { ITERATION_LIMIT_REPLY } from "./runtime/constants";
 import { runAgentLoop, UI_ACTION_CONFIRMATIONS } from "./runtime.server";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import {
@@ -254,9 +255,9 @@ describe("runAgentLoop — charakterystyka (etap 0)", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(result.status).toBe("done");
-    expect(result.output).toBe(
-      "I have completed several tool calls but ran out of orchestration cycles. Please rephrase or ask me to continue.",
-    );
+    // Etap 6b: komunikat po polsku (wcześniej angielski tekst na sztywno).
+    expect(result.output).toBe(ITERATION_LIMIT_REPLY);
+    expect(result.output).toContain("kontynuuj");
 
     const row = finalRunRow(calls, "run-1")!;
     expect(row.status).toBe("done");
