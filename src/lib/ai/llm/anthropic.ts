@@ -174,6 +174,18 @@ type AnthropicResponse = {
   };
 };
 
+/**
+ * Czy model przyjmuje wymuszenie narzędzia (`tool_choice` typu "tool"/"any").
+ * Claude Opus 5.5, Sonnet 5.5 oraz Fable / Mythos 5.1 i 5.2 zwracają wtedy 400
+ * („tool_choice: type "tool" and "any" are not supported for this model”) —
+ * według dokumentacji Claude API sprawdzonej 2026-11-12 (etap 6b). Nowsze
+ * modele spoza tej listy traktujemy jak przyjmujące; gdyby któryś odrzucił,
+ * zostaje dotychczasowy failover na Gemini.
+ */
+export function acceptsForcedToolChoice(model: string): boolean {
+  return !/claude-(opus|sonnet)-5-5|claude-(fable|mythos)-5-[12]/.test(model);
+}
+
 export async function callAnthropic(opts: CallAnthropicOptions): Promise<ModelTurnResult> {
   const tools = opts.toolDeclarations?.length ? toAnthropicTools(opts.toolDeclarations) : undefined;
 
@@ -202,7 +214,7 @@ export async function callAnthropic(opts: CallAnthropicOptions): Promise<ModelTu
       ...(tools
         ? {
             tools,
-            ...(opts.forceToolName
+            ...(opts.forceToolName && acceptsForcedToolChoice(opts.model)
               ? { tool_choice: { type: "tool", name: opts.forceToolName } }
               : {}),
           }
