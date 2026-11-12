@@ -264,7 +264,7 @@ Wymaga W2 i W3.
       `chat_routing` przestaje być czytane. Zachować gotowe kwestie
       zastępcze, gdy serwer nie odpowiada. `speakJarvis` zostaje.
       Kolumnę `chat_routing` usunąć dopiero w etapie 8.
-- [ ] **A5.** Odczyt `user_secrets` tylko po stronie serwera klientem
+- [x] **A5.** Odczyt `user_secrets` tylko po stronie serwera klientem
       service role, po weryfikacji tokenu użytkownika (jeden helper
       `getOwnerSecrets(userId)` w pliku `.server.ts`). Zapis kluczy
       z Ustawień — tą samą drogą. Skrypty w `scripts/` przechodzą na service
@@ -278,8 +278,12 @@ Wymaga W2 i W3.
         Skrypty z `scripts/` czytają klucze tą samą drogą (service role ze
         zmiennych Actions — wszystkie workflowy go mają). Funkcje SQL
         czytające tabelę są SECURITY DEFINER, więc REVOKE ich nie dotknie.
-      - [ ] Migracja REVOKE (PR 5b) — czeka na potwierdzenie właściciela, że
-        5a działa w produkcji (Ustawienia → klucze, czat, brief).
+      - [x] Migracja REVOKE (PR 5b): `20261112160000_user_secrets_service_role_only.sql`
+        — `REVOKE ALL ... FROM anon, authenticated` (szerzej niż SELECT/INSERT/
+        UPDATE/DELETE: Supabase nadaje też TRUNCATE/REFERENCES/TRIGGER i anon).
+        Właściciel potwierdził działanie 5a 2026-11-12. Sprawdzone na lokalnym
+        Postgresie 16: authenticated i anon → permission denied, funkcje
+        SECURITY DEFINER i service_role działają.
 - [x] Sprawdzić, że żadna funkcja serwerowa nie zwraca pełnego klucza
       (dziś zwracają podgląd 4 znaków — utrzymać). Test
       `src/lib/secrets/noKeyLeak.test.ts`; `google_cse_cx` (jawny
@@ -406,6 +410,7 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 | 2026-11-11 | 3 | #227 | czysty / 1068 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Pomiar przed/po niewykonany (brak dostępu do bazy, księga od dziś) — zapytanie w etapie 3. Oczekiwany efekt: klasyfikator tylko dla poleceń UI (zamiast po każdej turze bez narzędzi), historia ≤ ~6000 tokenów zamiast do 30×8000 znaków, cache promptu dla agentów na Claude. |
 | 2026-11-12 | 4 | #228 | czysty / 1086 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Testy z etapu 0 bez zmian. Pokrycie `src/lib/agents`: linie 51,82% (było 45,33%), `runtime/` 83,8%, `tools/` 49,8%. Ten poziom to próg dla etapu 9. |
 | 2026-11-12 | 5 (5a) | #229 | czysty / 1098 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | A8, A5 (kod), A14. Z Ustawień znika przełącznik „Czat przez serwer” — czat zawsze idzie przez serwer. Migracja REVOKE (5b) dopiero po potwierdzeniu przez właściciela, że 5a działa po publikacji w Lovable. |
+| 2026-11-12 | 5 (5b) | (PR w toku) | czysty / 1104 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Migracja REVOKE na `user_secrets`. Po drodze (zgłoszenia właściciela): #230 (prośba „dwa razy”), #231 (wątek czatu — regresja z A8), #232 (nieistniejący agent; stare nazwy agentów w kodzie), #233 (narzędzia `guardian_*` → `shield_*`). Etap 5 zamknięty. |
 
 ## Załącznik: znaleziska z rewizji (skrót)
 
