@@ -380,7 +380,7 @@ przyczynę, dla której awaria była niewidoczna.
       to pierwsza rzecz do naprawy w tym etapie.
       Stan 2026-11-12: logów z 13.11 jeszcze nie ma; ostatnie przebiegi po W7
       (Commute Watch 16:08 UTC, Morning Brief 12:54 UTC) zielone.
-- [ ] **`recall` a obca treść (luka w A2d).** Wpis pamięci o pochodzeniu
+- [x] **`recall` a obca treść (luka w A2d).** Wpis pamięci o pochodzeniu
       `tool` albo `unknown` zwrócony przez `recall` jest obcą treścią:
       ustawia `untrustedSeen` i dostaje notę, tak jak wynik `fetch_url`.
       Wpisy `user` — nie. Dziś `recall` zwraca pochodzenie, ale bramka A2b
@@ -390,22 +390,35 @@ przyczynę, dla której awaria była niewidoczna.
       Uwaga: wpisy sprzed migracji mają `unknown`; sprawdzić, ile ich jest,
       i jeśli potwierdzenia byłyby przez to nagminne — zapytać właściciela,
       czy oznaczyć stare wpisy jako `user` jednorazową migracją.
-- [ ] **Wymuszenie narzędzia u Claude** (Rejestr, etap 3):
+      Zrobione: pole narzędzia `untrustedResult` (obcość z wyniku), test
+      `runtime.recallUntrusted.test.ts`. Liczby wpisów `unknown` nie da się
+      sprawdzić z sesji — zapytanie dla właściciela w podsumowaniu etapu 6b.
+- [x] **Wymuszenie narzędzia u Claude** (Rejestr, etap 3):
       `tool_choice: {type: "tool"}` zwraca 400 na Opus 5.5 / Sonnet 5.5,
       więc F.O.R.G.E. na tych modelach zawsze pada i schodzi na Gemini.
       Sprawdzić w aktualnej dokumentacji Claude API, co te modele
       przyjmują, i dobrać sposób per model w `src/lib/ai/llm/anthropic.ts`.
       Jeśli wymuszenia nie da się uzyskać — dla `generate_document` od razu
       iść na Gemini, z jednym `info` w logu zamiast błędu i failoveru.
+      Dokumentacja (2026-11-12): Opus 5.5, Sonnet 5.5, Fable/Mythos 5.1–5.2
+      odrzucają `any`/`tool`; zalecane `auto` + instrukcja nie gwarantuje
+      wywołania. Zrobione: `acceptsForcedToolChoice`, wymuszona tura na
+      Gemini z `info`; bez klucza Gemini — Claude z `auto`.
 - [ ] **Katalog modeli** (Rejestr, etap 2): usunąć `gemini-2.0-flash`
       i `gemini-2.0-flash-lite` z `models.ts` po sprawdzeniu u źródła, że
       są wyłączone; agent z takim modelem w bazie ma zejść na domyślny
       z ostrzeżeniem (sprawdzić, czy już tak jest).
+      Nie było (404 → failover na Groq albo martwy run) — naprawione: 404 na
+      modelu agenta → model domyślny z `warn` (test
+      `runtime.retiredModel.test.ts`). Wpisów w katalogu NIE usunięto:
+      ai.google.dev niedostępne z sesji, wyłączenia nie dało się potwierdzić
+      u źródła — czeka na zrzut od właściciela albo dostęp sieci.
 - [ ] **Stawki Groq** (Rejestr, etap 2): zweryfikować na stronie Groq;
       jeśli z sesji nadal niedostępna — poprosić właściciela o zrzut cennika.
-- [ ] **Komunikat po limicie iteracji** (Rejestr, etap 0): po polsku,
+      2026-11-12: groq.com niedostępne z sesji — prośba o zrzut w podsumowaniu.
+- [x] **Komunikat po limicie iteracji** (Rejestr, etap 0): po polsku,
       w tonie reszty odpowiedzi.
-- [ ] **Porządek w planie:** pozycje Rejestru naprawione w tym etapie
+- [x] **Porządek w planie:** pozycje Rejestru naprawione w tym etapie
       oznaczyć numerem PR.
 
 Poza zakresem (zapisane, żeby nie robić „przy okazji”): rozbicie
@@ -502,12 +515,12 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 
 | Data | Gdzie | Opis | Znalezione w etapie | Naprawione w (PR) |
 |---|---|---|---|---|
-| 2026-11-11 | `runtime.server.ts`, koniec pętli narzędziowej | Komunikat po wyczerpaniu limitu iteracji jest po angielsku („I have completed several tool calls but ran out of orchestration cycles…”), reszta odpowiedzi jest po polsku. Utrwalony w teście charakteryzującym nr 5. | 0 | |
+| 2026-11-11 | `runtime.server.ts`, koniec pętli narzędziowej | Komunikat po wyczerpaniu limitu iteracji jest po angielsku („I have completed several tool calls but ran out of orchestration cycles…”), reszta odpowiedzi jest po polsku. Utrwalony w teście charakteryzującym nr 5. | 0 | naprawione w etapie 6b (#238): po polsku, `ITERATION_LIMIT_REPLY` |
 | 2026-11-11 | `bun.lock` | Rejestr Lovable (`europe-west*-npm.pkg.dev`) jest niedostępny z sesji Claude Code w chmurze, więc `bun install` tam nie działa. Nowe wpisy (`@vitest/coverage-v8` i zależności) mają pusty adres, czyli domyślny rejestr npm, zamiast adresu cache Lovable. Sprawdzić, czy build w Lovable przechodzi. | 0 | nie wymaga naprawy — właściciel potwierdził 2026-11-11, że build w Lovable przechodzi |
-| 2026-11-11 | `src/lib/agents/models.ts` (katalog modeli) | Katalog nadal oferuje `gemini-2.0-flash`, który według forum Google wyłączono 31.03.2026; nie ma go w cenniku (koszt `null`). | 2 | |
+| 2026-11-11 | `src/lib/agents/models.ts` (katalog modeli) | Katalog nadal oferuje `gemini-2.0-flash`, który według forum Google wyłączono 31.03.2026; nie ma go w cenniku (koszt `null`). | 2 | częściowo (#238): model wyłączony u dostawcy → domyślny z ostrzeżeniem; wpisy w katalogu czekają na potwierdzenie u źródła |
 | 2026-11-11 | build (`npm run build`) | 31 ostrzeżeń „externalized for browser compatibility”, m.in. `node:dns`/`node:net` z `tools.server.ts` i `web-push` — kod serwerowy jest w grafie importów klienta. Identycznie na `main` przed etapem 2; build przechodzi, nic z tego nie trafia do bundla przeglądarki (sprawdzone). | 2 | |
 | 2026-11-11 | `src/lib/agents/pricing.ts` | Stawki Groq niezweryfikowane u źródła (strona Groq niedostępna z sesji, agregatory sprzeczne — część mówi o przejściu tych modeli na „contact sales”). Sprawdzić ręcznie na groq.com/pricing. | 2 | |
-| 2026-11-11 | `src/lib/ai/llm/anthropic.ts` (`forceToolName`) | Wymuszenie narzędzia przez `tool_choice: {type: "tool"}` (F.O.R.G.E. → `generate_document`) według dokumentacji Claude API zwraca 400 na Claude Opus 5.5 i Sonnet 5.5. Agent ustawiony na te modele padnie przy wymuszeniu (potem zejdzie na Gemini). | 3 | |
+| 2026-11-11 | `src/lib/ai/llm/anthropic.ts` (`forceToolName`) | Wymuszenie narzędzia przez `tool_choice: {type: "tool"}` (F.O.R.G.E. → `generate_document`) według dokumentacji Claude API zwraca 400 na Claude Opus 5.5 i Sonnet 5.5. Agent ustawiony na te modele padnie przy wymuszeniu (potem zejdzie na Gemini). | 3 | naprawione w etapie 6b (#238): `acceptsForcedToolChoice`, wymuszona tura od razu na Gemini |
 | 2026-11-12 | `useAgentChatChannel.ts`, `VoiceCommandContext.tsx` (historia czatu) | Klient dopisywał wiadomość do transkryptu PRZED pobraniem historii, więc model dostawał tę samą prośbę dwa razy (historia + input) i odpowiadał „prośba padła dwa razy”. Od etapu 3 tylko przy pierwszej wiadomości w nowym/wyczyszczonym wątku i w ścieżce głosowej; wcześniej przy każdej turze. Zgłosił właściciel. | 0 | naprawione 2026-11-12: historia pobierana przed dopisaniem + `withoutCurrentInput` na serwerze (test) |
 | 2026-11-12 | `runAgent` (`runtime.functions.ts`) | **Regresja z etapu 5 (A8):** przepisany `askJarvis` przestał podawać `conversationId` (zniknęło `resolveConversationId`), więc od publikacji 5a każda odpowiedź drogą głosową/komend zakładała nowy wątek i czat pokazywał tylko najnowszy. Wiadomość bez `conversationId` (wysłana, zanim czat wczytał wątek; głos; zmiana agenta) zakładała NOWY wątek. Czat pokazywał potem tylko ten wątek — starej rozmowy nie dało się przewinąć. Zgłosił właściciel. Stare wątki zostają w bazie nietknięte. | 0 | naprawione 2026-11-12: bez `conversationId` dopisujemy do ostatniego wątku agenta (test `runAgent.thread.test.ts`) |
 | 2026-11-12 | `useAgentChatChannel.ts` (aktywny agent) | Przeglądarka pamiętała slug agenta sprzed zmiany nazw (`orchestrator`); mikrofon spoza `/jarvis` wysyła od razu, zanim aplikacja wczyta wybór z konta → „Agent not found: orchestrator”. Zgłosił właściciel. | 0 | naprawione 2026-11-12: zapamiętany agent sprawdzany z listą istniejących (`isAgentSlug`), nieznany → J.A.R.V.I.S. i nadpisanie wpisu |
@@ -526,6 +539,8 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 | 2026-11-12 | 5 (5b) | #234 | czysty / 1104 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Migracja REVOKE na `user_secrets`. Po drodze (zgłoszenia właściciela): #230 (prośba „dwa razy”), #231 (wątek czatu — regresja z A8), #232 (nieistniejący agent; stare nazwy agentów w kodzie), #233 (narzędzia `guardian_*` → `shield_*`). Etap 5 zamknięty. |
 | 2026-11-12 | 6 | #235 | czysty / 1116 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Kolejka w tle (pg_cron → `document-jobs.yml`) i warunkowe przejęcie zadań/grafik. Migracja sprawdzona na lokalnym Postgresie 16 (atrapy `net`/`cron`): wywołanie tylko przy czekającej pracy, blokada 5 min, drugi przebieg bez błędu. Otwarte: usunięcie ratownika z briefingu (po tygodniu), sprawdzenie ucinania w logach Lovable. |
 | 2026-11-12 | przegląd | — | czysty / 1116 zielonych / 0 błędów, 15 ostrzeżeń | Niezależny przegląd `main` po etapach 0–6: kierunek zgodny z planem; znaleziona usterka z sekretami jobów (W7, etap 6b). Dopisany etap 6b, zmieniona kolejność: 6b → 9 → 7 → 8. |
+| 2026-11-12 | 6b (A) | #237 | czysty / 1122 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Joby: jedna droga uwierzytelnienia, głośno o braku kluczy, zdanie na koniec; README sekretów. Ręcznie: 7 jobów bez sekretu → kod 1. |
+| 2026-11-12 | 6b (B) | #238 | czysty / 1129 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | recall a obca treść, wymuszenie narzędzia per model Claude, model wyłączony → domyślny, komunikat limitu po polsku. Otwarte: W8 (logi z 13.11), stawki Groq i katalog Gemini (strony poza siecią sesji), liczba wpisów `unknown`. |
 
 ## Załącznik: znaleziska z rewizji (skrót)
 
