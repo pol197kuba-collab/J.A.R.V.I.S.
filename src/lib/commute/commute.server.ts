@@ -14,6 +14,7 @@ import {
   type SavedRoute,
   type ViaPoint,
 } from "./types";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 type Db = SupabaseClient<Database>;
 
@@ -47,11 +48,7 @@ export async function loadCommuteSettings(db: Db, ownerId: string): Promise<Comm
 
 /** Klucz TomTom z Ustawień; w jobie bez konta awaryjnie ze zmiennej środowiska. */
 export async function loadTomtomKey(db: Db, ownerId: string): Promise<string | null> {
-  const { data } = await db
-    .from("user_secrets")
-    .select("tomtom_api_key")
-    .eq("owner_id", ownerId)
-    .maybeSingle();
+  const { data } = await readOwnerSecrets(ownerId, "tomtom_api_key");
   return data?.tomtom_api_key?.trim() || process.env.TOMTOM_API_KEY?.trim() || null;
 }
 

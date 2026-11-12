@@ -11,6 +11,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { classifyKeyFailure, REASON_FIX, REASON_LABEL, type ProviderId } from "./providerKeys";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 export type KeyCheck = {
   provider: ProviderId;
@@ -63,13 +64,10 @@ export const testProviderKeys = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<KeyCheck[]> => {
     const { supabase, userId } = context;
-    const { data, error } = await supabase
-      .from("user_secrets")
-      .select(
-        "gemini_api_key, anthropic_api_key, groq_api_key, google_cse_api_key, google_cse_cx, github_token, tomtom_api_key",
-      )
-      .eq("owner_id", userId)
-      .maybeSingle();
+    const { data, error } = await readOwnerSecrets(
+      userId,
+      "gemini_api_key, anthropic_api_key, groq_api_key, google_cse_api_key, google_cse_cx, github_token, tomtom_api_key",
+    );
     if (error) throw new Error(error.message);
 
     const gemini = data?.gemini_api_key?.trim();

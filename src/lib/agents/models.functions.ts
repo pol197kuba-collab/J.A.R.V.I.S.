@@ -9,6 +9,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ANTHROPIC_MODELS, GEMINI_MODELS, type ModelOption } from "./models";
 import { mergeModelLists, parseAnthropicModelList, parseGeminiModelList } from "./modelCatalog";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 const CACHE_TTL_MS = 15 * 60_000;
 const TIMEOUT_MS = 10_000;
@@ -58,11 +59,7 @@ export const listAvailableModels = createServerFn({ method: "GET" })
     const cached = cache.get(userId);
     if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.value;
 
-    const { data: secret } = await supabase
-      .from("user_secrets")
-      .select("gemini_api_key, anthropic_api_key")
-      .eq("owner_id", userId)
-      .maybeSingle();
+    const { data: secret } = await readOwnerSecrets(userId, "gemini_api_key, anthropic_api_key");
 
     const geminiKey = secret?.gemini_api_key?.trim() || null;
     const anthropicKey = secret?.anthropic_api_key?.trim() || null;

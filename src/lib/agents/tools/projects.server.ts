@@ -3,6 +3,7 @@
 
 import type { Json } from "@/integrations/supabase/types";
 import type { Tool, ToolContext } from "./shared.server";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 // ---------------------------------------------------------------------------
 // D.R.O.I.D. tools — Software Delivery. D.R.O.I.D. never writes code itself;
@@ -113,11 +114,7 @@ export const listProjects: Tool = {
 };
 
 async function getGithubToken(ctx: ToolContext): Promise<string | null> {
-  const { data } = await ctx.supabase
-    .from("user_secrets")
-    .select("github_token")
-    .eq("owner_id", ctx.userId)
-    .maybeSingle();
+  const { data } = await readOwnerSecrets(ctx.userId, "github_token");
   const token = data?.github_token?.trim();
   return token || null;
 }

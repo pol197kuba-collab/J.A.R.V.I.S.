@@ -24,6 +24,7 @@ import { documentMarkdown, fridgeNote } from "./route";
 import { sanitizeFilename } from "@/lib/documents/chunking";
 import { callGemini } from "@/lib/ai/llm/gemini";
 import type { GeminiUsageMetadata } from "@/lib/ai/llm/usage";
+import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 // A 1600px receipt JPEG is ~300–600 kB of base64; this is the backstop.
 const MAX_BASE64_LENGTH = 3_000_000;
@@ -46,11 +47,7 @@ export const extractScan = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const startedAt = Date.now();
 
-    const { data: secret } = await supabase
-      .from("user_secrets")
-      .select("gemini_api_key")
-      .eq("owner_id", userId)
-      .maybeSingle();
+    const { data: secret } = await readOwnerSecrets(userId, "gemini_api_key");
     const apiKey = secret?.gemini_api_key?.trim();
     if (!apiKey) {
       throw new Error("Brak klucza Gemini. Wpisz go w Settings → AI Core, aby włączyć skaner.");
