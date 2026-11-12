@@ -32,7 +32,7 @@ export type SystemPulse = {
   failedRuns24h: number;
   /**
    * system_events at level warn/error in 24h — the same query S.H.I.E.L.D.'s
-   * guardian_scan_errors tool runs. Catches things like a provider fallback
+   * shield_scan_errors tool runs. Catches things like a provider fallback
    * (Gemini -> Groq) that a run recovered from, so it never shows up as a
    * failed run but is still worth flagging.
    */

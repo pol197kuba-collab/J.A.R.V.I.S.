@@ -13,7 +13,7 @@ import { type Tool, clampInt } from "./shared.server";
 export const scanErrors: Tool = {
   risk: "read",
   declaration: {
-    name: "guardian_scan_errors",
+    name: "shield_scan_errors",
     description:
       "Scan system_events and agent_runs for recent warnings/errors across the whole system (not just this conversation). Use to answer 'what broke recently' or a general system health check.",
     parameters: {
@@ -49,7 +49,7 @@ export const scanErrors: Tool = {
       .order("created_at", { ascending: false })
       .limit(limit);
     if (eventsErr) {
-      await ctx.logEvent("error", "tool.guardian_scan_errors", eventsErr.message);
+      await ctx.logEvent("error", "tool.shield_scan_errors", eventsErr.message);
       return { error: eventsErr.message };
     }
 
@@ -62,7 +62,7 @@ export const scanErrors: Tool = {
       .order("created_at", { ascending: false })
       .limit(limit);
     if (runsErr) {
-      await ctx.logEvent("error", "tool.guardian_scan_errors", runsErr.message);
+      await ctx.logEvent("error", "tool.shield_scan_errors", runsErr.message);
       return { error: runsErr.message };
     }
 
@@ -79,7 +79,7 @@ export const scanErrors: Tool = {
 export const runStats: Tool = {
   risk: "read",
   declaration: {
-    name: "guardian_run_stats",
+    name: "shield_run_stats",
     description:
       "Aggregate agent run statistics over a time window — counts by status and average latency per agent. Use to spot trends (rising error rate, latency regression) rather than a single incident.",
     parameters: {
@@ -102,7 +102,7 @@ export const runStats: Tool = {
       .eq("user_id", ctx.userId)
       .gte("created_at", since);
     if (error) {
-      await ctx.logEvent("error", "tool.guardian_run_stats", error.message);
+      await ctx.logEvent("error", "tool.shield_run_stats", error.message);
       return { error: error.message };
     }
 
@@ -147,7 +147,7 @@ export const runStats: Tool = {
 export const checkDelegation: Tool = {
   risk: "read",
   declaration: {
-    name: "guardian_check_delegation",
+    name: "shield_check_delegation",
     description:
       "Smoke-test multi-agent delegation tracing: checks whether recent delegated agent runs correctly link back to their parent run via parent_run_id. Use when asked to verify delegation/tracing health.",
     parameters: {
@@ -185,7 +185,7 @@ export const checkDelegation: Tool = {
       .order("created_at", { ascending: false })
       .limit(limit);
     if (error) {
-      await ctx.logEvent("error", "tool.guardian_check_delegation", error.message);
+      await ctx.logEvent("error", "tool.shield_check_delegation", error.message);
       return { error: error.message };
     }
 

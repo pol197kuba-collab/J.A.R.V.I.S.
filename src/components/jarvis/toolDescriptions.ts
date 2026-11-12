@@ -40,9 +40,9 @@ const TOOL_DESCRIPTIONS: Record<string, Describer> = {
     return status ? `✅ aktualizuje zadanie → ${status}` : `✅ aktualizuje zadanie`;
   },
   delete_task: () => `🗑️ usuwa zadanie`,
-  guardian_scan_errors: () => `🛡️ skanuje logi błędów`,
-  guardian_run_stats: () => `🛡️ liczy statystyki agentów`,
-  guardian_check_delegation: () => `🛡️ sprawdza integralność delegacji`,
+  shield_scan_errors: () => `🛡️ skanuje logi błędów`,
+  shield_run_stats: () => `🛡️ liczy statystyki agentów`,
+  shield_check_delegation: () => `🛡️ sprawdza integralność delegacji`,
   list_documents: () => `📁 przegląda dokumenty`,
   search_documents: (a) => `🔍 szuka w dokumentach: „${truncate(str(a, "query"))}"`,
   generate_document: (a) => `📄 generuje plik ${str(a, "format")}: „${truncate(str(a, "title"))}"`,
