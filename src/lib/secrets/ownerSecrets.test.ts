@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { clearOwnerSecrets, readOwnerSecrets, writeOwnerSecrets } from "./ownerSecrets.server";
+import {
+  SecretsReadError,
+  clearOwnerSecrets,
+  readOwnerSecrets,
+  writeOwnerSecrets,
+} from "./ownerSecrets.server";
 import { makeDb } from "@/lib/agents/runtime.testkit";
 import { testSecretsDb } from "@/test/secretsDb";
 
@@ -39,10 +44,28 @@ describe("ownerSecrets", () => {
     ]);
   });
 
-  it("brak klienta service role: błąd w wyniku, nie wyjątek", async () => {
-    testSecretsDb.current = null;
-    const res = await readOwnerSecrets("owner-1", "gemini_api_key");
+  // Etap 6b: „nie ma klucza” i „nie udało się odczytać” muszą się różnić dla
+  // wywołującego. Wcześniej oba dawały data: null — joby po etapie 5 nie
+  // widziały kluczy (logowały się bez service role) i kończyły się na zielono.
+  it("brak wiersza: data null, bez wyjątku — to „nie ma klucza”", async () => {
+    makeDb((t) => (t === "user_secrets" ? { data: null, error: null } : undefined));
+    const res = await readOwnerSecrets("owner-1", "tomtom_api_key");
     expect(res.data).toBeNull();
-    expect(res.error?.message).toContain("brak atrapy");
+    expect(res.error).toBeNull();
+  });
+
+  it("błąd odczytu z bazy: wyjątek SecretsReadError, nie cichy brak klucza", async () => {
+    makeDb((t) =>
+      t === "user_secrets" ? { data: null, error: { message: "permission denied" } } : undefined,
+    );
+    await expect(readOwnerSecrets("owner-1", "tomtom_api_key")).rejects.toThrow(SecretsReadError);
+    await expect(readOwnerSecrets("owner-1", "tomtom_api_key")).rejects.toThrow(
+      "permission denied",
+    );
+  });
+
+  it("brak klienta service role: wyjątek SecretsReadError", async () => {
+    testSecretsDb.current = null;
+    await expect(readOwnerSecrets("owner-1", "gemini_api_key")).rejects.toThrow(SecretsReadError);
   });
 });

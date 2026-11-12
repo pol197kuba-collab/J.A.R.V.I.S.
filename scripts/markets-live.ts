@@ -33,6 +33,7 @@ import { askAlarm } from "../src/lib/markets/alarm.server";
 import { createModelBudget, DAILY_TOKEN_BUDGET, warsawDay } from "../src/lib/markets/budget";
 import { computeSignals } from "../src/lib/markets/signals";
 import { loadWatchlist, type Db } from "../src/lib/markets/ingest.server";
+import { startJob } from "../src/lib/jobs/jobRun";
 
 const notice = (m: string) => console.log(`::notice::${m}`);
 const warn = (m: string) => console.log(`::warning::${m}`);
@@ -51,30 +52,10 @@ function requireEnv(name: string): string {
 }
 
 async function auth(): Promise<{ db: Db; ownerId: string }> {
-  const url = requireEnv("SUPABASE_URL");
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  const anonKey =
-    process.env.SUPABASE_PUBLISHABLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
-  const email = process.env.JARVIS_EMAIL?.trim();
-  const password = process.env.JARVIS_PASSWORD;
-  const opts = { auth: { persistSession: false, autoRefreshToken: false } };
-  if (serviceRoleKey) {
-    return {
-      db: createClient<Database>(url, serviceRoleKey, opts) as Db,
-      ownerId: requireEnv("JARVIS_OWNER_ID"),
-    };
-  }
-  if (anonKey && email && password) {
-    const client = createClient<Database>(url, anonKey, opts);
-    const { data, error } = await client.auth.signInWithPassword({ email, password });
-    if (error || !data.user) {
-      fail(`Logowanie nie powiodło się: ${error?.message ?? "brak użytkownika"}`);
-      process.exit(1);
-    }
-    return { db: client as Db, ownerId: data.user.id };
-  }
-  fail("Brak danych uwierzytelniających (jak w market-grid.yml).");
-  process.exit(1);
+  // Jedna droga uwierzytelnienia: service role + JARVIS_OWNER_ID (etap 6b,
+  // src/lib/jobs/jobRun.ts). Logowanie hasłem ukryło awarię kluczy po etapie 5.
+  const job = startJob("market-live");
+  return { db: job.db as Db, ownerId: job.ownerId };
 }
 
 /**
@@ -345,6 +326,10 @@ async function main() {
   const used = (usage ?? []).reduce((s, u) => s + u.tokens_in + u.tokens_out, 0);
   notice(`tokeny dziś: ${used} z ${DAILY_TOKEN_BUDGET}`);
   await finish(0);
+  notice(
+    `Przebieg zakończony: ceny ${prices.size} z ${assets.length} instrumentów, ` +
+      `nowych zdarzeń ${written}.`,
+  );
 }
 
 main().catch((err) => {

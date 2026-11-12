@@ -47,14 +47,10 @@ jobs:
       - name: Build brief
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          # Dwie drogi uwierzytelnienia — wystarczy wypełnić jedną. Briefing
-          # jest per użytkownik, więc to konto (albo JARVIS_OWNER_ID) decyduje,
-          # czyje zadania, rozkazy i watchlista do niego trafią.
+          # Jedna droga uwierzytelnienia: service role + właściciel (etap 6b,
+          # src/lib/jobs/jobRun.ts). Bez nich job jest czerwony.
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           JARVIS_OWNER_ID: ${{ secrets.JARVIS_OWNER_ID }}
-          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-          JARVIS_EMAIL: ${{ secrets.JARVIS_EMAIL }}
-          JARVIS_PASSWORD: ${{ secrets.JARVIS_PASSWORD }}
           # Oba opcjonalne. Bez nich briefing powstaje z samych liczb —
           # uboższy język, ten sam komplet informacji.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

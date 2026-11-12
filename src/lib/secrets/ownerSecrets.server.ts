@@ -11,6 +11,12 @@
 //
 // Kształt wyniku jak w supabase-js ({ data, error }), żeby wywołujący nie
 // zmieniali logiki wokół odczytu.
+//
+// Etap 6b: „nie ma klucza” (data: null) i „nie udało się odczytać” to dwie
+// różne rzeczy. Nieudany odczyt rzuca SecretsReadError — wcześniej wyglądał
+// jak brak klucza, więc joby po etapie 5 (bez klucza service role) kończyły
+// się na zielono, nie robiąc swojej pracy. Tam, gdzie klucz jest tylko
+// dodatkiem (embedding notatki, newsy), wywołujący łapie wyjątek jawnie.
 import type { Database } from "@/integrations/supabase/types";
 import { secretsDb } from "./secretsDb.server";
 
@@ -25,18 +31,46 @@ async function readWith<Q extends string>(ownerId: string, columns: Q) {
   return db.from("user_secrets").select(columns).eq("owner_id", ownerId).maybeSingle();
 }
 
-/** Wybrane kolumny user_secrets właściciela (np. "gemini_api_key, groq_api_key"). */
+/** Odczyt user_secrets się nie udał — to NIE to samo co brak klucza. */
+export class SecretsReadError extends Error {
+  constructor(message: string) {
+    super(`Nie udało się odczytać kluczy (user_secrets): ${message}`);
+    this.name = "SecretsReadError";
+  }
+}
+
+/**
+ * Wybrane kolumny user_secrets właściciela (np. "gemini_api_key, groq_api_key").
+ * Brak wiersza → data: null. Nieudany odczyt (brak klucza service role,
+ * błąd bazy) → wyjątek SecretsReadError.
+ */
 export async function readOwnerSecrets<Q extends string>(
   ownerId: string,
   columns: Q,
 ): Promise<ReadResult<Q>> {
+  let result: ReadResult<Q>;
   try {
-    return await readWith(ownerId, columns);
+    result = await readWith(ownerId, columns);
   } catch (err) {
-    // Brak klucza service role w środowisku — zwracamy błąd w tym samym
-    // kształcie co supabase-js zamiast przerywać wywołującego wyjątkiem.
-    const message = err instanceof Error ? err.message : String(err);
-    return { data: null, error: { message } } as unknown as ReadResult<Q>;
+    throw new SecretsReadError(err instanceof Error ? err.message : String(err));
+  }
+  if (result.error) throw new SecretsReadError(result.error.message);
+  return result;
+}
+
+/** Odczyt dla miejsc, gdzie klucz jest dodatkiem: błąd → brak klucza + log. */
+export async function readOwnerSecretsOrNone<Q extends string>(
+  ownerId: string,
+  columns: Q,
+  where: string,
+): Promise<ReadResult<Q>["data"]> {
+  try {
+    return (await readOwnerSecrets(ownerId, columns)).data;
+  } catch (err) {
+    console.warn(
+      `[${where}] ${err instanceof Error ? err.message : String(err)} — działam bez klucza`,
+    );
+    return null;
   }
 }
 

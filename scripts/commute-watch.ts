@@ -5,67 +5,30 @@
  *
  * Skrypt jest CIENKI: decyzja „czy budzić telefon” siedzi w
  * src/lib/commute/alert.ts (czysta, z testami), liczenie trasy w
- * src/lib/commute/*. Tutaj są tylko uwierzytelnienie, odczyt stanu i zapis.
+ * src/lib/commute/*. Tutaj są tylko odczyt stanu i zapis.
+ *
+ * Etap 6b: brak klucza TomTom (albo nieudany odczyt kluczy) to AWARIA —
+ * czerwony przebieg i wpis w system_events. Od etapu 5 do 6b ten job przez
+ * pół dnia nie miał klucza i był zielony. Uwierzytelnienie tylko service role
+ * (src/lib/jobs/jobRun.ts).
  */
-import { createClient } from "@supabase/supabase-js";
-import type { Database, Json } from "../src/integrations/supabase/types";
+import type { Json } from "../src/integrations/supabase/types";
 import { decideAlert, inWatchWindow, type AlertState } from "../src/lib/commute/alert";
 import { commuteFacts } from "../src/lib/commute/brief";
 import { computeCommute, loadCommuteSettings } from "../src/lib/commute/commute.server";
 import { notifyOwner } from "../src/lib/notifications/notify.server";
 import type { CommuteDirection } from "../src/lib/commute/types";
+import { startJob } from "../src/lib/jobs/jobRun";
 
-const notice = (m: string) => console.log(`::notice::${m}`);
-const warn = (m: string) => console.log(`::warning::${m}`);
-const fail = (m: string) => console.log(`::error::${m}`);
+const DIRECTION_PL: Record<CommuteDirection, string> = { to: "do pracy", back: "do domu" };
 
-function requireEnv(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) {
-    fail(`Brak wymaganego sekretu ${name}. Ustaw go w Settings → Secrets → Actions.`);
-    process.exit(1);
-  }
-  return value;
-}
-
-async function main(): Promise<void> {
-  const supabaseUrl = requireEnv("SUPABASE_URL");
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  const anonKey =
-    process.env.SUPABASE_PUBLISHABLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
-  const email = process.env.JARVIS_EMAIL?.trim();
-  const password = process.env.JARVIS_PASSWORD;
-
-  let db: ReturnType<typeof createClient<Database>>;
-  let ownerId: string;
-  if (serviceRoleKey) {
-    db = createClient<Database>(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    ownerId = requireEnv("JARVIS_OWNER_ID");
-  } else if (anonKey && email && password) {
-    const client = createClient<Database>(supabaseUrl, anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data: session, error } = await client.auth.signInWithPassword({ email, password });
-    if (error || !session.user) {
-      fail(`Logowanie kontem ${email} nie powiodło się: ${error?.message ?? "brak użytkownika"}`);
-      process.exit(1);
-    }
-    db = client;
-    ownerId = session.user.id;
-  } else {
-    fail(
-      "Brak danych uwierzytelniających. Ustaw SUPABASE_SERVICE_ROLE_KEY + JARVIS_OWNER_ID albo " +
-        "SUPABASE_PUBLISHABLE_KEY + JARVIS_EMAIL + JARVIS_PASSWORD w Settings → Secrets → Actions.",
-    );
-    process.exit(1);
-  }
+async function main(): Promise<number> {
+  const job = startJob("commute-watch");
+  const { db, ownerId } = job;
 
   const settings = await loadCommuteSettings(db, ownerId);
   if (!settings.home || !settings.work) {
-    notice("Brak adresów domu i pracy — nic do sprawdzenia.");
-    return;
+    return job.finish("Brak adresów domu i pracy w Ustawieniach → Dojazd — nic do sprawdzenia.");
   }
 
   const { data: row } = await db
@@ -76,21 +39,26 @@ async function main(): Promise<void> {
   let state = (row?.alert_state ?? {}) as AlertState;
 
   const now = new Date();
+  const done: string[] = [];
   for (const direction of ["to", "back"] as CommuteDirection[]) {
     if (!inWatchWindow(now, direction, settings)) continue;
+    const label = `dojazd ${DIRECTION_PL[direction]}`;
     try {
       const outcome = await computeCommute(db, ownerId, direction, now, settings);
       if (!outcome.ok) {
-        warn(
-          `dojazd (${direction}): ${outcome.reason === "no_key" ? "brak klucza TomTom" : "brak adresów"}`,
+        await job.fail(
+          label,
+          outcome.reason === "no_key"
+            ? "brak klucza TomTom (Ustawienia → Klucze API) — alert nie może działać"
+            : "brak adresów domu i pracy",
         );
         continue;
       }
       const facts = commuteFacts(outcome.result, settings);
       const decision = decideAlert(direction, facts, settings, state, now);
       state = decision.state;
-      notice(
-        `dojazd (${direction}): ${facts.durationMin} min, opóźnienie ${facts.delayMin ?? "?"} min — ` +
+      job.notice(
+        `${label}: ${facts.durationMin} min, opóźnienie ${facts.delayMin ?? "?"} min — ` +
           (decision.send ? "alert" : "bez alertu"),
       );
       if (decision.send) {
@@ -106,22 +74,16 @@ async function main(): Promise<void> {
           url: "/situation-room",
           tag: `commute-${direction}`,
         });
-        if (res.error) warn(`meldunek: ${res.error}`);
+        if (res.error) await job.fail(`${label} — meldunek`, res.error);
+        else if (res.push?.skipped === "secrets_read_failed") {
+          await job.fail(`${label} — push`, "nie udało się odczytać kluczy VAPID");
+        }
+        done.push(`${label}: ${facts.durationMin} min, alert wysłany`);
+      } else {
+        done.push(`${label}: ${facts.durationMin} min, bez alertu`);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      fail(`dojazd (${direction}): ${message}`);
-      try {
-        await db.from("system_events").insert({
-          owner_id: ownerId,
-          level: "error",
-          source: "commute-watch",
-          message: `[cron] dojazd (${direction}): ${message}`,
-          meta: {} as Json,
-        });
-      } catch {
-        // zostaje ::error:: powyżej
-      }
+      await job.fail(label, err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -129,9 +91,21 @@ async function main(): Promise<void> {
     .from("commute_settings")
     .update({ alert_state: state as unknown as Json })
     .eq("owner_id", ownerId);
+
+  return job.finish(
+    done.length > 0
+      ? `Sprawdzono — ${done.join("; ")}.`
+      : job.failures.length > 0
+        ? "Dojazdu nie udało się sprawdzić."
+        : "Poza oknem dojazdu — nic do sprawdzenia.",
+  );
 }
 
-main().catch((err: unknown) => {
-  fail(`Nieobsłużony błąd: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
-  process.exit(1);
-});
+main()
+  .then((code) => process.exit(code))
+  .catch((err: unknown) => {
+    console.log(
+      `::error::Nieobsłużony błąd: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`,
+    );
+    process.exit(1);
+  });

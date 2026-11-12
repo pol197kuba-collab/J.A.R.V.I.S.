@@ -55,18 +55,10 @@ jobs:
       - name: Ingest
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          # Dwie drogi uwierzytelnienia — wystarczy wypełnić jedną (patrz
-          # scripts/markets-daily.ts). service_role jest prostszy, ale nie
-          # każda instalacja ma do niego dostęp; wtedy job loguje się kontem.
-          #
-          # UWAGA: watchlista i prognozy są per użytkownik, więc to konto (albo
-          # JARVIS_OWNER_ID) decyduje, czyje instrumenty są zaciągane i czyje
-          # prognozy rozliczane.
+          # Jedna droga uwierzytelnienia: service role + właściciel (etap 6b,
+          # src/lib/jobs/jobRun.ts). Bez nich job jest czerwony.
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           JARVIS_OWNER_ID: ${{ secrets.JARVIS_OWNER_ID }}
-          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-          JARVIS_EMAIL: ${{ secrets.JARVIS_EMAIL }}
-          JARVIS_PASSWORD: ${{ secrets.JARVIS_PASSWORD }}
           # Oba opcjonalne. Bez nich newsy dostają ocenę heurystyczną, a typer
           # zapisuje wyłącznie prognozę sygnałową — job i tak kończy się
           # sukcesem, bo uboższy wynik to nie awaria.

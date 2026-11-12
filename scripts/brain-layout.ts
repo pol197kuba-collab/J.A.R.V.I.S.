@@ -43,6 +43,7 @@ import {
 import type { Vec3 } from "../src/lib/brain/projection";
 import { computeInsights } from "../src/lib/brain/insights";
 import { readOwnerSecrets } from "../src/lib/secrets/ownerSecrets.server";
+import { startJob } from "../src/lib/jobs/jobRun";
 
 const args = new Set(process.argv.slice(2));
 const DRY_RUN = args.has("--dry-run");
@@ -75,43 +76,10 @@ function requireEnv(name: string): string {
 }
 
 async function main(): Promise<void> {
-  const supabaseUrl = requireEnv("SUPABASE_URL");
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  const anonKey =
-    process.env.SUPABASE_PUBLISHABLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
-  const email = process.env.JARVIS_EMAIL?.trim();
-  const password = process.env.JARVIS_PASSWORD;
-
-  // Dwie drogi uwierzytelnienia, identycznie jak w pozostałych jobach.
-  let db: Db;
-  let ownerId: string;
-  let asServiceRole = false;
-  if (serviceRoleKey) {
-    db = createClient<Database>(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    ownerId = requireEnv("JARVIS_OWNER_ID");
-    asServiceRole = true;
-    notice("Uwierzytelnienie: service_role.");
-  } else if (anonKey && email && password) {
-    const client = createClient<Database>(supabaseUrl, anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data: session, error } = await client.auth.signInWithPassword({ email, password });
-    if (error || !session.user) {
-      fail(`Logowanie kontem ${email} nie powiodło się: ${error?.message ?? "brak użytkownika"}`);
-      process.exit(1);
-    }
-    db = client;
-    ownerId = session.user.id;
-    notice(`Uwierzytelnienie: konto ${email}.`);
-  } else {
-    fail(
-      "Brak danych uwierzytelniających. Ustaw SUPABASE_SERVICE_ROLE_KEY + JARVIS_OWNER_ID albo " +
-        "SUPABASE_PUBLISHABLE_KEY + JARVIS_EMAIL + JARVIS_PASSWORD w Settings → Secrets → Actions.",
-    );
-    process.exit(1);
-  }
+  // Jedna droga uwierzytelnienia: service role + JARVIS_OWNER_ID (etap 6b,
+  // src/lib/jobs/jobRun.ts). Logowanie hasłem ukryło awarię kluczy po etapie 5.
+  const job = startJob("brain-layout");
+  const { db, ownerId } = job;
 
   /** Awaria widoczna i w Actions, i w /system-logs (Strażnik ją zobaczy). */
   async function report(step: string, message: string, meta: Json = {}) {
@@ -133,8 +101,15 @@ async function main(): Promise<void> {
   // Klucz Gemini: sekret joba albo klucz użytkownika z aplikacji.
   let geminiKey = process.env.GEMINI_API_KEY?.trim() || null;
   if (!geminiKey) {
-    const { data } = await readOwnerSecrets(ownerId, "gemini_api_key");
-    geminiKey = data?.gemini_api_key?.trim() || null;
+    // Brak klucza to świadoma degradacja (słowa kluczowe zamiast nazw), ale
+    // NIEUDANY odczyt kluczy to awaria — czerwony przebieg (etap 6b).
+    try {
+      const { data } = await readOwnerSecrets(ownerId, "gemini_api_key");
+      geminiKey = data?.gemini_api_key?.trim() || null;
+    } catch (err) {
+      await report("klucze", err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
   }
   if (!geminiKey) {
     warn("Brak klucza Gemini — bez dogonienia embeddingów i z nazwami gromad ze słów kluczowych.");
@@ -160,7 +135,7 @@ async function main(): Promise<void> {
   let sources: BrainSource[];
   let previous: Map<string, Vec3>;
   try {
-    sources = await loadSources(db, ownerId, asServiceRole);
+    sources = await loadSources(db, ownerId);
     previous = await loadPrevious(db, ownerId);
   } catch (err) {
     await report("odczyt", err instanceof Error ? err.message : String(err));
@@ -241,14 +216,15 @@ async function main(): Promise<void> {
   notice("Układ zapisany.");
 }
 
-async function loadSources(db: Db, ownerId: string, asServiceRole: boolean) {
+async function loadSources(db: Db, ownerId: string) {
   const out: BrainSource[] = [];
   let skipped = 0;
   for (let from = 0; ; from += PAGE) {
-    const query = asServiceRole
-      ? db.rpc("brain_source_rows", { p_owner: ownerId })
-      : db.rpc("brain_sources");
-    const { data, error } = await query.range(from, from + PAGE - 1);
+    // Job działa zawsze jako service role (etap 6b), więc właściciel jest
+    // podawany jawnie — brain_sources() (z auth.uid()) jest dla aplikacji.
+    const { data, error } = await db
+      .rpc("brain_source_rows", { p_owner: ownerId })
+      .range(from, from + PAGE - 1);
     if (error) throw new Error(`brain_sources: ${error.message}`);
     for (const row of data ?? []) {
       const embedding = parseVectorLiteral(row.embedding);
