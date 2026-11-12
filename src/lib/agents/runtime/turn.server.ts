@@ -3,7 +3,7 @@
 // wydzielone z runtime.server.ts; klient modeli: src/lib/ai/llm/).
 import type { Json } from "@/integrations/supabase/types";
 import { DEFAULT_GEMINI_MODEL, DEFAULT_GROQ_FALLBACK_MODEL } from "../models";
-import { callAnthropic } from "@/lib/ai/llm/anthropic";
+import { acceptsForcedToolChoice, callAnthropic } from "@/lib/ai/llm/anthropic";
 import { callGemini } from "@/lib/ai/llm/gemini";
 import { callGroq } from "@/lib/ai/llm/groq";
 import { withPurpose } from "@/lib/ai/llm/ledger";
@@ -48,6 +48,26 @@ export async function runModelTurn(
   } = ctx;
   let functionCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
   let textOut = "";
+  // Wymuszona tura generate_document na modelu Claude, który wymuszenia nie
+  // przyjmuje (Opus 5.5 / Sonnet 5.5 — 400): od razu Gemini, jednym `info`
+  // w logu zamiast nieudanego wywołania i ostrzeżenia z failoveru (etap 6b).
+  // Bez klucza Gemini zostaje Claude bez wymuszenia (tool_choice auto).
+  if (
+    state.modelProvider === "anthropic" &&
+    forceGenerateDocument &&
+    apiKey &&
+    !acceptsForcedToolChoice(state.model)
+  ) {
+    await logEvent(
+      "info",
+      AGENT_SLUGS.JARVIS,
+      `${state.model} nie przyjmuje wymuszenia narzędzia — ${GENERATE_DOCUMENT_TOOL} i reszta runu idą na ${DEFAULT_GEMINI_MODEL}`,
+      { run_id: runId, iter, configured_model: modelRef } as Json,
+    );
+    state.modelProvider = "gemini";
+    state.model = DEFAULT_GEMINI_MODEL;
+    return { retry: true, functionCalls, textOut };
+  }
   try {
     if (state.modelProvider === "anthropic") {
       // Claude path — same canonical `contents`, same tool declarations,
@@ -164,6 +184,19 @@ export async function runModelTurn(
             ),
           ledger: runLedger,
         });
+        // Model agenta wyłączony u dostawcy (404 — np. stary gemini-2.0-flash
+        // zapisany w ustawieniach agenta): model domyślny z ostrzeżeniem
+        // zamiast martwego runu (etap 6b). Ten sam krok pętli od nowa.
+        if (!res.ok && res.status === 404 && state.model !== DEFAULT_GEMINI_MODEL) {
+          await logEvent(
+            "warn",
+            AGENT_SLUGS.JARVIS,
+            `model ${state.model} niedostępny u dostawcy (HTTP 404) — używam ${DEFAULT_GEMINI_MODEL}; zmień model agenta w Ustawieniach`,
+            { run_id: runId, iter, configured_model: modelRef } as Json,
+          );
+          state.model = DEFAULT_GEMINI_MODEL;
+          return { retry: true, functionCalls, textOut };
+        }
         if (!res.ok) throw new Error(res.message);
         const data = res.data;
         meterUsage(state, res.usage, res.costUsd);

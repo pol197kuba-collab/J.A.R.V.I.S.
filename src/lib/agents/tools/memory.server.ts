@@ -165,6 +165,12 @@ const RECALL_NOTE_BODY = 600;
 
 export const recall: Tool = {
   risk: "read",
+  // A2d (etap 6b): wpis zapisany przez narzędzie (`tool`) albo sprzed migracji
+  // pochodzenia (`unknown`) to obca treść — tak jak wynik fetch_url. Po nim
+  // akcje `external` czekają na potwierdzenie. Wpisy właściciela (`user`) nie.
+  untrustedResult: (result) =>
+    Array.isArray(result.memories) &&
+    result.memories.some((m) => (m as { origin?: unknown }).origin !== "user"),
   declaration: {
     name: "recall",
     description:

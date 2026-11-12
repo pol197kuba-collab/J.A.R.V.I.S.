@@ -12,7 +12,7 @@ import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { UI_ACTIONS } from "@/lib/constants/uiActions";
 import type { GeminiContent } from "@/lib/ai/llm/types";
 import { ZERO_USAGE } from "@/lib/ai/llm/usage";
-import { GENERATE_DOCUMENT_TOOL } from "./runtime/constants";
+import { GENERATE_DOCUMENT_TOOL, ITERATION_LIMIT_REPLY } from "./runtime/constants";
 import { prepareRun } from "./runtime/context.server";
 import { declareTools, executeToolCalls } from "./runtime/tools.server";
 import { runModelTurn } from "./runtime/turn.server";
@@ -100,8 +100,7 @@ export async function runAgentLoop(args: AgentLoopInput): Promise<AgentRunResult
         // Force a final text reply on the next (skipped) turn by breaking here
         // but we already broke out via loop bound. If we get here we still
         // have unconsumed tool output; fall through to a graceful message.
-        state.finalText =
-          "I have completed several tool calls but ran out of orchestration cycles. Please rephrase or ask me to continue.";
+        state.finalText = ITERATION_LIMIT_REPLY;
       }
     }
 

@@ -66,6 +66,12 @@ export type Tool = {
    * niej narzędzia `external` czekają na potwierdzenie użytkownika.
    */
   untrustedOutput?: ByArgs<boolean>;
+  /**
+   * Jak wyżej, ale rozstrzygane z WYNIKU — gdy obcość zależy od tego, co
+   * narzędzie znalazło (np. `recall`: wpis zapisany przez narzędzie albo sprzed
+   * migracji pochodzenia to obca treść, wpis właściciela — nie). Etap 6b.
+   */
+  untrustedResult?: (result: ToolResult) => boolean;
 };
 
 const resolveByArgs = <T>(value: ByArgs<T>, args: Record<string, unknown>): T =>
@@ -75,8 +81,13 @@ export function toolRisk(tool: Tool, args: Record<string, unknown>): ToolRisk {
   return resolveByArgs(tool.risk, args);
 }
 
-export function bringsUntrustedContent(tool: Tool, args: Record<string, unknown>): boolean {
-  return tool.untrustedOutput === undefined ? false : resolveByArgs(tool.untrustedOutput, args);
+export function bringsUntrustedContent(
+  tool: Tool,
+  args: Record<string, unknown>,
+  result?: ToolResult,
+): boolean {
+  if (tool.untrustedOutput !== undefined && resolveByArgs(tool.untrustedOutput, args)) return true;
+  return result !== undefined && tool.untrustedResult !== undefined && tool.untrustedResult(result);
 }
 
 export const clampInt = (v: unknown, min: number, max: number, fallback: number): number => {

@@ -249,7 +249,7 @@ export async function executeToolCalls(
           logEvent,
           untrustedContent: state.untrustedSeen,
         });
-        if (bringsUntrustedContent(tool, callArgs)) {
+        if (bringsUntrustedContent(tool, callArgs, response)) {
           state.untrustedSeen = true;
           responseUntrusted = true;
         }
