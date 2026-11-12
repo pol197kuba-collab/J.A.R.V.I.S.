@@ -845,11 +845,38 @@ export const runAgent = createServerFn({ method: "POST" })
     // turze. Pole `history` zostaje tylko dla rozmowy bez wątku. W obu
     // przypadkach przycięcie do budżetu tokenów (najnowsze w całości).
     let history: HistoryTurn[] = data.history ?? [];
-    if (data.conversationId) {
+
+    // Bez conversationId (wiadomość wysłana, zanim czat wczytał wątek; głos;
+    // przełączenie agenta) dopisujemy do OSTATNIEGO wątku agenta — tego
+    // samego, który pokazuje getActiveConversation. Wcześniej każda taka
+    // wiadomość zakładała nowy wątek: czat pokazywał potem tylko jego,
+    // a stara rozmowa znikała z widoku. Nowy wątek tylko, gdy żadnego nie ma.
+    let conversationId = data.conversationId ?? null;
+    if (!conversationId) {
+      const { data: agentRow } = await supabase
+        .from("agents")
+        .select("id")
+        .eq("owner_id", userId)
+        .eq("slug", data.agentSlug)
+        .maybeSingle();
+      if (agentRow) {
+        const { data: conv } = await supabase
+          .from("conversations")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("agent_id", agentRow.id)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        conversationId = conv?.id ?? null;
+      }
+    }
+
+    if (conversationId) {
       const { data: rows } = await supabase
         .from("messages")
         .select("role, content")
-        .eq("conversation_id", data.conversationId)
+        .eq("conversation_id", conversationId)
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(HISTORY_FETCH_LIMIT);
@@ -869,7 +896,7 @@ export const runAgent = createServerFn({ method: "POST" })
       agentSlug: data.agentSlug,
       input: data.input,
       history: trimHistory(withoutCurrentInput(history, data.input)),
-      conversationId: data.conversationId ?? null,
+      conversationId,
     });
   });
 
