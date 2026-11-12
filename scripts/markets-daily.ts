@@ -48,6 +48,7 @@ import {
   sessionAt,
 } from "../src/lib/markets/schedule";
 import { DAILY_TOKEN_BUDGET, warsawDay } from "../src/lib/markets/budget";
+import { startJob } from "../src/lib/jobs/jobRun";
 
 const args = new Set(process.argv.slice(2));
 const DRY_RUN = args.has("--dry-run");
@@ -97,8 +98,6 @@ async function main(): Promise<void> {
     return;
   }
 
-  const supabaseUrl = requireEnv("SUPABASE_URL");
-
   // Klucze modeli są opcjonalne: bez nich newsy dostają ocenę heurystyczną,
   // a typer zapisuje wyłącznie prognozę sygnałową. Job kończy się wtedy
   // sukcesem — uboższy wynik to nie awaria.
@@ -113,52 +112,10 @@ async function main(): Promise<void> {
     );
   }
 
-  // Dwie drogi uwierzytelnienia, w kolejności preferencji — identycznie jak
-  // w scripts/orlen-daily.ts:
-  //
-  // 1. service_role — omija RLS, nic nie zależy od kont użytkowników.
-  // 2. Logowanie kontem (klucz anon + e-mail i hasło) — dla instalacji,
-  //    w których Supabase jest zarządzany przez Lovable i service_role jest
-  //    poza zasięgiem właściciela.
-  //
-  // UWAGA na różnicę wobec modułu paliwowego: market_predictions i
-  // market_watchlist są PER UŻYTKOWNIK, więc ownerId nie jest tu tylko
-  // etykietą w logach — to on decyduje, czyja watchlista jest zaciągana i
-  // czyje prognozy są rozliczane.
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  const anonKey =
-    process.env.SUPABASE_PUBLISHABLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
-  const email = process.env.JARVIS_EMAIL?.trim();
-  const password = process.env.JARVIS_PASSWORD;
-
-  let db: Db;
-  let ownerId: string;
-
-  if (serviceRoleKey) {
-    db = createClient<Database>(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    }) as Db;
-    ownerId = requireEnv("JARVIS_OWNER_ID");
-    notice("Uwierzytelnienie: service_role.");
-  } else if (anonKey && email && password) {
-    const client = createClient<Database>(supabaseUrl, anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data: session, error } = await client.auth.signInWithPassword({ email, password });
-    if (error || !session.user) {
-      fail(`Logowanie kontem ${email} nie powiodło się: ${error?.message ?? "brak użytkownika"}`);
-      process.exit(1);
-    }
-    db = client as Db;
-    ownerId = session.user.id;
-    notice(`Uwierzytelnienie: konto ${email}.`);
-  } else {
-    fail(
-      "Brak danych uwierzytelniających. Ustaw SUPABASE_SERVICE_ROLE_KEY + JARVIS_OWNER_ID albo " +
-        "SUPABASE_PUBLISHABLE_KEY + JARVIS_EMAIL + JARVIS_PASSWORD w Settings → Secrets → Actions.",
-    );
-    process.exit(1);
-  }
+  // Jedna droga uwierzytelnienia: service role + JARVIS_OWNER_ID (etap 6b,
+  // src/lib/jobs/jobRun.ts). Logowanie hasłem ukryło awarię kluczy po etapie 5.
+  const job = startJob("market-grid");
+  const { db, ownerId } = job;
 
   // ---------- 0. Czy ten przebieg w ogóle ma działać ----------
   // Job uruchamia baza (workflow_dispatch) dwa razy: rano dla akcji, ETF-ów i

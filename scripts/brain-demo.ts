@@ -18,6 +18,7 @@ import {
   DEMO_TAG,
   demoCreatedAt,
 } from "../src/lib/brain/demoSeed";
+import { startJob } from "../src/lib/jobs/jobRun";
 
 type Db = SupabaseClient<Database>;
 
@@ -40,36 +41,10 @@ function requireEnv(name: string): string {
 }
 
 async function connect(): Promise<{ db: Db; ownerId: string }> {
-  const supabaseUrl = requireEnv("SUPABASE_URL");
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  const anonKey =
-    process.env.SUPABASE_PUBLISHABLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
-  const email = process.env.JARVIS_EMAIL?.trim();
-  const password = process.env.JARVIS_PASSWORD;
-
-  // Dwie drogi uwierzytelnienia, identycznie jak w pozostałych jobach.
-  if (serviceRoleKey) {
-    const db = createClient<Database>(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    return { db, ownerId: requireEnv("JARVIS_OWNER_ID") };
-  }
-  if (anonKey && email && password) {
-    const db = createClient<Database>(supabaseUrl, anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data, error } = await db.auth.signInWithPassword({ email, password });
-    if (error || !data.user) {
-      fail(`Logowanie kontem ${email} nie powiodło się: ${error?.message ?? "brak użytkownika"}`);
-      process.exit(1);
-    }
-    return { db, ownerId: data.user.id };
-  }
-  fail(
-    "Brak danych uwierzytelniających. Ustaw SUPABASE_SERVICE_ROLE_KEY + JARVIS_OWNER_ID albo " +
-      "SUPABASE_PUBLISHABLE_KEY + JARVIS_EMAIL + JARVIS_PASSWORD w Settings → Secrets → Actions.",
-  );
-  process.exit(1);
+  // Jedna droga uwierzytelnienia: service role + JARVIS_OWNER_ID (etap 6b,
+  // src/lib/jobs/jobRun.ts). Logowanie hasłem ukryło awarię kluczy po etapie 5.
+  const job = startJob("brain-demo");
+  return { db: job.db as Db, ownerId: job.ownerId };
 }
 
 /** Kolejność po temacie (drugi tag) na przemian: A1, B1, C1, A2, B2, … */

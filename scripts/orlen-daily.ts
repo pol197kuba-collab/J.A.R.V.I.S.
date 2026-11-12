@@ -17,6 +17,7 @@ import type { Database, Json } from "../src/integrations/supabase/types";
 import { ORLEN_PRODUCTS } from "../src/lib/fuel/orlen";
 import { ingestMarket, ingestNews, ingestPrices, type Db } from "../src/lib/fuel/ingest.server";
 import { evaluateStandingOrders } from "../src/lib/orders/evaluate.server";
+import { startJob } from "../src/lib/jobs/jobRun";
 
 const args = new Set(process.argv.slice(2));
 const DRY_RUN = args.has("--dry-run");
@@ -66,56 +67,15 @@ async function main(): Promise<void> {
     return;
   }
 
-  const supabaseUrl = requireEnv("SUPABASE_URL");
   const geminiKey = process.env.GEMINI_API_KEY?.trim() || null;
   if (!geminiKey) {
     warn("Brak GEMINI_API_KEY — newsy dostaną ocenę heurystyczną zamiast streszczeń po polsku.");
   }
 
-  // Dwie drogi uwierzytelnienia, w kolejności preferencji:
-  //
-  // 1. service_role — omija RLS, nic nie zależy od kont użytkowników.
-  // 2. Logowanie kontem (klucz anon + e-mail i hasło) — dla instalacji,
-  //    w których Supabase jest zarządzany przez Lovable i service_role jest
-  //    poza zasięgiem właściciela. Dokładnie to robi local-worker/worker.py.
-  //    Zapis działa wtedy dzięki politykom z migracji 20260920140000.
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  const anonKey =
-    process.env.SUPABASE_PUBLISHABLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
-  const email = process.env.JARVIS_EMAIL?.trim();
-  const password = process.env.JARVIS_PASSWORD;
-
-  let db: Db;
-  let ownerId: string;
-
-  if (serviceRoleKey) {
-    db = createClient<Database>(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    }) as Db;
-    // Przy service_role nie ma sesji, z której dałoby się wziąć właściciela,
-    // więc musi go podać sekret.
-    ownerId = requireEnv("JARVIS_OWNER_ID");
-    notice("Uwierzytelnienie: service_role.");
-  } else if (anonKey && email && password) {
-    const client = createClient<Database>(supabaseUrl, anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data: session, error } = await client.auth.signInWithPassword({ email, password });
-    if (error || !session.user) {
-      fail(`Logowanie kontem ${email} nie powiodło się: ${error?.message ?? "brak użytkownika"}`);
-      process.exit(1);
-    }
-    db = client as Db;
-    // Właściciel bierze się z sesji — jeden sekret mniej do utrzymania.
-    ownerId = session.user.id;
-    notice(`Uwierzytelnienie: konto ${email}.`);
-  } else {
-    fail(
-      "Brak danych uwierzytelniających. Ustaw SUPABASE_SERVICE_ROLE_KEY + JARVIS_OWNER_ID albo " +
-        "SUPABASE_PUBLISHABLE_KEY + JARVIS_EMAIL + JARVIS_PASSWORD w Settings → Secrets → Actions.",
-    );
-    process.exit(1);
-  }
+  // Jedna droga uwierzytelnienia: service role + JARVIS_OWNER_ID (etap 6b,
+  // src/lib/jobs/jobRun.ts). Logowanie hasłem ukryło awarię kluczy po etapie 5.
+  const job = startJob("orlen-prices");
+  const { db, ownerId } = job;
 
   const failures: string[] = [];
 

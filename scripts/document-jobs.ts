@@ -12,49 +12,33 @@
  *
  * Skrypt jest CIENKI: decyzje w documentJobs.recovery.ts i
  * documents/enrichQueue.ts (czyste, z testami), wykonanie w
- * documentJobs.rescue.ts. Tutaj tylko uwierzytelnienie i log.
- *
- * Wymaga klucza service role: od etapu 5 (5b) klucze modeli w user_secrets
- * czyta wyłącznie serwer tym kluczem.
+ * documentJobs.rescue.ts. Uwierzytelnienie i log: src/lib/jobs/jobRun.ts.
+ * Błąd przy dokończeniu zadania albo grafik (także nieudany odczyt kluczy)
+ * to awaria — czerwony przebieg (etap 6b).
  */
-import { createClient } from "@supabase/supabase-js";
-import type { Database } from "../src/integrations/supabase/types";
 import { rescueDocumentJobs, sweepPendingImages } from "../src/lib/agents/documentJobs.rescue";
+import { startJob } from "../src/lib/jobs/jobRun";
 
-const notice = (m: string) => console.log(`::notice::${m}`);
-const warn = (m: string) => console.log(`::warning::${m}`);
-const fail = (m: string) => console.log(`::error::${m}`);
-
-function requireEnv(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) {
-    fail(`Brak wymaganego sekretu ${name}. Ustaw go w Settings → Secrets → Actions.`);
-    process.exit(1);
-  }
-  return value;
-}
-
-async function main(): Promise<void> {
-  const db = createClient<Database>(
-    requireEnv("SUPABASE_URL"),
-    requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
-    { auth: { persistSession: false, autoRefreshToken: false } },
-  );
-  const ownerId = requireEnv("JARVIS_OWNER_ID");
+async function main(): Promise<number> {
+  const job = startJob("document-jobs");
+  const { db, ownerId } = job;
 
   const jobs = await rescueDocumentJobs(db, ownerId);
-  notice(
-    `Dokumenty: dokończone ${jobs.resumed}, zamknięte jako nieudane ${jobs.failed}, ` +
-      `pominięte ${jobs.skipped}.`,
-  );
-  for (const e of jobs.errors) warn(`dokumenty: ${e}`);
+  for (const e of jobs.errors) await job.fail("dokumenty", e);
 
   const images = await sweepPendingImages(db, ownerId);
-  notice(`Grafiki: dograne ${images.enriched}, pominięte ${images.skipped}.`);
-  for (const e of images.errors) warn(`grafiki: ${e}`);
+  for (const e of images.errors) await job.fail("grafiki", e);
+
+  return job.finish(
+    `Dokumenty: dokończone ${jobs.resumed}, zamknięte jako nieudane ${jobs.failed}, ` +
+      `czekające dalej ${jobs.skipped}; grafiki: dograne ${images.enriched}, ` +
+      `pominięte ${images.skipped}.`,
+  );
 }
 
-main().catch((err) => {
-  fail(err instanceof Error ? (err.stack ?? err.message) : String(err));
-  process.exit(1);
-});
+main()
+  .then((code) => process.exit(code))
+  .catch((err: unknown) => {
+    console.log(`::error::${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
+    process.exit(1);
+  });

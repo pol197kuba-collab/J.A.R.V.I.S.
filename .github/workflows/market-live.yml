@@ -37,9 +37,6 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           JARVIS_OWNER_ID: ${{ secrets.JARVIS_OWNER_ID }}
-          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-          JARVIS_EMAIL: ${{ secrets.JARVIS_EMAIL }}
-          JARVIS_PASSWORD: ${{ secrets.JARVIS_PASSWORD }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         # tsx przypięty tutaj, jak w market-grid.yml.

@@ -31,6 +31,7 @@ import { rescueDocumentJobs } from "../src/lib/agents/documentJobs.rescue";
 import { rescueStuckAgents } from "../src/lib/agents/agentStatus.rescue";
 import { warsawDate, warsawHour } from "../src/lib/format/warsaw";
 import { sendPushToOwner, type PushResult } from "../src/lib/notifications/push.server";
+import { startJob } from "../src/lib/jobs/jobRun";
 
 const args = new Set(process.argv.slice(2));
 const DRY_RUN = args.has("--dry-run");
@@ -85,8 +86,6 @@ function requireEnv(name: string): string {
 }
 
 async function main(): Promise<void> {
-  const supabaseUrl = requireEnv("SUPABASE_URL");
-
   // Klucze modeli są opcjonalne. Bez nich briefing powstaje z samych liczb —
   // uboższy język, ten sam komplet informacji. To nie jest awaria.
   const keys = {
@@ -97,44 +96,10 @@ async function main(): Promise<void> {
     warn("Brak kluczy modeli — briefing zostanie złożony z samych liczb.");
   }
 
-  // Dwie drogi uwierzytelnienia, identycznie jak w pozostałych jobach:
-  // service_role omija RLS, logowanie kontem działa tam, gdzie właściciel
-  // nie ma do service_role dostępu. Briefing jest PER UŻYTKOWNIK, więc to
-  // konto decyduje, czyje zadania, rozkazy i watchlista trafią do rubryki.
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  const anonKey =
-    process.env.SUPABASE_PUBLISHABLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
-  const email = process.env.JARVIS_EMAIL?.trim();
-  const password = process.env.JARVIS_PASSWORD;
-
-  let db;
-  let ownerId: string;
-
-  if (serviceRoleKey) {
-    db = createClient<Database>(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    ownerId = requireEnv("JARVIS_OWNER_ID");
-    notice("Uwierzytelnienie: service_role.");
-  } else if (anonKey && email && password) {
-    const client = createClient<Database>(supabaseUrl, anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data: session, error } = await client.auth.signInWithPassword({ email, password });
-    if (error || !session.user) {
-      fail(`Logowanie kontem ${email} nie powiodło się: ${error?.message ?? "brak użytkownika"}`);
-      process.exit(1);
-    }
-    db = client;
-    ownerId = session.user.id;
-    notice(`Uwierzytelnienie: konto ${email}.`);
-  } else {
-    fail(
-      "Brak danych uwierzytelniających. Ustaw SUPABASE_SERVICE_ROLE_KEY + JARVIS_OWNER_ID albo " +
-        "SUPABASE_PUBLISHABLE_KEY + JARVIS_EMAIL + JARVIS_PASSWORD w Settings → Secrets → Actions.",
-    );
-    process.exit(1);
-  }
+  // Jedna droga uwierzytelnienia: service role + JARVIS_OWNER_ID (etap 6b,
+  // src/lib/jobs/jobRun.ts). Logowanie hasłem ukryło awarię kluczy po etapie 5.
+  const job = startJob("morning-brief");
+  const { db, ownerId } = job;
 
   if (DRY_RUN) {
     // Podgląd: zbieramy fakty i składamy tekst, ale niczego nie zapisujemy
@@ -215,6 +180,9 @@ async function main(): Promise<void> {
         })
         .eq("id", t.id);
       notice(`test powiadomienia: ${pushLine(result)}`);
+      if (result.skipped === "secrets_read_failed") {
+        await job.fail("test powiadomienia", "nie udało się odczytać kluczy VAPID");
+      }
       await logEvent(
         db,
         ownerId,
@@ -252,7 +220,7 @@ async function main(): Promise<void> {
   const now = new Date();
   const decision = decideBriefRun(schedule, now, lastBrief?.brief_date ?? null);
   if (!decision.run) {
-    notice(
+    process.exitCode = job.finish(
       decision.reason === "already_built"
         ? `Rubryka na ${warsawDate(now)} już istnieje — pomijam.`
         : `Jest ${warsawHour(now)}:00 czasu lokalnego, briefing zamówiony na ${schedule.hour}:00 — za wcześnie.`,
@@ -260,6 +228,7 @@ async function main(): Promise<void> {
     return;
   }
 
+  let summary = "Briefing nie powstał.";
   try {
     const { brief, notified, push, error } = await buildDailyBrief(db, ownerId, keys, {
       notify: true,
@@ -297,13 +266,21 @@ async function main(): Promise<void> {
       const line = pushLine(push);
       notice(`push: ${line}`);
       await logEvent(db, ownerId, push.sent > 0 ? "info" : "warn", `briefing — push: ${line}`);
+      // Etap 6b: briefing bez pushu przez nieudany odczyt kluczy to awaria —
+      // tak wyglądał przebieg po etapie 5, zielony mimo braku powiadomień.
+      if (push.skipped === "secrets_read_failed") {
+        await job.fail("push", "nie udało się odczytać kluczy VAPID — briefing bez powiadomienia");
+      }
     }
+    summary =
+      `Briefing ${brief.date} zapisany (${brief.sections.length} sekcji)` +
+      (push ? `, push: ${pushLine(push)}.` : ".");
   } catch (err) {
     fail(err instanceof Error ? (err.stack ?? err.message) : String(err));
     process.exit(1);
   }
 
-  notice("Przebieg zakończony bez awarii.");
+  process.exitCode = job.finish(summary);
 }
 
 main().catch((err: unknown) => {
