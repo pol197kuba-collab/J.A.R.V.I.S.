@@ -12,11 +12,10 @@ import {
   setActiveAgent as setActiveAgentFn,
   getActiveAgentSlug,
   getGeminiKeyStatus,
-  getUserSettings,
   importChatHistory,
   type AgentSummary,
 } from "@/lib/agents/runtime.functions";
-import { setServerRuntimePreference } from "./jarvisBrain";
+import { setServerKeyLinked } from "./jarvisBrain";
 import { CHAT_HISTORY_LIMIT } from "./chatHistory";
 import { speak } from "@/lib/audio/speak";
 import { setAgentBusy, reportOutcome } from "./agentActivity";
@@ -116,7 +115,6 @@ export function useAgentChatChannel(): AgentChatChannel {
   const fetchActiveAgentSlug = useServerFn(getActiveAgentSlug);
   const importHistory = useServerFn(importChatHistory);
   const fetchKeyStatus = useServerFn(getGeminiKeyStatus);
-  const fetchSettings = useServerFn(getUserSettings);
   const enrichImages = useServerFn(enrichDocumentImagesFn);
   const runDocumentJob = useServerFn(runDocumentJobFn);
 
@@ -215,16 +213,15 @@ export function useAgentChatChannel(): AgentChatChannel {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agents]);
 
-  // Flagi "klucz Gemini jest na serwerze" / "routing przez serwer" żyją w
-  // localStorage i dotąd ustawiała je tylko strona Ustawień. Na nowym
-  // urządzeniu albo w incognito czat szedł więc ścieżką lokalną i nic nie
-  // trafiało do bazy. Odświeżamy je z konta przy każdym montowaniu.
+  // Flaga „klucz Gemini jest na serwerze” (dla komunikatu „rdzeń offline”)
+  // odświeżana z konta przy każdym montowaniu. Czat zawsze idzie przez
+  // serwer (plan naprawczy, etap 5, A8).
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchKeyStatus(), fetchSettings()])
-      .then(([status, settings]) => {
+    fetchKeyStatus()
+      .then((status) => {
         if (cancelled) return;
-        setServerRuntimePreference({ routing: settings.chatRouting, keyLinked: status.linked });
+        setServerKeyLinked(status.linked);
       })
       .catch(() => {
         /* offline — zostają dotychczasowe flagi */
@@ -232,7 +229,7 @@ export function useAgentChatChannel(): AgentChatChannel {
     return () => {
       cancelled = true;
     };
-  }, [fetchKeyStatus, fetchSettings]);
+  }, [fetchKeyStatus]);
 
   // Za każdym razem, gdy zmienia się aktywny agent, wczytaj JEGO wątek z
   // serwera — to jest właściwa synchronizacja historii między urządzeniami.
