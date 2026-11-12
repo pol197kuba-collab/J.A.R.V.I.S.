@@ -184,16 +184,18 @@ export async function finalizeRun(ctx: RunContext, state: RunState): Promise<Age
     })
     .eq("id", runId);
 
-  await supabase
-    .from("agents")
-    .update({
-      status: "idle",
-      current_task: null,
-      progress: 0,
-      time_elapsed_seconds: Math.round(latencyMs / 1000),
-      busy_since: null,
-    })
-    .eq("id", agent.id);
+  // A19: inny run tego agenta wciąż pracuje — status zostaje „busy”.
+  if (!(await otherRunActive(ctx)))
+    await supabase
+      .from("agents")
+      .update({
+        status: "idle",
+        current_task: null,
+        progress: 0,
+        time_elapsed_seconds: Math.round(latencyMs / 1000),
+        busy_since: null,
+      })
+      .eq("id", agent.id);
 
   await logEvent(
     "info",
@@ -284,16 +286,44 @@ export async function failRun(
       ...runUsageColumns(state),
     })
     .eq("id", runId);
-  await supabase
-    .from("agents")
-    .update({
-      status: "error",
-      current_task: msg.slice(0, 200),
-      progress: 0,
-      time_elapsed_seconds: Math.round((Date.now() - startedAt) / 1000),
-      busy_since: null,
-    })
-    .eq("id", agent.id);
+  if (!(await otherRunActive(ctx)))
+    await supabase
+      .from("agents")
+      .update({
+        status: "error",
+        current_task: msg.slice(0, 200),
+        progress: 0,
+        time_elapsed_seconds: Math.round((Date.now() - startedAt) / 1000),
+        busy_since: null,
+      })
+      .eq("id", agent.id);
   await logEvent("error", AGENT_SLUGS.JARVIS, `run failed: ${msg}`, { run_id: runId } as Json);
   return { runId, status: "error", output: "", error: msg };
+}
+
+/**
+ * Plan naprawczy, etap 4 (A19): czy ten sam agent ma inny run w toku.
+ *
+ * Koniec runu ustawiał agentowi „idle” (albo „error”), nawet gdy równolegle
+ * pracował jego drugi run — widżet statusu i Town pokazywały wolnego agenta,
+ * który właśnie pracował. Prostsza z dwóch opcji planu: nie nadpisujemy
+ * statusu, dopóki inny run trwa; ostatni kończący się run ustawi go sam.
+ *
+ * Liczą się tylko runy z ostatnich 15 minut: run, który padł bez zapisu
+ * (np. ubity proces), zostaje w bazie jako „running” i bez tego limitu
+ * trzymałby agenta „zajętego” na zawsze. Błąd odczytu = brak innego runu,
+ * czyli zachowanie sprzed poprawki.
+ */
+export const ACTIVE_RUN_WINDOW_MS = 15 * 60_000;
+
+async function otherRunActive(ctx: RunContext): Promise<boolean> {
+  const { data, error } = await ctx.supabase
+    .from("agent_runs")
+    .select("id")
+    .eq("agent_id", ctx.agent.id)
+    .eq("status", "running")
+    .neq("id", ctx.runId)
+    .gte("started_at", new Date(Date.now() - ACTIVE_RUN_WINDOW_MS).toISOString())
+    .limit(1);
+  return !error && (data ?? []).length > 0;
 }
