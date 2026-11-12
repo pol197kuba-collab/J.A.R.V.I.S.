@@ -1,4 +1,4 @@
-// Server-only J.A.R.V.I.S. core: runOrchestrator — jeden run agenta jako
+// Server-only J.A.R.V.I.S. core: runAgentLoop — jeden run agenta jako
 // czytelna sekwencja kroków (plan naprawczy, etap 4). Kroki mieszkają
 // w src/lib/agents/runtime/:
 //   context.server.ts  — agent, klucze, zespół, prompt, model, budżet, wiersz runu
@@ -17,7 +17,7 @@ import { prepareRun } from "./runtime/context.server";
 import { declareTools, executeToolCalls } from "./runtime/tools.server";
 import { runModelTurn } from "./runtime/turn.server";
 import { failRun, finalizeRun } from "./runtime/finalize.server";
-import type { OrchestratorInput, RunState } from "./runtime/types";
+import type { AgentLoopInput, RunState } from "./runtime/types";
 
 export { UI_ACTIONS };
 export { UI_ACTION_CONFIRMATIONS, UNTRUSTED_CONTENT_NOTICE } from "./runtime/constants";
@@ -26,9 +26,9 @@ export {
   type ClassifierFallbackDeps,
   type ClassifierFallbackResult,
 } from "./runtime/classifier.server";
-export type { OrchestratorInput } from "./runtime/types";
+export type { AgentLoopInput } from "./runtime/types";
 
-export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRunResult> {
+export async function runAgentLoop(args: AgentLoopInput): Promise<AgentRunResult> {
   // 1. Przygotowanie: agent, klucze, zespół, prompt, model, budżet, wiersz runu.
   const { ctx, modelProvider, model } = await prepareRun(args);
 
@@ -39,8 +39,8 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     toolDeclarations: [],
     declaredToolNames: new Set(),
     allowDelegate: false,
-    isProducer: false,
-    producerCalledGenerate: false,
+    isForge: false,
+    forgeCalledGenerate: false,
     finalText: "",
     uiAction: null,
     toolCallLog: [],
@@ -73,16 +73,16 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
     // relayed a confident "plik gotowy" with no file and no link ever
     // produced. Same lesson as the download-link saga: don't ask the model
     // to reliably do the one thing it must — force it. Until generate_document
-    // has actually run once this turn, the producer's request pins Gemini to
+    // has actually run once this turn, F.O.R.G.E.'s request pins Gemini to
     // that function (functionCallingConfig mode ANY); afterwards it switches
     // back to AUTO so the follow-up turn can produce the text summary.
-    state.isProducer =
+    state.isForge =
       ctx.agent.slug === AGENT_SLUGS.FORGE &&
       state.toolDeclarations.some((d) => d.name === GENERATE_DOCUMENT_TOOL);
 
     // 3. Pętla: tura modelu → narzędzia, aż model odpowie tekstem.
     for (let iter = 0; iter < ctx.maxToolIterations; iter++) {
-      const forceGenerateDocument = state.isProducer && !state.producerCalledGenerate;
+      const forceGenerateDocument = state.isForge && !state.forgeCalledGenerate;
       const turn = await runModelTurn(ctx, state, iter, forceGenerateDocument);
       if (turn.retry) {
         // Powtórka tego samego kroku pętli: `iter` wróci do bieżącej wartości
@@ -94,7 +94,7 @@ export async function runOrchestrator(args: OrchestratorInput): Promise<AgentRun
         state.finalText = turn.textOut;
         break;
       }
-      await executeToolCalls(ctx, state, turn.functionCalls, iter, runOrchestrator);
+      await executeToolCalls(ctx, state, turn.functionCalls, iter, runAgentLoop);
 
       if (iter === ctx.maxToolIterations - 1) {
         // Force a final text reply on the next (skipped) turn by breaking here

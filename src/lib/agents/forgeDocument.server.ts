@@ -54,7 +54,7 @@ import {
   type DeckSlide,
   type DeckSpec,
   type DocSpec,
-  type ProducerSpec,
+  type ForgeSpec,
 } from "./docSpec";
 import { callGemini } from "@/lib/ai/llm/gemini";
 import type { LedgerContext } from "@/lib/ai/llm/ledger";
@@ -689,7 +689,7 @@ async function resolveOneImage(
  *  correctness (no repeated image) matters more than shaving a few seconds
  *  off a background job. */
 export async function generateDocImages(
-  spec: ProducerSpec,
+  spec: ForgeSpec,
   apiKey: string,
   onWarn?: (message: string) => Promise<void> | void,
   googleCse?: GoogleCseCreds,
@@ -1339,7 +1339,7 @@ async function buildDocx(spec: DocSpec, images: DocImages): Promise<Uint8Array> 
 }
 
 export async function buildDocument(
-  spec: ProducerSpec,
+  spec: ForgeSpec,
   images: DocImages = NO_IMAGES,
 ): Promise<Uint8Array> {
   return spec.format === "pptx" ? buildPptx(spec, images) : buildDocx(spec, images);

@@ -1,6 +1,6 @@
 // Agent Runtime — server-side functions.
 //
-// Zgodnie z CODEX.md: to jest fundament pod Orchestratora. Na tym etapie
+// Zgodnie z CODEX.md: to jest fundament pod rdzeń J.A.R.V.I.S.. Na tym etapie
 // obsługujemy jednego agenta ("jarvis") i pojedynczy krok wywołania
 // LLM (bez multi-step tool loopu). Pamięć krótkoterminowa przekazywana jest
 // w polu `history`, żeby nie budować jeszcze konwersacji w DB.
@@ -889,8 +889,8 @@ export const runAgent = createServerFn({ method: "POST" })
         );
     }
 
-    const { runOrchestrator } = await import("./runtime.server");
-    return runOrchestrator({
+    const { runAgentLoop } = await import("./runtime.server");
+    return runAgentLoop({
       supabase,
       userId,
       agentSlug: data.agentSlug,

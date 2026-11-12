@@ -11,7 +11,7 @@ const LEVEL_COLOR: Record<SystemEvent["level"], string> = {
 };
 
 // system_events.source is a free-form string ("jarvis", "tool.web_search",
-// "tool.fetch_url", "herald", ...) written by runOrchestrator's logEvent
+// "tool.fetch_url", "herald", ...) written by runAgentLoop's logEvent
 // helper. Render it as a short HUD-style tag instead of the raw dotted slug.
 function formatSource(source: string): string {
   if (source.startsWith("tool.")) return `TOOL·${source.slice(5).toUpperCase()}`;

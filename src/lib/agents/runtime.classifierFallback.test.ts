@@ -3,7 +3,7 @@ import { runClassifierFallback } from "./runtime.server";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 
 // Regression test for the extraction of runClassifierFallback out of
-// runOrchestrator (previously two near-identical Groq/Gemini blocks inline).
+// runAgentLoop (previously two near-identical Groq/Gemini blocks inline).
 // Pins down the side effects the refactor must not alter: which endpoint is
 // hit, forceToolName/toolConfig reaching the request, logEvent's exact
 // arguments per branch, and — critically — that Groq's classifier tokens are

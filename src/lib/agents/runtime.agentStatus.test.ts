@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { runOrchestrator } from "./runtime.server";
+import { runAgentLoop } from "./runtime.server";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import {
   HERALD,
@@ -34,7 +34,7 @@ function world(otherRunning: boolean) {
 }
 
 const run = (db: ReturnType<typeof world>["db"]) =>
-  runOrchestrator({
+  runAgentLoop({
     supabase: db,
     userId: "u1",
     agentSlug: AGENT_SLUGS.HERALD,

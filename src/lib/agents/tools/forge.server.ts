@@ -187,7 +187,7 @@ export const generateDocumentTool: Tool = {
   },
   async execute(args, ctx) {
     const { normalizeDocSpec, buildDocument, CONTENT_TYPES, specHasImagePrompts, blocksOf } =
-      await import("../producer.server");
+      await import("../forgeDocument.server");
     const normalized = normalizeDocSpec(args);
     if (!normalized.ok) {
       await ctx.logEvent("warn", "tool.generate_document", `rejected: ${normalized.error}`, {

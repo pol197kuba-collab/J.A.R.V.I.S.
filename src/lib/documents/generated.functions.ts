@@ -92,8 +92,8 @@ export async function enrichGeneratedFileImages(
   fileId: string,
 ): Promise<EnrichResult> {
   const { generateDocImages, buildDocument, CONTENT_TYPES } =
-    await import("@/lib/agents/producer.server");
-  type ProducerDocSpec = import("@/lib/agents/producer.server").ProducerSpec;
+    await import("@/lib/agents/forgeDocument.server");
+  type ForgeDocSpec = import("@/lib/agents/forgeDocument.server").ForgeSpec;
 
   const { data: row, error } = await supabase
     .from("generated_files")
@@ -105,7 +105,7 @@ export async function enrichGeneratedFileImages(
   if (row.image_status !== "pending") return { ok: false, reason: "not_pending" };
   if (!row.spec) return { ok: false, reason: "no_spec" };
 
-  const spec = row.spec as unknown as ProducerDocSpec;
+  const spec = row.spec as unknown as ForgeDocSpec;
 
   const { data: secret } = await readOwnerSecrets(
     userId,

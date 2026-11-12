@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
-import { runOrchestrator } from "./runtime.server";
+import { runAgentLoop } from "./runtime.server";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { testSecretsDb } from "@/test/secretsDb";
 
@@ -91,12 +91,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("runOrchestrator — delegated sub-runs get no UI control", () => {
+describe("runAgentLoop — delegated sub-runs get no UI control", () => {
   it("delegated run: no perform_ui_action declaration, no UI prompt block, no classifier pass", async () => {
     const fetchMock = makeGeminiFetchMock();
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: makeSupabaseStub(baseResponses()),
       userId: "user-1",
       agentSlug: AGENT_SLUGS.HERALD,
@@ -124,7 +124,7 @@ describe("runOrchestrator — delegated sub-runs get no UI control", () => {
     const fetchMock = makeGeminiFetchMock();
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: makeSupabaseStub(baseResponses()),
       userId: "user-1",
       agentSlug: AGENT_SLUGS.HERALD,

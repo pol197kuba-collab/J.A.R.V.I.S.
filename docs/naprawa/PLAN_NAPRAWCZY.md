@@ -53,7 +53,7 @@
 
 Bez tego kolejne etapy nie mają jak wykryć regresji w rdzeniu agentów.
 
-- [x] Testy charakteryzujące `runOrchestrator` na zamockowanym `fetch`
+- [x] Testy charakteryzujące `runAgentLoop` na zamockowanym `fetch`
       i zamockowanym kliencie bazy (wzorzec: `runtime.delegation.test.ts`).
       Minimum scenariuszy: zwykła odpowiedź bez narzędzi; jedno narzędzie
       i odpowiedź; delegacja do kolegi; wymuszony `generate_document` u Forge;
@@ -148,7 +148,7 @@ narzędzia…”).
       wyszukiwanie zdjęć bez ponowień (czas rzeczywisty / własny limit czasu).
 - [x] **Migracja wywołań**, po jednym module na commit, każdy z testem:
       `runtime.server.ts` (pętla i klasyfikator), `tools.server.ts`
-      (`web_search`), `producer.server.ts`, `documentJobs.functions.ts`,
+      (`web_search`), `forgeDocument.server.ts`, `documentJobs.functions.ts`,
       `brief/build.server.ts`, `fuel/news.server.ts`, `vision/*` (3 pliki),
       `brain/ask.functions.ts`, `ai/embed.ts`, moduł rynków, skrypty.
       Na końcu `grep generativelanguage.googleapis.com src scripts` zwraca
@@ -224,7 +224,7 @@ Dopiero po etapie 2, żeby efekt było widać w liczbach.
 
 Czysta refaktoryzacja: testy z etapu 0 nie mogą się zmienić.
 
-- [x] `runOrchestrator` podzielić na moduły w `src/lib/agents/runtime/`:
+- [x] `runAgentLoop` podzielić na moduły w `src/lib/agents/runtime/`:
       przygotowanie kontekstu (agent, klucze, zespół, prompt, model, budżet);
       jedna tura modelu (wybór dostawcy, failover) — po etapie 2 to cienka
       warstwa nad klientem; wykonanie narzędzi (bramka z etapu 1, delegacja,
@@ -233,7 +233,7 @@ Czysta refaktoryzacja: testy z etapu 0 nie mogą się zmienić.
       tych kroków.
       → `runtime/context.server.ts`, `turn.server.ts`, `tools.server.ts`,
       `finalize.server.ts` (+ `classifier.server.ts`, `constants.ts`,
-      `prompt.ts`, `usage.ts`, `types.ts`); `runOrchestrator` ma ~70 linii.
+      `prompt.ts`, `usage.ts`, `types.ts`); `runAgentLoop` ma ~70 linii.
       Kod i komentarze przeniesione dosłownie (porównane linia po linii).
 - [x] Prompt systemowy i blok zespołu przenieść do osobnego pliku jako
       nazwane sekcje (bez zmiany treści — porównać wynikowy string testem).
@@ -392,7 +392,8 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 | 2026-11-11 | `src/lib/agents/pricing.ts` | Stawki Groq niezweryfikowane u źródła (strona Groq niedostępna z sesji, agregatory sprzeczne — część mówi o przejściu tych modeli na „contact sales”). Sprawdzić ręcznie na groq.com/pricing. | 2 | |
 | 2026-11-11 | `src/lib/ai/llm/anthropic.ts` (`forceToolName`) | Wymuszenie narzędzia przez `tool_choice: {type: "tool"}` (F.O.R.G.E. → `generate_document`) według dokumentacji Claude API zwraca 400 na Claude Opus 5.5 i Sonnet 5.5. Agent ustawiony na te modele padnie przy wymuszeniu (potem zejdzie na Gemini). | 3 | |
 | 2026-11-12 | `useAgentChatChannel.ts`, `VoiceCommandContext.tsx` (historia czatu) | Klient dopisywał wiadomość do transkryptu PRZED pobraniem historii, więc model dostawał tę samą prośbę dwa razy (historia + input) i odpowiadał „prośba padła dwa razy”. Od etapu 3 tylko przy pierwszej wiadomości w nowym/wyczyszczonym wątku i w ścieżce głosowej; wcześniej przy każdej turze. Zgłosił właściciel. | 0 | naprawione 2026-11-12: historia pobierana przed dopisaniem + `withoutCurrentInput` na serwerze (test) |
-| 2026-11-12 | `runAgent` (`runtime.functions.ts`) | Wiadomość bez `conversationId` (wysłana, zanim czat wczytał wątek; głos; zmiana agenta) zakładała NOWY wątek. Czat pokazywał potem tylko ten wątek — starej rozmowy nie dało się przewinąć. Zgłosił właściciel. Stare wątki zostają w bazie nietknięte. | 0 | naprawione 2026-11-12: bez `conversationId` dopisujemy do ostatniego wątku agenta (test `runAgent.thread.test.ts`) |
+| 2026-11-12 | `runAgent` (`runtime.functions.ts`) | **Regresja z etapu 5 (A8):** przepisany `askJarvis` przestał podawać `conversationId` (zniknęło `resolveConversationId`), więc od publikacji 5a każda odpowiedź drogą głosową/komend zakładała nowy wątek i czat pokazywał tylko najnowszy. Wiadomość bez `conversationId` (wysłana, zanim czat wczytał wątek; głos; zmiana agenta) zakładała NOWY wątek. Czat pokazywał potem tylko ten wątek — starej rozmowy nie dało się przewinąć. Zgłosił właściciel. Stare wątki zostają w bazie nietknięte. | 0 | naprawione 2026-11-12: bez `conversationId` dopisujemy do ostatniego wątku agenta (test `runAgent.thread.test.ts`) |
+| 2026-11-12 | `useAgentChatChannel.ts` (aktywny agent) | Przeglądarka pamiętała slug agenta sprzed zmiany nazw (`orchestrator`); mikrofon spoza `/jarvis` wysyła od razu, zanim aplikacja wczyta wybór z konta → „Agent not found: orchestrator”. Zgłosił właściciel. | 0 | naprawione 2026-11-12: zapamiętany agent sprawdzany z listą istniejących (`isAgentSlug`), nieznany → J.A.R.V.I.S. i nadpisanie wpisu |
 
 ## Dziennik
 

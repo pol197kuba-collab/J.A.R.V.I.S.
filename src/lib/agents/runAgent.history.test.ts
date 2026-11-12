@@ -12,14 +12,14 @@ vi.mock("@tanstack/react-start", () => {
   return { createServerFn: () => builder };
 });
 vi.mock("@/integrations/supabase/auth-middleware", () => ({ requireSupabaseAuth: {} }));
-const runOrchestrator = vi.fn().mockResolvedValue({ runId: "r", status: "done", output: "ok" });
-vi.mock("./runtime.server", () => ({ runOrchestrator }));
+const runAgentLoop = vi.fn().mockResolvedValue({ runId: "r", status: "done", output: "ok" });
+vi.mock("./runtime.server", () => ({ runAgentLoop }));
 
 type Handler = (a: { data: unknown; context: unknown }) => Promise<unknown>;
 
 const CONV = "11111111-1111-4111-8111-111111111111";
 
-beforeEach(() => runOrchestrator.mockClear());
+beforeEach(() => runAgentLoop.mockClear());
 
 describe("runAgent — historia z serwera", () => {
   it("z conversationId: historia z messages (od najstarszej), historia klienta ignorowana", async () => {
@@ -47,7 +47,7 @@ describe("runAgent — historia z serwera", () => {
       context: { supabase: db, userId: "u1" },
     });
 
-    const args = runOrchestrator.mock.calls[0][0];
+    const args = runAgentLoop.mock.calls[0][0];
     expect(args.history).toEqual([
       { role: "user", text: "Cześć" },
       { role: "jarvis", text: "Dzień dobry." },
@@ -71,7 +71,7 @@ describe("runAgent — historia z serwera", () => {
       context: { supabase: db, userId: "u1" },
     });
 
-    const args = runOrchestrator.mock.calls[0][0];
+    const args = runAgentLoop.mock.calls[0][0];
     // 30 × ~2000 tokenów ≫ budżet 6000 → zostają tylko najnowsze, w całości.
     expect(args.history.length).toBeLessThan(30);
     expect(args.history.length).toBeGreaterThan(0);

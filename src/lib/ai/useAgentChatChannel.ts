@@ -23,11 +23,11 @@ import { requestOpenDocument } from "@/lib/documents/openDocumentBus";
 import { enrichDocumentImagesFn } from "@/lib/documents/generated.functions";
 import { runDocumentJobFn } from "@/lib/agents/documentJobs.functions";
 import { ACTIVE_AGENT_LS_KEY } from "@/routes/agent-hub";
-import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
+import { AGENT_SLUGS, isAgentSlug } from "@/lib/constants/agentSlugs";
 
 // Single source of truth for "send a message to an agent and handle the
 // reply" — extracted out of the Dashboard ChatPanel so the /jarvis matrix
-// console (MatrixChatConsole) can talk to the exact same backend/orchestrator
+// console (MatrixChatConsole) can talk to the exact same J.A.R.V.I.S. backend
 // without re-implementing conversation sync, active-agent tracking, UI-action
 // dispatch, or error handling. Consumers differ only in how they RENDER
 // `messages`/`typing`/`activeAgent` — never in how a message actually gets
@@ -49,7 +49,12 @@ function readActiveAgent(): ActiveAgent {
     const raw = window.localStorage.getItem(ACTIVE_AGENT_LS_KEY);
     if (!raw) return DEFAULT_AGENT;
     const parsed = JSON.parse(raw) as ActiveAgent;
-    return parsed.slug && parsed.name ? parsed : DEFAULT_AGENT;
+    if (isAgentSlug(parsed.slug) && parsed.name) return parsed;
+    // Zapamiętany agent nie istnieje (np. slug sprzed zmiany nazw agentów
+    // w sierpniu) — wysłanie do niego kończyło się „Agent not found”.
+    // Wracamy do J.A.R.V.I.S. i nadpisujemy wpis, żeby nie wracał.
+    window.localStorage.setItem(ACTIVE_AGENT_LS_KEY, JSON.stringify(DEFAULT_AGENT));
+    return DEFAULT_AGENT;
   } catch {
     return DEFAULT_AGENT;
   }
@@ -188,7 +193,7 @@ export function useAgentChatChannel(): AgentChatChannel {
     let cancelled = false;
     fetchActiveAgentSlug()
       .then((res) => {
-        if (cancelled || !res.agentSlug) return;
+        if (cancelled || !isAgentSlug(res.agentSlug)) return;
         setActiveAgent((prev) =>
           prev.slug === res.agentSlug ? prev : { slug: res.agentSlug, name: res.agentSlug },
         );

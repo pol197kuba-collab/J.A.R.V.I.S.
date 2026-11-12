@@ -1,4 +1,4 @@
-// Atrapy do testów runOrchestrator: klient bazy zapisujący każde wywołanie
+// Atrapy do testów runAgentLoop: klient bazy zapisujący każde wywołanie
 // i kolejki odpowiedzi dostawców modeli. Wydzielone z testów
 // charakteryzujących (etap 0), używane też przez testy bramki narzędzi
 // (etap 1). Tylko dla testów — nic z produkcji tego nie importuje.

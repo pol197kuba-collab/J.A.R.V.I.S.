@@ -12,7 +12,7 @@ import { useSingleVoiceCommand } from "./useSingleVoiceCommand";
 // chrome) as HudOverlay / "Recent Network Assignments". The actual send/
 // receive/error-handling logic is NOT reimplemented here — both this console
 // and the Dashboard ChatPanel share useAgentChatChannel() so they talk to
-// the exact same orchestrator/backend. Reverse-pagination (below) is a
+// the exact same J.A.R.V.I.S. backend. Reverse-pagination (below) is a
 // render-only concern layered on top of the shared `messages` array — it
 // never touches how history is fetched or persisted.
 

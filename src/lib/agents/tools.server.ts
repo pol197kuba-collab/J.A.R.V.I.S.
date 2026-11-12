@@ -25,7 +25,7 @@ import {
   searchDocumentsTool,
 } from "./tools/documents.server";
 import { generateDocumentTool, openDocumentTool, queueDocumentJob } from "./tools/forge.server";
-import { checkDelegation, runStats, scanErrors } from "./tools/guardian.server";
+import { checkDelegation, runStats, scanErrors } from "./tools/shield.server";
 import { runLocalAction } from "./tools/local.server";
 import { fuelOutlookTool, marketOutlookTool } from "./tools/markets.server";
 import { recall, remember } from "./tools/memory.server";

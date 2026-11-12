@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
-import { runOrchestrator } from "./runtime.server";
+import { runAgentLoop } from "./runtime.server";
 import { callGroq, chooseGroqModel } from "@/lib/ai/llm/groq";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { testSecretsDb } from "@/test/secretsDb";
@@ -81,7 +81,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("runOrchestrator — empty Gemini turn", () => {
+describe("runAgentLoop — empty Gemini turn", () => {
   it("retries an empty turn once, without thinking, and returns the real answer", async () => {
     let n = 0;
     const fetchMock = vi.fn().mockImplementation(async () => {
@@ -101,7 +101,7 @@ describe("runOrchestrator — empty Gemini turn", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: makeSupabaseStub(baseResponses()),
       userId: "u1",
       agentSlug: AGENT_SLUGS.JARVIS,
@@ -135,7 +135,7 @@ describe("runOrchestrator — empty Gemini turn", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: makeSupabaseStub(baseResponses()),
       userId: "u1",
       agentSlug: AGENT_SLUGS.JARVIS,
@@ -155,7 +155,7 @@ describe("runOrchestrator — empty Gemini turn", () => {
     const fetchMock = vi.fn().mockResolvedValue(emptyTurn);
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await runOrchestrator({
+    const result = await runAgentLoop({
       supabase: makeSupabaseStub(baseResponses()),
       userId: "u1",
       agentSlug: AGENT_SLUGS.JARVIS,

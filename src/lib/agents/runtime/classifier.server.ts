@@ -68,7 +68,7 @@ type UsageTracker = (usage: LlmUsage, costUsd: number | null) => void;
 
 // Forces one narrow yes/no decision ("does this message match a UI action?")
 // via the free Groq tier when a key is configured, falling back to Gemini on
-// any Groq failure or when no key is set. Extracted from runOrchestrator so
+// any Groq failure or when no key is set. Extracted from runAgentLoop so
 // the request-building/response-parsing that used to be written out twice
 // (once per provider) lives in one place — the two providers still need
 // separate branches internally (different APIs, different failure shapes),
@@ -159,7 +159,7 @@ async function classifyCore(
     // Only ever called when queueTool is truthy, which itself only happens
     // when the caller opted in via queueDocumentJobEnabled — the same
     // caller is responsible for also passing real supabase/userId/agentId
-    // in that case (see runOrchestrator's call site below).
+    // in that case (see runAgentLoop's call site below).
     const response = await queueTool!.execute(call.args ?? {}, {
       supabase: supabase!,
       userId: userId!,

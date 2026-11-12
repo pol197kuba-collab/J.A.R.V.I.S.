@@ -9,7 +9,7 @@
 // whichever slice of that roster is part of the current/most recent
 // interaction).
 //
-// `output.tool_calls` is now written incrementally by runOrchestrator
+// `output.tool_calls` is now written incrementally by runAgentLoop
 // (after every iteration's tool calls, not just once at the very end), so
 // a `running` row here can carry real, live progress — not just "started,
 // no detail yet" — the frontend just needs to keep polling.
@@ -106,7 +106,7 @@ export const getAgentFlow = createServerFn({ method: "GET" })
         const input = (r.input ?? {}) as { text?: string };
         const rawCalls = output.tool_calls ?? [];
 
-        // classifier_* entries are runOrchestrator's internal UI-action
+        // classifier_* entries are runAgentLoop's internal UI-action
         // classification pass (runtime.server.ts, "Fallback classifier
         // pass"), not a tool the agent chose to use — it runs on every
         // turn that doesn't already call perform_ui_action and logs its

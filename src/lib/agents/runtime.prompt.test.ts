@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { runOrchestrator } from "./runtime.server";
+import { runAgentLoop } from "./runtime.server";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import {
   HERALD,
@@ -36,7 +36,7 @@ async function stablePrompt(
   const fetchMock = providerFetch({ gemini: [geminiText("ok")] });
   vi.stubGlobal("fetch", fetchMock);
   const { db } = worldDb({ agents, secrets: KEYS_GEMINI_ONLY });
-  await runOrchestrator({
+  await runAgentLoop({
     supabase: db,
     userId: "u1",
     agentSlug,

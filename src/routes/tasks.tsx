@@ -458,7 +458,7 @@ function TasksPage() {
   };
 
   // ---------- run via JARVIS ----------
-  // Hands the task straight to the JARVIS orchestrator as a "do this now"
+  // Hands the task straight to J.A.R.V.I.S. as a "do this now"
   // instruction — it looks the task up by title (already unique enough for
   // the model's own list_tasks lookup) and routes it to the right teammate
   // per the existing "WYKONYWANIE ISTNIEJĄCEGO ZADANIA" prompt behavior.

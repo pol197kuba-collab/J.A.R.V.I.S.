@@ -58,7 +58,7 @@ async function resolveConversationId(): Promise<string | null> {
   return id;
 }
 
-// Action vocabulary shared with the server orchestrator (UI_ACTIONS in
+// Action vocabulary shared with the server-side J.A.R.V.I.S. runtime (UI_ACTIONS in
 // src/lib/constants/uiActions.ts) plus the client-only "none" escape hatch.
 // Sourcing both from the same array is what stops them from drifting
 // silently — that drift already shipped twice (system_check shadowing

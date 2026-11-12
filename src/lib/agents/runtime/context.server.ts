@@ -17,7 +17,7 @@ import {
   UI_ACTIONS_WITH_NONE,
 } from "./constants";
 import { basePromptFor, dateSection, teamRosterSection, uiAccessSection } from "./prompt";
-import type { OrchestratorInput, RunContext } from "./types";
+import type { AgentLoopInput, RunContext } from "./types";
 import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
 
 export type PreparedRun = {
@@ -27,7 +27,7 @@ export type PreparedRun = {
   model: string;
 };
 
-export async function prepareRun(args: OrchestratorInput): Promise<PreparedRun> {
+export async function prepareRun(args: AgentLoopInput): Promise<PreparedRun> {
   const {
     supabase,
     userId,
@@ -48,7 +48,7 @@ export async function prepareRun(args: OrchestratorInput): Promise<PreparedRun> 
   // overwritten by a misclassified navigation confirmation.
   const isDelegatedRun = delegationDepth > 0 || parentRunId != null;
 
-  // 1. Resolve agent (fallback: orchestrator).
+  // 1. Resolve agent (fallback: J.A.R.V.I.S.).
   const { data: agent, error: agentErr } = await supabase
     .from("agents")
     .select("id, name, slug, model, config")
@@ -106,11 +106,11 @@ export async function prepareRun(args: OrchestratorInput): Promise<PreparedRun> 
   // removed from the declared enum outright whenever an enabled S.H.I.E.L.D.
   // exists — the model then has no way to select it, by construction,
   // rather than one more instruction to hopefully win a wording race.
-  const hasEnabledGuardian = teammates.some((t) => t.slug === AGENT_SLUGS.SHIELD && t.is_enabled);
-  const effectiveUiActions: string[] = hasEnabledGuardian
+  const hasEnabledShield = teammates.some((t) => t.slug === AGENT_SLUGS.SHIELD && t.is_enabled);
+  const effectiveUiActions: string[] = hasEnabledShield
     ? UI_ACTIONS.filter((a) => a !== "system_check")
     : [...UI_ACTIONS];
-  const effectiveUiActionsWithNone: string[] = hasEnabledGuardian
+  const effectiveUiActionsWithNone: string[] = hasEnabledShield
     ? UI_ACTIONS_WITH_NONE.filter((a) => a !== "system_check")
     : [...UI_ACTIONS_WITH_NONE];
 

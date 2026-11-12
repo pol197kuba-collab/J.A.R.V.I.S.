@@ -18,7 +18,7 @@ import {
   UI_ACTION_TOOL_NAME,
   UNTRUSTED_CONTENT_NOTICE,
 } from "./constants";
-import type { OrchestratorInput, RunContext, RunState } from "./types";
+import type { AgentLoopInput, RunContext, RunState } from "./types";
 
 export async function declareTools(ctx: RunContext): Promise<{
   toolDeclarations: ToolDeclaration[];
@@ -38,7 +38,7 @@ export async function declareTools(ctx: RunContext): Promise<{
   // works if the tool is actually declared to the model. When its DB
   // binding is missing (or the migration wasn't applied), it was declared
   // nothing, the forced-tool-call path never turned on, and the model
-  // "confirmed" a presentation while calling zero tools (live: producer
+  // "confirmed" a presentation while calling zero tools (live: F.O.R.G.E.
   // sub-run, 0 tool calls, no file). Guarantee the tool in-memory for the
   // forge agent, exactly like J.A.R.V.I.S. always gets
   // delegate_to_agent regardless of DB state.
@@ -115,7 +115,7 @@ export async function executeToolCalls(
   state: RunState,
   functionCalls: Array<{ name: string; args: Record<string, unknown> }>,
   iter: number,
-  runSubAgent: (args: OrchestratorInput) => Promise<AgentRunResult>,
+  runSubAgent: (args: AgentLoopInput) => Promise<AgentRunResult>,
 ): Promise<void> {
   const {
     supabase,
@@ -257,7 +257,7 @@ export async function executeToolCalls(
           // Stop forcing after the first real attempt (success OR error),
           // so a failing build can't pin the loop to retrying the tool
           // for all remaining iterations — the model gets to report back.
-          state.producerCalledGenerate = true;
+          state.forgeCalledGenerate = true;
           if (response.ok === true && typeof response.download_url === "string") {
             state.attachments.push({
               filename: typeof response.filename === "string" ? response.filename : "plik",
