@@ -295,8 +295,10 @@ export function useAgentChatChannel(): AgentChatChannel {
       setTyping(true);
       try {
         if (hasServerKey()) {
-          emitChat("user", text);
+          // Historia PRZED dopisaniem bieżącej wiadomości — inaczej model
+          // dostaje tę samą prośbę dwa razy (historia + input).
           const history = getRecentHistory(3);
+          emitChat("user", text);
           setAgentBusy(true);
           try {
             const result = await runAgentFn({

@@ -426,6 +426,9 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       const cleanCommand = transcript.trim();
       console.log("=== SENDING TO GEMINI VOICE CORE ===", cleanCommand);
       console.debug("[voice] → gemini", cleanCommand, `(source=${source})`);
+      // Historia PRZED dopisaniem bieżącej wypowiedzi — inaczej model dostaje
+      // tę samą prośbę dwa razy (w historii i w prompcie).
+      const history = getRecentHistory(3);
       emitChat("user", transcript);
       if (!hasGeminiKey() && !offlineNoticeShownRef.current) {
         offlineNoticeShownRef.current = true;
@@ -440,9 +443,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
         fire(local.action);
         return;
       }
-      // Multi-turn memory: feed the last clean turns into Gemini so JARVIS
-      // actually remembers what we just talked about.
-      const history = getRecentHistory(3);
+      // Multi-turn memory: `history` (zebrana wyżej) to ostatnie czyste tury.
       // Ask Gemini for richer reply + open-ended chat handling.
       const reply = await askJarvis({
         prompt:
