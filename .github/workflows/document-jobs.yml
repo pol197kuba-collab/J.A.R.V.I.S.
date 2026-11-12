@@ -1,0 +1,41 @@
+name: Document Jobs
+
+# Dokańcza w tle zadania dokumentowe (Insight → Forge) i dogrywanie grafik,
+# których nie dokończyła przeglądarka (uśpiony telefon, zamknięta karta).
+#
+# URUCHAMIA GO BAZA (pg_cron → workflow_dispatch, patrz migracja
+# 20261112170000_document_jobs_dispatch.sql) tylko wtedy, gdy coś czeka.
+# Brak harmonogramu tutaj celowo: pusty przebieg co godzinę paliłby minuty
+# Actions na nic, a godzinny przebieg briefingu i tak ratuje porzucone zadania.
+on:
+  workflow_dispatch:
+
+# Jeden przebieg naraz — kolejne czekają, nie przerywają trwającego potoku.
+concurrency:
+  group: document-jobs
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: zadania dokumentowe w tle
+    runs-on: ubuntu-latest
+    # Potok to research + budowa pliku + bramka jakości z jedną poprawką
+    # (kilka minut), maks. 2 zadania i 3 pliki z grafikami na przebieg.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run document queue
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          JARVIS_OWNER_ID: ${{ secrets.JARVIS_OWNER_ID }}
+        run: npx --yes tsx@4.21.0 scripts/document-jobs.ts
