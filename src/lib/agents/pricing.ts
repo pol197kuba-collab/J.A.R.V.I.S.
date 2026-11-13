@@ -37,7 +37,7 @@ type Rate = {
  * i `claude-opus-5` to ten sam model i ta sama cena.
  *
  * Zweryfikowane: Anthropic 2026-11-06; Gemini 2026-11-11 (2.5 Flash,
- * 2.5 Flash-Lite, embedding); Groq NIE (patrz niżej). Przy aktualizacji
+ * 2.5 Flash-Lite, embedding); Groq 2026-11-13 (patrz niżej). Przy aktualizacji
  * zmieniaj TĘ datę razem z liczbami — cennik bez daty po pół roku jest gorszy niż jego brak, bo
  * wygląda na aktualny.
  */
@@ -65,13 +65,16 @@ const RATES: Readonly<Record<string, Rate>> = {
   // Embeddingi: płaci się tylko za wejście.
   "gemini-embedding-001": { inputPerM: 0.15, outputPerM: 0 },
 
-  // Groq — klasyfikator UI i awaryjna tura. NIEZWERYFIKOWANE u źródła
-  // (2026-11-11): strona cennika Groq była niedostępna, a agregatory podają
-  // sprzeczne dane (część mówi o przejściu tych modeli na „contact sales").
-  // Stawki z ostatniego publicznego cennika; na darmowym kluczu realny koszt
-  // to zero, więc licznik zawyża — bezpieczny kierunek.
+  // Groq — sprawdzone 2026-11-13 na console.groq.com/docs/models.
+  // llama-3.1-8b-instant i llama-3.3-70b-versatile (domyślne modele
+  // aplikacji) są tam „Enterprise” z ceną „Contact Sales” — publicznej stawki
+  // nie ma. Zostaje ostatnia publiczna, żeby księga nie gubiła kosztu
+  // (na darmowym kluczu realnie zero — licznik zawyża, bezpieczny kierunek).
   "llama-3.1-8b-instant": { inputPerM: 0.05, outputPerM: 0.08 },
   "llama-3.3-70b-versatile": { inputPerM: 0.59, outputPerM: 0.79 },
+  // Publiczne stawki (Developer plan), sprawdzone 2026-11-13:
+  "openai/gpt-oss-20b": { inputPerM: 0.075, outputPerM: 0.3 },
+  "openai/gpt-oss-120b": { inputPerM: 0.15, outputPerM: 0.6 },
 };
 
 /** Mnożnik stawki wejściowej dla tokenów odczytanych z cache'u. */

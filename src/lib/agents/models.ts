@@ -68,19 +68,12 @@ export const GEMINI_MODELS: ModelOption[] = [
     hint: "Tani, do klasyfikacji",
     provider: "gemini",
   },
-  {
-    id: "gemini-2.0-flash",
-    label: "Gemini 2.0 Flash",
-    hint: "Stabilna generacja 2.0",
-    provider: "gemini",
-  },
-  {
-    id: "gemini-2.0-flash-lite",
-    label: "Gemini 2.0 Flash Lite",
-    hint: "Najtańszy Flash",
-    provider: "gemini",
-  },
 ];
+
+// USUNIĘTE (etap 6b): "gemini-2.0-flash" i "gemini-2.0-flash-lite" — Google
+// wyłączył je 2026-06-01 (strona deprecations Gemini API, sprawdzona
+// 2026-11-13). Agent, który ma je w bazie, schodzi na model domyślny
+// z ostrzeżeniem (turn.server.ts, 404).
 
 // USUNIĘTE ŚWIADOMIE: "gemini-3.5-flash" i "gemini-3-pro-latest". Pierwszy
 // był na tej liście i okazał się nieprzyjmowany przez API — migracja
