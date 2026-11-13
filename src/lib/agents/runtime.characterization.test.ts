@@ -335,7 +335,8 @@ describe("runAgentLoop — charakterystyka (etap 0)", () => {
     expect(row.tokens_output).toBe(40);
     // Etap 2 (A20): tura Groq wyceniona po stawce Groq 70B, nie Gemini.
     expect(row.model).toBe("gemini-2.5-flash");
-    expect(row.cost_usd).toBeCloseTo(0.000209, 6); // 300 × 0,59/M + 40 × 0,79/M
+    // Etap 6b: awaryjna tura na openai/gpt-oss-120b (decyzja właściciela).
+    expect(row.cost_usd).toBeCloseTo(0.000069, 6); // 300 × 0,15/M + 40 × 0,60/M
     expect(loggedMessages(calls)).toContain("failover to groq succeeded");
   });
 
@@ -447,7 +448,8 @@ describe("runAgentLoop — charakterystyka (etap 0)", () => {
     // Etap 2: tokeny klasyfikatora Groq wchodzą do runu.
     expect(row.tokens_input).toBe(940);
     expect(row.tokens_output).toBe(35);
-    expect(row.cost_usd).toBeCloseTo(0.000347, 6);
+    // Etap 6b: klasyfikator na openai/gpt-oss-20b (0,075/0,30 za 1M).
+    expect(row.cost_usd).toBeCloseTo(0.00035, 6);
   });
 
   it("9b. pytanie merytoryczne: klasyfikator pominięty, jedna tura (etap 3, A9)", async () => {

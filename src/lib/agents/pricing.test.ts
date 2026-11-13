@@ -62,6 +62,8 @@ describe("cennik po etapie 2 (księga llm_usage)", () => {
       "gemini-embedding-001",
       "llama-3.1-8b-instant",
       "llama-3.3-70b-versatile",
+      "openai/gpt-oss-20b",
+      "openai/gpt-oss-120b",
     ]) {
       expect(hasPricing(m), m).toBe(true);
     }

@@ -178,7 +178,12 @@ describe("Groq — retired model", () => {
       "openai/gpt-oss-20b",
     ];
     expect(chooseGroqModel(available, "llama-3.1-8b-instant")).toBe("openai/gpt-oss-20b");
-    expect(chooseGroqModel(["x-instant", ...available], "llama-3.1-8b-instant")).toBe("x-instant");
+    // Etap 6b: GPT-OSS ma pierwszeństwo przed „instant” (Llama na Groq to
+    // dziś „Enterprise / Contact Sales”).
+    expect(chooseGroqModel(["x-instant", ...available], "llama-3.1-8b-instant")).toBe(
+      "openai/gpt-oss-20b",
+    );
+    expect(chooseGroqModel(["x-instant", "whisper-large-v3"], "gone")).toBe("x-instant");
     expect(chooseGroqModel(available, "llama-3.3-70b-versatile")).toBe("llama-3.3-70b-versatile");
     expect(chooseGroqModel(["whisper-large-v3"], "gone")).toBeNull();
   });
@@ -205,5 +210,19 @@ describe("Groq — retired model", () => {
     // second call goes straight to the stand-in — no 404, no model listing
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(bodyOf(fetchMock.mock.calls[3]).model).toBe("llama-3.3-70b-versatile");
+  });
+});
+
+describe("Groq — modele myślące (etap 6b)", () => {
+  it("gpt-oss: reasoning_effort low i zapas tokenów na myślenie; Llama bez zmian", async () => {
+    const { groqReasoningParams, REASONING_TOKEN_HEADROOM } = await import("@/lib/ai/llm/groq");
+    expect(groqReasoningParams("openai/gpt-oss-20b", 50)).toEqual({
+      reasoning_effort: "low",
+      max_tokens: 50 + REASONING_TOKEN_HEADROOM,
+    });
+    expect(groqReasoningParams("openai/gpt-oss-120b", undefined)).toEqual({
+      reasoning_effort: "low",
+    });
+    expect(groqReasoningParams("llama-3.3-70b-versatile", 50)).toEqual({ max_tokens: 50 });
   });
 });

@@ -161,5 +161,10 @@ export const RECOMMENDED_AGENT_MODELS: Readonly<Record<string, string>> = {
 // and emergency failover (see llm/groq.ts). Not user-selectable as a
 // primary agent model, so no provider-prefix parsing is needed here; these
 // are plain Groq model IDs passed straight to their API.
-export const DEFAULT_GROQ_CLASSIFIER_MODEL = "llama-3.1-8b-instant";
-export const DEFAULT_GROQ_FALLBACK_MODEL = "llama-3.3-70b-versatile";
+//
+// Etap 6b (decyzja właściciela 2026-11-13): Llama 3.1 8B / 3.3 70B są na
+// console.groq.com/docs/models „Enterprise / Contact Sales” — na zwykłym
+// koncie mogą nie działać. GPT-OSS to modele produkcyjne Developer planu
+// z publiczną ceną; myślą (reasoning), patrz REASONING_* w llm/groq.ts.
+export const DEFAULT_GROQ_CLASSIFIER_MODEL = "openai/gpt-oss-20b";
+export const DEFAULT_GROQ_FALLBACK_MODEL = "openai/gpt-oss-120b";
