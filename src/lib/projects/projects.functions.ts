@@ -95,7 +95,7 @@ export const deleteProject = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     // Tasks keep existing (tasks.project_id -> ON DELETE SET NULL, they fall
-    // back to "General"); dev_sessions for this project cascade-delete.
+    // back to "General").
     const { error } = await supabase
       .from("projects")
       .delete()
