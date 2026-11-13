@@ -25,18 +25,21 @@ test("logowanie → czat → odpowiedź → notatka w /notes", async ({ page }) 
   await page.locator('input[type="password"]').fill(E2E_PASSWORD);
   await page.getByRole("button", { name: /Request Access/i }).click();
 
-  // Po sekwencji startowej pulpit: przycisk „Otwórz czat” prowadzi do /jarvis.
-  await page.getByRole("button", { name: "Otwórz czat" }).click({ timeout: 60_000 });
-
+  // Po sekwencji startowej aplikacja otwiera ekran domowy trybu HUD: /jarvis
+  // z konsolą czatu (MODE_HOME).
   const input = page.getByPlaceholder("wpisz komendę dla J.A.R.V.I.S.…");
+  await input.waitFor({ timeout: 60_000 });
   await input.fill("Zapisz notatkę: kupić mleko");
   await input.press("Enter");
 
   // Odpowiedź modelu (atrapy) po wykonaniu save_note na serwerze.
   await expect(page.getByText(MOCK_REPLY)).toBeVisible({ timeout: 60_000 });
 
-  // Powrót na pulpit bez przeładowania i przejście do notatek.
-  await page.goBack();
-  await page.getByRole("button", { name: "Notatki" }).first().click();
+  // Do notatek wewnątrz aplikacji (przeładowanie wróciłoby do /jarvis):
+  // paleta modułów Ctrl+K.
+  await page.keyboard.press("Control+k");
+  await page.getByPlaceholder("Przejdź do modułu…").fill("Notatki");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/notes/, { timeout: 30_000 });
   await expect(page.getByText(NOTE_TITLE)).toBeVisible({ timeout: 30_000 });
 });

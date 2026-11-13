@@ -2,14 +2,14 @@
 // generativelanguage.googleapis.com/v1beta/models/<model>:generateContent
 // i :embedContent — tylko tyle, ile potrzebuje przepływ czat → notatka:
 //
-//   1. tura z narzędziem save_note w deklaracjach → wywołanie save_note;
+//   1. tura z prośbą „zapisz notatkę” i narzędziem save_note → wywołanie save_note;
 //   2. tura z odpowiedzią save_note → krótki tekst (MOCK_REPLY);
 //   3. każda inna tura (briefing, klasyfikator…) → „OK”;
 //   4. embedContent → wektor o właściwym wymiarze.
 import { createServer } from "node:http";
 import { EMBED_DIMS, MOCK_PORT, MOCK_REPLY, NOTE_BODY, NOTE_TITLE } from "./fixtures";
 
-type Part = { functionResponse?: { name?: string } };
+type Part = { text?: string; functionResponse?: { name?: string } };
 type Body = {
   contents?: Array<{ parts?: Part[] }>;
   tools?: Array<{ functionDeclarations?: Array<{ name?: string }> }>;
@@ -28,7 +28,14 @@ export function answer(path: string, body: Body): unknown {
   const parts = (body.contents ?? []).flatMap((c) => c.parts ?? []);
   if (parts.some((p) => p.functionResponse?.name === "save_note")) return text(MOCK_REPLY);
   const declared = (body.tools ?? []).flatMap((t) => t.functionDeclarations ?? []);
-  if (declared.some((d) => d.name === "save_note")) {
+  // Notatka tylko na wyraźną prośbę z testu — nie przy automatycznym
+  // powitaniu po zalogowaniu (ono też idzie przez agenta z narzędziami).
+  const lastText =
+    (body.contents ?? [])
+      .at(-1)
+      ?.parts?.map((p) => p.text ?? "")
+      .join(" ") ?? "";
+  if (declared.some((d) => d.name === "save_note") && /zapisz notatk/i.test(lastText)) {
     return {
       candidates: [
         {
