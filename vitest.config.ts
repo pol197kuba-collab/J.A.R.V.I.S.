@@ -10,8 +10,9 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.ts"],
     setupFiles: ["src/test/setup.ts"],
-    // `npm run test:coverage` — pomiar bez progu (plan naprawczy, etap 0).
-    // Próg dla src/lib/agents dochodzi w etapie 9.
+    // `npm run test:coverage` — pomiar od etapu 0; od etapu 9 CI uruchamia go
+    // z progiem dla src/lib/agents na poziomie osiągniętym po etapie 4
+    // (linie 51,82%, Dziennik planu naprawczego) — żeby pokrycie nie spadało.
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
@@ -22,6 +23,9 @@ export default defineConfig({
         "src/routeTree.gen.ts",
       ],
       reporter: ["text-summary", "json-summary", "html"],
+      thresholds: {
+        "src/lib/agents/**": { lines: 51.82 },
+      },
     },
   },
 });

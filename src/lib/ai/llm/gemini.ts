@@ -16,6 +16,16 @@ import {
 
 export const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
+/**
+ * Adres API Gemini. Zmienna JARVIS_GEMINI_BASE_URL służy WYŁĄCZNIE testowi
+ * dymnemu w przeglądarce (plan naprawczy, etap 9: e2e/) — kieruje wywołania
+ * serwera na lokalną atrapę modelu. W produkcji nie jest ustawiona.
+ */
+export function geminiEndpointBase(): string {
+  const override = typeof process === "undefined" ? undefined : process.env.JARVIS_GEMINI_BASE_URL;
+  return override?.trim() ? override.trim().replace(/\/+$/, "") : GEMINI_ENDPOINT_BASE;
+}
+
 export type GeminiCall = {
   apiKey: string;
   model: string;
@@ -52,7 +62,7 @@ export async function callGemini<T extends { usageMetadata?: GeminiUsageMetadata
   call: GeminiCall,
 ): Promise<GeminiResult<T>> {
   const res = await requestJson<T>({
-    url: `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(call.model)}:generateContent`,
+    url: `${geminiEndpointBase()}/${encodeURIComponent(call.model)}:generateContent`,
     headers: { "x-goog-api-key": call.apiKey },
     body: call.body,
     timeoutMs: call.timeoutMs,
@@ -95,7 +105,7 @@ export async function embedWithGemini(call: GeminiEmbedCall): Promise<number[] |
     embedding?: { values?: number[] };
     usageMetadata?: GeminiUsageMetadata;
   }>({
-    url: `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(call.model)}:embedContent`,
+    url: `${geminiEndpointBase()}/${encodeURIComponent(call.model)}:embedContent`,
     headers: { "x-goog-api-key": call.apiKey },
     body: {
       model: `models/${call.model}`,
