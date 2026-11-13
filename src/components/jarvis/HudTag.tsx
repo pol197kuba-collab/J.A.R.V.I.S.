@@ -14,7 +14,7 @@ function rand(seed: number) {
   };
 }
 
-export function makeTag(seed: number) {
+function makeTag(seed: number) {
   const r = rand(seed);
   const prefix = PREFIXES[Math.floor(r() * PREFIXES.length)];
   let suffix = "";

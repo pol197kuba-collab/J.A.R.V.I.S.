@@ -146,8 +146,9 @@ remoncie" takes its builders out of `NPCS`.
 
 One three.js scene runs landing page → 3D login → ignition → Arc Core, and the
 `/jarvis` canvas (R3F) shows the same Arc Core. Both are **faithful ports** of
-the approved prototype `docs/jarvis-3d-v2/` (`docs/login-scene-prototype/` is
-the older one it replaces) — keep them that way:
+the approved prototype `docs/jarvis-3d-v2/` (the older
+`docs/login-scene-prototype/` was removed in stage 8; its `reactor.js` is
+identical to v2's) — keep them that way:
 
 - **Fidelity contract:** geometry, segment counts, textures, the simplex core
   shader, bloom/fog/fov numbers, DPR caps, orbit tables (`orbits.ts`) and time

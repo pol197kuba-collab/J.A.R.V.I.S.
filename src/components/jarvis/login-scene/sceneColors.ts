@@ -3,7 +3,7 @@
 // src/lib/theme/themeColor.ts (the same path JarvisCanvas / Core3D use).
 //
 // FIDELITY: in the default JARVIS theme every entry resolves to the colour the
-// prototype (docs/login-scene-prototype/src/reactor.js) hard-codes. The four
+// prototype (docs/jarvis-3d-v2/src/reactor.js) hard-codes. The four
 // real tokens (primary, accent, reactor, hot) are bit-exact. The helper tints
 // below have no token of their own, so each is a color-mix of a token with
 // white/black whose percentage was fitted to the prototype hex (max channel

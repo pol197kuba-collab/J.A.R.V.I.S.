@@ -398,6 +398,7 @@ export function useAgentChatChannel(): AgentChatChannel {
       activeAgent.name,
       conversationId,
       runAgentFn,
+      runDocumentJob,
       enrichImages,
       performAction,
       routeText,

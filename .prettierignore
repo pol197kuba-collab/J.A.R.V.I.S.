@@ -27,8 +27,6 @@ src/routes/**/list-tools.ts
 src/routes/**/invoke-tool/*.ts
 src/routes/**/oauth-protected-resource.ts
 
-# Prototyp sceny logowania (docs/login-scene-prototype/) — materiał referencyjny,
-# trzymany bajt w bajt tak, jak dostarczony; nie jest kodem aplikacji. Bez tego
-# lint (prettier) padał na 265 błędach tylko z tego katalogu.
-docs/login-scene-prototype/
+# Prototyp sceny 3D (docs/jarvis-3d-v2/) — materiał referencyjny, trzymany
+# bajt w bajt tak, jak dostarczony; nie jest kodem aplikacji.
 docs/jarvis-3d-v2/

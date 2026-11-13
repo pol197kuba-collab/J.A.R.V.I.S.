@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ArcReactorTriangle } from "./ArcReactorTriangle";
-import { bootLogs } from "@/data/mock";
+import { bootLogs } from "@/data/bootLogs";
 import { audio } from "@/lib/audio/AudioEngine";
 import { ensureAppFullscreen } from "@/lib/fullscreen";
 

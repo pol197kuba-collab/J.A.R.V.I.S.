@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { getSpeechCtor, type AnySpeechRecognition } from "./VoiceCommandContext";
+import { getSpeechCtor, type AnySpeechRecognition } from "./speechRecognition";
 
 // One-shot dictation for a chat mic button: capture exactly ONE spoken
 // utterance and resolve with its transcript, then stop — deliberately NOT
