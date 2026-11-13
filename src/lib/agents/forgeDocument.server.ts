@@ -401,9 +401,27 @@ export async function fetchWebSearchOgImage(
       apiKey: geminiApiKey,
       model: DEFAULT_GEMINI_MODEL,
       body: {
-        generationConfig: { temperature: 0, maxOutputTokens: 50 },
+        // Wyszukiwanie odpala model sam, z własnej decyzji. Samo hasło i 50
+        // tokenów odpowiedzi nie wystarczały: model myślący zużywał budżet na
+        // myślenie i w ogóle nie szukał („wyszukiwarka nie zwróciła stron”,
+        // 2026-11-13). Teraz wprost polecenie szukania, budżet z zapasem i
+        // myślenie na minimum.
+        generationConfig: {
+          temperature: 0,
+          maxOutputTokens: 1024,
+          thinkingConfig: { thinkingBudget: 0 },
+        },
         tools: [{ google_search: {} }],
-        contents: [{ role: "user", parts: [{ text: query }] }],
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: `Use Google Search to find web pages with photos of: ${query}. Reply with one short sentence.`,
+              },
+            ],
+          },
+        ],
       },
       timeoutMs: OG_IMAGE_TIMEOUT_MS,
       retries: 0,
