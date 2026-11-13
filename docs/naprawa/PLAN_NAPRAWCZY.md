@@ -399,6 +399,8 @@ przyczynę, dla której awaria była niewidoczna.
       Zrobione: pole narzędzia `untrustedResult` (obcość z wyniku), test
       `runtime.recallUntrusted.test.ts`. Liczby wpisów `unknown` nie da się
       sprawdzić z sesji — zapytanie dla właściciela w podsumowaniu etapu 6b.
+      Wynik 2026-11-13: 10 wpisów, wszystkie `unknown`. Właściciel: „oznacz”
+      — migracja `20261113090000_memories_origin_owner.sql` (`unknown` → `user`).
 - [x] **Wymuszenie narzędzia u Claude** (Rejestr, etap 3):
       `tool_choice: {type: "tool"}` zwraca 400 na Opus 5.5 / Sonnet 5.5,
       więc F.O.R.G.E. na tych modelach zawsze pada i schodzi na Gemini.
@@ -410,7 +412,7 @@ przyczynę, dla której awaria była niewidoczna.
       odrzucają `any`/`tool`; zalecane `auto` + instrukcja nie gwarantuje
       wywołania. Zrobione: `acceptsForcedToolChoice`, wymuszona tura na
       Gemini z `info`; bez klucza Gemini — Claude z `auto`.
-- [ ] **Katalog modeli** (Rejestr, etap 2): usunąć `gemini-2.0-flash`
+- [x] **Katalog modeli** (Rejestr, etap 2): usunąć `gemini-2.0-flash`
       i `gemini-2.0-flash-lite` z `models.ts` po sprawdzeniu u źródła, że
       są wyłączone; agent z takim modelem w bazie ma zejść na domyślny
       z ostrzeżeniem (sprawdzić, czy już tak jest).
@@ -419,9 +421,17 @@ przyczynę, dla której awaria była niewidoczna.
       `runtime.retiredModel.test.ts`). Wpisów w katalogu NIE usunięto:
       ai.google.dev niedostępne z sesji, wyłączenia nie dało się potwierdzić
       u źródła — czeka na zrzut od właściciela albo dostęp sieci.
-- [ ] **Stawki Groq** (Rejestr, etap 2): zweryfikować na stronie Groq;
+      2026-11-13 (sieć dopuszczona przez właściciela): strona deprecations
+      Gemini API — oba wyłączone 2026-06-01; usunięte z `models.ts`.
+- [x] **Stawki Groq** (Rejestr, etap 2): zweryfikować na stronie Groq;
       jeśli z sesji nadal niedostępna — poprosić właściciela o zrzut cennika.
       2026-11-12: groq.com niedostępne z sesji — prośba o zrzut w podsumowaniu.
+      2026-11-13 (console.groq.com/docs/models): `llama-3.1-8b-instant`
+      i `llama-3.3-70b-versatile` to teraz „Enterprise / Contact Sales” —
+      publicznej stawki brak, w cenniku zostaje ostatnia publiczna (opisane);
+      dopisane `openai/gpt-oss-20b` ($0,075/$0,30) i `gpt-oss-120b`
+      ($0,15/$0,60). Domyślne modele Groq to Llama — możliwe, że na zwykłym
+      koncie już nie działają; zmiana na gpt-oss czeka na decyzję właściciela.
 - [x] **Komunikat po limicie iteracji** (Rejestr, etap 0): po polsku,
       w tonie reszty odpowiedzi.
 - [x] **Porządek w planie:** pozycje Rejestru naprawione w tym etapie
@@ -523,9 +533,9 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 |---|---|---|---|---|
 | 2026-11-11 | `runtime.server.ts`, koniec pętli narzędziowej | Komunikat po wyczerpaniu limitu iteracji jest po angielsku („I have completed several tool calls but ran out of orchestration cycles…”), reszta odpowiedzi jest po polsku. Utrwalony w teście charakteryzującym nr 5. | 0 | naprawione w etapie 6b (#238): po polsku, `ITERATION_LIMIT_REPLY` |
 | 2026-11-11 | `bun.lock` | Rejestr Lovable (`europe-west*-npm.pkg.dev`) jest niedostępny z sesji Claude Code w chmurze, więc `bun install` tam nie działa. Nowe wpisy (`@vitest/coverage-v8` i zależności) mają pusty adres, czyli domyślny rejestr npm, zamiast adresu cache Lovable. Sprawdzić, czy build w Lovable przechodzi. | 0 | nie wymaga naprawy — właściciel potwierdził 2026-11-11, że build w Lovable przechodzi |
-| 2026-11-11 | `src/lib/agents/models.ts` (katalog modeli) | Katalog nadal oferuje `gemini-2.0-flash`, który według forum Google wyłączono 31.03.2026; nie ma go w cenniku (koszt `null`). | 2 | częściowo (#238): model wyłączony u dostawcy → domyślny z ostrzeżeniem; wpisy w katalogu czekają na potwierdzenie u źródła |
+| 2026-11-11 | `src/lib/agents/models.ts` (katalog modeli) | Katalog nadal oferuje `gemini-2.0-flash`, który według forum Google wyłączono 31.03.2026; nie ma go w cenniku (koszt `null`). | 2 | naprawione: #238 (model wyłączony → domyślny), 2026-11-13 usunięte z katalogu (wyłączone 2026-06-01) |
 | 2026-11-11 | build (`npm run build`) | 31 ostrzeżeń „externalized for browser compatibility”, m.in. `node:dns`/`node:net` z `tools.server.ts` i `web-push` — kod serwerowy jest w grafie importów klienta. Identycznie na `main` przed etapem 2; build przechodzi, nic z tego nie trafia do bundla przeglądarki (sprawdzone). | 2 | |
-| 2026-11-11 | `src/lib/agents/pricing.ts` | Stawki Groq niezweryfikowane u źródła (strona Groq niedostępna z sesji, agregatory sprzeczne — część mówi o przejściu tych modeli na „contact sales”). Sprawdzić ręcznie na groq.com/pricing. | 2 | |
+| 2026-11-11 | `src/lib/agents/pricing.ts` | Stawki Groq niezweryfikowane u źródła (strona Groq niedostępna z sesji, agregatory sprzeczne — część mówi o przejściu tych modeli na „contact sales”). Sprawdzić ręcznie na groq.com/pricing. | 2 | sprawdzone 2026-11-13: Llama „Contact Sales”, dopisane gpt-oss; decyzja o modelach domyślnych u właściciela |
 | 2026-11-11 | `src/lib/ai/llm/anthropic.ts` (`forceToolName`) | Wymuszenie narzędzia przez `tool_choice: {type: "tool"}` (F.O.R.G.E. → `generate_document`) według dokumentacji Claude API zwraca 400 na Claude Opus 5.5 i Sonnet 5.5. Agent ustawiony na te modele padnie przy wymuszeniu (potem zejdzie na Gemini). | 3 | naprawione w etapie 6b (#238): `acceptsForcedToolChoice`, wymuszona tura od razu na Gemini |
 | 2026-11-12 | `useAgentChatChannel.ts`, `VoiceCommandContext.tsx` (historia czatu) | Klient dopisywał wiadomość do transkryptu PRZED pobraniem historii, więc model dostawał tę samą prośbę dwa razy (historia + input) i odpowiadał „prośba padła dwa razy”. Od etapu 3 tylko przy pierwszej wiadomości w nowym/wyczyszczonym wątku i w ścieżce głosowej; wcześniej przy każdej turze. Zgłosił właściciel. | 0 | naprawione 2026-11-12: historia pobierana przed dopisaniem + `withoutCurrentInput` na serwerze (test) |
 | 2026-11-12 | `runAgent` (`runtime.functions.ts`) | **Regresja z etapu 5 (A8):** przepisany `askJarvis` przestał podawać `conversationId` (zniknęło `resolveConversationId`), więc od publikacji 5a każda odpowiedź drogą głosową/komend zakładała nowy wątek i czat pokazywał tylko najnowszy. Wiadomość bez `conversationId` (wysłana, zanim czat wczytał wątek; głos; zmiana agenta) zakładała NOWY wątek. Czat pokazywał potem tylko ten wątek — starej rozmowy nie dało się przewinąć. Zgłosił właściciel. Stare wątki zostają w bazie nietknięte. | 0 | naprawione 2026-11-12: bez `conversationId` dopisujemy do ostatniego wątku agenta (test `runAgent.thread.test.ts`) |
