@@ -47,6 +47,19 @@ const empty = (skipped: string | null): PushResult => ({
 
 type Vapid = { publicKey: string; privateKey: string; subject: string };
 
+/**
+ * Ile push może czekać w usłudze, zanim przepadnie (12 h). Meldunek sprzed
+ * pół dnia (briefing, korek) jest już nieaktualny — lepiej, żeby nie przyszedł.
+ */
+export const PUSH_TTL_SECONDS = 12 * 60 * 60;
+
+/**
+ * Opcje wysyłki (W8, etap 6b): briefing wyszedł o 05:00, telefon pokazał go
+ * ok. 07:30 — domyślny priorytet „normal” Android w trybie Doze odkłada.
+ * Meldunki J.A.R.V.I.S. mają przyjść od razu, więc „high”.
+ */
+const PUSH_OPTIONS = { urgency: "high", TTL: PUSH_TTL_SECONDS } as const;
+
 /** Klucze VAPID właściciela; null, gdy jeszcze nie zostały wygenerowane. */
 export async function loadVapidKeys(db: Db, ownerId: string): Promise<Vapid | null> {
   const { data } = await readOwnerSecrets(
@@ -98,6 +111,7 @@ type WebPushModule = {
   sendNotification(
     subscription: { endpoint: string; keys: { p256dh: string; auth: string } },
     payload: string,
+    options?: { urgency?: "very-low" | "low" | "normal" | "high"; TTL?: number },
   ): Promise<unknown>;
 };
 
@@ -163,6 +177,7 @@ export async function sendPushToOwner(
       await webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
         body,
+        PUSH_OPTIONS,
       );
       result.sent += 1;
       await db.from("push_subscriptions").update({ last_success_at: now }).eq("id", sub.id);
