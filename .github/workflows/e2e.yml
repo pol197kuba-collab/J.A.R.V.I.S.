@@ -60,12 +60,13 @@ jobs:
 
       # Baza produkcyjna pozwala założyć konto tylko właścicielowi (trigger
       # enforce_owner_only_signup, W1). W tej JEDNORAZOWEJ lokalnej bazie
-      # wyłączamy go, żeby założyć konto testowe — produkcja bez zmian.
+      # przepuszczamy wszystkich, żeby założyć konto testowe — produkcja bez zmian.
       - name: Konto testowe dozwolone w lokalnej bazie
         run: |
           eval "$(supabase status -o env)"
-          psql "$DB_URL" -v ON_ERROR_STOP=1 \
-            -c "ALTER TABLE auth.users DISABLE TRIGGER enforce_owner_only_signup"
+          # Tabela auth.users należy do supabase_auth_admin, ale funkcję
+          # triggera założyła migracja (właściciel: postgres) — podmieniamy ją.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -c "CREATE OR REPLACE FUNCTION public.enforce_owner_only_signup() RETURNS trigger LANGUAGE plpgsql AS \$f\$ BEGIN RETURN NEW; END \$f\$"
 
       - name: Przeglądarka
         run: npx playwright install --with-deps chromium
