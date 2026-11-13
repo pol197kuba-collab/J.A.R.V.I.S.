@@ -116,6 +116,32 @@ export type CallGroqOptions = {
   retries?: number;
 };
 
+// ── modele myślące (GPT-OSS) ────────────────────────────────────────────────
+//
+// GPT-OSS rozumuje przed odpowiedzią (console.groq.com/docs/reasoning,
+// 2026-11-13): rozumowanie wraca w osobnym polu message.reasoning (przy
+// narzędziach domyślnie „parsed”), a jego tokeny liczą się do odpowiedzi.
+// Klasyfikator ma limit 50 tokenów — bez zapasu całe rozumowanie zjadłoby
+// limit i zostałby pusty wynik. Dlatego: niski wysiłek i zapas na myślenie.
+export const REASONING_EFFORT = "low";
+export const REASONING_TOKEN_HEADROOM = 1024;
+
+const isReasoningModel = (model: string) => /gpt-oss/i.test(model);
+
+/** max_tokens (+ reasoning_effort dla modeli myślących). */
+export function groqReasoningParams(
+  model: string,
+  maxOutputTokens: number | undefined,
+): { max_tokens?: number; reasoning_effort?: string } {
+  if (!isReasoningModel(model)) return { max_tokens: maxOutputTokens };
+  return {
+    reasoning_effort: REASONING_EFFORT,
+    ...(maxOutputTokens !== undefined
+      ? { max_tokens: maxOutputTokens + REASONING_TOKEN_HEADROOM }
+      : {}),
+  };
+}
+
 // ── self-healing model choice ──────────────────────────────────────────────
 //
 // Groq retires models without notice. Live failure (2026-10-09): every
@@ -133,12 +159,14 @@ const NOT_A_CHAT_MODEL = /whisper|guard|tts|playai|vision|compound|embed|orpheus
 export function chooseGroqModel(available: readonly string[], wanted: string): string | null {
   const chat = available.filter((id) => !NOT_A_CHAT_MODEL.test(id));
   if (chat.includes(wanted)) return wanted;
+  // GPT-OSS najpierw: Llama na Groq to dziś „Enterprise / Contact Sales”
+  // (console.groq.com/docs/models, 2026-11-13).
   const prefs = [
+    /gpt-oss-20b/i,
+    /gpt-oss/i,
     /instant/i,
     /llama.*8b/i,
-    /gpt-oss-20b/i,
     /llama/i,
-    /gpt-oss/i,
     /qwen|gemma|mistral/i,
   ];
   for (const re of prefs) {
@@ -189,7 +217,7 @@ async function callGroqOnce(opts: CallGroqOptions): Promise<ModelTurnResult> {
       model: opts.model,
       messages: toOpenAiMessages(opts.systemPrompt, opts.contents),
       temperature: opts.temperature,
-      max_tokens: opts.maxOutputTokens,
+      ...groqReasoningParams(opts.model, opts.maxOutputTokens),
       ...(tools
         ? {
             tools,

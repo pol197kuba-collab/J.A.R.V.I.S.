@@ -432,6 +432,9 @@ przyczynę, dla której awaria była niewidoczna.
       dopisane `openai/gpt-oss-20b` ($0,075/$0,30) i `gpt-oss-120b`
       ($0,15/$0,60). Domyślne modele Groq to Llama — możliwe, że na zwykłym
       koncie już nie działają; zmiana na gpt-oss czeka na decyzję właściciela.
+      Właściciel 2026-11-13: „przestaw” — klasyfikator `openai/gpt-oss-20b`,
+      awaryjna tura `openai/gpt-oss-120b`, `reasoning_effort: low` + zapas
+      1024 tokenów na myślenie (console.groq.com/docs/reasoning).
 - [x] **Komunikat po limicie iteracji** (Rejestr, etap 0): po polsku,
       w tonie reszty odpowiedzi.
 - [x] **Porządek w planie:** pozycje Rejestru naprawione w tym etapie

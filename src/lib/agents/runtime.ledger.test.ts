@@ -93,7 +93,7 @@ describe("runAgentLoop — księga llm_usage", () => {
     const rows = ledgerRows(calls);
     expect(rows.map((r) => [r.provider, r.purpose, r.model])).toEqual([
       ["gemini", "turn", "gemini-2.5-flash"],
-      ["groq", "classifier", "llama-3.1-8b-instant"],
+      ["groq", "classifier", "openai/gpt-oss-20b"],
     ]);
     expect(rows[1]).toMatchObject({ tokens_input: 40, tokens_output: 5, run_id: "run-1" });
   });
