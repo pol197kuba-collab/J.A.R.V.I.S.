@@ -43,13 +43,15 @@ export const STALE_AFTER_MS = 15 * 60_000;
 export const MAX_ATTEMPTS = 3;
 
 /**
- * Po jakim czasie zadanie `queued`, którego nikt nie wystartował, podejmuje
- * kolejka w tle (plan naprawczy, etap 6). Przeglądarka startuje zadanie
- * zaraz po turze czatu, więc `queued` starsze niż półtorej minuty znaczy, że
- * start nie doszedł (uśpiona karta) — nie ma sensu czekać pełnych 15 minut.
- * Ta sama wartość stoi w SQL (dispatch_document_jobs) — zmieniać razem.
+ * Po jakim czasie zadanie `queued` podejmuje kolejka w tle. Od 2026-11-13
+ * zero: aplikacja nie wykonuje już potoku sama, tylko od razu prosi o job
+ * (`request_document_jobs`), więc każde `queued` czeka właśnie na niego.
+ * Stara wersja aplikacji, która jeszcze sama startuje potok, nie zdubluje
+ * pracy — przejęcie zadania to jeden warunkowy UPDATE. SQL
+ * (dispatch_document_jobs) woła job dla `queued` starszych niż 30 s —
+ * to siatka na wypadek, gdyby prośba z aplikacji nie doszła.
  */
-export const QUEUED_GRACE_MS = 90_000;
+export const QUEUED_GRACE_MS = 0;
 
 export type JobSnapshot = {
   status: string;

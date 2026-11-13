@@ -68,25 +68,19 @@ describe("exhaustedReason", () => {
 });
 
 describe("classifyJob — kolejka w tle (etap 6)", () => {
-  it("podejmuje zadanie `queued`, którego nikt nie ruszył dłużej niż 90 s", () => {
-    // Przeglądarka nie wysłała startu (uśpiona karta) — nie czekamy 15 min.
-    expect(
-      classifyJob({ status: "queued", updatedAt: agoMs(QUEUED_GRACE_MS + 1000), attempts: 0 }, NOW),
-    ).toBe("resumable");
-  });
-
-  it("zostawia świeże `queued` przeglądarce, która właśnie je startuje", () => {
-    expect(classifyJob({ status: "queued", updatedAt: agoMs(30_000), attempts: 0 }, NOW)).toBe(
-      "healthy",
+  it("bierze każde zadanie `queued` od razu — aplikacja już go nie wykonuje (2026-11-13)", () => {
+    // Wcześniej świeże `queued` zostawało przeglądarce przez 90 s; od kiedy
+    // aplikacja prosi o kolejkę w tle zamiast liczyć sama, job wezwany po
+    // kilkunastu sekundach pomijałby właśnie to zadanie.
+    expect(QUEUED_GRACE_MS).toBe(0);
+    expect(classifyJob({ status: "queued", updatedAt: agoMs(5_000), attempts: 0 }, NOW)).toBe(
+      "resumable",
     );
   });
 
   it("`running` dalej dostaje pełne 15 minut — potok trwa kilka minut", () => {
-    expect(
-      classifyJob(
-        { status: "running", updatedAt: agoMs(QUEUED_GRACE_MS + 1000), attempts: 1 },
-        NOW,
-      ),
-    ).toBe("healthy");
+    expect(classifyJob({ status: "running", updatedAt: agoMs(90_000), attempts: 1 }, NOW)).toBe(
+      "healthy",
+    );
   });
 });

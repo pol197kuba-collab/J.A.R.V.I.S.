@@ -24,6 +24,7 @@ import type { PushResult } from "@/lib/notifications/push.server";
 import { composeBrief, sectionsToSpoken } from "./compose";
 import { gatherFacts } from "./facts.server";
 import type { BriefSection, ComposedBrief, DailyBrief } from "./types";
+import { DEFAULT_GEMINI_MODEL } from "@/lib/agents/models";
 
 type Db = SupabaseClient<Database>;
 
@@ -31,7 +32,7 @@ export type BriefKeys = { anthropicApiKey: string | null; geminiApiKey: string |
 
 const MODEL_TIMEOUT_MS = 30_000;
 const ANTHROPIC_BRIEF_MODEL = "claude-sonnet-5";
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = DEFAULT_GEMINI_MODEL;
 
 /** Ile znaków wolno mieć wersji mówionej. Powyżej tego to już nie briefing. */
 const MAX_SPOKEN_CHARS = 900;

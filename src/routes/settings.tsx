@@ -18,16 +18,9 @@ import {
   type UserSettings,
 } from "@/lib/agents/runtime.functions";
 import { setServerKeyLinked } from "@/lib/ai/jarvisBrain";
-import { useModelCatalog } from "@/lib/agents/useModelCatalog";
+import { useHudNavigate } from "@/components/jarvis/TransitionContext";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import { cn } from "@/lib/utils";
-
-const CATALOG_STATUS_LABEL: Record<string, string> = {
-  live: "z API",
-  fallback: "zapasowa (API nie odpowiedziało)",
-  no_key: "zapasowa (brak klucza)",
-  loading: "ładowanie…",
-};
 
 const TABS = [
   { id: "keys", label: "Klucze API" },
@@ -123,7 +116,11 @@ function Settings() {
 }
 
 function JarvisSection() {
-  const catalog = useModelCatalog();
+  const { go } = useHudNavigate();
+  const openAgentHub = () => {
+    audio.playClick();
+    go("/agent-hub");
+  };
   const fetchSettings = useServerFn(getUserSettings);
   const persistSettings = useServerFn(updateUserSettings);
   const [prefs, setPrefs] = useState<UserSettings | null>(null);
@@ -157,49 +154,21 @@ function JarvisSection() {
     <div className="space-y-6">
       <HudPanel index={1} title="ROZMOWA" className="p-5">
         <div className="mt-4 space-y-4">
-          <div className="flex flex-col gap-2 @min-[560px]:flex-row @min-[560px]:items-start @min-[560px]:justify-between @min-[560px]:gap-4">
-            <div className="min-w-0">
-              <p className="text-sm text-foreground">Model J.A.R.V.I.S.-a</p>
-              {/* Skąd pochodzi lista — bez tego „widzę stare modele" wygląda
-                  identycznie jak „nie ma klucza". */}
-              <p className="font-mono mt-1 text-[10px] text-muted-foreground/70">
-                Lista: Gemini {CATALOG_STATUS_LABEL[catalog.geminiStatus]} · Claude{" "}
-                {CATALOG_STATUS_LABEL[catalog.anthropicStatus]}
-              </p>
-              {catalog.errors.length > 0 && (
-                <p
-                  className="font-mono mt-1 break-words text-[10px]"
-                  style={{ color: "var(--warning)" }}
-                >
-                  {catalog.errors.join(" · ")}
-                </p>
-              )}
-            </div>
-            <select
-              disabled={busy || !prefs}
-              value={prefs?.defaultModel ?? ""}
-              onChange={(e) => updatePref({ defaultModel: e.target.value })}
-              className="font-mono w-full min-w-0 border border-primary/60 bg-black/60 px-3 py-1.5 text-xs text-primary outline-none focus:border-primary disabled:opacity-40 @min-[560px]:w-auto @min-[560px]:min-w-[220px]"
+          <div className="min-w-0">
+            <p className="text-sm text-foreground">Model J.A.R.V.I.S.-a i agentów</p>
+            {/* Jedno źródło: model każdego agenta ustawia się w Agent Hub
+                (decyzja właściciela 2026-11-13). Wcześniej tu był „model
+                domyślny”, który nie działał dla agentów z własnym modelem. */}
+            <p className="text-xs text-muted-foreground">
+              Ustawiasz w Agent Hub, osobno dla każdego agenta.
+            </p>
+            <button
+              type="button"
+              onClick={openAgentHub}
+              className="font-display mt-2 border-b border-primary/60 pb-0.5 text-[10px] uppercase tracking-[0.25em] text-primary hover:text-foreground"
             >
-              {prefs && !catalog.models.some((m) => m.id === prefs.defaultModel) && (
-                <option value={prefs.defaultModel}>{prefs.defaultModel} (spoza listy)</option>
-              )}
-              <optgroup label="Google Gemini">
-                {catalog.gemini.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label} — {m.id}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="Anthropic Claude (wymaga klucza)">
-                {catalog.anthropic.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                    {m.hint ? ` — ${m.hint}` : ""}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
+              Agent Hub →
+            </button>
           </div>
           <div className="flex items-start justify-between gap-4 border-t border-primary/20 pt-3">
             <div className="min-w-0">

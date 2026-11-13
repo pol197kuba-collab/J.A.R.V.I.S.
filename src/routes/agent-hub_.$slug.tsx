@@ -571,9 +571,10 @@ function SettingsPanel({
           <SectionLabel>MODEL</SectionLabel>
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm text-foreground">Inherit from global default</p>
+              <p className="text-sm text-foreground">Model domyślny</p>
               <p className="text-xs text-muted-foreground">
-                Gdy on = używa modelu z Settings ({data.effectiveModel}).
+                Gdy włączone, agent używa modelu domyślnego aplikacji ({data.effectiveModel}).
+                Wyłącz, żeby wybrać model tylko dla tego agenta.
               </p>
             </div>
             <button

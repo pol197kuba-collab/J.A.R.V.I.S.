@@ -10,8 +10,19 @@ import type { LlmUsage } from "./usage";
 
 export type GeminiPart =
   | { text: string }
-  | { functionCall: { name: string; args: Record<string, unknown> } }
+  | {
+      functionCall: { name: string; args: Record<string, unknown> };
+      /** Gemini 3.x+: podpis myślenia — trzeba go odesłać w historii, inaczej HTTP 400. */
+      thoughtSignature?: string;
+    }
   | { functionResponse: { name: string; response: Record<string, unknown> } };
+
+/** Wywołanie narzędzia z tury modelu; podpis tylko z Gemini 3.x+. */
+export type ModelFunctionCall = {
+  name: string;
+  args: Record<string, unknown>;
+  thoughtSignature?: string;
+};
 
 export type GeminiContent = { role: "user" | "model" | "function"; parts: GeminiPart[] };
 

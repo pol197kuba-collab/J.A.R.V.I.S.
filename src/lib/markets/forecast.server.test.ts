@@ -232,7 +232,7 @@ describe("forecastWithModel", () => {
       anthropicApiKey: "sk-test",
       geminiApiKey: "gem",
     });
-    expect(result.model).toBe("gemini-2.5-flash");
+    expect(result.model).toBe("gemini-3.8-flash");
     // Claude: pierwsza próba + jedno ponowienie po 500, potem Gemini.
     const claudeCalls = fetchMock.mock.calls.filter((c) =>
       String(c[0]).includes("api.anthropic.com"),

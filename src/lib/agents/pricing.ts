@@ -60,6 +60,12 @@ const RATES: Readonly<Record<string, Rate>> = {
   "gemini-flash-latest": { inputPerM: 0.3, outputPerM: 2.5 },
   "gemini-2.5-pro": { inputPerM: 1.25, outputPerM: 10 },
   "gemini-pro-latest": { inputPerM: 1.25, outputPerM: 10 },
+  // Sprawdzone 2026-11-13 na aistudio.google.com/docs/pricing (poziom płatny).
+  // 3.8/3.6 Flash: stawka do 2026-12-31; od 2027-01-01 $1.50 → $7.50.
+  "gemini-4-hydrogen": { inputPerM: 1.5, outputPerM: 7.5 },
+  "gemini-3.8-flash": { inputPerM: 0.75, outputPerM: 3.75 },
+  "gemini-3.6-flash": { inputPerM: 0.75, outputPerM: 3.75 },
+  "gemini-3.5-flash-lite": { inputPerM: 0.3, outputPerM: 2.5 },
   // Dopisane 2026-11-11 (etap 2), stawki ze strony cennika Gemini.
   "gemini-2.5-flash-lite": { inputPerM: 0.1, outputPerM: 0.4 },
   // Embeddingi: płaci się tylko za wejście.

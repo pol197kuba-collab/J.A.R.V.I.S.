@@ -3,7 +3,7 @@
 //
 // Two providers serve the main conversational turn:
 //
-//   * Google Gemini — bare IDs ("gemini-2.5-flash"). The app calls Google
+//   * Google Gemini — bare IDs ("gemini-3.8-flash"). The app calls Google
 //     directly with the user's key, so the IDs must match what the
 //     Generative Language API accepts.
 //   * Anthropic Claude — IDs carry an "anthropic:" prefix
@@ -51,24 +51,37 @@ export const GEMINI_MODELS: ModelOption[] = [
     provider: "gemini",
   },
   {
-    id: "gemini-2.5-pro",
-    label: "Gemini 2.5 Pro",
-    hint: "Najmocniejsze rozumowanie w Gemini",
+    id: "gemini-4-hydrogen",
+    label: "Gemini 4 Hydrogen",
+    hint: "Najnowszy, mocne rozumowanie · $1.50→$7.50 / 1M",
     provider: "gemini",
   },
   {
-    id: "gemini-2.5-flash",
-    label: "Gemini 2.5 Flash",
-    hint: "Szybki, uniwersalny, tani",
+    id: "gemini-3.8-flash",
+    label: "Gemini 3.8 Flash",
+    hint: "Szybki, agentowy, domyślny · $0.75→$3.75 / 1M",
     provider: "gemini",
   },
   {
-    id: "gemini-2.5-flash-lite",
-    label: "Gemini 2.5 Flash Lite",
-    hint: "Tani, do klasyfikacji",
+    id: "gemini-3.6-flash",
+    label: "Gemini 3.6 Flash",
+    hint: "Poprzedni Flash · $0.75→$3.75 / 1M",
+    provider: "gemini",
+  },
+  {
+    id: "gemini-3.5-flash-lite",
+    label: "Gemini 3.5 Flash-Lite",
+    hint: "Najtańszy, do prostych zadań · $0.30→$2.50 / 1M",
     provider: "gemini",
   },
 ];
+
+// USUNIĘTE 2026-11-13: "gemini-2.5-pro", "gemini-2.5-flash" (wycofane
+// 2026-11-02, wyłączenie 2026-12-01, dostęp tylko dla dotychczasowych
+// użytkowników) i "gemini-2.5-flash-lite" (bez daty, ale Google zaleca nowe
+// modele) — strony aistudio.google.com/docs/deprecations i /docs/models,
+// sprawdzone 2026-11-13. Modele 3.x/4.x wymagają innych parametrów
+// (geminiCompat.ts) i podpisów myślenia w pętli narzędzi.
 
 // USUNIĘTE (etap 6b): "gemini-2.0-flash" i "gemini-2.0-flash-lite" — Google
 // wyłączył je 2026-06-01 (strona deprecations Gemini API, sprawdzona
@@ -110,7 +123,7 @@ export const ANTHROPIC_MODELS: ModelOption[] = [
 
 export const ALL_MODELS: ModelOption[] = [...GEMINI_MODELS, ...ANTHROPIC_MODELS];
 
-export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 
 export const isKnownGeminiModel = (id: string): boolean => GEMINI_MODELS.some((m) => m.id === id);
 
@@ -139,22 +152,18 @@ export const modelLabel = (ref: string): string =>
 // Agenci spoza tej mapy zostają na tym, co mają (najczęściej: dziedziczą
 // globalny domyślny model).
 export const RECOMMENDED_AGENT_MODELS: Readonly<Record<string, string>> = {
-  // Rdzeń: rozmowa, routing, delegacja do zespołu — najdłuższe łańcuchy
-  // narzędziowe w całej aplikacji.
-  jarvis: `${ANTHROPIC_PREFIX}claude-opus-5`,
-  // Research wieloźródłowy i analiza dokumentów — tu jakość wnioskowania
-  // przekłada się bezpośrednio na wynik.
-  insight: `${ANTHROPIC_PREFIX}claude-opus-5`,
-  metric: `${ANTHROPIC_PREFIX}claude-opus-5`,
-  // Kod i sesje deweloperskie.
-  droid: `${ANTHROPIC_PREFIX}claude-opus-5`,
-  // Diagnostyka logów — dużo czytania, wnioski proste.
-  shield: `${ANTHROPIC_PREFIX}claude-sonnet-5`,
-  // Budowa plików: praca w dużej mierze mechaniczna (struktura slajdów),
-  // ale treść nadal pisana przez model.
-  forge: `${ANTHROPIC_PREFIX}claude-sonnet-5`,
-  // Copy / marketing.
-  herald: `${ANTHROPIC_PREFIX}claude-sonnet-5`,
+  // Podział „mieszany” wybrany przez właściciela 2026-11-13. Rozmowa i
+  // routing muszą być szybkie — Opus potrafił odpowiadać ponad minutę.
+  jarvis: "gemini-3.8-flash",
+  // Research wieloźródłowy i analiza danych — tu jakość wnioskowania
+  // przekłada się na wynik, więc Claude (Sonnet: mocny, 2,5× tańszy od Opusa).
+  insight: `${ANTHROPIC_PREFIX}claude-sonnet-5`,
+  metric: `${ANTHROPIC_PREFIX}claude-sonnet-5`,
+  // Reszta: szybki Flash z natywnym wyszukiwaniem Google.
+  droid: "gemini-3.8-flash",
+  shield: "gemini-3.8-flash",
+  forge: "gemini-3.8-flash",
+  herald: "gemini-3.8-flash",
 };
 
 // Groq — free-tier only, used internally for the UI-action classifier pass

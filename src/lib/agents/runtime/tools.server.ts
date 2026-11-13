@@ -9,7 +9,7 @@ import {
   getToolByName,
   toolRisk,
 } from "../tools.server";
-import type { GeminiPart, ToolDeclaration } from "@/lib/ai/llm/types";
+import type { GeminiPart, ModelFunctionCall, ToolDeclaration } from "@/lib/ai/llm/types";
 import { AGENT_SLUGS, isToolForcedForAgent } from "@/lib/constants/agentSlugs";
 import { UI_ACTIONS, type UiAction } from "@/lib/constants/uiActions";
 import {
@@ -113,7 +113,7 @@ export async function declareTools(ctx: RunContext): Promise<{
 export async function executeToolCalls(
   ctx: RunContext,
   state: RunState,
-  functionCalls: Array<{ name: string; args: Record<string, unknown> }>,
+  functionCalls: ModelFunctionCall[],
   iter: number,
   runSubAgent: (args: AgentLoopInput) => Promise<AgentRunResult>,
 ): Promise<void> {
@@ -135,6 +135,7 @@ export async function executeToolCalls(
     role: "model",
     parts: functionCalls.map((fc) => ({
       functionCall: { name: fc.name, args: fc.args ?? {} },
+      ...(fc.thoughtSignature ? { thoughtSignature: fc.thoughtSignature } : {}),
     })),
   });
 

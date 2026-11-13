@@ -128,4 +128,27 @@ describe("fetchWebSearchOgImage — klient modeli i księga", () => {
     const row = calls.find((c) => c.table === "llm_usage")?.ops[0].args[0];
     expect(row).toMatchObject({ module: "documents", purpose: "image_search", tokens_input: 30 });
   });
+
+  it("wprost każe szukać i daje budżet na myślenie (2026-11-13: „nie zwróciła stron”)", async () => {
+    const { fetchWebSearchOgImage } = await import("./forgeDocument.server");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ candidates: [{}] }),
+      text: async () => "",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await fetchWebSearchOgImage("Home Assistant dashboard", "k", () => {});
+    vi.unstubAllGlobals();
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body)) as {
+      contents: Array<{ parts: Array<{ text: string }> }>;
+      generationConfig: { maxOutputTokens: number };
+    };
+    // Samo hasło z 50 tokenami odpowiedzi: model myślący zużywał budżet na
+    // myślenie i nie odpalał wyszukiwania, więc nie było żadnych stron.
+    expect(body.contents[0].parts[0].text).toMatch(/search/i);
+    expect(body.contents[0].parts[0].text).toContain("Home Assistant dashboard");
+    expect(body.generationConfig.maxOutputTokens).toBeGreaterThanOrEqual(1024);
+  });
 });
