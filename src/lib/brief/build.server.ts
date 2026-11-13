@@ -124,7 +124,7 @@ async function rewriteWithGemini(
   apiKey: string,
   input: string,
   ledger: LedgerContext | undefined,
-): Promise<string | null> {
+): Promise<string | { error: string }> {
   const res = await callGemini<{
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
     usageMetadata?: GeminiUsageMetadata;
@@ -139,12 +139,12 @@ async function rewriteWithGemini(
     timeoutMs: MODEL_TIMEOUT_MS,
     ledger,
   });
-  if (!res.ok) return null;
+  if (!res.ok) return { error: res.message };
   return (
     res.data.candidates?.[0]?.content?.parts
       ?.map((p) => p.text ?? "")
       .join("")
-      .trim() || null
+      .trim() ?? ""
   );
 }
 
@@ -156,8 +156,11 @@ export async function polishBrief(
   parts: Parts,
   keys: BriefKeys,
   ledger?: LedgerContext,
-): Promise<{ greeting: string; body: string; generatedBy: string }> {
-  const plain = { ...parts, generatedBy: "facts" };
+): Promise<{ greeting: string; body: string; generatedBy: string; fallbackReasons: string[] }> {
+  // W8 (etap 6b): dlaczego zostały same liczby — wcześniej to ginęło w ciszy
+  // (13.11 briefing bez modelu mimo dwóch kluczy). Job pokazuje te powody.
+  const fallbackReasons: string[] = [];
+  const plain = { ...parts, generatedBy: "facts", fallbackReasons };
   if (!keys.anthropicApiKey && !keys.geminiApiKey) return plain;
 
   const input = `${MARK_GREETING} ${parts.greeting}\n${MARK_BODY} ${parts.body}`;
@@ -166,11 +169,23 @@ export async function polishBrief(
   // Mieszanie ciepłego powitania od modelu z suchą treścią z liczb dałoby
   // rubrykę, która w połowie zdania zmienia głos.
   const accept = (raw: string | null, label: string) => {
+    const reject = (why: string) => {
+      fallbackReasons.push(`${label}: ${why}`);
+      return null;
+    };
+    if (!raw || !raw.trim()) return reject("pusta odpowiedź");
     const got = parseParts(raw);
-    if (!got) return null;
-    if (!isUsableGreeting(got.greeting)) return null;
-    if (!isUsable(got.body, parts.body)) return null;
-    return { greeting: got.greeting.trim(), body: got.body.trim(), generatedBy: `model:${label}` };
+    if (!got) return reject("odpowiedź bez znaczników POWITANIE/BRIEFING");
+    if (!isUsableGreeting(got.greeting)) return reject("powitanie nie przeszło kontroli");
+    if (!isUsable(got.body, parts.body)) {
+      return reject("treść nie przeszła kontroli (markdown albo krótsza niż połowa)");
+    }
+    return {
+      greeting: got.greeting.trim(),
+      body: got.body.trim(),
+      generatedBy: `model:${label}`,
+      fallbackReasons,
+    };
   };
 
   if (keys.anthropicApiKey) {
@@ -187,14 +202,26 @@ export async function polishBrief(
       });
       const ok = accept(result.text, ANTHROPIC_BRIEF_MODEL);
       if (ok) return ok;
-    } catch {
-      // Przechodzimy na zapasowego dostawcę — nie jest to awaria briefingu.
+    } catch (err) {
+      // Przechodzimy na zapasowego dostawcę — nie jest to awaria briefingu,
+      // ale powód zostaje (fallbackReasons).
+      fallbackReasons.push(
+        `${ANTHROPIC_BRIEF_MODEL}: ${err instanceof Error ? err.message : String(err)}`.slice(
+          0,
+          300,
+        ),
+      );
     }
   }
 
   if (keys.geminiApiKey) {
-    const ok = accept(await rewriteWithGemini(keys.geminiApiKey, input, ledger), GEMINI_MODEL);
-    if (ok) return ok;
+    const res = await rewriteWithGemini(keys.geminiApiKey, input, ledger);
+    if (typeof res !== "string") {
+      fallbackReasons.push(`${GEMINI_MODEL}: ${res.error}`.slice(0, 300));
+    } else {
+      const ok = accept(res, GEMINI_MODEL);
+      if (ok) return ok;
+    }
   }
 
   return plain;
@@ -207,6 +234,8 @@ export type BuildBriefResult = {
   /** Co się stało z powiadomieniem na urządzenia; null, gdy nie próbowano. */
   push?: PushResult | null;
   error: string | null;
+  /** Dlaczego tekst został z samych liczb mimo kluczy modeli (W8, etap 6b). */
+  fallbackReasons?: string[];
 };
 
 /**
@@ -228,7 +257,7 @@ export async function buildDailyBrief(
 ): Promise<BuildBriefResult> {
   const facts = await gatherFacts(db, ownerId);
   const composed: ComposedBrief = composeBrief(facts);
-  const { greeting, body, generatedBy } = await polishBrief(
+  const { greeting, body, generatedBy, fallbackReasons } = await polishBrief(
     { greeting: composed.greeting, body: sectionsToSpoken(composed.sections) },
     keys,
     { db, ownerId, module: "brief", purpose: "polish" },
@@ -260,7 +289,7 @@ export async function buildDailyBrief(
     createdAt: data?.created_at ?? new Date().toISOString(),
   };
 
-  if (error) return { brief, notified: false, error: error.message };
+  if (error) return { brief, notified: false, error: error.message, fallbackReasons };
 
   let notified = false;
   if (options.notify) {
@@ -283,10 +312,10 @@ export async function buildDailyBrief(
       silent: options.push === false,
     });
     notified = result.id !== null;
-    return { brief, notified, push: result.push ?? null, error: null };
+    return { brief, notified, push: result.push ?? null, error: null, fallbackReasons };
   }
 
-  return { brief, notified, error: null };
+  return { brief, notified, error: null, fallbackReasons };
 }
 
 /** Sekcje z bazy wracają jako `Json` — tu odzyskują swój kształt. */

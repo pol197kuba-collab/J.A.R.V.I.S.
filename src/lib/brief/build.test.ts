@@ -79,3 +79,32 @@ describe("polishBrief — księga llm_usage", () => {
     expect(row).toMatchObject({ module: "brief", purpose: "polish", tokens_input: 200 });
   });
 });
+
+// W8 (etap 6b): briefing 13.11 wyszedł „z samych liczb”, choć oba klucze
+// modeli były ustawione — przepisanie padło po cichu. Powód ma wracać do
+// wołającego, żeby job mógł go pokazać.
+describe("polishBrief — powód powrotu do samych liczb", () => {
+  it("pusta odpowiedź modelu → generatedBy facts i powód z nazwą modelu", async () => {
+    const { vi } = await import("vitest");
+    const { polishBrief } = await import("./build.server");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          candidates: [{ content: { parts: [] }, finishReason: "MAX_TOKENS" }],
+          usageMetadata: { promptTokenCount: 200, candidatesTokenCount: 0 },
+        }),
+        text: async () => "",
+      }),
+    );
+    const got = await polishBrief(
+      { greeting: "Dzień dobry.", body: "Rynki spokojne, paliwo bez zmian." },
+      { anthropicApiKey: null, geminiApiKey: "k" },
+    );
+    vi.unstubAllGlobals();
+    expect(got.generatedBy).toBe("facts");
+    expect(got.fallbackReasons).toEqual(["gemini-2.5-flash: pusta odpowiedź"]);
+  });
+});

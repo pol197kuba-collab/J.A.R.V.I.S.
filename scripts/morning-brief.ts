@@ -230,10 +230,15 @@ async function main(): Promise<void> {
 
   let summary = "Briefing nie powstał.";
   try {
-    const { brief, notified, push, error } = await buildDailyBrief(db, ownerId, keys, {
-      notify: true,
-      push: schedule.push,
-    });
+    const { brief, notified, push, error, fallbackReasons } = await buildDailyBrief(
+      db,
+      ownerId,
+      keys,
+      {
+        notify: true,
+        push: schedule.push,
+      },
+    );
 
     if (error) {
       fail(`Zapis briefingu: ${error}`);
@@ -260,6 +265,13 @@ async function main(): Promise<void> {
     // Brak powiadomienia przy udanym zapisie znaczy, że briefing jest, ale
     // nikt się o nim nie dowie — warto, żeby było to widać w przebiegu.
     if (!notified) warn("Briefing zapisany, ale meldunek się nie zapisał.");
+    // W8 (etap 6b): klucze modeli są, a tekst z samych liczb — powód na widoku,
+    // zamiast cichego spadku jak 13.11.
+    if (brief.generatedBy === "facts" && (keys.anthropicApiKey || keys.geminiApiKey)) {
+      const why = (fallbackReasons ?? []).join("; ") || "bez podanego powodu";
+      warn(`Tekst briefingu z samych liczb mimo kluczy modeli: ${why}`);
+      await logEvent(db, ownerId, "warn", `briefing bez modelu: ${why}`);
+    }
     // Wynik pukania w telefony — bez tego „nie dostałem powiadomienia” nie
     // miało żadnego śladu: ani w Actions, ani w System Logs.
     if (push) {
