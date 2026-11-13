@@ -152,7 +152,7 @@ export const getSystemPulse = createServerFn({ method: "GET" })
 // Kokpit startowy — "what's waiting for you right now", the dynamic hero
 // that replaced the static welcome banner. Deliberately forward-looking
 // (overdue/upcoming tasks, files ready to grab, unread notifications)
-// rather than retrospective — that's what the Living Feed and System Pulse
+// rather than retrospective — that's what System Logs and System Pulse
 // are for.
 // ---------------------------------------------------------------------------
 

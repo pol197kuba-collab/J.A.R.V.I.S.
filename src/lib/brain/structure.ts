@@ -52,10 +52,8 @@ const EXACT: Record<string, ModuleId> = {
   conversations: "agenci",
   messages: "agenci",
   document_jobs: "agenci",
-  local_jobs: "agenci",
   tasks: "praca",
   projects: "praca",
-  dev_sessions: "praca",
 };
 
 /** Do którego modułu aplikacji należy tabela — po nazwie, reszta to System. */

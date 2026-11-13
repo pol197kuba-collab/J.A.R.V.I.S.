@@ -30,7 +30,7 @@ describe("which transition", () => {
     expect(pickKind("/", "/jarvis")).toBe("core-enter");
     expect(pickKind("/jarvis", "/documents")).toBe("core-leave");
     expect(pickKind("/", "/rynki")).toBe("tunnel");
-    expect(pickKind("/feed", "/mozg")).toBe("tunnel");
+    expect(pickKind("/system-logs", "/mozg")).toBe("tunnel");
   });
   it("tempo 1×: the approved demo timings", () => {
     expect(TRANSITION_MS).toEqual({ tunnel: 950, "core-enter": 1500, "core-leave": 1350 });

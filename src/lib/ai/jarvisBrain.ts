@@ -79,30 +79,14 @@ const FALLBACK_GREETINGS = [
   "Systemy uruchomione, Panie Sławiński. Czekam na dyspozycje.",
 ];
 
-const FALLBACK_MODULE: Record<string, string[]> = {
-  fuel: [
-    "Ładuję Fuel Monitor Matrix, Panie Sławiński.",
-    "Uruchamiam telemetrię paliwową — dane surcharge aktywne.",
-  ],
-  rto: ["Uruchamiam systemy kalkulacji RTO.", "Model return-to-office startuje."],
-  jobfit: [
-    "Uruchamiam JobFit AI. Optymalizator CV online.",
-    "Moduł JobFit aktywny, Panie Sławiński.",
-  ],
-  telemetry: ["Sprawdzam dojazd do pracy.", "Kanał Situation Room startuje."],
-  dashboard: ["Wracam do głównego kokpitu, Panie Sławiński."],
-};
-
 const FALLBACK_GENERIC = [
   "Przyjąłem, Panie Sławiński.",
   "Zrozumiałem. Czekam na dyspozycje.",
   "Do usług, Panie Sławiński.",
 ];
 
-export function fallbackFor(kind: string, hint?: string): JarvisReply {
+export function fallbackFor(kind: string): JarvisReply {
   if (kind === "greeting") return { action: "none", speech: pick(FALLBACK_GREETINGS) };
-  if (kind === "module" && hint && FALLBACK_MODULE[hint])
-    return { action: "none", speech: pick(FALLBACK_MODULE[hint]) };
   if (kind === "system_check")
     return {
       action: "system_check",
@@ -145,12 +129,11 @@ export type BrainInput = {
   /** Recent clean conversation turns for multi-turn memory. */
   history?: Array<{ role: "user" | "jarvis"; text: string }>;
   /** Used by fallbackFor() if the network call fails. */
-  fallbackKind?: "greeting" | "module" | "system_check" | "shutdown" | "sleep" | "generic";
-  fallbackHint?: string;
+  fallbackKind?: "greeting" | "system_check" | "shutdown" | "sleep" | "generic";
 };
 
 export async function askJarvis(input: BrainInput): Promise<JarvisReply> {
-  const fb = () => fallbackFor(input.fallbackKind ?? "generic", input.fallbackHint);
+  const fb = () => fallbackFor(input.fallbackKind ?? "generic");
 
   // Agent Runtime na serwerze. Import dynamiczny, żeby funkcje serwerowe nie
   // ładowały się do każdego bundla, który tylko woła speakJarvis.

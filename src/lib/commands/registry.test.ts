@@ -50,14 +50,14 @@ describe("COMMAND_REGISTRY", () => {
       expect(firstMatch("wholesale fuel")).toBe("open_fuel_prices");
     });
 
-    it("dwuznaczne 'open fuel prices' trafia do cennika, nie do sub-systemu", () => {
+    it("'open fuel prices' trafia do cennika", () => {
       expect(firstMatch("open fuel prices")).toBe("open_fuel_prices");
     });
 
-    it("frazy o monitorze nadal prowadzą do sub-systemu", () => {
-      expect(firstMatch("jarvis open fuel")).toBe("open_fuel");
-      expect(firstMatch("jarvis otwórz monitor paliwa")).toBe("open_fuel");
-      expect(firstMatch("launch monitor")).toBe("open_fuel");
+    it("frazy o monitorze paliwa (dawny sub-system) prowadzą do cennika", () => {
+      expect(firstMatch("jarvis open fuel")).toBe("open_fuel_prices");
+      expect(firstMatch("jarvis otwórz monitor paliwa")).toBe("open_fuel_prices");
+      expect(firstMatch("launch monitor")).toBe("open_fuel_prices");
     });
   });
 

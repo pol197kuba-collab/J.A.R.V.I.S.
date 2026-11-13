@@ -39,7 +39,7 @@
       logowania przez OAuth (`StarkLogin.tsx:115`): nowe konto Google też jest
       rejestracją.
 - [x] **W2. Którą ścieżką chodzi czat.** (sprawdzone przez właściciela 2026-11-11) SQL: `select chat_routing from
-    user_settings;` — wynik wpisać tutaj: `server` (1 wiersz). Potrzebne w etapie 5.
+user_settings;` — wynik wpisać tutaj: `server` (1 wiersz). Potrzebne w etapie 5.
 - [x] **W3. Klucz service role na hostingu.** (potwierdzone przez właściciela 2026-11-11: ustawiony) Potwierdzić, że
       `JARVIS_SUPABASE_SERVICE_ROLE_KEY` jest ustawiony w sekretach Lovable
       (używa go moduł paliw). Bez tego etap 5 nie ruszy.
@@ -199,7 +199,7 @@ Dopiero po etapie 2, żeby efekt było widać w liczbach.
       właściciela 2026-11-11), więc punktem odniesienia będzie okres przed
       publikacją etapu 3. Zapytanie do uruchomienia w Supabase:
       `select date_trunc('day', created_at) d, purpose, count(*), avg(tokens_input)::int,
-    sum(cache_read) from llm_usage where module = 'agents' group by 1, 2 order by 1, 2;`
+sum(cache_read) from llm_usage where module = 'agents' group by 1, 2 order by 1, 2;`
 - [x] **Cache promptu Anthropic**: `cache_control` na bloku systemowym
       i definicjach narzędzi. Sprawdzić w aktualnej dokumentacji minimalną
       długość prefiksu i ceny zapisu do cache.
@@ -277,7 +277,7 @@ Wymaga W2 i W3.
       `getOwnerSecrets(userId)` w pliku `.server.ts`). Zapis kluczy
       z Ustawień — tą samą drogą. Skrypty w `scripts/` przechodzą na service
       role tam, gdzie czytają klucze. Potem migracja: `REVOKE SELECT, INSERT,
-    UPDATE, DELETE ON user_secrets FROM authenticated`.
+UPDATE, DELETE ON user_secrets FROM authenticated`.
       Kolejność wdrożenia: najpierw kod (PR 5a), po potwierdzeniu działania
       migracja (PR 5b). - [x] Kod (PR 5a): helpery `readOwnerSecrets` / `writeOwnerSecrets` /
       `clearOwnerSecrets` w `src/lib/secrets/ownerSecrets.server.ts`; żaden
@@ -511,17 +511,28 @@ Bezwarunkowo:
 
 Decyzje właściciela z 2026-11-11 (W5):
 
-| Moduł            | Decyzja | Co obejmuje usunięcie                                                                                                 |
-| ---------------- | ------- | --------------------------------------------------------------------------------------------------------------------- |
-| `/sub-systems`   | usuń    | trasa, `components/jarvis/subsystems/`, `data/subSystems.ts`, wpis w rejestrze komend i menu                          |
-| `/schema`        | usuń    | trasa, `lib/schema/`, komenda `open_schema` (tryb STRUKTURA w `/mozg` zostaje)                                        |
-| `/commands`      | usuń    | trasa, `CommandDirectory`, `data/commandDirectory.ts`                                                                 |
-| `/feed`          | usuń    | trasa, `lib/feed/` (zostają `/system-logs` i podgląd w `/jarvis`)                                                     |
-| Serwer MCP       | usuń    | `lib/mcp/`, trasy `mcp`, `[.mcp]`, `[.well-known]`, `@lovable.dev/mcp-js`, wtyczka w `vite.config.ts`, `.lovable/mcp` |
-| Darwin w runtime | odepnij | wywołanie `chooseVariant` w orkiestratorze (kod `lib/darwin` i tabele mogą zostać uśpione)                            |
-| Lokalny worker   | usuń    | `local-worker/`, narzędzie `run_local_action`, tabela `local_jobs`                                                    |
-| Dev Wing         | usuń    | `start_dev_session`, `check_dev_session`, `lib/dev/`, `claude-dev.yml`, tabele `dev_sessions`/`projects`              |
-| Dane demo Mózgu  | usuń    | `brain-demo.yml`, `scripts/brain-demo.ts`, `lib/brain/demoSeed.ts`                                                    |
+| Moduł            | Decyzja      | Co obejmuje usunięcie                                                                                                 |
+| ---------------- | ------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `/sub-systems`   | usuń ✓ 8B    | trasa, `components/jarvis/subsystems/`, `data/subSystems.ts`, wpis w rejestrze komend i menu                          |
+| `/schema`        | usuń ✓ 8B    | trasa, `lib/schema/`, komenda `open_schema` (tryb STRUKTURA w `/mozg` zostaje)                                        |
+| `/commands`      | usuń ✓ 8B    | trasa, `CommandDirectory`, `data/commandDirectory.ts`                                                                 |
+| `/feed`          | usuń ✓ 8B    | trasa, `lib/feed/` (zostają `/system-logs` i podgląd w `/jarvis`)                                                     |
+| Serwer MCP       | usuń ✓ 8B    | `lib/mcp/`, trasy `mcp`, `[.mcp]`, `[.well-known]`, `@lovable.dev/mcp-js`, wtyczka w `vite.config.ts`, `.lovable/mcp` |
+| Darwin w runtime | odepnij ✓ 8B | wywołanie `chooseVariant` w orkiestratorze (kod `lib/darwin` i tabele mogą zostać uśpione)                            |
+| Lokalny worker   | usuń ✓ 8B    | `local-worker/`, narzędzie `run_local_action`, tabela `local_jobs`                                                    |
+| Dev Wing         | usuń ✓ 8B    | `start_dev_session`, `check_dev_session`, `lib/dev/`, `claude-dev.yml`, tabele `dev_sessions`/`projects`              |
+| Dane demo Mózgu  | usuń ✓ 8B    | `brain-demo.yml`, `scripts/brain-demo.ts`, `lib/brain/demoSeed.ts`                                                    |
+
+Wykonanie 8B (2026-11-13): wszystkie moduły z tabeli usunięte z kodu, menu,
+Kokpitu, rejestru komend, tuneli i Town (pulpit w Town i Kokpit prowadzą do
+`/system-logs` zamiast `/feed`). Komendy „monitor paliwa” / „open fuel”
+prowadzą do `/paliwa`. Projekty zostają (decyzja właściciela 2026-11-13:
+używa ich `/tasks`); znikają tylko `start_dev_session` / `check_dev_session`.
+Migracja `20261113140000` usuwa wiersze trzech narzędzi z `tools` i podmienia
+prompt D.R.O.I.D.-a (projekty i zadania zamiast zlecania kodu), o ile nie był
+zmieniany ręcznie. Darwin: kod i tabele uśpione, korzysta z nich jeszcze typer
+rynków. Tabele `local_jobs`, `dev_sessions` i kolumna `chat_routing` — 8C,
+po publikacji 8B (zgoda właściciela 2026-11-13).
 
 Uwagi do wykonania:
 
@@ -570,6 +581,8 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 | 2026-11-12 | `useAgentChatChannel.ts` (aktywny agent)                             | Przeglądarka pamiętała slug agenta sprzed zmiany nazw (`orchestrator`); mikrofon spoza `/jarvis` wysyła od razu, zanim aplikacja wczyta wybór z konta → „Agent not found: orchestrator”. Zgłosił właściciel.                                                                                                                                                                                                                                                                                        | 0                   | naprawione 2026-11-12: zapamiętany agent sprawdzany z listą istniejących (`isAgentSlug`), nieznany → J.A.R.V.I.S. i nadpisanie wpisu |
 | 2026-11-13 | `supabase/migrations/20260817120000_metric_analysis_expansion.sql`   | Migracja nie przechodzi na czystej bazie: `to_jsonb($$…$$)` — „could not determine polymorphic type”. Na produkcji nałożona dawno, więc nic nie psuje; pliku migracji nie wolno zmieniać. Test dymny poprawia ją tylko w kopii roboczej CI (`e2e/fix-legacy-migrations.sh`; job pada, jeśli wzorzec zniknie).                                                                                                                                                                                       | 9                   | obejście w CI (#242), plik w repo bez zmian                                                                                          |
 | 2026-11-13 | lokalna baza testu dymnego                                           | Trigger `enforce_owner_only_signup` (W1) blokuje założenie konta testowego; w jednorazowej bazie CI funkcja jest podmieniana na przepuszczającą. Produkcja bez zmian.                                                                                                                                                                                                                                                                                                                               | 9                   | świadome obejście w CI (#242)                                                                                                        |
+| 2026-11-13 | D.R.O.I.D. (agent)                                                   | Bez Dev Wing agent prowadzi już tylko projekty i zadania; rola „Software Delivery” i opis na stronie startowej (`landingData.ts`, zatwierdzona treść) zostały bez zmian. Decyzja właściciela: zostawić, przemianować czy usunąć agenta (pokój w Town, sigil, `MODULE_AGENT`).                                                                                                                                                                                                                       | 8                   |                                                                                                                                      |
+| 2026-11-13 | `handle_new_user()`                                                  | Funkcja zakładania konta nadal daje nowemu kontu D.R.O.I.D.-a ze starym promptem i próbuje przypiąć usunięte narzędzia (nie znajdzie ich — bez błędu). Rejestracja jest zablokowana (W1), więc nie ma skutku; poprawić przy najbliższej zmianie tej funkcji.                                                                                                                                                                                                                                        | 8                   |                                                                                                                                      |
 
 ## Dziennik
 

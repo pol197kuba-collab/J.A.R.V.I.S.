@@ -2,8 +2,6 @@
 // wiersz agent_runs i logowanie (plan naprawczy, etap 4: wydzielone
 // z runtime.server.ts).
 import type { Json } from "@/integrations/supabase/types";
-import { stripMarkers } from "@/lib/darwin/prompt";
-import { chooseVariant } from "@/lib/darwin/variants.server";
 import { DEFAULT_GEMINI_MODEL, parseModelRef, ANTHROPIC_PREFIX } from "../models";
 import { chooseModel } from "../budget";
 import { currentBudget } from "../budget.server";
@@ -114,17 +112,10 @@ export async function prepareRun(args: AgentLoopInput): Promise<PreparedRun> {
     ? UI_ACTIONS_WITH_NONE.filter((a) => a !== "system_check")
     : [...UI_ACTIONS_WITH_NONE];
 
-  // Prompt: bazowy (J.A.R.V.I.S. / wariant Darwina / własny agenta), skład
-  // zespołu z zasadami delegowania, sekcja dostępu do interfejsu — sekcje
-  // i ich uzasadnienia w runtime/prompt.ts. Darwin (S2.1): teammate z
-  // wariantami promptu dostaje jeden na run; J.A.R.V.I.S. bez wariantów.
-  const variant =
-    agent.slug === AGENT_SLUGS.JARVIS ? null : await chooseVariant(supabase, userId, agent.slug);
-  const basePrompt = basePromptFor(
-    agent.slug,
-    variant ? stripMarkers(variant.prompt) : null,
-    agentSpecific,
-  );
+  // Prompt: bazowy (J.A.R.V.I.S. / własny agenta), skład zespołu z zasadami
+  // delegowania, sekcja dostępu do interfejsu — sekcje i ich uzasadnienia
+  // w runtime/prompt.ts.
+  const basePrompt = basePromptFor(agent.slug, agentSpecific);
 
   // Etap 3 (A10): stała część promptu osobno, data i godzina osobno, ZA nią.
   // Godzina zmienia się co minutę — doklejona do całości unieważniała cache
@@ -217,7 +208,6 @@ export async function prepareRun(args: AgentLoopInput): Promise<PreparedRun> {
       user_id: userId,
       agent_id: agent.id,
       parent_run_id: parentRunId,
-      variant_id: variant?.id ?? null,
       status: "running",
       input: { text: input, history_len: history.length },
       started_at: new Date(startedAt).toISOString(),

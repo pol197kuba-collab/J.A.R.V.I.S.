@@ -247,12 +247,7 @@ describe("klasa ryzyka narzędzi", () => {
   });
 
   it("akcje z skutkiem poza bazą albo nieodwracalne są external", () => {
-    for (const name of [
-      "start_dev_session",
-      "delete_note",
-      "delete_task",
-      "cancel_standing_order",
-    ]) {
+    for (const name of ["delete_note", "delete_task", "cancel_standing_order"]) {
       expect(toolRisk(getToolByName(name)!, {}), name).toBe("external");
     }
   });
@@ -272,15 +267,6 @@ describe("klasa ryzyka narzędzi", () => {
     }
   });
 
-  it("run_local_action: zapis pliku jest external, odczyt i lista to read", () => {
-    const local = getToolByName("run_local_action")!;
-    expect(toolRisk(local, { action: "write_text_file" })).toBe("external");
-    expect(toolRisk(local, { action: "read_text_file" })).toBe("read");
-    expect(toolRisk(local, { action: "list_dir" })).toBe("read");
-    // Nieznana akcja: ostrożnie, jak zapis.
-    expect(toolRisk(local, { action: "rm" })).toBe("external");
-  });
-
   it("obcą treść wnoszą dokładnie narzędzia z listy planu", () => {
     const untrusted = ALL_TOOLS.filter((t) => bringsUntrustedContent(t, {})).map(
       (t) => t.declaration.name,
@@ -294,10 +280,6 @@ describe("klasa ryzyka narzędzi", () => {
         "web_search",
       ].sort(),
     );
-    const local = getToolByName("run_local_action")!;
-    expect(bringsUntrustedContent(local, { action: "read_text_file" })).toBe(true);
-    expect(bringsUntrustedContent(local, { action: "list_dir" })).toBe(true);
-    expect(bringsUntrustedContent(local, { action: "write_text_file" })).toBe(false);
   });
 });
 

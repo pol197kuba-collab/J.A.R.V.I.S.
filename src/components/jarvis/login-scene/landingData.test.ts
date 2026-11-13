@@ -26,7 +26,6 @@ describe("landing data", () => {
     const m = landingModules().map((x) => x.title);
     expect(m).toEqual([
       "Dashboard",
-      "Feed",
       "Mózg",
       "Agent Town",
       "Wydatki",

@@ -7,8 +7,8 @@ import { tryParseJson, fallbackFor, JARVIS_ACTIONS, type JarvisAction } from "./
 // pinned so a "cleanup" of the parser can't silently drop a tolerance.
 describe("tryParseJson", () => {
   it("parses the canonical shape", () => {
-    expect(tryParseJson('{"action":"open_fuel","speech":"Ładuję."}')).toEqual({
-      action: "open_fuel",
+    expect(tryParseJson('{"action":"open_fuel_prices","speech":"Ładuję."}')).toEqual({
+      action: "open_fuel_prices",
       speech: "Ładuję.",
     });
   });
@@ -72,18 +72,6 @@ describe("fallbackFor", () => {
 
   it("greeting → spoken greeting with no UI action", () => {
     const r = fallbackFor("greeting");
-    expect(r.action).toBe("none");
-    expect(r.speech.length).toBeGreaterThan(0);
-  });
-
-  it("module + known hint → canned module line", () => {
-    const r = fallbackFor("module", "fuel");
-    expect(r.action).toBe("none");
-    expect(r.speech.length).toBeGreaterThan(0);
-  });
-
-  it("module + unknown hint falls through to generic", () => {
-    const r = fallbackFor("module", "nonexistent-module");
     expect(r.action).toBe("none");
     expect(r.speech.length).toBeGreaterThan(0);
   });

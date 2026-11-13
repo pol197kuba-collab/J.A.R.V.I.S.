@@ -142,8 +142,7 @@ const logFailure = (context: LogContext, message: string, meta: Json) =>
  * przez Lovable i ten klucz jest poza zasięgiem właściciela, więc drugim
  * wyborem jest klient bieżącego użytkownika: migracja
  * 20260920140000_fuel_grid_authenticated_writes.sql daje zalogowanym prawo
- * zapisu do trzech tabel cache. Ten sam wybór co w local-worker/worker.py,
- * który celowo loguje się kluczem anon zamiast service role.
+ * zapisu do trzech tabel cache.
  *
  * Zwraca też `viaServiceRole`, bo to rozróżnienie decyduje, czy operacja
  * ciężka (pełna archiwizacja) ma sens z poziomu przeglądarki.

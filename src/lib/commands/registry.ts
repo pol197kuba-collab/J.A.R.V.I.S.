@@ -3,27 +3,22 @@
 // hand-duplicated across four places (client regex list, UI_ACTIONS enum,
 // the user-facing Command Directory panel, and the server's Polish
 // confirmation lines) and drifted repeatedly — see PRs #43/#44 and the
-// open_documents/open_schema gap. Add a new command here ONCE; every
+// open_documents gap. Add a new command here ONCE; every
 // consumer (VoiceCommandContext, uiActions.ts, commandDirectory.ts,
 // runtime.server.ts) derives from this array.
 //
 // `id` doubles as the JarvisAction/UiAction value used everywhere (regex
 // match, Gemini's structured "action" field, the perform_ui_action tool).
-import type { SubSystemId } from "@/data/subSystems";
 
 export type CommandCategory = "Navigation" | "Interface" | "System";
 
 /**
  * How `fire()` in VoiceCommandContext executes the command:
  * - "route": plain navigation to a static path.
- * - "module": navigation to /sub-systems with a pending module handoff.
  * - "special": bespoke side effect (menu toggle, vision scan, reboot, ...),
  *   handled by its own switch case — not data-driven, since each one differs.
  */
-export type CommandKind =
-  | { type: "route"; path: string }
-  | { type: "module"; module: SubSystemId }
-  | { type: "special" };
+export type CommandKind = { type: "route"; path: string } | { type: "special" };
 
 export type CommandDef = {
   id: string;
@@ -99,10 +94,8 @@ export const COMMAND_REGISTRY = [
     description:
       "Opens the Market Grid: quotes for stocks, crypto, commodities and FX, news scored per instrument, a technical outlook with its own accuracy scoreboard, and forecasts drawn past today on the chart.",
   },
-  // MUSI stać przed `open_fuel`: VoiceCommandContext bierze PIERWSZE
-  // dopasowanie z tablicy, a "open fuel prices" pasuje też do tamtego
-  // wzorca (`open\s+fuel`). Kolejność rozstrzyga to na korzyść cennika —
-  // kto mówi „fuel prices", chce wykresów, nie ramki z sub-systemem.
+  // „monitor paliwa” / „open fuel” prowadziły do ramki w /sub-systems
+  // (usuniętej w etapie 8) — teraz do tego samego modułu cen paliw.
   {
     id: "open_fuel_prices",
     category: "Navigation",
@@ -111,7 +104,7 @@ export const COMMAND_REGISTRY = [
       // `orlen(?:a|u|em|ie)?` — polska odmiana: "ceny Orlenu", "cennik
       // Orlenu", "co z Orlenem". Samo `orlen\b` nie złapałoby żadnej z nich,
       // bo granica słowa wypada dopiero za końcówką.
-      /\b(fuel\s+prices|wholesale\s+fuel|ceny\s+paliw|ceny\s+hurtowe|hurtowe\s+ceny|cennik\s+hurtowy|orlen(?:a|u|em|ie)?)\b/i,
+      /\b(fuel\s+prices|wholesale\s+fuel|open\s+fuel|launch\s+monitor|jarvis\s+fuel|otwórz\s+paliwo|otworz\s+paliwo|monitor\s+paliwa|ceny\s+paliw|ceny\s+hurtowe|hurtowe\s+ceny|cennik\s+hurtowy|orlen(?:a|u|em|ie)?)\b/i,
     confirmation: "Otwieram monitoring hurtowych cen paliw, Panie Sławiński.",
     label: "Open Fuel Prices",
     phrases: [
@@ -122,53 +115,6 @@ export const COMMAND_REGISTRY = [
     ],
     description:
       "Opens the Orlen wholesale fuel price monitor: price charts for five fuels, Brent and USD/PLN context, a short-term forecast and market news.",
-  },
-  {
-    id: "open_fuel",
-    category: "Navigation",
-    kind: { type: "module", module: "fuel-monitor" },
-    pattern:
-      /\b(open\s+fuel|launch\s+monitor|jarvis\s+fuel|otwórz\s+paliwo|otworz\s+paliwo|monitor\s+paliwa)\b/i,
-    confirmation: "Ładuję Fuel Monitor Matrix, Panie Sławiński.",
-    label: "Open Fuel Monitor",
-    phrases: [
-      "Jarvis open fuel",
-      "Launch fuel monitor",
-      "Jarvis, otwórz monitor paliwa",
-      "Jarvis, pokaż paliwo",
-    ],
-    description: "Launches the Fuel Monitor Matrix sub-system inside the secure module frame.",
-  },
-  {
-    id: "open_calculator",
-    category: "Navigation",
-    kind: { type: "module", module: "rto-calculator" },
-    pattern:
-      /\b(open\s+calculator|launch\s+rto|jarvis\s+office|otwórz\s+kalkulator|otworz\s+kalkulator|kalkulator\s+rto)\b/i,
-    confirmation: "Uruchamiam kalkulator RTO.",
-    label: "Open RTO Calculator",
-    phrases: [
-      "Jarvis open calculator",
-      "Launch RTO",
-      "Jarvis, otwórz kalkulator",
-      "Jarvis, kalkulator RTO",
-    ],
-    description: "Loads the RTO calculation sub-system for road transport operations.",
-  },
-  {
-    id: "open_jobfit",
-    category: "Navigation",
-    kind: { type: "module", module: "jobfit-ai" },
-    pattern: /\b(open\s+jobfit|launch\s+ai|jarvis\s+job|otwórz\s+jobfit|otworz\s+jobfit)\b/i,
-    confirmation: "Uruchamiam optymalizator CV.",
-    label: "Open JobFit AI",
-    phrases: [
-      "Jarvis open jobfit",
-      "Launch AI resume",
-      "Jarvis, otwórz JobFit",
-      "Jarvis, uruchom optymalizator CV",
-    ],
-    description: "Initializes the JobFit AI resume optimizer sub-system.",
   },
   {
     id: "open_telemetry",
@@ -188,17 +134,6 @@ export const COMMAND_REGISTRY = [
     ],
     description:
       "Opens the Situation Room — commute to work: live traffic, incidents, detours and the route map.",
-  },
-  {
-    id: "open_subsystems",
-    category: "Navigation",
-    kind: { type: "route", path: "/sub-systems" },
-    pattern:
-      /\b(open\s+sub[-\s]?systems|otwórz\s+podsystemy|otworz\s+podsystemy|pokaż\s+podsystemy|pokaz\s+podsystemy)\b/i,
-    confirmation: "Otwieram podsystemy.",
-    label: "Open Sub-Systems",
-    phrases: ["Open sub-systems", "Jarvis, otwórz podsystemy", "Jarvis, pokaż podsystemy"],
-    description: "Opens the full sub-systems grid (Fuel Monitor, RTO, JobFit and more).",
   },
   {
     id: "open_agents",
@@ -260,17 +195,6 @@ export const COMMAND_REGISTRY = [
     description: "Opens the Documents module (file archive).",
   },
   {
-    id: "open_schema",
-    category: "Navigation",
-    kind: { type: "route", path: "/schema" },
-    pattern:
-      /\b(open\s+schema|schema\s+explorer|otwórz\s+schemat|otworz\s+schemat|pokaż\s+schemat|pokaz\s+schemat|eksplorator\s+schematu)\b/i,
-    confirmation: "Otwieram eksplorator schematu.",
-    label: "Open Schema",
-    phrases: ["Open schema", "Schema explorer", "Jarvis, otwórz schemat"],
-    description: "Opens the Schema Explorer.",
-  },
-  {
     id: "open_vision",
     category: "Navigation",
     kind: { type: "route", path: "/vision" },
@@ -282,23 +206,6 @@ export const COMMAND_REGISTRY = [
     label: "Open Vision",
     phrases: ["Open vision module", "Jarvis, otwórz moduł wizji", "Jarvis, pokaż wizję"],
     description: "Opens the Vision module without starting a scan.",
-  },
-  {
-    id: "open_commands",
-    category: "Navigation",
-    kind: { type: "route", path: "/commands" },
-    pattern:
-      /\b(open\s+commands?|command\s+directory|command\s+playground|otwórz\s+komendy|otworz\s+komendy|pokaż\s+komendy|pokaz\s+komendy|lista\s+komend|katalog\s+komend)\b/i,
-    confirmation: "Otwieram katalog komend.",
-    label: "Open Commands",
-    phrases: [
-      "Open commands",
-      "Command directory",
-      "Jarvis, otwórz komendy",
-      "Jarvis, pokaż listę komend",
-    ],
-    description:
-      "Opens the Commands module — the full command directory plus a live test playground.",
   },
   {
     id: "open_menu",
