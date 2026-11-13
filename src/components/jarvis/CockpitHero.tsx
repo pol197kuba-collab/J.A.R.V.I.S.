@@ -1,12 +1,20 @@
 // Kokpit startowy — the dynamic hero that replaced the static "SYSTEM
 // OPERATIONAL / WELCOME" banner. Forward-looking on purpose: what's waiting
 // for you right now (overdue/upcoming tasks, files ready to download,
-// unread notifications), not what already happened — that's the Living
-// Feed's job (/feed) and System Pulse's job (stats below this hero).
+// unread notifications), not what already happened — that's System Logs'
+// job (/system-logs) and System Pulse's job (stats below this hero).
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { AlertTriangle, Clock, FileDown, Bell, MessageSquare, Rss, StickyNote } from "lucide-react";
+import {
+  AlertTriangle,
+  Clock,
+  FileDown,
+  Bell,
+  MessageSquare,
+  StickyNote,
+  Terminal,
+} from "lucide-react";
 import { getCockpit, type CockpitTask } from "@/lib/dashboard/dashboard.functions";
 import { useHudNavigate } from "./TransitionContext";
 import { cn } from "@/lib/utils";
@@ -53,7 +61,7 @@ export function CockpitHero() {
 
   const actions = [
     { label: "Otwórz czat", icon: MessageSquare, to: "/jarvis" },
-    { label: "Feed", icon: Rss, to: "/feed" },
+    { label: "Logi", icon: Terminal, to: "/system-logs" },
     { label: "Notatki", icon: StickyNote, to: "/notes" },
     {
       label: cockpit ? `Powiadomienia (${cockpit.unreadNotifications})` : "Powiadomienia",

@@ -10,7 +10,6 @@ import {
 } from "react";
 import { useHudNavigate } from "./TransitionContext";
 import { usePhase } from "./PhaseContext";
-import type { SubSystemId } from "@/data/subSystems";
 import { useServerFn } from "@tanstack/react-start";
 import { speak, speakCancel, onSpeaking, isSpeakingNow } from "@/lib/audio/speak";
 import { askJarvis, hasGeminiKey, type JarvisAction } from "@/lib/ai/jarvisBrain";
@@ -30,8 +29,6 @@ type Ctx = {
   inConversation: boolean;
   lastTranscript: string;
   setEnabled: (v: boolean) => void;
-  /** Module-init handoff for /sub-systems route */
-  consumePendingModule: () => SubSystemId | null;
   /** Route arbitrary text (chat input) through the same Gemini→action pipeline. */
   routeText: (text: string) => Promise<void>;
   /**
@@ -50,7 +47,6 @@ const VoiceCtx = createContext<Ctx>({
   inConversation: false,
   lastTranscript: "",
   setEnabled: () => {},
-  consumePendingModule: () => null,
   routeText: async () => {},
   performAction: () => {},
 });
@@ -146,7 +142,6 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
   const [enabled, setEnabled] = useState(false);
   const [listening, setListening] = useState(false);
   const [lastTranscript, setLastTranscript] = useState("");
-  const pendingRef = useRef<SubSystemId | null>(null);
   const recRef = useRef<AnySpeechRecognition | null>(null);
   // Per-action debounce so "open menu" → "close menu" can fire back-to-back.
   const lastFireMapRef = useRef<Map<string, number>>(new Map());
@@ -184,12 +179,6 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       // The window may have been extended since this timer was armed.
       if (Date.now() >= conversationUntilRef.current) setInConversation(false);
     }, CONVERSATION_WINDOW_MS + 50);
-  }, []);
-
-  const consumePendingModule = useCallback(() => {
-    const v = pendingRef.current;
-    pendingRef.current = null;
-    return v;
   }, []);
 
   // The throttle-queue timer (set inside `route`) outlives any single mic
@@ -282,18 +271,11 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Data-driven cases: plain route navigation, or a /sub-systems
-      // navigation with a pending module handoff. Every other command has
+      // Data-driven case: plain route navigation. Every other command has
       // bespoke side effects and is handled explicitly below.
       if (cmd.kind.type === "route") {
         say(cmd.confirmation);
         go(cmd.kind.path);
-        return;
-      }
-      if (cmd.kind.type === "module") {
-        pendingRef.current = cmd.kind.module;
-        say(cmd.confirmation);
-        go("/sub-systems");
         return;
       }
 
@@ -346,7 +328,7 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
           break;
         }
         default:
-          // Every "route"/"module" kind returned above; every remaining
+          // Every "route" kind returned above; every remaining
           // "special" id must have an explicit case here. Adding a new
           // "special" command without one is exactly the silent-no-op bug
           // that shipped for open_documents/open_schema — surface it loudly.
@@ -624,7 +606,6 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       inConversation,
       lastTranscript,
       setEnabled,
-      consumePendingModule,
       routeText,
       performAction,
     }),
@@ -635,7 +616,6 @@ export function VoiceCommandProvider({ children }: { children: ReactNode }) {
       inConversation,
       lastTranscript,
       setEnabled,
-      consumePendingModule,
       routeText,
       performAction,
     ],

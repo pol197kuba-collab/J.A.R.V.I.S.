@@ -71,7 +71,6 @@ export const MODULE_AGENT: Readonly<Record<string, string>> = {
   "/mozg": "insight",
   "/situation-room": "shield",
   "/system-logs": "shield",
-  "/feed": "herald",
 };
 
 /** What the tunnel board shows for a route: "MODULE // NN", the title, one line. */

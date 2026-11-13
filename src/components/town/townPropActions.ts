@@ -201,7 +201,7 @@ export function propContent(id: string, d: PropDeps): PropContent {
         options: [
           { label: "Zadania", to: "/tasks" },
           { label: "Notatki", to: "/notes" },
-          { label: "Feed", to: "/feed" },
+          { label: "Logi", to: "/system-logs" },
           { label: "Agent Hub", to: "/agent-hub" },
         ].map((l) => ({ label: l.label, run: () => d.navigate(l.to) })),
       };

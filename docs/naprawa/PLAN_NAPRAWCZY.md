@@ -39,7 +39,7 @@
       logowania przez OAuth (`StarkLogin.tsx:115`): nowe konto Google też jest
       rejestracją.
 - [x] **W2. Którą ścieżką chodzi czat.** (sprawdzone przez właściciela 2026-11-11) SQL: `select chat_routing from
-    user_settings;` — wynik wpisać tutaj: `server` (1 wiersz). Potrzebne w etapie 5.
+  user_settings;` — wynik wpisać tutaj: `server` (1 wiersz). Potrzebne w etapie 5.
 - [x] **W3. Klucz service role na hostingu.** (potwierdzone przez właściciela 2026-11-11: ustawiony) Potwierdzić, że
       `JARVIS_SUPABASE_SERVICE_ROLE_KEY` jest ustawiony w sekretach Lovable
       (używa go moduł paliw). Bez tego etap 5 nie ruszy.
@@ -199,7 +199,7 @@ Dopiero po etapie 2, żeby efekt było widać w liczbach.
       właściciela 2026-11-11), więc punktem odniesienia będzie okres przed
       publikacją etapu 3. Zapytanie do uruchomienia w Supabase:
       `select date_trunc('day', created_at) d, purpose, count(*), avg(tokens_input)::int,
-    sum(cache_read) from llm_usage where module = 'agents' group by 1, 2 order by 1, 2;`
+  sum(cache_read) from llm_usage where module = 'agents' group by 1, 2 order by 1, 2;`
 - [x] **Cache promptu Anthropic**: `cache_control` na bloku systemowym
       i definicjach narzędzi. Sprawdzić w aktualnej dokumentacji minimalną
       długość prefiksu i ceny zapisu do cache.
@@ -277,7 +277,7 @@ Wymaga W2 i W3.
       `getOwnerSecrets(userId)` w pliku `.server.ts`). Zapis kluczy
       z Ustawień — tą samą drogą. Skrypty w `scripts/` przechodzą na service
       role tam, gdzie czytają klucze. Potem migracja: `REVOKE SELECT, INSERT,
-    UPDATE, DELETE ON user_secrets FROM authenticated`.
+  UPDATE, DELETE ON user_secrets FROM authenticated`.
       Kolejność wdrożenia: najpierw kod (PR 5a), po potwierdzeniu działania
       migracja (PR 5b). - [x] Kod (PR 5a): helpery `readOwnerSecrets` / `writeOwnerSecrets` /
       `clearOwnerSecrets` w `src/lib/secrets/ownerSecrets.server.ts`; żaden

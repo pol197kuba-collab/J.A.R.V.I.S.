@@ -58,7 +58,7 @@ type ByArgs<T> = T | ((args: Record<string, unknown>) => T);
 export type Tool = {
   declaration: ToolDeclaration;
   execute: (args: Record<string, unknown>, ctx: ToolContext) => Promise<ToolResult>;
-  /** Klasa ryzyka; funkcja, gdy zależy od argumentów (run_local_action). */
+  /** Klasa ryzyka; funkcja, gdy zależy od argumentów wywołania. */
   risk: ByArgs<ToolRisk>;
   /**
    * Czy wynik niesie treść spoza właściciela (strony WWW, wgrane dokumenty,

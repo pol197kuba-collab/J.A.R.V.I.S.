@@ -26,16 +26,10 @@ import {
 } from "./tools/documents.server";
 import { generateDocumentTool, openDocumentTool, queueDocumentJob } from "./tools/forge.server";
 import { checkDelegation, runStats, scanErrors } from "./tools/shield.server";
-import { runLocalAction } from "./tools/local.server";
 import { fuelOutlookTool, marketOutlookTool } from "./tools/markets.server";
 import { recall, remember } from "./tools/memory.server";
 import { deleteNote, listNotesTool, saveNote } from "./tools/notes.server";
-import {
-  checkDevSession,
-  createProject,
-  listProjects,
-  startDevSession,
-} from "./tools/projects.server";
+import { createProject, listProjects } from "./tools/projects.server";
 import { type Tool } from "./tools/shared.server";
 import {
   cancelStandingOrderTool,
@@ -86,12 +80,9 @@ export const ALL_TOOLS: Tool[] = [
   deleteTask,
   listProjects,
   createProject,
-  startDevSession,
-  checkDevSession,
   scanErrors,
   runStats,
   checkDelegation,
-  runLocalAction,
   listDocumentsTool,
   searchDocumentsTool,
   readDocumentTool,

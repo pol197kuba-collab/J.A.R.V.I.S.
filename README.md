@@ -70,7 +70,7 @@ sekretów job kończy się na czerwono (`::error::`), a nie po cichu bez pracy.
 | Nazwa               | Używają                                      | Bez niego                                                                                                   |
 | ------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `GEMINI_API_KEY`    | Morning Brief, Market Grid/Live, Orlen, Mózg | briefing z samych liczb, newsy z oceną heurystyczną, prognoza tylko sygnałowa; Mózg bierze klucz z Ustawień |
-| `ANTHROPIC_API_KEY` | Morning Brief, Market Grid/Live, Claude Dev  | jak wyżej (gdy brak też Gemini); Claude Dev Wing nie ruszy                                                  |
+| `ANTHROPIC_API_KEY` | Morning Brief, Market Grid/Live              | jak wyżej (gdy brak też Gemini)                                                                             |
 | `TOMTOM_API_KEY`    | Commute Watch                                | zapas — pierwszeństwo ma klucz z Ustawień; bez obu job jest **czerwony** (alert o korku nie może działać)   |
 
 `JARVIS_EMAIL`, `JARVIS_PASSWORD` i `SUPABASE_PUBLISHABLE_KEY` nie są już
@@ -97,8 +97,6 @@ z niego baza uruchamia workflowy), `vapid_public_key` / `vapid_private_key` /
 | `orlen-prices.yml`  | cennik hurtowy Orlenu, Brent, USD/PLN (`scripts/orlen-daily.ts`)       | cron GitHuba (pn–pt 07:30 i 15:30 CEST)                            |
 | `brain-layout.yml`  | pełny układ Mózgu 3D (`scripts/brain-layout.ts`)                       | cron GitHuba (03:40 CEST)                                          |
 | `document-jobs.yml` | dokończenie dokumentów i grafik w tle (`scripts/document-jobs.ts`)     | pg_cron `document-jobs-dispatch`, tylko gdy coś czeka              |
-| `brain-demo.yml`    | wgranie / usunięcie danych demo Mózgu 3D                               | ręcznie                                                            |
-| `claude-dev.yml`    | Claude Code na issue / PR                                              | komentarz `@claude`, przypisanie, review                           |
 
 ## Zadania pg_cron (w bazie)
 
@@ -122,5 +120,4 @@ aplikacji — każda musi działać ze starym i z nowym kodem.
 - `src/routes/` — moduły (trasy TanStack Router).
 - `src/components/` — UI: `jarvis/` (HUD i moduły), `town/` (Agent Town), `brain/` (Mózg 3D), `ui/` (shadcn).
 - `supabase/migrations/` — schemat bazy; `scripts/` — joby GitHub Actions.
-- `local-worker/` — opcjonalny most do lokalnego dysku (własny README).
 - `docs/` — prototypy scen 3D, plan naprawczy.

@@ -10,8 +10,8 @@ src/lib/agents/producerFonts.server.ts
 
 # Pliki PRZEPISYWANE PRZEZ NARZĘDZIA, nie pisane ręcznie.
 #
-# Powód jest konkretny i sprawdzony: `vite build` (plugin Lovable) zwija
-# pliki tras MCP przy KAŻDYM przebiegu, a edycje w Lovable regenerują
+# Powód jest konkretny i sprawdzony: `vite build` (plugin MCP Lovable, usunięty
+# w etapie 8) zwijał pliki tras, a edycje w Lovable regenerują
 # types.ts i previewAuthStorage.ts we własnym formatowaniu. Efekt — każdy
 # build i każda edycja w edytorze zostawiały repo w stanie, który lint
 # odrzucał: jeden commit z Lovable dał 1327 błędów formatowania i wywrócił
@@ -22,10 +22,6 @@ src/lib/agents/producerFonts.server.ts
 # Ta sama zasada, co dla routeTree.gen.ts wyżej.
 src/integrations/supabase/types.ts
 src/integrations/supabase/previewAuthStorage.ts
-src/routes/mcp.ts
-src/routes/**/list-tools.ts
-src/routes/**/invoke-tool/*.ts
-src/routes/**/oauth-protected-resource.ts
 
 # Prototyp sceny 3D (docs/jarvis-3d-v2/) — materiał referencyjny, trzymany
 # bajt w bajt tak, jak dostarczony; nie jest kodem aplikacji.

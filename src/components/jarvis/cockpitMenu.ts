@@ -13,10 +13,7 @@ const EXTRA_BLURBS: Readonly<Record<string, string>> = {
   "J.A.R.V.I.S.": "Macierz agentów na żywo",
   "Agent Town": "Pixel-artowe biuro na żywych danych",
   "Agent Hub": "Rejestr i ustawienia agentów",
-  Commands: "Komendy głosowe i tekstowe",
-  "Sub-Systems": "Stan podsystemów",
   "System Logs": "Dzienniki i błędy",
-  Schema: "Mapa bazy danych",
   Settings: "Klucze API i preferencje",
 };
 

@@ -67,7 +67,6 @@ export const landingIntroAgents = (): IntroAgent[] =>
 /** Prototype descriptions of the modules shown in the tunnel, keyed by modules.ts title. */
 const MODULE_BLURBS: Record<string, string> = {
   Dashboard: "Poranny briefing, budżet i zadania",
-  Feed: "Dziennik tego, co zrobił zespół",
   Mózg: "Mapa wiedzy 3D i mapa bazy danych",
   "Agent Town": "Pixel-artowe biuro na żywych danych",
   Wydatki: "Paragony zeskanowane w Vision",
@@ -90,8 +89,8 @@ export interface LandingModule {
 
 /**
  * Modules in the tunnel: the real app modules (modules.ts order) that have an
- * approved description. Modules without one (Agent Hub, Commands, Sub-Systems,
- * System Logs, Schema, Settings, J.A.R.V.I.S. itself) are not presented.
+ * approved description. Modules without one (Agent Hub, System Logs, Settings,
+ * J.A.R.V.I.S. itself) are not presented.
  */
 export function landingModules(): LandingModule[] {
   return MODULE_ITEMS.filter((m) => MODULE_BLURBS[m.title]).map((m) => ({

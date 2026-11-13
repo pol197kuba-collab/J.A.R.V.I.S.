@@ -4,15 +4,11 @@ import {
   Bot,
   Terminal,
   Settings as SettingsIcon,
-  Boxes,
   Radar,
   Eye,
   ListChecks,
-  Database,
   FileText,
-  Command,
   StickyNote,
-  Rss,
   CandlestickChart,
   Fuel,
   Castle,
@@ -63,7 +59,6 @@ export const MODULE_GROUPS: readonly ModuleGroup[] = [
     items: [
       { title: "J.A.R.V.I.S.", shortTitle: "JARVIS", url: "/jarvis", icon: Hexagon },
       { title: "Dashboard", shortTitle: "Dashboard", url: "/", icon: LayoutDashboard },
-      { title: "Feed", shortTitle: "Feed", url: "/feed", icon: Rss, keywords: "aktualności news" },
       {
         title: "Mózg",
         shortTitle: "Mózg",
@@ -150,7 +145,6 @@ export const MODULE_GROUPS: readonly ModuleGroup[] = [
         icon: Radar,
         keywords: "dojazd praca trasa mapa korki objazd utrudnienia ruch drogowy",
       },
-      { title: "Commands", shortTitle: "Commands", url: "/commands", icon: Command },
     ],
   },
   {
@@ -158,20 +152,12 @@ export const MODULE_GROUPS: readonly ModuleGroup[] = [
     label: "System",
     icon: Cpu,
     items: [
-      { title: "Sub-Systems", shortTitle: "Systems", url: "/sub-systems", icon: Boxes },
       {
         title: "System Logs",
         shortTitle: "Logs",
         url: "/system-logs",
         icon: Terminal,
         keywords: "logi błędy",
-      },
-      {
-        title: "Schema",
-        shortTitle: "Schema",
-        url: "/schema",
-        icon: Database,
-        keywords: "baza db",
       },
       {
         title: "Settings",

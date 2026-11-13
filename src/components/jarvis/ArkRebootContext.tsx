@@ -21,11 +21,6 @@ const REBOOT_SEQUENCE: RebootStep[] = [
   { path: "/", module: "DASHBOARD", log: "[DASHBOARD: CORE REFRESHED // 100%]" },
   { path: "/agent-hub", module: "AGENT HUB", log: "[AGENT_HUB: RECONNECTING NEURAL AGENTS...]" },
   {
-    path: "/sub-systems",
-    module: "SUB-SYSTEMS",
-    log: "[SUB_SYSTEMS: COMPILING LOGISTICS UTILITIES...]",
-  },
-  {
     path: "/situation-room",
     module: "SITUATION ROOM",
     log: "[SITUATION_ROOM: REFRESHING TRAFFIC & ROUTES...]",

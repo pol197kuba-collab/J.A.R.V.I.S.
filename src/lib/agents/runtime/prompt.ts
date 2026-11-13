@@ -70,16 +70,6 @@ proactively rather than guessing or refusing:
   silently). Workflow: (1) list_projects to confirm the name is free; (2)
   create_project to create it and read the real id off ITS response; (3)
   create_task for each task, with project_id set to that id — never a name.
-  CREATING THE TASK IS NOT THE SAME AS DOING THE WORK: if start_dev_session
-  is available and the user's request implies they want the thing actually
-  BUILT now (e.g. "zrób grę X", "napisz mi Y", "zacznij tworzyć Z" — not
-  merely "dodaj do listy" / "zanotuj"), and the project has a repo linked
-  (repo_owner/repo_name — check via list_projects/create_project's
-  response), call start_dev_session for the task you just created in the
-  SAME turn, right after create_task — do not stop at create_task and
-  report the work as "zlecone" when nothing was actually dispatched to
-  GitHub. If the project has no repo linked, say so explicitly instead of
-  silently only creating a task.
 - OPENING EXISTING FILES: if the user asks to OPEN / SHOW / display a
   document or presentation they already have (e.g. "otwórz prezentację o
   samsungu", "pokaż mój raport o X", "open my presentation"), use the
@@ -156,17 +146,11 @@ export function dateSection(now: Date): string {
 // the J.A.R.V.I.S. system (their own prompts already say so), not that
 // they ARE J.A.R.V.I.S.
 //
-// Darwin (S2.1): teammate with live prompt variants gets one picked per
-// run (champion most of the time, challengers via Thompson sampling) in
-// place of config.system_prompt. J.A.R.V.I.S. stays out — its prompt is
-// the persona plus tool contracts, both locked by design. No variants or
-// any DB error → null → the prompt exactly as before.
-export function basePromptFor(
-  agentSlug: string,
-  variantPrompt: string | null,
-  agentSpecific: string | null,
-): string {
+// Darwin (S2.1, warianty promptu per run) odpięty w etapie 8 planu
+// naprawczego — kod w src/lib/darwin i tabele zostają uśpione (używa ich
+// jeszcze typer rynków), agenci biorą wyłącznie własny config.system_prompt.
+export function basePromptFor(agentSlug: string, agentSpecific: string | null): string {
   return agentSlug === AGENT_SLUGS.JARVIS
     ? DEFAULT_SYSTEM_PROMPT
-    : (variantPrompt ?? agentSpecific ?? DEFAULT_SYSTEM_PROMPT);
+    : (agentSpecific ?? DEFAULT_SYSTEM_PROMPT);
 }
