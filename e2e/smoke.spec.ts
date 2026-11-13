@@ -39,7 +39,9 @@ test("logowanie → czat → odpowiedź → notatka w /notes", async ({ page }) 
   // paleta modułów Ctrl+K.
   await page.keyboard.press("Control+k");
   await page.getByPlaceholder("Przejdź do modułu…").fill("Notatki");
-  await page.keyboard.press("Enter");
+  // Konkretna pozycja, nie pierwsza z listy — „Mózg” też pasuje do „notatki”
+  // (słowa kluczowe) i bywa wyżej.
+  await page.getByRole("option", { name: "Notatki", exact: true }).click();
   await expect(page).toHaveURL(/\/notes/, { timeout: 30_000 });
   await expect(page.getByText(NOTE_TITLE)).toBeVisible({ timeout: 30_000 });
 });
