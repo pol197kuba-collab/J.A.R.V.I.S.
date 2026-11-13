@@ -27,7 +27,7 @@ describe("landing data", () => {
     expect(m).toEqual([
       "Dashboard",
       "Mózg",
-      "Agent Town",
+      "Situation Room",
       "Wydatki",
       "Paliwa",
       "Rynki",
@@ -35,7 +35,7 @@ describe("landing data", () => {
       "Zadania",
       "Notatki",
       "Dokumenty",
-      "Situation Room",
+      "Agent Town",
     ]);
     expect(landingModules().every((x) => x.sub.length > 5)).toBe(true);
   });
