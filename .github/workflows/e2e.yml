@@ -58,6 +58,15 @@ jobs:
           echo "JARVIS_SUPABASE_PUBLISHABLE_KEY=${PUBLISHABLE_KEY:-$ANON_KEY}" >> "$GITHUB_ENV"
           echo "JARVIS_SUPABASE_SERVICE_ROLE_KEY=${SECRET_KEY:-$SERVICE_ROLE_KEY}" >> "$GITHUB_ENV"
 
+      # Baza produkcyjna pozwala założyć konto tylko właścicielowi (trigger
+      # enforce_owner_only_signup, W1). W tej JEDNORAZOWEJ lokalnej bazie
+      # wyłączamy go, żeby założyć konto testowe — produkcja bez zmian.
+      - name: Konto testowe dozwolone w lokalnej bazie
+        run: |
+          eval "$(supabase status -o env)"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 \
+            -c "ALTER TABLE auth.users DISABLE TRIGGER enforce_owner_only_signup"
+
       - name: Przeglądarka
         run: npx playwright install --with-deps chromium
 
