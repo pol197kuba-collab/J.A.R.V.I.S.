@@ -64,6 +64,13 @@ jobs:
       - name: Test dymny
         run: npm run test:e2e -- --trace off
 
+      - name: Logi bazy i logowania (przy błędzie)
+        if: failure()
+        run: |
+          for c in $(docker ps --format '{{.Names}}' | grep -E 'supabase_(auth|db)_'); do
+            echo "::group::$c"; docker logs --tail 80 "$c" 2>&1; echo "::endgroup::"
+          done
+
       - name: Zrzuty z nieudanego testu
         if: failure()
         uses: actions/upload-artifact@v4
