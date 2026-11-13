@@ -44,3 +44,24 @@ export async function insertNoteOutsideApp(title: string, body: string): Promise
   });
   if (!res.ok) throw new Error(`Zapis notatki spoza aplikacji: ${await res.text()}`);
 }
+
+/** Czy narzędzie jest włączone agentowi konta testowego (wiersz w agent_tools). */
+export async function isToolEnabledFor(agentSlug: string, toolSlug: string): Promise<boolean> {
+  const { url, headers } = localDb();
+  const ownerId = await findTestUserId();
+  if (!ownerId) throw new Error("Brak konta testowego.");
+  const get = async <T>(path: string): Promise<T> => {
+    const res = await fetch(`${url}/rest/v1/${path}`, { headers });
+    if (!res.ok) throw new Error(`${path}: ${await res.text()}`);
+    return (await res.json()) as T;
+  };
+  const [agent] = await get<Array<{ id: string }>>(
+    `agents?select=id&owner_id=eq.${ownerId}&slug=eq.${agentSlug}`,
+  );
+  const [tool] = await get<Array<{ id: string }>>(`tools?select=id&slug=eq.${toolSlug}`);
+  if (!agent || !tool) return false;
+  const rows = await get<Array<{ is_enabled: boolean }>>(
+    `agent_tools?select=is_enabled&agent_id=eq.${agent.id}&tool_id=eq.${tool.id}`,
+  );
+  return rows[0]?.is_enabled === true;
+}
