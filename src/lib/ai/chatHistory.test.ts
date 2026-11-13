@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { planChatImport, toConversationMessage, type StoredMessage } from "./chatHistory";
+import {
+  localizeTime,
+  planChatImport,
+  toConversationMessage,
+  type StoredMessage,
+} from "./chatHistory";
 
 const NOW = Date.parse("2026-10-16T12:00:00Z");
 
@@ -89,5 +94,35 @@ describe("toConversationMessage", () => {
     });
     expect(m.time).toMatch(/^\d{2}:\d{2}:\d{2}$/);
     expect(m.agentName).toBeUndefined();
+  });
+});
+
+describe("godzina wiadomości z historii — strefa telefonu, nie serwera", () => {
+  it("serwer oddaje chwilę (createdAt), godzinę liczy klient w swojej strefie", () => {
+    // 20:22 czasu polskiego (CET, UTC+1) = 19:22 UTC — tak zapisała baza.
+    const stored = {
+      id: "3",
+      role: "user",
+      content: "Zrób mi prezentację",
+      created_at: "2026-11-13T19:22:46Z",
+      metadata: null,
+    };
+    const m = toConversationMessage(stored);
+    expect(m.createdAt).toBe("2026-11-13T19:22:46Z");
+    expect(localizeTime(m, "Europe/Warsaw").time).toBe("20:22:46");
+    // Wcześniej serwer (UTC) wpisywał tu 19:22:46 — przesunięcie o godzinę.
+    expect(localizeTime(m, "UTC").time).toBe("19:22:46");
+  });
+
+  it("import z localStorage zostawia oryginalną godzinę", () => {
+    const m = toConversationMessage({
+      id: "4",
+      role: "jarvis",
+      content: "Witaj",
+      created_at: "2026-10-16T05:00:00Z",
+      metadata: { local_time: "09:00:02" },
+    });
+    expect(m.createdAt).toBeUndefined();
+    expect(localizeTime(m, "Europe/Warsaw").time).toBe("09:00:02");
   });
 });

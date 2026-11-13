@@ -95,7 +95,10 @@ export type ConversationMessage = {
   id: string;
   role: "user" | "jarvis";
   text: string;
+  /** "HH:MM:SS" do wyświetlenia — po stronie klienta poprawia ją `localizeTime`. */
   time: string;
+  /** Chwila zapisu (ISO). Brak dla importu z localStorage — tam liczy się `time`. */
+  createdAt?: string;
   agentName?: string;
 };
 
@@ -108,7 +111,26 @@ export function toConversationMessage(m: StoredMessage): ConversationMessage {
     id: m.id,
     role: m.role === "user" ? "user" : "jarvis",
     text: m.content,
+    // Serwer działa w UTC, więc godzina liczona TU byłaby przesunięta o
+    // 1–2 h względem telefonu (zgłoszenie 2026-11-13: 20:22 → 19:22).
+    // Zostaje jako zapas; właściwą godzinę ustawia klient (`localizeTime`).
     time: localTime ?? new Date(m.created_at).toTimeString().slice(0, 8),
+    ...(localTime ? {} : { createdAt: m.created_at }),
     ...(agentName ? { agentName } : {}),
   };
+}
+
+/** Godzina wiadomości w strefie urządzenia (albo podanej — w testach). */
+export function localizeTime(m: ConversationMessage, timeZone?: string): ConversationMessage {
+  if (!m.createdAt) return m;
+  const at = new Date(m.createdAt);
+  if (Number.isNaN(at.getTime())) return m;
+  const time = new Intl.DateTimeFormat("pl-PL", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    ...(timeZone ? { timeZone } : {}),
+  }).format(at);
+  return { ...m, time };
 }

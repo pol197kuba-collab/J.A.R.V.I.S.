@@ -6,6 +6,7 @@ import { lookup } from "node:dns/promises";
 import type { Json } from "@/integrations/supabase/types";
 import { callGemini } from "@/lib/ai/llm/gemini";
 import type { GeminiUsageMetadata } from "@/lib/ai/llm/usage";
+import { DEFAULT_GEMINI_MODEL } from "@/lib/agents/models";
 import { type Tool, toolLedger } from "./shared.server";
 
 // ---------------------------------------------------------------------------
@@ -17,6 +18,17 @@ import { type Tool, toolLedger } from "./shared.server";
 // in the same request, so we isolate it here: the outer agent loop keeps
 // function-calling, and this tool "delegates" the actual search to a grounded
 // Gemini turn. Returns a synthesised answer plus real Google source URLs.
+
+/**
+ * Model do wyszukiwania. Wyszukiwanie zawsze idzie do Gemini (Google Search
+ * grounding), więc model agenta nadaje się tylko, gdy sam jest modelem
+ * Gemini. Agent na Claude albo Groq (np. I.N.S.I.G.H.T. na claude-opus-5)
+ * wysyłał do Gemini nazwę cudzego modelu i każde wyszukiwanie kończyło się
+ * HTTP 404 (zgłoszenie 2026-11-13).
+ */
+export function groundingModel(agentModel: string): string {
+  return /^gemini-/i.test(agentModel.trim()) ? agentModel.trim() : DEFAULT_GEMINI_MODEL;
+}
 
 type GroundingChunk = {
   web?: { uri?: string; title?: string };
@@ -57,7 +69,7 @@ export const webSearch: Tool = {
     try {
       const res = await callGemini<WebSearchResponse>({
         apiKey: ctx.apiKey,
-        model: ctx.model,
+        model: groundingModel(ctx.model),
         body: {
           systemInstruction: {
             parts: [

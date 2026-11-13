@@ -16,7 +16,7 @@ import {
   type AgentSummary,
 } from "@/lib/agents/runtime.functions";
 import { setServerKeyLinked } from "./jarvisBrain";
-import { CHAT_HISTORY_LIMIT } from "./chatHistory";
+import { CHAT_HISTORY_LIMIT, localizeTime } from "./chatHistory";
 import { speak } from "@/lib/audio/speak";
 import { setAgentBusy, reportOutcome } from "./agentActivity";
 import { requestOpenDocument } from "@/lib/documents/openDocumentBus";
@@ -254,8 +254,10 @@ export function useAgentChatChannel(): AgentChatChannel {
         // Import się nie udał → lokalna kopia to jedyne miejsce, gdzie jest
         // stara historia. Nie nadpisujemy jej wątkiem z serwera.
         if (migrated && res.messages.length > 0) {
-          setMessages(res.messages);
-          saveHistory(res.messages);
+          // Godzina w strefie telefonu — serwer liczy w UTC.
+          const local = res.messages.map((m) => localizeTime(m));
+          setMessages(local);
+          saveHistory(local);
         }
       } catch {
         /* offline / błąd sieci — zostań przy lokalnym cache, nic nie psuj */
