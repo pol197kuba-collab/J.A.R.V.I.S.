@@ -4,6 +4,18 @@
 import { expect, test } from "@playwright/test";
 import { E2E_EMAIL, E2E_PASSWORD, MOCK_REPLY, NOTE_TITLE } from "./fixtures";
 
+// Przy błędzie: adres i widoczny tekst do logu CI (zrzut ekranu jest
+// w artefakcie, ale log czyta się szybciej).
+test.afterEach(async ({ page }, testInfo) => {
+  if (testInfo.status === testInfo.expectedStatus) return;
+  const text = await page
+    .locator("body")
+    .innerText()
+    .catch(() => "(brak tekstu)");
+  console.log(`[e2e] adres: ${page.url()}`);
+  console.log(`[e2e] widoczny tekst:\n${text.slice(0, 2000)}`);
+});
+
 test("logowanie → czat → odpowiedź → notatka w /notes", async ({ page }) => {
   // Klasyczne wejście (bez sceny 3D) — test sprawdza przepływ, nie animację.
   await page.goto("/?loginScene=0");
