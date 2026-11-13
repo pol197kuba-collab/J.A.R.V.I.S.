@@ -1,22 +1,20 @@
 import { PushTestButton } from "@/components/jarvis/orders/PushTestButton";
 import { BriefDelivery } from "@/components/jarvis/brief/BriefDelivery";
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { UiModeSettings } from "@/components/jarvis/UiModeSettings";
 import { PushToggle } from "@/components/jarvis/orders/PushToggle";
 import { BriefScheduleControls } from "@/components/jarvis/brief/BriefScheduleControls";
 import { ApiKeysSection } from "@/components/jarvis/settings/ApiKeysSection";
+import { AgentToolsSummary } from "@/components/jarvis/agents/AgentToolsSummary";
 import { CommuteSettingsPanel } from "@/components/jarvis/commute/CommuteSettingsPanel";
 import { useAudioSettings } from "@/lib/audio/useAudioSettings";
 import { audio } from "@/lib/audio/AudioEngine";
 import { useServerFn } from "@tanstack/react-start";
 import {
   getUserSettings,
-  listAgentTools,
-  setAgentToolEnabled,
   updateUserSettings,
-  type AgentToolSummary,
   type UserSettings,
 } from "@/lib/agents/runtime.functions";
 import { setServerKeyLinked } from "@/lib/ai/jarvisBrain";
@@ -132,31 +130,11 @@ function JarvisSection() {
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const fetchAgentTools = useServerFn(listAgentTools);
-  const persistAgentTool = useServerFn(setAgentToolEnabled);
-  const [tools, setTools] = useState<AgentToolSummary[] | null>(null);
-  const [toolsError, setToolsError] = useState<string | null>(null);
-  const [pendingToolId, setPendingToolId] = useState<string | null>(null);
-
   useEffect(() => {
     fetchSettings()
       .then(setPrefs)
       .catch((err) => setErrorMsg(err instanceof Error ? err.message : "Nie udało się wczytać."));
   }, [fetchSettings]);
-
-  const refreshTools = useCallback(async () => {
-    try {
-      const list = await fetchAgentTools({ data: { agentSlug: AGENT_SLUGS.JARVIS } });
-      setTools(list);
-      setToolsError(null);
-    } catch (err) {
-      setToolsError(err instanceof Error ? err.message : "Failed to load tools");
-    }
-  }, [fetchAgentTools]);
-
-  useEffect(() => {
-    void refreshTools();
-  }, [refreshTools]);
 
   const updatePref = async (patch: Partial<UserSettings>) => {
     setBusy(true);
@@ -172,31 +150,6 @@ function JarvisSection() {
       setErrorMsg(err instanceof Error ? err.message : "Update failed");
     } finally {
       setBusy(false);
-    }
-  };
-
-  const handleToggleTool = async (tool: AgentToolSummary) => {
-    const nextEnabled = !tool.enabledForAgent;
-    setPendingToolId(tool.id);
-    // Optimistic update — revert on failure.
-    setTools(
-      (prev) =>
-        prev?.map((t) => (t.id === tool.id ? { ...t, enabledForAgent: nextEnabled } : t)) ?? prev,
-    );
-    try {
-      await persistAgentTool({
-        data: { agentSlug: AGENT_SLUGS.JARVIS, toolId: tool.id, enabled: nextEnabled },
-      });
-      audio.playClick();
-    } catch (err) {
-      setToolsError(err instanceof Error ? err.message : "Failed to update tool");
-      setTools(
-        (prev) =>
-          prev?.map((t) => (t.id === tool.id ? { ...t, enabledForAgent: !nextEnabled } : t)) ??
-          prev,
-      );
-    } finally {
-      setPendingToolId(null);
     }
   };
 
@@ -299,60 +252,7 @@ function JarvisSection() {
         </div>
       </HudPanel>
 
-      <HudPanel index={2} title="NARZĘDZIA" tone="quiet" className="p-5">
-        <div className="mt-4 space-y-3">
-          <p className="text-xs text-muted-foreground">
-            Wyłączonego narzędzia J.A.R.V.I.S. nie zaproponuje modelowi przy kolejnej rozmowie.
-          </p>
-          {toolsError && (
-            <p className="font-mono text-[10px]" style={{ color: "var(--destructive)" }}>
-              ✕ {toolsError}
-            </p>
-          )}
-          {tools === null && !toolsError && (
-            <p className="font-mono text-[10px] text-muted-foreground/70">Ładowanie…</p>
-          )}
-          {tools?.length === 0 && (
-            <p className="font-mono text-[10px] text-muted-foreground/70">
-              Brak agenta „jarvis" lub brak zarejestrowanych narzędzi.
-            </p>
-          )}
-          {tools?.map((tool, i) => (
-            <div
-              key={tool.id}
-              className={`flex items-start justify-between gap-4 ${i > 0 ? "border-t border-primary/20 pt-3" : ""}`}
-            >
-              <div className="min-w-0">
-                <p className="break-words text-sm text-foreground">
-                  {tool.name}
-                  {!tool.globallyEnabled && (
-                    <span
-                      className="ml-2 font-mono text-[10px] uppercase tracking-widest"
-                      style={{ color: "var(--destructive)" }}
-                    >
-                      WYŁĄCZONE GLOBALNIE
-                    </span>
-                  )}
-                </p>
-                {tool.description && (
-                  <p className="break-words text-xs text-muted-foreground">{tool.description}</p>
-                )}
-              </div>
-              <button
-                type="button"
-                disabled={pendingToolId === tool.id || !tool.globallyEnabled}
-                onClick={() => handleToggleTool(tool)}
-                className={toggleClass}
-                style={{
-                  color: tool.enabledForAgent ? "var(--success)" : "var(--muted-foreground)",
-                }}
-              >
-                {tool.enabledForAgent ? "● ON" : "○ OFF"}
-              </button>
-            </div>
-          ))}
-        </div>
-      </HudPanel>
+      <AgentToolsSummary index={2} agentSlug={AGENT_SLUGS.JARVIS} agentName="J.A.R.V.I.S." />
     </div>
   );
 }

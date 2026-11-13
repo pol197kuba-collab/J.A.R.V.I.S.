@@ -10,7 +10,7 @@ import {
   MOCK_REPLY,
   NOTE_TITLE,
 } from "./fixtures";
-import { insertNoteOutsideApp } from "./localDb";
+import { insertNoteOutsideApp, isToolEnabledFor } from "./localDb";
 
 // Przy błędzie: adres i widoczny tekst do logu CI (zrzut ekranu jest
 // w artefakcie, ale log czyta się szybciej).
@@ -57,4 +57,36 @@ test("logowanie → czat → odpowiedź → notatka w /notes", async ({ page }) 
   // bez przeładowania — przez realtime, nie przez zapasowe odpytywanie (60 s).
   await insertNoteOutsideApp(LIVE_NOTE_TITLE, "Wpisana wprost do bazy.");
   await expect(page.getByText(LIVE_NOTE_TITLE)).toBeVisible({ timeout: LIVE_NOTE_WAIT_MS });
+});
+
+test("Agent Hub → zakładka Narzędzia: macierz narzędzie × agent", async ({ page }) => {
+  await page.goto("/?loginScene=0");
+  await page.getByRole("button", { name: /Engage JARVIS/i }).click();
+  await page.locator('input[type="email"]').fill(E2E_EMAIL);
+  await page.locator('input[type="password"]').fill(E2E_PASSWORD);
+  await page.getByRole("button", { name: /Request Access/i }).click();
+  await page.getByPlaceholder("wpisz komendę dla J.A.R.V.I.S.…").waitFor({ timeout: 60_000 });
+
+  await page.keyboard.press("Control+k");
+  await page.getByPlaceholder("Przejdź do modułu…").fill("Agent Hub");
+  await page.getByRole("option", { name: "Agent Hub", exact: true }).click();
+  await expect(page).toHaveURL(/\/agent-hub/, { timeout: 30_000 });
+
+  await page.getByRole("tab", { name: "Narzędzia" }).click();
+  await expect(page.getByText(/NARZĘDZIA AGENTÓW/i)).toBeVisible({ timeout: 30_000 });
+  // Katalog z migracji: kategoria notatek i nowe narzędzie dojazdu.
+  await expect(page.getByRole("region", { name: "Notatki i pamięć" })).toBeVisible();
+  await page.getByRole("searchbox", { name: "Szukaj narzędzia" }).fill("check_commute");
+  const commute = page.getByRole("region", { name: "Rynki, paliwa i dojazd" });
+  await expect(commute).toBeVisible();
+  // Konto testowe powstaje po migracjach, więc ma narzędzie wyłączone —
+  // włączamy je i sprawdzamy zapis w bazie.
+  const chip = commute.getByRole("button", { name: "J.A.R.V.I.S.", exact: true });
+  await expect(chip).toHaveAttribute("aria-pressed", "false");
+  await chip.click();
+  await expect(chip).toHaveAttribute("aria-pressed", "true");
+  await expect(chip).toBeEnabled({ timeout: 15_000 });
+  await expect
+    .poll(() => isToolEnabledFor("jarvis", "check_commute"), { timeout: 15_000 })
+    .toBe(true);
 });

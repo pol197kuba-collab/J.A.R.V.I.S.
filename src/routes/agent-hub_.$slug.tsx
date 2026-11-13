@@ -10,18 +10,17 @@ import {
   clearAgentConversations,
   getAgentDetail,
   resetAgentStats,
-  setAgentToolEnabled,
   updateAgentSettings,
   type AgentBehaviourConfig,
   type AgentDetail,
   type AgentRunRecord,
-  type AgentToolSummary,
 } from "@/lib/agents/runtime.functions";
 import { audio } from "@/lib/audio/AudioEngine";
 import { DEFAULT_GEMINI_MODEL } from "@/lib/agents/models";
 import { useModelCatalog } from "@/lib/agents/useModelCatalog";
 import { LIVE_FALLBACK_MS } from "@/lib/realtime/liveTables";
 import { useLiveTables } from "@/lib/realtime/useLiveTables";
+import { AgentToolsSummary } from "@/components/jarvis/agents/AgentToolsSummary";
 
 export const Route = createFileRoute("/agent-hub_/$slug")({
   head: ({ params }) => ({
@@ -58,7 +57,6 @@ function AgentConsole() {
 
   const fetchDetail = useServerFn(getAgentDetail);
   const persistSettings = useServerFn(updateAgentSettings);
-  const persistTool = useServerFn(setAgentToolEnabled);
   const resetStats = useServerFn(resetAgentStats);
   const clearConvs = useServerFn(clearAgentConversations);
 
@@ -76,15 +74,6 @@ function AgentConsole() {
 
   const settingsMutation = useMutation({
     mutationFn: (patch: SettingsPatch) => persistSettings({ data: { slug, patch } }),
-    onSuccess: () => {
-      audio.playClick();
-      invalidate();
-    },
-  });
-
-  const toolMutation = useMutation({
-    mutationFn: (v: { toolId: string; enabled: boolean }) =>
-      persistTool({ data: { agentSlug: slug, toolId: v.toolId, enabled: v.enabled } }),
     onSuccess: () => {
       audio.playClick();
       invalidate();
@@ -147,10 +136,11 @@ function AgentConsole() {
       <Header data={data} onBack={() => navigate({ to: "/agent-hub" })} />
       <TelemetryPanel data={data} />
       <LiveRunsPanel data={data} onOpenRun={setRunDetail} />
-      <ToolsPanel
-        data={data}
-        onToggle={(t) => toolMutation.mutate({ toolId: t.id, enabled: !t.enabledForAgent })}
-        pending={toolMutation.isPending}
+      <AgentToolsSummary
+        index={3}
+        agentSlug={data.agent.slug}
+        agentName={data.agent.name}
+        usage7d={data.toolUsage7d}
       />
       <MemoryPanel data={data} />
       <SettingsPanel
@@ -444,69 +434,6 @@ function inputPreview(input: unknown): string {
   } catch {
     return String(input);
   }
-}
-
-// ---------------------------------------------------------------------------
-// Tools
-// ---------------------------------------------------------------------------
-
-function ToolsPanel({
-  data,
-  onToggle,
-  pending,
-}: {
-  data: AgentDetail;
-  onToggle: (t: AgentToolSummary) => void;
-  pending: boolean;
-}) {
-  return (
-    <HudPanel index={3} title="ARSENAL // TOOL BINDINGS" className="p-5">
-      <div className="mt-3 space-y-3">
-        {data.tools.length === 0 && (
-          <p className="font-mono text-xs text-muted-foreground/70">
-            NO TOOLS REGISTERED IN THE GLOBAL CATALOG.
-          </p>
-        )}
-        {data.tools.map((t, i) => {
-          const u24 = data.toolUsage24h[t.slug] ?? 0;
-          const u7d = data.toolUsage7d[t.slug] ?? 0;
-          return (
-            <div
-              key={t.id}
-              className={`flex items-start justify-between gap-3 ${i > 0 ? "border-t border-primary/20 pt-3" : ""}`}
-            >
-              <div className="flex-1">
-                <p className="text-sm text-foreground">
-                  {t.name}
-                  {!t.globallyEnabled && (
-                    <span
-                      className="font-display ml-2 text-[10px] uppercase tracking-widest"
-                      style={{ color: "var(--destructive)" }}
-                    >
-                      GLOBALLY DISABLED
-                    </span>
-                  )}
-                </p>
-                {t.description && <p className="text-xs text-muted-foreground">{t.description}</p>}
-                <p className="font-mono mt-1 text-[10px] text-muted-foreground/70">
-                  usage · {u24} · 24h / {u7d} · 7d
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled={pending || !t.globallyEnabled}
-                onClick={() => onToggle(t)}
-                className="font-display border border-primary/60 px-3 py-1 text-[10px] uppercase tracking-widest disabled:opacity-40"
-                style={{ color: t.enabledForAgent ? "var(--success)" : "var(--muted-foreground)" }}
-              >
-                {t.enabledForAgent ? "● ON" : "○ OFF"}
-              </button>
-            </div>
-          );
-        })}
-      </div>
-    </HudPanel>
-  );
 }
 
 // ---------------------------------------------------------------------------
