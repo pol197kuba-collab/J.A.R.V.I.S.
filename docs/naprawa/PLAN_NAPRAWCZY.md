@@ -521,11 +521,14 @@ z danymi właściciela usuwamy osobną migracją dopiero po jego potwierdzeniu.
 
 ## Etap 9 — testy przepływów (A26)
 
-- [ ] Jeden test dymny w przeglądarce (Playwright jako devDependency — zgoda właściciela W6):
+- [x] Jeden test dymny w przeglądarce (Playwright jako devDependency — zgoda właściciela W6):
       logowanie kontem testowym → czat → odpowiedź → notatka widoczna
       w `/notes`. Model zamockowany na poziomie sieci.
-- [ ] Próg pokrycia dla `src/lib/agents` w CI ustawiony na poziomie
+      (#242: `e2e/`, workflow `e2e.yml` na lokalnym Supabase w CI, atrapa
+      Gemini przez `JARVIS_GEMINI_BASE_URL`; produkcja nietknięta.)
+- [x] Próg pokrycia dla `src/lib/agents` w CI ustawiony na poziomie
       osiągniętym po etapie 4 (żeby nie spadał).
+      (#242: `vitest.config.ts`, linie ≥ 51,82%; CI uruchamia `test:coverage`.)
 
 ## Rejestr usterek
 
@@ -543,6 +546,8 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 | 2026-11-12 | `useAgentChatChannel.ts`, `VoiceCommandContext.tsx` (historia czatu) | Klient dopisywał wiadomość do transkryptu PRZED pobraniem historii, więc model dostawał tę samą prośbę dwa razy (historia + input) i odpowiadał „prośba padła dwa razy”. Od etapu 3 tylko przy pierwszej wiadomości w nowym/wyczyszczonym wątku i w ścieżce głosowej; wcześniej przy każdej turze. Zgłosił właściciel. | 0 | naprawione 2026-11-12: historia pobierana przed dopisaniem + `withoutCurrentInput` na serwerze (test) |
 | 2026-11-12 | `runAgent` (`runtime.functions.ts`) | **Regresja z etapu 5 (A8):** przepisany `askJarvis` przestał podawać `conversationId` (zniknęło `resolveConversationId`), więc od publikacji 5a każda odpowiedź drogą głosową/komend zakładała nowy wątek i czat pokazywał tylko najnowszy. Wiadomość bez `conversationId` (wysłana, zanim czat wczytał wątek; głos; zmiana agenta) zakładała NOWY wątek. Czat pokazywał potem tylko ten wątek — starej rozmowy nie dało się przewinąć. Zgłosił właściciel. Stare wątki zostają w bazie nietknięte. | 0 | naprawione 2026-11-12: bez `conversationId` dopisujemy do ostatniego wątku agenta (test `runAgent.thread.test.ts`) |
 | 2026-11-12 | `useAgentChatChannel.ts` (aktywny agent) | Przeglądarka pamiętała slug agenta sprzed zmiany nazw (`orchestrator`); mikrofon spoza `/jarvis` wysyła od razu, zanim aplikacja wczyta wybór z konta → „Agent not found: orchestrator”. Zgłosił właściciel. | 0 | naprawione 2026-11-12: zapamiętany agent sprawdzany z listą istniejących (`isAgentSlug`), nieznany → J.A.R.V.I.S. i nadpisanie wpisu |
+| 2026-11-13 | `supabase/migrations/20260817120000_metric_analysis_expansion.sql` | Migracja nie przechodzi na czystej bazie: `to_jsonb($$…$$)` — „could not determine polymorphic type”. Na produkcji nałożona dawno, więc nic nie psuje; pliku migracji nie wolno zmieniać. Test dymny poprawia ją tylko w kopii roboczej CI (`e2e/fix-legacy-migrations.sh`; job pada, jeśli wzorzec zniknie). | 9 | obejście w CI (#242), plik w repo bez zmian |
+| 2026-11-13 | lokalna baza testu dymnego | Trigger `enforce_owner_only_signup` (W1) blokuje założenie konta testowego; w jednorazowej bazie CI funkcja jest podmieniana na przepuszczającą. Produkcja bez zmian. | 9 | świadome obejście w CI (#242) |
 
 ## Dziennik
 
@@ -560,6 +565,7 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 | 2026-11-12 | przegląd | — | czysty / 1116 zielonych / 0 błędów, 15 ostrzeżeń | Niezależny przegląd `main` po etapach 0–6: kierunek zgodny z planem; znaleziona usterka z sekretami jobów (W7, etap 6b). Dopisany etap 6b, zmieniona kolejność: 6b → 9 → 7 → 8. |
 | 2026-11-12 | 6b (A) | #237 | czysty / 1122 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Joby: jedna droga uwierzytelnienia, głośno o braku kluczy, zdanie na koniec; README sekretów. Ręcznie: 7 jobów bez sekretu → kod 1. |
 | 2026-11-12 | 6b (B) | #238 | czysty / 1129 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | recall a obca treść, wymuszenie narzędzia per model Claude, model wyłączony → domyślny, komunikat limitu po polsku. Otwarte: W8 (logi z 13.11), stawki Groq i katalog Gemini (strony poza siecią sesji), liczba wpisów `unknown`. |
+| 2026-11-13 | 9 | #242 | czysty / 1134 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Test dymny Playwright (logowanie → czat → odpowiedź → notatka w `/notes`) na lokalnym Supabase z atrapą Gemini — zielony w CI (~3 min). Próg pokrycia `src/lib/agents` 51,82% linii w CI. Przy okazji (#241): Groq na GPT-OSS. Następny etap: 7. |
 
 ## Załącznik: znaleziska z rewizji (skrót)
 
