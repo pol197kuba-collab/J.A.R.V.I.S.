@@ -2,7 +2,7 @@
 // server functions (strona, kafelek, dock), briefingu i joba alertów.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
-import { planDeparture } from "./plan";
+import { planDeparture, type DeparturePlan } from "./plan";
 import { buildCommute, fetchRoutes } from "./tomtom.server";
 import {
   DEFAULT_COMMUTE_SETTINGS,
@@ -95,16 +95,17 @@ export async function computeCommute(
   direction: CommuteDirection,
   now: Date = new Date(),
   settingsIn?: CommuteSettings,
+  /** Wymuszony moment wyjazdu (agent pytany „jak teraz”); domyślnie plan z ustawień. */
+  planOverride?: DeparturePlan,
 ): Promise<CommuteOutcome> {
   const settings = settingsIn ?? (await loadCommuteSettings(db, ownerId));
   if (!settings.home || !settings.work) return { ok: false, reason: "no_places" };
   const key = await loadTomtomKey(db, ownerId);
   if (!key) return { ok: false, reason: "no_key" };
 
-  const plan = planDeparture(
-    now,
-    direction === "to" ? settings.departToMin : settings.departBackMin,
-  );
+  const plan =
+    planOverride ??
+    planDeparture(now, direction === "to" ? settings.departToMin : settings.departBackMin);
   const [origin, destination] =
     direction === "to" ? [settings.home, settings.work] : [settings.work, settings.home];
   // Brak tabeli tras (migracja jeszcze nie wgrana) nie może zabić dojazdu —
