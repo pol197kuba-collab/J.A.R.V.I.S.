@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { clearSystemEvents, listSystemEvents } from "@/lib/system/events.functions";
+import { LIVE_FALLBACK_MS } from "@/lib/realtime/liveTables";
+import { useLiveTables } from "@/lib/realtime/useLiveTables";
 
 export const Route = createFileRoute("/system-logs")({
   head: () => ({
@@ -39,6 +41,7 @@ function SystemLogs() {
   const fetchEvents = useServerFn(listSystemEvents);
   const clearEvents = useServerFn(clearSystemEvents);
   const [confirmClear, setConfirmClear] = useState(false);
+  useLiveTables("system_events");
   const {
     data: events = [],
     isLoading,
@@ -48,7 +51,7 @@ function SystemLogs() {
   } = useQuery({
     queryKey: ["system_events", "list"],
     queryFn: () => fetchEvents({ data: { limit: 200 } }),
-    refetchInterval: 4000,
+    refetchInterval: LIVE_FALLBACK_MS,
   });
   const clear = useMutation({
     mutationFn: () => clearEvents(),

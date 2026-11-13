@@ -15,6 +15,13 @@ export const APP_PORT = 8080;
 export const NOTE_TITLE = "Test dymny: kupić mleko";
 export const NOTE_BODY = "Notatka zapisana przez test dymny etapu 9.";
 
+/**
+ * Notatka wpisana wprost do bazy, gdy /notes jest otwarte (etap 7): ma się
+ * pojawić na żywo, długo przed zapasowym odpytywaniem (60 s).
+ */
+export const LIVE_NOTE_TITLE = "Test dymny: notatka na żywo";
+export const LIVE_NOTE_WAIT_MS = 15_000;
+
 /** Odpowiedź atrapy po wykonaniu save_note — tekst widoczny w czacie. */
 export const MOCK_REPLY = "Zapisałem notatkę o mleku.";
 

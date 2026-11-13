@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { listTasks, createTask, updateTask, deleteTask } from "@/lib/tasks/tasks.functions";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { LIVE_FALLBACK_MS } from "@/lib/realtime/liveTables";
+import { useLiveTables } from "@/lib/realtime/useLiveTables";
 
 // P1-P2 read as "urgent" (amber); P3-P5 stay neutral primary.
 function priorityStyle(p: number): { label: string; color: string } {
@@ -29,10 +31,11 @@ export function TasksWidget({ index = 0 }: { index?: number }) {
   const [details, setDetails] = useState("");
   const [priority, setPriority] = useState(3);
 
+  useLiveTables("tasks");
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ["tasks", "open"],
     queryFn: () => fetchTasks({ data: { scope: "open" } }),
-    refetchInterval: 8000,
+    refetchInterval: LIVE_FALLBACK_MS,
   });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["tasks"] });

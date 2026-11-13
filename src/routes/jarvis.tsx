@@ -7,6 +7,8 @@ import { HudOverlay } from "@/components/jarvis/HudOverlay";
 import { AgentRegistryPanel } from "@/components/jarvis/AgentRegistryPanel";
 import { MatrixChatConsole } from "@/components/jarvis/MatrixChatConsole";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
+import { LIVE_FALLBACK_MS } from "@/lib/realtime/liveTables";
+import { useLiveTables } from "@/lib/realtime/useLiveTables";
 
 export const Route = createFileRoute("/jarvis")({
   head: () => ({
@@ -28,10 +30,11 @@ export const Route = createFileRoute("/jarvis")({
 // same `agents` query AgentFlowTree/ChatPanel/Agent Hub already share).
 function AgentMatrix() {
   const fetchAgents = useServerFn(listAgents);
+  useLiveTables("agents", "agent_runs");
   const { data: agents = [] } = useQuery({
     queryKey: ["agents", "list"],
     queryFn: () => fetchAgents(),
-    refetchInterval: 3000,
+    refetchInterval: LIVE_FALLBACK_MS,
   });
 
   const teammates = agents.filter((a) => a.slug !== AGENT_SLUGS.JARVIS);

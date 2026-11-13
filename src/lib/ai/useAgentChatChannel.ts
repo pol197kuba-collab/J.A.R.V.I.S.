@@ -24,6 +24,8 @@ import { enrichDocumentImagesFn } from "@/lib/documents/generated.functions";
 import { runDocumentJobFn } from "@/lib/agents/documentJobs.functions";
 import { ACTIVE_AGENT_LS_KEY } from "@/routes/agent-hub";
 import { AGENT_SLUGS, isAgentSlug } from "@/lib/constants/agentSlugs";
+import { LIVE_FALLBACK_MS } from "@/lib/realtime/liveTables";
+import { useLiveTables } from "@/lib/realtime/useLiveTables";
 
 // Single source of truth for "send a message to an agent and handle the
 // reply" — extracted out of the Dashboard ChatPanel so the /jarvis matrix
@@ -155,10 +157,11 @@ export function useAgentChatChannel(): AgentChatChannel {
     [importHistory],
   );
 
+  useLiveTables("agents", "agent_runs");
   const { data: agents = [] } = useQuery({
     queryKey: ["agents", "list"],
     queryFn: () => fetchAgents(),
-    refetchInterval: 15000,
+    refetchInterval: LIVE_FALLBACK_MS,
   });
 
   const switchAgent = useCallback(

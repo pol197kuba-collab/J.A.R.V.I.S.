@@ -11,6 +11,8 @@ import { CockpitMenu } from "./CockpitMenu";
 import { useLongPress } from "./useLongPress";
 import { agentDots, reactorState } from "./dockWidgets";
 import { JARVIS_HOLD_MS } from "./module-transition/miniCoreMath";
+import { LIVE_FALLBACK_MS } from "@/lib/realtime/liveTables";
+import { useLiveTables } from "@/lib/realtime/useLiveTables";
 
 /** Fired on window to open the desktop menu (the header's MENU // SYS button). */
 export const OPEN_COCKPIT_EVENT = "jarvis:cockpit";
@@ -27,10 +29,11 @@ export function DesktopNav() {
   const [open, setOpen] = useState(false);
   const { go } = useHudNavigate();
   const fetchAgents = useServerFn(listAgents);
+  useLiveTables("agents", "agent_runs");
   const { data: agents } = useQuery({
     queryKey: ["agents", "list"],
     queryFn: () => fetchAgents(),
-    refetchInterval: 15_000,
+    refetchInterval: LIVE_FALLBACK_MS,
   });
   const state = reactorState(agentDots(agents));
 

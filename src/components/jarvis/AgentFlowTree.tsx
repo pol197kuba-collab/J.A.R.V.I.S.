@@ -12,6 +12,8 @@ import { describeToolCall } from "./toolDescriptions";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
+import { LIVE_FALLBACK_MS } from "@/lib/realtime/liveTables";
+import { useLiveTables } from "@/lib/realtime/useLiveTables";
 
 // How long a fully-settled interaction stays highlighted before the tree
 // fades back to full standby. Without this, the last-ever completed run
@@ -294,10 +296,11 @@ function RunHistoryPanel({ agentName, runs }: { agentName: string; runs: FlowRun
 
 export function AgentFlowTree({ index = 0 }: { index?: number }) {
   const fetchFlow = useServerFn(getAgentFlow);
+  useLiveTables("agents", "agent_runs", "generated_files");
   const { data, isFetching } = useQuery({
     queryKey: ["agents", "flow"],
     queryFn: () => fetchFlow(),
-    refetchInterval: 3000,
+    refetchInterval: LIVE_FALLBACK_MS,
   });
   const agents = data?.agents ?? [];
   const runs = useMemo(() => data?.runs ?? [], [data]);

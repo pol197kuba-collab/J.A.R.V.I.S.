@@ -26,6 +26,8 @@ import { getFund } from "@/lib/fund/fund.functions";
 import { townFund } from "@/components/town/townFund";
 // Type-only: erased at build, so three.js never reaches the main bundle.
 import type { MenuControl } from "./module-transition/createTransitionScene";
+import { LIVE_FALLBACK_MS } from "@/lib/realtime/liveTables";
+import { useLiveTables } from "@/lib/realtime/useLiveTables";
 
 /**
  * Mobile-only dock pinned to the bottom of the viewport.
@@ -169,10 +171,11 @@ function AgentDots({ dots }: { dots: AgentDot[] }) {
 /** Real data for the dock: the same query keys the modules use, so it is shared cache. */
 function useDockData(pathname: string) {
   const fetchAgents = useServerFn(listAgents);
+  useLiveTables("agents", "agent_runs", "tasks");
   const { data: agents } = useQuery({
     queryKey: ["agents", "list"],
     queryFn: () => fetchAgents(),
-    refetchInterval: 15_000,
+    refetchInterval: LIVE_FALLBACK_MS,
   });
   const fetchTasks = useServerFn(listTasks);
   const { data: tasks } = useQuery({

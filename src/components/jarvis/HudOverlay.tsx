@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Activity, X } from "lucide-react";
 import { listSystemEvents, type SystemEvent } from "@/lib/system/events.functions";
+import { LIVE_FALLBACK_MS } from "@/lib/realtime/liveTables";
+import { useLiveTables } from "@/lib/realtime/useLiveTables";
 
 // Plain absolutely-positioned HTML chrome laid OVER the <JarvisCanvas>
 // (sibling in the DOM, not inside the R3F tree) — title, node-count readout,
@@ -35,10 +37,11 @@ export function HudOverlay({
   onlineCount: number;
 }) {
   const fetchEvents = useServerFn(listSystemEvents);
+  useLiveTables("system_events");
   const { data: events = [] } = useQuery({
     queryKey: ["system-events", "jarvis-matrix"],
     queryFn: () => fetchEvents({ data: { limit: 12 } }),
-    refetchInterval: 4000,
+    refetchInterval: LIVE_FALLBACK_MS,
   });
   // Collapsed by default — same reasoning as AgentRegistryPanel's twin: two
   // 220-260px side panels don't both fit next to each other (or the canvas's

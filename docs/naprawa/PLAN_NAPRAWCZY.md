@@ -454,16 +454,30 @@ testów, a etapy 7 i 8 dotkną tych samych miejsc.
 
 ## Etap 7 — odpytywanie → realtime (A15)
 
-- [ ] Wspólny hook: subskrypcja zmian tabeli unieważnia klucz zapytania;
+- [x] Wspólny hook: subskrypcja zmian tabeli unieważnia klucz zapytania;
       `refetchInterval` zostaje jako rzadki zapas (60 s).
-- [ ] Przepiąć tabele o szybkim odpytywaniu (3–8 s): `agent_runs`, `agents`,
+      (`src/lib/realtime/liveTables.ts` — mapa tabela → klucze, licznik
+      odwołań, seria zmian = jedno odświeżenie po 0,5 s; `useLiveTables.ts`.)
+- [x] Przepiąć tabele o szybkim odpytywaniu (3–8 s): `agent_runs`, `agents`,
       `system_events`, `tasks`, `notes`, `generated_files`/`document_jobs`.
       Dotyczy m.in. `/jarvis`, `/documents`, `/tasks`, `/notes`,
       `/system-logs`, `/agent-hub`, `AgentFlowTree`, `AgentOpsFeed`,
       `HudOverlay`, `TownView`.
-- [ ] Jedno połączenie realtime na aplikację, kanały zamykane przy
+      (Plus `documents`. `document_jobs` nie jest czytane przez żadne
+      zapytanie UI — postęp widać przez `generated_files`. Przepięte też
+      zapytania 10–15 s na tych samych kluczach (`DesktopNav`,
+      `MobileBottomNav`, `useAgentChatChannel`, `TaskBoardPanel`) — inaczej
+      wspólny klucz dalej odpytywałby co 15 s. Migracja dopisuje tabele do
+      publikacji `supabase_realtime`.)
+- [x] Jedno połączenie realtime na aplikację, kanały zamykane przy
       odmontowaniu. Sprawdzić HUD, Town i telefon.
-- [ ] Wolne odpytywania (5 min i rzadziej) zostają bez zmian.
+      (Jeden kanał na tabelę na całą aplikację, wszystkie przez jedno
+      połączenie WebSocket klienta Supabase. Wygląd bez zmian; test dymny
+      sprawdza, że notatka wpisana poza aplikacją pojawia się w `/notes`
+      w ≤ 15 s.)
+- [x] Wolne odpytywania (5 min i rzadziej) zostają bez zmian.
+      (Także zbiorcze 15–20 s: `CockpitHero`, `SystemPulsePanel`, `/feed`,
+      projekty — czytają tabele spoza publikacji albo agregaty.)
 
 ## Etap 8 — sprzątanie (A22–A25) i usunięcia zatwierdzone przez właściciela
 
@@ -566,6 +580,7 @@ nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 | 2026-11-12 | 6b (A) | #237 | czysty / 1122 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Joby: jedna droga uwierzytelnienia, głośno o braku kluczy, zdanie na koniec; README sekretów. Ręcznie: 7 jobów bez sekretu → kod 1. |
 | 2026-11-12 | 6b (B) | #238 | czysty / 1129 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | recall a obca treść, wymuszenie narzędzia per model Claude, model wyłączony → domyślny, komunikat limitu po polsku. Otwarte: W8 (logi z 13.11), stawki Groq i katalog Gemini (strony poza siecią sesji), liczba wpisów `unknown`. |
 | 2026-11-13 | 9 | #242 | czysty / 1134 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Test dymny Playwright (logowanie → czat → odpowiedź → notatka w `/notes`) na lokalnym Supabase z atrapą Gemini — zielony w CI (~3 min). Próg pokrycia `src/lib/agents` 51,82% linii w CI. Przy okazji (#241): Groq na GPT-OSS. Następny etap: 7. |
+| 2026-11-13 | 7 | #244 | czysty / 1141 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | 18 zapytań z odpytywania 3–15 s na realtime + zapas 60 s. Migracja publikacji sprawdzona na lokalnym Postgresie 16 (dwa przebiegi). Test dymny z realtime (lokalny Supabase). Do sprawdzenia po publikacji: czy status agenta i dokumentów odświeża się od razu. |
 
 ## Załącznik: znaleziska z rewizji (skrót)
 

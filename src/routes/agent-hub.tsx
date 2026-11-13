@@ -6,6 +6,8 @@ import { useQuery } from "@tanstack/react-query";
 import { listAgents } from "@/lib/agents/runtime.functions";
 import { useHudNavigate } from "@/components/jarvis/TransitionContext";
 import { audio } from "@/lib/audio/AudioEngine";
+import { LIVE_FALLBACK_MS } from "@/lib/realtime/liveTables";
+import { useLiveTables } from "@/lib/realtime/useLiveTables";
 
 export const Route = createFileRoute("/agent-hub")({
   head: () => ({
@@ -31,6 +33,7 @@ function AgentHub() {
   const fetchAgents = useServerFn(listAgents);
   const { go, isTransitioning } = useHudNavigate();
 
+  useLiveTables("agents", "agent_runs");
   const {
     data: agents = [],
     isLoading,
@@ -38,7 +41,7 @@ function AgentHub() {
   } = useQuery({
     queryKey: ["agents", "list"],
     queryFn: () => fetchAgents(),
-    refetchInterval: 5000,
+    refetchInterval: LIVE_FALLBACK_MS,
   });
 
   const onlineCount = agents.filter((a) => a.isEnabled).length;

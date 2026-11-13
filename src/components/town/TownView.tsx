@@ -44,6 +44,8 @@ import { propById } from "./townProps";
 import { blipPlan } from "./townBlips";
 import { audio } from "@/lib/audio/AudioEngine";
 import { propContent } from "./townPropActions";
+import { LIVE_FALLBACK_MS } from "@/lib/realtime/liveTables";
+import { useLiveTables } from "@/lib/realtime/useLiveTables";
 
 const FALLBACK_NAMES: Record<TownSlug, string> = {
   jarvis: "J.A.R.V.I.S.",
@@ -110,10 +112,11 @@ const isUuid = (id: string) => /^[0-9a-f-]{36}$/i.test(id);
 export function TownView() {
   const { send, agents, messages, activeAgent } = useAgentChatChannel();
   const fetchFlow = useServerFn(getAgentFlow);
+  useLiveTables("agents", "agent_runs", "generated_files");
   const { data: flow, error: flowError } = useQuery({
     queryKey: ["agents", "flow"],
     queryFn: () => fetchFlow(),
-    refetchInterval: 3000,
+    refetchInterval: LIVE_FALLBACK_MS,
   });
   const runs = useMemo(() => flow?.runs ?? [], [flow]);
   const navigate = useNavigate();

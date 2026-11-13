@@ -27,6 +27,8 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { LIVE_FALLBACK_MS } from "@/lib/realtime/liveTables";
+import { useLiveTables } from "@/lib/realtime/useLiveTables";
 
 const GENERAL_GROUP_KEY = "__general__";
 const NO_PROJECT = "__none__";
@@ -314,6 +316,7 @@ function TasksPage() {
   const runAgentFn = useServerFn(runAgent);
   const [scope, setScope] = useState<Scope>("open");
 
+  useLiveTables("tasks");
   const {
     data: tasks = [],
     isLoading,
@@ -322,7 +325,7 @@ function TasksPage() {
   } = useQuery({
     queryKey: ["tasks", scope],
     queryFn: () => fetchTasks({ data: { scope } }),
-    refetchInterval: 8000,
+    refetchInterval: LIVE_FALLBACK_MS,
   });
 
   const { data: projects = [] } = useQuery({

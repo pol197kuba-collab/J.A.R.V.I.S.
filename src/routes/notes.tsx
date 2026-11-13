@@ -16,6 +16,8 @@ import {
   type Note,
 } from "@/lib/notes/notes.functions";
 import { toast } from "sonner";
+import { LIVE_FALLBACK_MS } from "@/lib/realtime/liveTables";
+import { useLiveTables } from "@/lib/realtime/useLiveTables";
 
 export const Route = createFileRoute("/notes")({
   head: () => ({
@@ -42,6 +44,7 @@ function NotesPage() {
   const [editTitle, setEditTitle] = useState("");
   const [editBody, setEditBody] = useState("");
 
+  useLiveTables("notes");
   const {
     data: notes = [],
     isLoading,
@@ -49,7 +52,7 @@ function NotesPage() {
   } = useQuery({
     queryKey: ["notes", "list"],
     queryFn: () => fetchNotes(),
-    refetchInterval: 8000,
+    refetchInterval: LIVE_FALLBACK_MS,
   });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["notes", "list"] });

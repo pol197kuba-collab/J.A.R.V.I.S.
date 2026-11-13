@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { listNotes, createNote, deleteNote, updateNote } from "@/lib/notes/notes.functions";
 import { toast } from "sonner";
+import { LIVE_FALLBACK_MS } from "@/lib/realtime/liveTables";
+import { useLiveTables } from "@/lib/realtime/useLiveTables";
 
 export function NotesWidget({ index = 0 }: { index?: number }) {
   const qc = useQueryClient();
@@ -24,10 +26,11 @@ export function NotesWidget({ index = 0 }: { index?: number }) {
   const [editTitle, setEditTitle] = useState("");
   const [editBody, setEditBody] = useState("");
 
+  useLiveTables("notes");
   const { data: notes = [], isLoading } = useQuery({
     queryKey: ["notes", "list"],
     queryFn: () => fetchNotes(),
-    refetchInterval: 8000,
+    refetchInterval: LIVE_FALLBACK_MS,
   });
 
   const createMut = useMutation({

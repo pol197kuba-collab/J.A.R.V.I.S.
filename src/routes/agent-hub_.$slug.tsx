@@ -20,6 +20,8 @@ import {
 import { audio } from "@/lib/audio/AudioEngine";
 import { DEFAULT_GEMINI_MODEL } from "@/lib/agents/models";
 import { useModelCatalog } from "@/lib/agents/useModelCatalog";
+import { LIVE_FALLBACK_MS } from "@/lib/realtime/liveTables";
+import { useLiveTables } from "@/lib/realtime/useLiveTables";
 
 export const Route = createFileRoute("/agent-hub_/$slug")({
   head: ({ params }) => ({
@@ -60,10 +62,11 @@ function AgentConsole() {
   const resetStats = useServerFn(resetAgentStats);
   const clearConvs = useServerFn(clearAgentConversations);
 
+  useLiveTables("agents", "agent_runs");
   const { data, isLoading, error } = useQuery({
     queryKey: ["agent", slug],
     queryFn: () => fetchDetail({ data: { slug } }),
-    refetchInterval: 5000,
+    refetchInterval: LIVE_FALLBACK_MS,
   });
 
   const invalidate = () => {
