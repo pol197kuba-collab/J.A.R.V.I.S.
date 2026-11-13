@@ -13,6 +13,7 @@ import {
   type GeminiUsageMetadata,
   type LlmUsage,
 } from "./usage";
+import { adaptGeminiBody } from "./geminiCompat";
 
 export const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -64,7 +65,8 @@ export async function callGemini<T extends { usageMetadata?: GeminiUsageMetadata
   const res = await requestJson<T>({
     url: `${geminiEndpointBase()}/${encodeURIComponent(call.model)}:generateContent`,
     headers: { "x-goog-api-key": call.apiKey },
-    body: call.body,
+    // Gemini 3.x/4.x: bez wycofanych parametrów próbkowania (geminiCompat.ts).
+    body: adaptGeminiBody(call.model, call.body),
     timeoutMs: call.timeoutMs,
     retries: call.retries,
     backoffMs: call.backoffMs,

@@ -50,9 +50,10 @@ export function budgetStatus(spentUsd: number, limitUsd: number): BudgetStatus {
 const DOWNGRADE: Readonly<Record<string, string>> = {
   "claude-opus-5": "anthropic:claude-sonnet-5",
   "claude-sonnet-5": "anthropic:claude-haiku-4-5",
-  "claude-haiku-4-5": "gemini-2.5-flash",
-  "gemini-2.5-pro": "gemini-2.5-flash",
-  "gemini-pro-latest": "gemini-2.5-flash",
+  "claude-haiku-4-5": "gemini-3.8-flash",
+  "gemini-4-hydrogen": "gemini-3.8-flash",
+  "gemini-2.5-pro": "gemini-3.8-flash",
+  "gemini-pro-latest": "gemini-3.8-flash",
 };
 
 export type ModelDecision = {

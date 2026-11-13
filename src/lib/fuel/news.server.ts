@@ -8,8 +8,9 @@ import { heuristicImpact, type ImpactVerdict, type NewsItem } from "./news";
 import { callGemini } from "@/lib/ai/llm/gemini";
 import type { LedgerContext } from "@/lib/ai/llm/ledger";
 import type { GeminiUsageMetadata } from "@/lib/ai/llm/usage";
+import { DEFAULT_GEMINI_MODEL } from "@/lib/agents/models";
 
-const MODEL = "gemini-2.5-flash";
+const MODEL = DEFAULT_GEMINI_MODEL;
 const TIMEOUT_MS = 25_000;
 
 const SYSTEM_PROMPT = `Jesteś analitykiem rynku paliw. Oceniasz, jak nagłówek prasowy wpływa na HURTOWE CENY PALIW w Polsce (cennik Orlenu).

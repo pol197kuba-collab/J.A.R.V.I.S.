@@ -93,12 +93,12 @@ describe("parseAnthropicModelList", () => {
 
 describe("mergeModelLists", () => {
   it("prefers the live entry and keeps a fallback the API did not return", () => {
-    const live = [{ id: "gemini-2.5-flash", label: "Z API", provider: "gemini" as const }];
+    const live = [{ id: "gemini-3.8-flash", label: "Z API", provider: "gemini" as const }];
     const merged = mergeModelLists(live, GEMINI_MODELS);
-    expect(merged.find((m) => m.id === "gemini-2.5-flash")?.label).toBe("Z API");
-    // Model wybrany wcześniej ręcznie nie może zniknąć z listy tylko
-    // dlatego, że API go nie wymieniło.
-    expect(merged.some((m) => m.id === "gemini-2.5-pro")).toBe(true);
+    expect(merged.find((m) => m.id === "gemini-3.8-flash")?.label).toBe("Z API");
+    // Model z listy zapasowej nie może zniknąć tylko dlatego, że API go nie
+    // wymieniło.
+    expect(merged.some((m) => m.id === "gemini-4-hydrogen")).toBe(true);
   });
 
   it("returns just the fallback when nothing came from the API", () => {

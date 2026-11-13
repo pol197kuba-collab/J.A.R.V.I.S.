@@ -369,10 +369,12 @@ describe("runAgentLoop — charakterystyka (etap 0)", () => {
     const row = finalRunRow(calls, "run-1")!;
     expect(row.status).toBe("done");
     expect(toolNames(row.output)).toEqual([]);
-    expect(row.model).toBe("gemini-2.5-flash");
+    // Zapas po Claude = model domyślny (od 2026-11-13 gemini-3.8-flash,
+    // $0.75 → $3.75 / 1M): 1000 × 0,75/M + 100 × 3,75/M.
+    expect(row.model).toBe("gemini-3.8-flash");
     expect(row.tokens_input).toBe(1000);
     expect(row.tokens_output).toBe(100);
-    expect(row.cost_usd).toBeCloseTo(0.00055, 6);
+    expect(row.cost_usd).toBeCloseTo(0.001125, 6);
     expect(
       loggedMessages(calls).some((m) => m.startsWith("Claude (claude-opus-5) nie odpowiedział")),
     ).toBe(true);

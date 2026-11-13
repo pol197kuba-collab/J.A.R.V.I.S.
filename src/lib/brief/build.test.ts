@@ -73,7 +73,7 @@ describe("polishBrief — księga llm_usage", () => {
     );
     vi.unstubAllGlobals();
 
-    expect(got.generatedBy).toBe("model:gemini-2.5-flash");
+    expect(got.generatedBy).toBe("model:gemini-3.8-flash");
     expect(String(fetchMock.mock.calls[0][0])).not.toContain("tajny");
     const row = calls.find((c) => c.table === "llm_usage")?.ops[0].args[0];
     expect(row).toMatchObject({ module: "brief", purpose: "polish", tokens_input: 200 });
@@ -105,6 +105,6 @@ describe("polishBrief — powód powrotu do samych liczb", () => {
     );
     vi.unstubAllGlobals();
     expect(got.generatedBy).toBe("facts");
-    expect(got.fallbackReasons).toEqual(["gemini-2.5-flash: pusta odpowiedź"]);
+    expect(got.fallbackReasons).toEqual(["gemini-3.8-flash: pusta odpowiedź"]);
   });
 });

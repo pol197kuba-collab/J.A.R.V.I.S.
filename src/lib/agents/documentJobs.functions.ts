@@ -449,14 +449,40 @@ export async function runDocumentJobCore(
 export const rescueDocumentJobsFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    // Najpierw tło: praca w zapytaniu z telefonu ginie z zamknięciem aplikacji.
+    if (await requestBackgroundJobs(context.supabase)) return { background: true as const };
     const { rescueDocumentJobs } = await import("./documentJobs.rescue");
     return rescueDocumentJobs(context.supabase, context.userId);
   });
 
+/**
+ * Prosi o workflow document-jobs.yml (funkcja bazy `request_document_jobs`).
+ * false = tło niedostępne (brak tokenu GitHub, limit doby, brak migracji) —
+ * wtedy wołający liczy w swoim zapytaniu, jak przed 2026-11-13.
+ */
+export async function requestBackgroundJobs(supabase: JobDb): Promise<boolean> {
+  try {
+    // Funkcji nie ma jeszcze w wygenerowanych typach (Lovable je odświeży).
+    const rpc = supabase.rpc as unknown as (
+      fn: string,
+    ) => Promise<{ data: unknown; error: { message: string } | null }>;
+    const { data, error } = await rpc("request_document_jobs");
+    return !error && data === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Start zadania dokumentowego po turze czatu (zgłoszenie 2026-11-13).
+ * Domyślnie NIE liczy w tym zapytaniu: zamknięcie aplikacji zabijało potok
+ * w połowie, a kolejka podejmowała go dopiero po 15 minutach. Prosi o job
+ * w tle; liczy tutaj tylko, gdy tło jest niedostępne.
+ */
 export const runDocumentJobFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => RunInput.parse(input))
-  .handler(
-    async ({ data, context }): Promise<RunDocumentJobResult> =>
-      runDocumentJobCore(context.supabase, context.userId, data.jobId),
-  );
+  .handler(async ({ data, context }): Promise<RunDocumentJobResult> => {
+    if (await requestBackgroundJobs(context.supabase)) return { ok: true };
+    return runDocumentJobCore(context.supabase, context.userId, data.jobId);
+  });

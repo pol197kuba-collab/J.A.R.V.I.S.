@@ -8,7 +8,7 @@ import { callGemini } from "@/lib/ai/llm/gemini";
 import { callGroq } from "@/lib/ai/llm/groq";
 import { withPurpose } from "@/lib/ai/llm/ledger";
 import type { GeminiUsageMetadata } from "@/lib/ai/llm/usage";
-import type { GeminiPart } from "@/lib/ai/llm/types";
+import type { GeminiPart, ModelFunctionCall } from "@/lib/ai/llm/types";
 import { AGENT_SLUGS } from "@/lib/constants/agentSlugs";
 import {
   GEMINI_MAX_RETRIES,
@@ -22,7 +22,7 @@ import type { RunContext, RunState } from "./types";
 export type ModelTurn = {
   /** Claude padł i run przeszedł na Gemini — ten sam krok pętli od nowa. */
   retry: boolean;
-  functionCalls: Array<{ name: string; args: Record<string, unknown> }>;
+  functionCalls: ModelFunctionCall[];
   textOut: string;
 };
 
@@ -46,7 +46,7 @@ export async function runModelTurn(
     logEvent,
     runLedger,
   } = ctx;
-  let functionCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
+  let functionCalls: ModelFunctionCall[] = [];
   let textOut = "";
   // Wymuszona tura generate_document na modelu Claude, który wymuszenia nie
   // przyjmuje (Opus 5.5 / Sonnet 5.5 — 400): od razu Gemini, jednym `info`
@@ -202,8 +202,17 @@ export async function runModelTurn(
         meterUsage(state, res.usage, res.costUsd);
 
         const parts = data.candidates?.[0]?.content?.parts ?? [];
+        // Podpis myślenia (Gemini 3.x+) idzie z wywołaniem do historii —
+        // bez niego następna tura dostaje HTTP 400.
         functionCalls = parts.flatMap((p) =>
-          "functionCall" in p && p.functionCall ? [p.functionCall] : [],
+          "functionCall" in p && p.functionCall
+            ? [
+                {
+                  ...p.functionCall,
+                  ...(p.thoughtSignature ? { thoughtSignature: p.thoughtSignature } : {}),
+                },
+              ]
+            : [],
         );
         textOut = parts
           .flatMap((p) => ("text" in p && p.text ? [p.text] : []))
