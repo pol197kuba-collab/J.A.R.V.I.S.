@@ -509,7 +509,6 @@ export const deleteGithubToken = createServerFn({ method: "POST" })
 // ---------------------------------------------------------------------------
 
 export type UserSettings = {
-  chatRouting: "client" | "server";
   defaultModel: string;
   voiceLanguage: "auto" | "en" | "pl";
   wakeWordEnabled: boolean;
@@ -530,7 +529,6 @@ export type UserSettings = {
 };
 
 const DEFAULT_SETTINGS: UserSettings = {
-  chatRouting: "client",
   defaultModel: DEFAULT_GEMINI_MODEL,
   voiceLanguage: "auto",
   wakeWordEnabled: true,
@@ -548,14 +546,13 @@ export const getUserSettings = createServerFn({ method: "GET" })
     const { data, error } = await supabase
       .from("user_settings")
       .select(
-        "chat_routing, default_model, voice_language, wake_word_enabled, brief_hour, brief_push, monthly_budget_usd, home_lat, home_lon",
+        "default_model, voice_language, wake_word_enabled, brief_hour, brief_push, monthly_budget_usd, home_lat, home_lon",
       )
       .eq("owner_id", userId)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return DEFAULT_SETTINGS;
     return {
-      chatRouting: data.chat_routing as "client" | "server",
       defaultModel: data.default_model,
       voiceLanguage: data.voice_language as "auto" | "en" | "pl",
       wakeWordEnabled: data.wake_word_enabled,
@@ -569,7 +566,6 @@ export const getUserSettings = createServerFn({ method: "GET" })
 
 const UpdateSettingsInput = z
   .object({
-    chatRouting: z.enum(["client", "server"]).optional(),
     defaultModel: GeminiModelId.optional(),
     voiceLanguage: z.enum(["auto", "en", "pl"]).optional(),
     wakeWordEnabled: z.boolean().optional(),
@@ -601,7 +597,6 @@ export const updateUserSettings = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const patch: {
       owner_id: string;
-      chat_routing?: "client" | "server";
       default_model?: string;
       voice_language?: "auto" | "en" | "pl";
       wake_word_enabled?: boolean;
@@ -611,7 +606,6 @@ export const updateUserSettings = createServerFn({ method: "POST" })
       home_lat?: number;
       home_lon?: number;
     } = { owner_id: userId };
-    if (data.chatRouting !== undefined) patch.chat_routing = data.chatRouting;
     if (data.defaultModel !== undefined) patch.default_model = data.defaultModel;
     if (data.voiceLanguage !== undefined) patch.voice_language = data.voiceLanguage;
     if (data.wakeWordEnabled !== undefined) patch.wake_word_enabled = data.wakeWordEnabled;
@@ -624,7 +618,7 @@ export const updateUserSettings = createServerFn({ method: "POST" })
       .from("user_settings")
       .upsert(patch, { onConflict: "owner_id" })
       .select(
-        "chat_routing, default_model, voice_language, wake_word_enabled, brief_hour, brief_push, monthly_budget_usd, home_lat, home_lon",
+        "default_model, voice_language, wake_word_enabled, brief_hour, brief_push, monthly_budget_usd, home_lat, home_lon",
       )
       .single();
     if (error) {
@@ -632,7 +626,6 @@ export const updateUserSettings = createServerFn({ method: "POST" })
       throw new Error(error.message);
     }
     return {
-      chatRouting: row.chat_routing as "client" | "server",
       defaultModel: row.default_model,
       voiceLanguage: row.voice_language as "auto" | "en" | "pl",
       wakeWordEnabled: row.wake_word_enabled,
