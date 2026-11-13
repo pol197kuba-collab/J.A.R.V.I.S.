@@ -20,6 +20,7 @@ import { getUserSettings } from "@/lib/agents/runtime.functions";
 import { logClientEvent } from "@/lib/system/logClientEvent";
 import { COMMAND_REGISTRY, getCommand, type CommandActionId } from "@/lib/commands/registry";
 import type { ScanMode } from "@/lib/vision/modes";
+import { getSpeechCtor, type AnySpeechRecognition } from "./speechRecognition";
 
 type Ctx = {
   enabled: boolean;
@@ -111,32 +112,6 @@ function isNoise(command: string): boolean {
   if (!bare) return true;
   if (NOISE_RE.test(bare)) return true;
   return false;
-}
-
-export type AnySpeechRecognition = {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult:
-    | ((e: {
-        resultIndex?: number;
-        results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }>;
-      }) => void)
-    | null;
-  onend: (() => void) | null;
-  onerror: ((e: unknown) => void) | null;
-  onstart: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-};
-
-export function getSpeechCtor(): (new () => AnySpeechRecognition) | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as {
-    SpeechRecognition?: new () => AnySpeechRecognition;
-    webkitSpeechRecognition?: new () => AnySpeechRecognition;
-  };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
 // Local action id = the command's registry id. Kept as a distinct alias so

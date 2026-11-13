@@ -46,7 +46,25 @@ export default tseslint.config(
           ],
         },
       ],
-      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
+      // Kontekst + jego hook w jednym pliku (useX obok XProvider) i warianty cva
+      // obok komponentu shadcn to świadomy wzorzec: przy zmianie takiego pliku
+      // HMR przeładowuje go w całości, nic więcej. Lista jawna — każdy nowy
+      // eksport niekomponentowy dalej daje ostrzeżenie (etap 8 planu naprawczego).
+      "react-refresh/only-export-components": [
+        "warn",
+        {
+          allowConstantExport: true,
+          allowExportNames: [
+            "useArkReboot",
+            "useRouteTransition",
+            "useHudNavigate",
+            "useVoiceCommands",
+            "useSidebar",
+            "buttonVariants",
+            "toggleVariants",
+          ],
+        },
+      ],
       "@typescript-eslint/no-unused-vars": "off",
     },
   },

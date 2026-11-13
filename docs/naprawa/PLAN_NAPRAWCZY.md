@@ -39,7 +39,7 @@
       logowania przez OAuth (`StarkLogin.tsx:115`): nowe konto Google też jest
       rejestracją.
 - [x] **W2. Którą ścieżką chodzi czat.** (sprawdzone przez właściciela 2026-11-11) SQL: `select chat_routing from
-      user_settings;` — wynik wpisać tutaj: `server` (1 wiersz). Potrzebne w etapie 5.
+    user_settings;` — wynik wpisać tutaj: `server` (1 wiersz). Potrzebne w etapie 5.
 - [x] **W3. Klucz service role na hostingu.** (potwierdzone przez właściciela 2026-11-11: ustawiony) Potwierdzić, że
       `JARVIS_SUPABASE_SERVICE_ROLE_KEY` jest ustawiony w sekretach Lovable
       (używa go moduł paliw). Bez tego etap 5 nie ruszy.
@@ -70,8 +70,7 @@ Bez tego kolejne etapy nie mają jak wykryć regresji w rdzeniu agentów.
       Gemini; pusta tura i powtórka; klasyfikator UI po turze bez narzędzi.
       Każdy sprawdza: tekst końcowy, listę wywołań narzędzi, co zapisano
       w `agent_runs` (status, tokeny, koszt).
-      → `src/lib/agents/runtime.characterization.test.ts` (11 testów: 9 scenariuszy
-      + failover na Groq + klasyfikator na Gemini). Znane usterki A4, A9, A20
+      → `src/lib/agents/runtime.characterization.test.ts` (11 testów: 9 scenariuszy + failover na Groq + klasyfikator na Gemini). Znane usterki A4, A9, A20
       utrwalone jako „STAN OBECNY” — etap, który je naprawia, zmienia te asercje.
 - [x] Pokrycie: `vitest --coverage` jako osobny skrypt `test:coverage`
       (bez progu w CI). Zapisać w Dzienniku pokrycie `src/lib/agents`.
@@ -200,7 +199,7 @@ Dopiero po etapie 2, żeby efekt było widać w liczbach.
       właściciela 2026-11-11), więc punktem odniesienia będzie okres przed
       publikacją etapu 3. Zapytanie do uruchomienia w Supabase:
       `select date_trunc('day', created_at) d, purpose, count(*), avg(tokens_input)::int,
-      sum(cache_read) from llm_usage where module = 'agents' group by 1, 2 order by 1, 2;`
+    sum(cache_read) from llm_usage where module = 'agents' group by 1, 2 order by 1, 2;`
 - [x] **Cache promptu Anthropic**: `cache_control` na bloku systemowym
       i definicjach narzędzi. Sprawdzić w aktualnej dokumentacji minimalną
       długość prefiksu i ceny zapisu do cache.
@@ -278,21 +277,19 @@ Wymaga W2 i W3.
       `getOwnerSecrets(userId)` w pliku `.server.ts`). Zapis kluczy
       z Ustawień — tą samą drogą. Skrypty w `scripts/` przechodzą na service
       role tam, gdzie czytają klucze. Potem migracja: `REVOKE SELECT, INSERT,
-      UPDATE, DELETE ON user_secrets FROM authenticated`.
+    UPDATE, DELETE ON user_secrets FROM authenticated`.
       Kolejność wdrożenia: najpierw kod (PR 5a), po potwierdzeniu działania
-      migracja (PR 5b).
-      - [x] Kod (PR 5a): helpery `readOwnerSecrets` / `writeOwnerSecrets` /
-        `clearOwnerSecrets` w `src/lib/secrets/ownerSecrets.server.ts`; żaden
-        klient użytkownika nie dotyka tabeli (test `runtime.secrets.test.ts`).
-        Skrypty z `scripts/` czytają klucze tą samą drogą (service role ze
-        zmiennych Actions — wszystkie workflowy go mają). Funkcje SQL
-        czytające tabelę są SECURITY DEFINER, więc REVOKE ich nie dotknie.
-      - [x] Migracja REVOKE (PR 5b): `20261112160000_user_secrets_service_role_only.sql`
-        — `REVOKE ALL ... FROM anon, authenticated` (szerzej niż SELECT/INSERT/
-        UPDATE/DELETE: Supabase nadaje też TRUNCATE/REFERENCES/TRIGGER i anon).
-        Właściciel potwierdził działanie 5a 2026-11-12. Sprawdzone na lokalnym
-        Postgresie 16: authenticated i anon → permission denied, funkcje
-        SECURITY DEFINER i service_role działają.
+      migracja (PR 5b). - [x] Kod (PR 5a): helpery `readOwnerSecrets` / `writeOwnerSecrets` /
+      `clearOwnerSecrets` w `src/lib/secrets/ownerSecrets.server.ts`; żaden
+      klient użytkownika nie dotyka tabeli (test `runtime.secrets.test.ts`).
+      Skrypty z `scripts/` czytają klucze tą samą drogą (service role ze
+      zmiennych Actions — wszystkie workflowy go mają). Funkcje SQL
+      czytające tabelę są SECURITY DEFINER, więc REVOKE ich nie dotknie. - [x] Migracja REVOKE (PR 5b): `20261112160000_user_secrets_service_role_only.sql`
+      — `REVOKE ALL ... FROM anon, authenticated` (szerzej niż SELECT/INSERT/
+      UPDATE/DELETE: Supabase nadaje też TRUNCATE/REFERENCES/TRIGGER i anon).
+      Właściciel potwierdził działanie 5a 2026-11-12. Sprawdzone na lokalnym
+      Postgresie 16: authenticated i anon → permission denied, funkcje
+      SECURITY DEFINER i service_role działają.
 - [x] Sprawdzić, że żadna funkcja serwerowa nie zwraca pełnego klucza
       (dziś zwracają podgląd 4 znaków — utrzymać). Test
       `src/lib/secrets/noKeyLeak.test.ts`; `google_cse_cx` (jawny
@@ -483,37 +480,48 @@ testów, a etapy 7 i 8 dotkną tych samych miejsc.
 
 Bezwarunkowo:
 
-- [ ] `ActiveTasksWidget.tsx` i nieużywane eksporty z `src/data/mock.ts`.
-- [ ] `public/Intro.mp4` albo `public/intro.mp4` — zostaje ten, do którego
+- [x] `ActiveTasksWidget.tsx` i nieużywane eksporty z `src/data/mock.ts`.
+      (8A: `mock.ts` usunięty, `bootLogs` w `src/data/bootLogs.ts`.)
+- [x] `public/Intro.mp4` albo `public/intro.mp4` — zostaje ten, do którego
       odwołuje się kod.
-- [ ] Nieużywane komponenty `src/components/ui/*` i ich zależności
+      (8A: kod nie odwołuje się do żadnego — oba identyczne pliki usunięte.)
+- [x] Nieużywane komponenty `src/components/ui/*` i ich zależności
       (zweryfikować każdy `grep`-em po nazwie pliku, także importy względne;
       kandydaci: carousel, calendar, drawer, form, input-otp, resizable,
       menubar, navigation-menu, context-menu, hover-card, pagination,
       breadcrumb, aspect-ratio).
-- [ ] `@types/leaflet` do `devDependencies`. Oba lockfile zaktualizowane
+      (8A: 27 nieużywanych komponentów — 13 kandydatów i 14 kolejnych — oraz
+      23 pakiety używane tylko przez nie. Tailwind, `router-plugin`,
+      `tsconfig-paths` zostają — używane pośrednio przez CSS/Vite.)
+- [x] `@types/leaflet` do `devDependencies`. Oba lockfile zaktualizowane
       (`bun.lock` dla Lovable, `package-lock.json` dla CI).
-- [ ] `docs/login-scene-prototype/` (4,9 MB, zastąpiony przez
+- [x] `docs/login-scene-prototype/` (4,9 MB, zastąpiony przez
       `docs/jarvis-3d-v2/` według `CLAUDE.md`).
-- [ ] `TODO.md` (130 kB): wpisy zrobione do `docs/archiwum/`, w korzeniu
+      (8A: `reactor.js` identyczny w obu; odwołania przepięte na v2.)
+- [x] `TODO.md` (130 kB): wpisy zrobione do `docs/archiwum/`, w korzeniu
       zostaje tylko to, co otwarte. `CODEX.md`: usunąć to, co powtarza
       `CLAUDE.md` / `PLAN.md`, albo zarchiwizować w całości.
-- [ ] Ostrzeżenia lint (15) — naprawić albo uzasadnić komentarzem.
+      (8A: oba do `docs/archiwum/`; w korzeniu `TODO.md` z otwartymi
+      pozycjami, ~11 kB.)
+- [x] Ostrzeżenia lint (15) — naprawić albo uzasadnić komentarzem.
+      (8A: 14 → 0 — usunięte pliki, eksporty przeniesione/ukryte, brakująca
+      zależność hooka, jawna lista hooków kontekstu w `eslint.config.js`
+      z uzasadnieniem. Ostatnie, w `/schema`, znika z modułem w 8B.)
 - [ ] Kolumna `user_settings.chat_routing` — usunąć (po etapie 5).
 
 Decyzje właściciela z 2026-11-11 (W5):
 
-| Moduł | Decyzja | Co obejmuje usunięcie |
-|---|---|---|
-| `/sub-systems` | usuń | trasa, `components/jarvis/subsystems/`, `data/subSystems.ts`, wpis w rejestrze komend i menu |
-| `/schema` | usuń | trasa, `lib/schema/`, komenda `open_schema` (tryb STRUKTURA w `/mozg` zostaje) |
-| `/commands` | usuń | trasa, `CommandDirectory`, `data/commandDirectory.ts` |
-| `/feed` | usuń | trasa, `lib/feed/` (zostają `/system-logs` i podgląd w `/jarvis`) |
-| Serwer MCP | usuń | `lib/mcp/`, trasy `mcp`, `[.mcp]`, `[.well-known]`, `@lovable.dev/mcp-js`, wtyczka w `vite.config.ts`, `.lovable/mcp` |
-| Darwin w runtime | odepnij | wywołanie `chooseVariant` w orkiestratorze (kod `lib/darwin` i tabele mogą zostać uśpione) |
-| Lokalny worker | usuń | `local-worker/`, narzędzie `run_local_action`, tabela `local_jobs` |
-| Dev Wing | usuń | `start_dev_session`, `check_dev_session`, `lib/dev/`, `claude-dev.yml`, tabele `dev_sessions`/`projects` |
-| Dane demo Mózgu | usuń | `brain-demo.yml`, `scripts/brain-demo.ts`, `lib/brain/demoSeed.ts` |
+| Moduł            | Decyzja | Co obejmuje usunięcie                                                                                                 |
+| ---------------- | ------- | --------------------------------------------------------------------------------------------------------------------- |
+| `/sub-systems`   | usuń    | trasa, `components/jarvis/subsystems/`, `data/subSystems.ts`, wpis w rejestrze komend i menu                          |
+| `/schema`        | usuń    | trasa, `lib/schema/`, komenda `open_schema` (tryb STRUKTURA w `/mozg` zostaje)                                        |
+| `/commands`      | usuń    | trasa, `CommandDirectory`, `data/commandDirectory.ts`                                                                 |
+| `/feed`          | usuń    | trasa, `lib/feed/` (zostają `/system-logs` i podgląd w `/jarvis`)                                                     |
+| Serwer MCP       | usuń    | `lib/mcp/`, trasy `mcp`, `[.mcp]`, `[.well-known]`, `@lovable.dev/mcp-js`, wtyczka w `vite.config.ts`, `.lovable/mcp` |
+| Darwin w runtime | odepnij | wywołanie `chooseVariant` w orkiestratorze (kod `lib/darwin` i tabele mogą zostać uśpione)                            |
+| Lokalny worker   | usuń    | `local-worker/`, narzędzie `run_local_action`, tabela `local_jobs`                                                    |
+| Dev Wing         | usuń    | `start_dev_session`, `check_dev_session`, `lib/dev/`, `claude-dev.yml`, tabele `dev_sessions`/`projects`              |
+| Dane demo Mózgu  | usuń    | `brain-demo.yml`, `scripts/brain-demo.ts`, `lib/brain/demoSeed.ts`                                                    |
 
 Uwagi do wykonania:
 
@@ -549,66 +557,66 @@ z danymi właściciela usuwamy osobną migracją dopiero po jego potwierdzeniu.
 Wszystko, co wyjdzie po drodze i nie należy do bieżącego etapu, trafia tutaj —
 nie naprawiamy „przy okazji” w tym samym PR, chyba że blokuje etap.
 
-| Data | Gdzie | Opis | Znalezione w etapie | Naprawione w (PR) |
-|---|---|---|---|---|
-| 2026-11-11 | `runtime.server.ts`, koniec pętli narzędziowej | Komunikat po wyczerpaniu limitu iteracji jest po angielsku („I have completed several tool calls but ran out of orchestration cycles…”), reszta odpowiedzi jest po polsku. Utrwalony w teście charakteryzującym nr 5. | 0 | naprawione w etapie 6b (#238): po polsku, `ITERATION_LIMIT_REPLY` |
-| 2026-11-11 | `bun.lock` | Rejestr Lovable (`europe-west*-npm.pkg.dev`) jest niedostępny z sesji Claude Code w chmurze, więc `bun install` tam nie działa. Nowe wpisy (`@vitest/coverage-v8` i zależności) mają pusty adres, czyli domyślny rejestr npm, zamiast adresu cache Lovable. Sprawdzić, czy build w Lovable przechodzi. | 0 | nie wymaga naprawy — właściciel potwierdził 2026-11-11, że build w Lovable przechodzi |
-| 2026-11-11 | `src/lib/agents/models.ts` (katalog modeli) | Katalog nadal oferuje `gemini-2.0-flash`, który według forum Google wyłączono 31.03.2026; nie ma go w cenniku (koszt `null`). | 2 | naprawione: #238 (model wyłączony → domyślny), 2026-11-13 usunięte z katalogu (wyłączone 2026-06-01) |
-| 2026-11-11 | build (`npm run build`) | 31 ostrzeżeń „externalized for browser compatibility”, m.in. `node:dns`/`node:net` z `tools.server.ts` i `web-push` — kod serwerowy jest w grafie importów klienta. Identycznie na `main` przed etapem 2; build przechodzi, nic z tego nie trafia do bundla przeglądarki (sprawdzone). | 2 | |
-| 2026-11-11 | `src/lib/agents/pricing.ts` | Stawki Groq niezweryfikowane u źródła (strona Groq niedostępna z sesji, agregatory sprzeczne — część mówi o przejściu tych modeli na „contact sales”). Sprawdzić ręcznie na groq.com/pricing. | 2 | sprawdzone 2026-11-13: Llama „Contact Sales”, dopisane gpt-oss; decyzja o modelach domyślnych u właściciela |
-| 2026-11-11 | `src/lib/ai/llm/anthropic.ts` (`forceToolName`) | Wymuszenie narzędzia przez `tool_choice: {type: "tool"}` (F.O.R.G.E. → `generate_document`) według dokumentacji Claude API zwraca 400 na Claude Opus 5.5 i Sonnet 5.5. Agent ustawiony na te modele padnie przy wymuszeniu (potem zejdzie na Gemini). | 3 | naprawione w etapie 6b (#238): `acceptsForcedToolChoice`, wymuszona tura od razu na Gemini |
-| 2026-11-12 | `useAgentChatChannel.ts`, `VoiceCommandContext.tsx` (historia czatu) | Klient dopisywał wiadomość do transkryptu PRZED pobraniem historii, więc model dostawał tę samą prośbę dwa razy (historia + input) i odpowiadał „prośba padła dwa razy”. Od etapu 3 tylko przy pierwszej wiadomości w nowym/wyczyszczonym wątku i w ścieżce głosowej; wcześniej przy każdej turze. Zgłosił właściciel. | 0 | naprawione 2026-11-12: historia pobierana przed dopisaniem + `withoutCurrentInput` na serwerze (test) |
-| 2026-11-12 | `runAgent` (`runtime.functions.ts`) | **Regresja z etapu 5 (A8):** przepisany `askJarvis` przestał podawać `conversationId` (zniknęło `resolveConversationId`), więc od publikacji 5a każda odpowiedź drogą głosową/komend zakładała nowy wątek i czat pokazywał tylko najnowszy. Wiadomość bez `conversationId` (wysłana, zanim czat wczytał wątek; głos; zmiana agenta) zakładała NOWY wątek. Czat pokazywał potem tylko ten wątek — starej rozmowy nie dało się przewinąć. Zgłosił właściciel. Stare wątki zostają w bazie nietknięte. | 0 | naprawione 2026-11-12: bez `conversationId` dopisujemy do ostatniego wątku agenta (test `runAgent.thread.test.ts`) |
-| 2026-11-12 | `useAgentChatChannel.ts` (aktywny agent) | Przeglądarka pamiętała slug agenta sprzed zmiany nazw (`orchestrator`); mikrofon spoza `/jarvis` wysyła od razu, zanim aplikacja wczyta wybór z konta → „Agent not found: orchestrator”. Zgłosił właściciel. | 0 | naprawione 2026-11-12: zapamiętany agent sprawdzany z listą istniejących (`isAgentSlug`), nieznany → J.A.R.V.I.S. i nadpisanie wpisu |
-| 2026-11-13 | `supabase/migrations/20260817120000_metric_analysis_expansion.sql` | Migracja nie przechodzi na czystej bazie: `to_jsonb($$…$$)` — „could not determine polymorphic type”. Na produkcji nałożona dawno, więc nic nie psuje; pliku migracji nie wolno zmieniać. Test dymny poprawia ją tylko w kopii roboczej CI (`e2e/fix-legacy-migrations.sh`; job pada, jeśli wzorzec zniknie). | 9 | obejście w CI (#242), plik w repo bez zmian |
-| 2026-11-13 | lokalna baza testu dymnego | Trigger `enforce_owner_only_signup` (W1) blokuje założenie konta testowego; w jednorazowej bazie CI funkcja jest podmieniana na przepuszczającą. Produkcja bez zmian. | 9 | świadome obejście w CI (#242) |
+| Data       | Gdzie                                                                | Opis                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Znalezione w etapie | Naprawione w (PR)                                                                                                                    |
+| ---------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-11-11 | `runtime.server.ts`, koniec pętli narzędziowej                       | Komunikat po wyczerpaniu limitu iteracji jest po angielsku („I have completed several tool calls but ran out of orchestration cycles…”), reszta odpowiedzi jest po polsku. Utrwalony w teście charakteryzującym nr 5.                                                                                                                                                                                                                                                                               | 0                   | naprawione w etapie 6b (#238): po polsku, `ITERATION_LIMIT_REPLY`                                                                    |
+| 2026-11-11 | `bun.lock`                                                           | Rejestr Lovable (`europe-west*-npm.pkg.dev`) jest niedostępny z sesji Claude Code w chmurze, więc `bun install` tam nie działa. Nowe wpisy (`@vitest/coverage-v8` i zależności) mają pusty adres, czyli domyślny rejestr npm, zamiast adresu cache Lovable. Sprawdzić, czy build w Lovable przechodzi.                                                                                                                                                                                              | 0                   | nie wymaga naprawy — właściciel potwierdził 2026-11-11, że build w Lovable przechodzi                                                |
+| 2026-11-11 | `src/lib/agents/models.ts` (katalog modeli)                          | Katalog nadal oferuje `gemini-2.0-flash`, który według forum Google wyłączono 31.03.2026; nie ma go w cenniku (koszt `null`).                                                                                                                                                                                                                                                                                                                                                                       | 2                   | naprawione: #238 (model wyłączony → domyślny), 2026-11-13 usunięte z katalogu (wyłączone 2026-06-01)                                 |
+| 2026-11-11 | build (`npm run build`)                                              | 31 ostrzeżeń „externalized for browser compatibility”, m.in. `node:dns`/`node:net` z `tools.server.ts` i `web-push` — kod serwerowy jest w grafie importów klienta. Identycznie na `main` przed etapem 2; build przechodzi, nic z tego nie trafia do bundla przeglądarki (sprawdzone).                                                                                                                                                                                                              | 2                   |                                                                                                                                      |
+| 2026-11-11 | `src/lib/agents/pricing.ts`                                          | Stawki Groq niezweryfikowane u źródła (strona Groq niedostępna z sesji, agregatory sprzeczne — część mówi o przejściu tych modeli na „contact sales”). Sprawdzić ręcznie na groq.com/pricing.                                                                                                                                                                                                                                                                                                       | 2                   | sprawdzone 2026-11-13: Llama „Contact Sales”, dopisane gpt-oss; decyzja o modelach domyślnych u właściciela                          |
+| 2026-11-11 | `src/lib/ai/llm/anthropic.ts` (`forceToolName`)                      | Wymuszenie narzędzia przez `tool_choice: {type: "tool"}` (F.O.R.G.E. → `generate_document`) według dokumentacji Claude API zwraca 400 na Claude Opus 5.5 i Sonnet 5.5. Agent ustawiony na te modele padnie przy wymuszeniu (potem zejdzie na Gemini).                                                                                                                                                                                                                                               | 3                   | naprawione w etapie 6b (#238): `acceptsForcedToolChoice`, wymuszona tura od razu na Gemini                                           |
+| 2026-11-12 | `useAgentChatChannel.ts`, `VoiceCommandContext.tsx` (historia czatu) | Klient dopisywał wiadomość do transkryptu PRZED pobraniem historii, więc model dostawał tę samą prośbę dwa razy (historia + input) i odpowiadał „prośba padła dwa razy”. Od etapu 3 tylko przy pierwszej wiadomości w nowym/wyczyszczonym wątku i w ścieżce głosowej; wcześniej przy każdej turze. Zgłosił właściciel.                                                                                                                                                                              | 0                   | naprawione 2026-11-12: historia pobierana przed dopisaniem + `withoutCurrentInput` na serwerze (test)                                |
+| 2026-11-12 | `runAgent` (`runtime.functions.ts`)                                  | **Regresja z etapu 5 (A8):** przepisany `askJarvis` przestał podawać `conversationId` (zniknęło `resolveConversationId`), więc od publikacji 5a każda odpowiedź drogą głosową/komend zakładała nowy wątek i czat pokazywał tylko najnowszy. Wiadomość bez `conversationId` (wysłana, zanim czat wczytał wątek; głos; zmiana agenta) zakładała NOWY wątek. Czat pokazywał potem tylko ten wątek — starej rozmowy nie dało się przewinąć. Zgłosił właściciel. Stare wątki zostają w bazie nietknięte. | 0                   | naprawione 2026-11-12: bez `conversationId` dopisujemy do ostatniego wątku agenta (test `runAgent.thread.test.ts`)                   |
+| 2026-11-12 | `useAgentChatChannel.ts` (aktywny agent)                             | Przeglądarka pamiętała slug agenta sprzed zmiany nazw (`orchestrator`); mikrofon spoza `/jarvis` wysyła od razu, zanim aplikacja wczyta wybór z konta → „Agent not found: orchestrator”. Zgłosił właściciel.                                                                                                                                                                                                                                                                                        | 0                   | naprawione 2026-11-12: zapamiętany agent sprawdzany z listą istniejących (`isAgentSlug`), nieznany → J.A.R.V.I.S. i nadpisanie wpisu |
+| 2026-11-13 | `supabase/migrations/20260817120000_metric_analysis_expansion.sql`   | Migracja nie przechodzi na czystej bazie: `to_jsonb($$…$$)` — „could not determine polymorphic type”. Na produkcji nałożona dawno, więc nic nie psuje; pliku migracji nie wolno zmieniać. Test dymny poprawia ją tylko w kopii roboczej CI (`e2e/fix-legacy-migrations.sh`; job pada, jeśli wzorzec zniknie).                                                                                                                                                                                       | 9                   | obejście w CI (#242), plik w repo bez zmian                                                                                          |
+| 2026-11-13 | lokalna baza testu dymnego                                           | Trigger `enforce_owner_only_signup` (W1) blokuje założenie konta testowego; w jednorazowej bazie CI funkcja jest podmieniana na przepuszczającą. Produkcja bez zmian.                                                                                                                                                                                                                                                                                                                               | 9                   | świadome obejście w CI (#242)                                                                                                        |
 
 ## Dziennik
 
-| Data | Etap | PR | Wynik kontroli (typecheck / testy / lint) | Uwagi, pomiary |
-|---|---|---|---|---|
-| 2026-11-11 | — | — | czysty / 981 zielonych / 0 błędów, 15 ostrzeżeń | stan wyjściowy |
-| 2026-11-11 | 0 | #223 | czysty / 992 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Pokrycie `src/lib/agents`: linie 40,06% (1002/2501), instrukcje 38,57%, gałęzie 33,66%, funkcje 36,09%; `runtime.server.ts` linie 80,7% / gałęzie 67,7% (bez nowych testów 73,5% / 59,0%); `tools.server.ts` linie 20,1%. Całe `src`: linie 23,46%. Mutacja kontrolna (+1 token w zapisie, klasyfikator mimo wywołań narzędzi) wywraca 10 z 11 nowych testów. |
-| 2026-11-11 | 1 | #225 | czysty / 1013 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Testy z etapu 0 bez zmian w asercjach. Pokrycie `src/lib/agents`: linie 44,80% (było 40,06%), gałęzie 37,11%; `runtime.server.ts` 82,3%, `tools.server.ts` 35,9% (było 20,1%). Migracja `memories.origin` — wchodzi sama po merge; nowy kod `remember` jej wymaga, więc publikacja w Lovable PO migracji. |
-| 2026-11-11 | 2 | #226 | czysty / 1046 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Pokrycie `src/lib/agents`: linie 45,33% (było 44,80%), `src/lib/ai/llm` 88,8%. Build OK, w bundlu przeglądarki brak księgi i klucza. Migracja `llm_usage` i funkcja sumująca sprawdzone na lokalnym Postgresie 16 (dwa przebiegi, przejście z `agent_runs`). Kolejność wdrożenia: migracja (sama po merge) → publikacja w Lovable. |
-| 2026-11-11 | 3 | #227 | czysty / 1068 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Pomiar przed/po niewykonany (brak dostępu do bazy, księga od dziś) — zapytanie w etapie 3. Oczekiwany efekt: klasyfikator tylko dla poleceń UI (zamiast po każdej turze bez narzędzi), historia ≤ ~6000 tokenów zamiast do 30×8000 znaków, cache promptu dla agentów na Claude. |
-| 2026-11-12 | 4 | #228 | czysty / 1086 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Testy z etapu 0 bez zmian. Pokrycie `src/lib/agents`: linie 51,82% (było 45,33%), `runtime/` 83,8%, `tools/` 49,8%. Ten poziom to próg dla etapu 9. |
-| 2026-11-12 | 5 (5a) | #229 | czysty / 1098 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | A8, A5 (kod), A14. Z Ustawień znika przełącznik „Czat przez serwer” — czat zawsze idzie przez serwer. Migracja REVOKE (5b) dopiero po potwierdzeniu przez właściciela, że 5a działa po publikacji w Lovable. |
-| 2026-11-12 | 5 (5b) | #234 | czysty / 1104 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Migracja REVOKE na `user_secrets`. Po drodze (zgłoszenia właściciela): #230 (prośba „dwa razy”), #231 (wątek czatu — regresja z A8), #232 (nieistniejący agent; stare nazwy agentów w kodzie), #233 (narzędzia `guardian_*` → `shield_*`). Etap 5 zamknięty. |
-| 2026-11-12 | 6 | #235 | czysty / 1116 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Kolejka w tle (pg_cron → `document-jobs.yml`) i warunkowe przejęcie zadań/grafik. Migracja sprawdzona na lokalnym Postgresie 16 (atrapy `net`/`cron`): wywołanie tylko przy czekającej pracy, blokada 5 min, drugi przebieg bez błędu. Otwarte: usunięcie ratownika z briefingu (po tygodniu), sprawdzenie ucinania w logach Lovable. |
-| 2026-11-12 | przegląd | — | czysty / 1116 zielonych / 0 błędów, 15 ostrzeżeń | Niezależny przegląd `main` po etapach 0–6: kierunek zgodny z planem; znaleziona usterka z sekretami jobów (W7, etap 6b). Dopisany etap 6b, zmieniona kolejność: 6b → 9 → 7 → 8. |
-| 2026-11-12 | 6b (A) | #237 | czysty / 1122 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Joby: jedna droga uwierzytelnienia, głośno o braku kluczy, zdanie na koniec; README sekretów. Ręcznie: 7 jobów bez sekretu → kod 1. |
-| 2026-11-12 | 6b (B) | #238 | czysty / 1129 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | recall a obca treść, wymuszenie narzędzia per model Claude, model wyłączony → domyślny, komunikat limitu po polsku. Otwarte: W8 (logi z 13.11), stawki Groq i katalog Gemini (strony poza siecią sesji), liczba wpisów `unknown`. |
-| 2026-11-13 | 9 | #242 | czysty / 1134 zielone / 0 błędów, 15 ostrzeżeń (bez nowych) | Test dymny Playwright (logowanie → czat → odpowiedź → notatka w `/notes`) na lokalnym Supabase z atrapą Gemini — zielony w CI (~3 min). Próg pokrycia `src/lib/agents` 51,82% linii w CI. Przy okazji (#241): Groq na GPT-OSS. Następny etap: 7. |
-| 2026-11-13 | 7 | #244 | czysty / 1141 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | 18 zapytań z odpytywania 3–15 s na realtime + zapas 60 s. Migracja publikacji sprawdzona na lokalnym Postgresie 16 (dwa przebiegi). Test dymny z realtime (lokalny Supabase). Do sprawdzenia po publikacji: czy status agenta i dokumentów odświeża się od razu. |
+| Data       | Etap     | PR   | Wynik kontroli (typecheck / testy / lint)                     | Uwagi, pomiary                                                                                                                                                                                                                                                                                                                                                |
+| ---------- | -------- | ---- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-11-11 | —        | —    | czysty / 981 zielonych / 0 błędów, 15 ostrzeżeń               | stan wyjściowy                                                                                                                                                                                                                                                                                                                                                |
+| 2026-11-11 | 0        | #223 | czysty / 992 zielone / 0 błędów, 15 ostrzeżeń (bez nowych)    | Pokrycie `src/lib/agents`: linie 40,06% (1002/2501), instrukcje 38,57%, gałęzie 33,66%, funkcje 36,09%; `runtime.server.ts` linie 80,7% / gałęzie 67,7% (bez nowych testów 73,5% / 59,0%); `tools.server.ts` linie 20,1%. Całe `src`: linie 23,46%. Mutacja kontrolna (+1 token w zapisie, klasyfikator mimo wywołań narzędzi) wywraca 10 z 11 nowych testów. |
+| 2026-11-11 | 1        | #225 | czysty / 1013 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Testy z etapu 0 bez zmian w asercjach. Pokrycie `src/lib/agents`: linie 44,80% (było 40,06%), gałęzie 37,11%; `runtime.server.ts` 82,3%, `tools.server.ts` 35,9% (było 20,1%). Migracja `memories.origin` — wchodzi sama po merge; nowy kod `remember` jej wymaga, więc publikacja w Lovable PO migracji.                                                     |
+| 2026-11-11 | 2        | #226 | czysty / 1046 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Pokrycie `src/lib/agents`: linie 45,33% (było 44,80%), `src/lib/ai/llm` 88,8%. Build OK, w bundlu przeglądarki brak księgi i klucza. Migracja `llm_usage` i funkcja sumująca sprawdzone na lokalnym Postgresie 16 (dwa przebiegi, przejście z `agent_runs`). Kolejność wdrożenia: migracja (sama po merge) → publikacja w Lovable.                            |
+| 2026-11-11 | 3        | #227 | czysty / 1068 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Pomiar przed/po niewykonany (brak dostępu do bazy, księga od dziś) — zapytanie w etapie 3. Oczekiwany efekt: klasyfikator tylko dla poleceń UI (zamiast po każdej turze bez narzędzi), historia ≤ ~6000 tokenów zamiast do 30×8000 znaków, cache promptu dla agentów na Claude.                                                                               |
+| 2026-11-12 | 4        | #228 | czysty / 1086 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Testy z etapu 0 bez zmian. Pokrycie `src/lib/agents`: linie 51,82% (było 45,33%), `runtime/` 83,8%, `tools/` 49,8%. Ten poziom to próg dla etapu 9.                                                                                                                                                                                                           |
+| 2026-11-12 | 5 (5a)   | #229 | czysty / 1098 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | A8, A5 (kod), A14. Z Ustawień znika przełącznik „Czat przez serwer” — czat zawsze idzie przez serwer. Migracja REVOKE (5b) dopiero po potwierdzeniu przez właściciela, że 5a działa po publikacji w Lovable.                                                                                                                                                  |
+| 2026-11-12 | 5 (5b)   | #234 | czysty / 1104 zielone / 0 błędów, 15 ostrzeżeń (bez nowych)   | Migracja REVOKE na `user_secrets`. Po drodze (zgłoszenia właściciela): #230 (prośba „dwa razy”), #231 (wątek czatu — regresja z A8), #232 (nieistniejący agent; stare nazwy agentów w kodzie), #233 (narzędzia `guardian_*` → `shield_*`). Etap 5 zamknięty.                                                                                                  |
+| 2026-11-12 | 6        | #235 | czysty / 1116 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | Kolejka w tle (pg_cron → `document-jobs.yml`) i warunkowe przejęcie zadań/grafik. Migracja sprawdzona na lokalnym Postgresie 16 (atrapy `net`/`cron`): wywołanie tylko przy czekającej pracy, blokada 5 min, drugi przebieg bez błędu. Otwarte: usunięcie ratownika z briefingu (po tygodniu), sprawdzenie ucinania w logach Lovable.                         |
+| 2026-11-12 | przegląd | —    | czysty / 1116 zielonych / 0 błędów, 15 ostrzeżeń              | Niezależny przegląd `main` po etapach 0–6: kierunek zgodny z planem; znaleziona usterka z sekretami jobów (W7, etap 6b). Dopisany etap 6b, zmieniona kolejność: 6b → 9 → 7 → 8.                                                                                                                                                                               |
+| 2026-11-12 | 6b (A)   | #237 | czysty / 1122 zielone / 0 błędów, 15 ostrzeżeń (bez nowych)   | Joby: jedna droga uwierzytelnienia, głośno o braku kluczy, zdanie na koniec; README sekretów. Ręcznie: 7 jobów bez sekretu → kod 1.                                                                                                                                                                                                                           |
+| 2026-11-12 | 6b (B)   | #238 | czysty / 1129 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | recall a obca treść, wymuszenie narzędzia per model Claude, model wyłączony → domyślny, komunikat limitu po polsku. Otwarte: W8 (logi z 13.11), stawki Groq i katalog Gemini (strony poza siecią sesji), liczba wpisów `unknown`.                                                                                                                             |
+| 2026-11-13 | 9        | #242 | czysty / 1134 zielone / 0 błędów, 15 ostrzeżeń (bez nowych)   | Test dymny Playwright (logowanie → czat → odpowiedź → notatka w `/notes`) na lokalnym Supabase z atrapą Gemini — zielony w CI (~3 min). Próg pokrycia `src/lib/agents` 51,82% linii w CI. Przy okazji (#241): Groq na GPT-OSS. Następny etap: 7.                                                                                                              |
+| 2026-11-13 | 7        | #244 | czysty / 1141 zielonych / 0 błędów, 15 ostrzeżeń (bez nowych) | 18 zapytań z odpytywania 3–15 s na realtime + zapas 60 s. Migracja publikacji sprawdzona na lokalnym Postgresie 16 (dwa przebiegi). Test dymny z realtime (lokalny Supabase). Do sprawdzenia po publikacji: czy status agenta i dokumentów odświeża się od razu.                                                                                              |
 
 ## Załącznik: znaleziska z rewizji (skrót)
 
-| ID | Waga | Gdzie | Co |
-|---|---|---|---|
-| A1 | wysoka | `runtime.server.ts:1244,1298` | wykonanie narzędzia bez sprawdzenia, czy jest włączone |
-| A2 | wysoka | `tools.server.ts:238,1107,1572` | obca treść i narzędzia z efektem ubocznym w jednej pętli |
-| A3 | wysoka | `budget.server.ts:26` | budżet liczy tylko `agent_runs` |
-| A4 | wysoka | `runtime.server.ts:1632` | run z błędem nie zapisuje kosztu |
-| A5 | wysoka | migracja `20260705210509` | sekrety jawnie, czytelne dla roli `authenticated` |
-| A6 | wysoka | `runtime.server.ts:522–1656` | jedna funkcja ~1130 linii |
-| A7 | średnia | 12 plików | wywołanie Gemini przepisane ręcznie |
-| A8 | średnia | `jarvisBrain.ts:28,327` | druga ścieżka czatu w przeglądarce, klucz w `localStorage` |
-| A9 | średnia | `runtime.server.ts:1424` | klasyfikator po każdej turze bez narzędzi |
-| A10 | średnia | `runtime.functions.ts:875`, `runtime.server.ts:622` | duży kontekst bez cache |
-| A11 | średnia | `runtime.server.ts:1111` | tokeny myślenia Gemini nieliczone (do weryfikacji) |
-| A12 | średnia | `budget.server.ts:27` | suma bez paginacji (limit 1000 wierszy) |
-| A13 | średnia | `tools.server.ts:255–264` | `fetch_url` bez limitu treści i czasu na treść |
-| A14 | średnia→niska | `claude-dev.yml:22` | wyzwalanie słowem `@claude` (repo prywatne) |
-| A15 | średnia | ~40 miejsc | odpytywanie co 3–8 s |
-| A16 | średnia | `documentJobs.functions.ts:1` | zadania w tle odpalane z przeglądarki |
-| A17 | średnia | `tools.server.ts` | 33 narzędzia w jednym pliku, mało testów |
-| A18 | niska | `runtime.server.ts:1068` i in. | klucz Gemini w adresie URL |
-| A19 | niska | `runtime.server.ts:778,1554` | status agenta przy równoległych runach |
-| A20 | niska | `runtime.server.ts:1209,1543` | tokeny Groq po stawce Gemini |
-| A21 | niska | `tools.server.ts:1988` | linki do plików ważne 7 dni |
-| A22 | niska | `ActiveTasksWidget.tsx`, `ui/*` | martwy kod |
-| A23 | niska | `public/` | zdublowany plik wideo |
-| A24 | niska | `package.json` | rozjazdy w zależnościach, dwa lockfile |
-| A25 | niska | korzeń repo | brak README, 210 kB notatek roboczych |
-| A26 | niska | testy | brak testów przepływów i pomiaru pokrycia |
+| ID  | Waga          | Gdzie                                               | Co                                                         |
+| --- | ------------- | --------------------------------------------------- | ---------------------------------------------------------- |
+| A1  | wysoka        | `runtime.server.ts:1244,1298`                       | wykonanie narzędzia bez sprawdzenia, czy jest włączone     |
+| A2  | wysoka        | `tools.server.ts:238,1107,1572`                     | obca treść i narzędzia z efektem ubocznym w jednej pętli   |
+| A3  | wysoka        | `budget.server.ts:26`                               | budżet liczy tylko `agent_runs`                            |
+| A4  | wysoka        | `runtime.server.ts:1632`                            | run z błędem nie zapisuje kosztu                           |
+| A5  | wysoka        | migracja `20260705210509`                           | sekrety jawnie, czytelne dla roli `authenticated`          |
+| A6  | wysoka        | `runtime.server.ts:522–1656`                        | jedna funkcja ~1130 linii                                  |
+| A7  | średnia       | 12 plików                                           | wywołanie Gemini przepisane ręcznie                        |
+| A8  | średnia       | `jarvisBrain.ts:28,327`                             | druga ścieżka czatu w przeglądarce, klucz w `localStorage` |
+| A9  | średnia       | `runtime.server.ts:1424`                            | klasyfikator po każdej turze bez narzędzi                  |
+| A10 | średnia       | `runtime.functions.ts:875`, `runtime.server.ts:622` | duży kontekst bez cache                                    |
+| A11 | średnia       | `runtime.server.ts:1111`                            | tokeny myślenia Gemini nieliczone (do weryfikacji)         |
+| A12 | średnia       | `budget.server.ts:27`                               | suma bez paginacji (limit 1000 wierszy)                    |
+| A13 | średnia       | `tools.server.ts:255–264`                           | `fetch_url` bez limitu treści i czasu na treść             |
+| A14 | średnia→niska | `claude-dev.yml:22`                                 | wyzwalanie słowem `@claude` (repo prywatne)                |
+| A15 | średnia       | ~40 miejsc                                          | odpytywanie co 3–8 s                                       |
+| A16 | średnia       | `documentJobs.functions.ts:1`                       | zadania w tle odpalane z przeglądarki                      |
+| A17 | średnia       | `tools.server.ts`                                   | 33 narzędzia w jednym pliku, mało testów                   |
+| A18 | niska         | `runtime.server.ts:1068` i in.                      | klucz Gemini w adresie URL                                 |
+| A19 | niska         | `runtime.server.ts:778,1554`                        | status agenta przy równoległych runach                     |
+| A20 | niska         | `runtime.server.ts:1209,1543`                       | tokeny Groq po stawce Gemini                               |
+| A21 | niska         | `tools.server.ts:1988`                              | linki do plików ważne 7 dni                                |
+| A22 | niska         | `ActiveTasksWidget.tsx`, `ui/*`                     | martwy kod                                                 |
+| A23 | niska         | `public/`                                           | zdublowany plik wideo                                      |
+| A24 | niska         | `package.json`                                      | rozjazdy w zależnościach, dwa lockfile                     |
+| A25 | niska         | korzeń repo                                         | brak README, 210 kB notatek roboczych                      |
+| A26 | niska         | testy                                               | brak testów przepływów i pomiaru pokrycia                  |

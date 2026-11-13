@@ -17,7 +17,7 @@ export type RebootStep = {
   log: string;
 };
 
-export const REBOOT_SEQUENCE: RebootStep[] = [
+const REBOOT_SEQUENCE: RebootStep[] = [
   { path: "/", module: "DASHBOARD", log: "[DASHBOARD: CORE REFRESHED // 100%]" },
   { path: "/agent-hub", module: "AGENT HUB", log: "[AGENT_HUB: RECONNECTING NEURAL AGENTS...]" },
   {

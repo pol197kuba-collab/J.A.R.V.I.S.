@@ -1,6 +1,6 @@
 // Agent Runtime — server-side functions.
 //
-// Zgodnie z CODEX.md: to jest fundament pod rdzeń J.A.R.V.I.S.. Na tym etapie
+// Zgodnie z docs/archiwum/CODEX.md: to jest fundament pod rdzeń J.A.R.V.I.S.. Na tym etapie
 // obsługujemy jednego agenta ("jarvis") i pojedynczy krok wywołania
 // LLM (bez multi-step tool loopu). Pamięć krótkoterminowa przekazywana jest
 // w polu `history`, żeby nie budować jeszcze konwersacji w DB.

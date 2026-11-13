@@ -1,5 +1,5 @@
 // three.js geometry of the login reactor, the Arc Core and the agent nodes.
-// 1:1 port of docs/login-scene-prototype/src/reactor.js — same geometries,
+// 1:1 port of docs/jarvis-3d-v2/src/reactor.js — same geometries,
 // segment counts, materials, shader, numbers. Only the colour source differs
 // (resolved theme tokens instead of hex literals, see sceneColors.ts).
 // Imports three: load ONLY through the dynamic import in LoginScene.tsx.
