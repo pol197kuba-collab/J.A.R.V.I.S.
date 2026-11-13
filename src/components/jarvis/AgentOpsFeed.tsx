@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { HudPanel } from "./HudPanel";
 import { listSystemEvents, type SystemEvent } from "@/lib/system/events.functions";
+import { LIVE_FALLBACK_MS } from "@/lib/realtime/liveTables";
+import { useLiveTables } from "@/lib/realtime/useLiveTables";
 
 const LEVEL_COLOR: Record<SystemEvent["level"], string> = {
   info: "var(--primary)",
@@ -25,10 +27,11 @@ function timeOf(iso: string): string {
 export function AgentOpsFeed({ index = 0 }: { index?: number }) {
   const fetchEvents = useServerFn(listSystemEvents);
 
+  useLiveTables("system_events");
   const { data: events = [], isFetching } = useQuery({
     queryKey: ["system-events", "ops-feed"],
     queryFn: () => fetchEvents({ data: { limit: 25 } }),
-    refetchInterval: 4000,
+    refetchInterval: LIVE_FALLBACK_MS,
   });
 
   return (

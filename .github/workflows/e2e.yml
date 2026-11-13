@@ -46,10 +46,11 @@ jobs:
       - name: Poprawki starych migracji do odtworzenia na czystej bazie
         run: bash e2e/fix-legacy-migrations.sh
 
-      # Baza + logowanie + API + storage (migracje tworzą kubełki). Bez
-      # studia, realtime i reszty usług, których test nie używa.
+      # Baza + logowanie + API + storage (migracje tworzą kubełki) + realtime
+      # (etap 7: odświeżanie na żywo). Bez studia i reszty usług, których
+      # test nie używa.
       - name: Lokalny Supabase (nakłada wszystkie migracje)
-        run: supabase start -x studio,imgproxy,mailpit,realtime,edge-runtime,logflare,vector,supavisor,postgres-meta
+        run: supabase start -x studio,imgproxy,mailpit,edge-runtime,logflare,vector,supavisor,postgres-meta
 
       - name: Klucze lokalnego Supabase
         run: |

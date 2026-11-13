@@ -20,6 +20,8 @@ import {
   type TaskStatus,
 } from "@/lib/tasks/tasks.functions";
 import { toast } from "sonner";
+import { LIVE_FALLBACK_MS } from "@/lib/realtime/liveTables";
+import { useLiveTables } from "@/lib/realtime/useLiveTables";
 
 const COLUMNS: { status: TaskStatus; label: string; color: string }[] = [
   { status: "todo", label: "DO ZROBIENIA", color: "var(--muted-foreground)" },
@@ -87,10 +89,11 @@ export function TaskBoardPanel({ index = 0 }: { index?: number }) {
   const [title, setTitle] = useState("");
   const [priority, setPriority] = useState(3);
 
+  useLiveTables("tasks");
   const { data: tasks = [], isFetching } = useQuery({
     queryKey: ["tasks", "all"],
     queryFn: () => fetchTasks({ data: { scope: "all" } }),
-    refetchInterval: 10_000,
+    refetchInterval: LIVE_FALLBACK_MS,
   });
 
   const createMut = useMutation({

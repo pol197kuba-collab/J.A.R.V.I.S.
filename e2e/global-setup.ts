@@ -4,26 +4,12 @@
 // (trigger handle_new_user dodaje mu agentów i narzędzia, tak jak każdemu
 // nowemu kontu) i wpisuje mu fikcyjny klucz Gemini — model jest atrapą, ale
 // aplikacja bez klucza w ogóle nie wysłałaby wiadomości do serwera.
-// Działa wyłącznie na lokalnej bazie z CI: odmawia, gdy adres nie jest lokalny.
+// Działa wyłącznie na lokalnej bazie z CI (localDb odmawia innego adresu).
 import { E2E_EMAIL, E2E_PASSWORD } from "./fixtures";
-
-function env(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) throw new Error(`Brak zmiennej ${name} (ustawia ją workflow e2e.yml).`);
-  return value;
-}
+import { findTestUserId, localDb } from "./localDb";
 
 export default async function globalSetup(): Promise<void> {
-  const url = env("JARVIS_SUPABASE_URL");
-  if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(url)) {
-    throw new Error(`Test dymny działa tylko na lokalnej bazie, a dostał ${url}.`);
-  }
-  const serviceKey = env("JARVIS_SUPABASE_SERVICE_ROLE_KEY");
-  const headers = {
-    apikey: serviceKey,
-    Authorization: `Bearer ${serviceKey}`,
-    "Content-Type": "application/json",
-  };
+  const { url, headers } = localDb();
 
   const created = await fetch(`${url}/auth/v1/admin/users`, {
     method: "POST",
@@ -35,11 +21,9 @@ export default async function globalSetup(): Promise<void> {
     userId = ((await created.json()) as { id: string }).id;
   } else {
     // Konto już jest (powtórzony przebieg na tej samej bazie) — szukamy go.
-    const list = await fetch(`${url}/auth/v1/admin/users?per_page=100`, { headers });
-    const users = ((await list.json()) as { users?: Array<{ id: string; email?: string }> }).users;
-    const found = users?.find((u) => u.email === E2E_EMAIL);
+    const found = await findTestUserId();
     if (!found) throw new Error(`Nie udało się założyć konta testowego: ${await created.text()}`);
-    userId = found.id;
+    userId = found;
   }
 
   const secrets = await fetch(`${url}/rest/v1/user_secrets?on_conflict=owner_id`, {

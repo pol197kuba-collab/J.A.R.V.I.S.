@@ -24,6 +24,8 @@ import {
 } from "@/lib/documents/generated.functions";
 import { consumePendingOpenDocument, onOpenDocument } from "@/lib/documents/openDocumentBus";
 import { cn } from "@/lib/utils";
+import { LIVE_FALLBACK_MS } from "@/lib/realtime/liveTables";
+import { useLiveTables } from "@/lib/realtime/useLiveTables";
 
 export const Route = createFileRoute("/documents")({
   head: () => ({
@@ -74,6 +76,7 @@ function DocumentsPage() {
   // must open once the generated-files list has loaded and contains it.
   const pendingOpenRef = useRef<string | null>(consumePendingOpenDocument());
 
+  useLiveTables("documents", "generated_files");
   const {
     data: documents = [],
     isLoading,
@@ -82,10 +85,9 @@ function DocumentsPage() {
   } = useQuery({
     queryKey: ["documents"],
     queryFn: () => fetchDocuments(),
-    // Fast enough to reflect uploading -> processing -> ready without
-    // feeling laggy; this is a small owner-scoped table, not a
-    // rate-limited third-party API, so a flat interval is fine.
-    refetchInterval: 3000,
+    // uploading -> processing -> ready przychodzi na żywo (useLiveTables);
+    // odpytywanie zostaje tylko jako zapas.
+    refetchInterval: LIVE_FALLBACK_MS,
   });
 
   const {
@@ -95,7 +97,7 @@ function DocumentsPage() {
   } = useQuery({
     queryKey: ["generated-files"],
     queryFn: () => fetchGenerated(),
-    refetchInterval: 5000,
+    refetchInterval: LIVE_FALLBACK_MS,
   });
 
   // Chat/voice "open this file" requests arriving while we're already mounted.
