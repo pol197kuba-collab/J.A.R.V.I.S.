@@ -26,6 +26,7 @@ import {
 } from "./tools/documents.server";
 import { generateDocumentTool, openDocumentTool, queueDocumentJob } from "./tools/forge.server";
 import { checkDelegation, runStats, scanErrors } from "./tools/shield.server";
+import { checkCommuteTool } from "./tools/commute.server";
 import { fuelOutlookTool, marketOutlookTool } from "./tools/markets.server";
 import { recall, remember } from "./tools/memory.server";
 import { deleteNote, listNotesTool, saveNote } from "./tools/notes.server";
@@ -67,6 +68,7 @@ export const ALL_TOOLS: Tool[] = [
   cancelStandingOrderTool,
   marketOutlookTool,
   fuelOutlookTool,
+  checkCommuteTool,
   webSearch,
   fetchUrl,
   saveNote,
