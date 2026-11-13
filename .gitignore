@@ -38,3 +38,7 @@ coverage
 
 # Supabase CLI (scripts/db-migrations.sh)
 supabase/.temp/
+
+# Playwright (etap 9)
+test-results/
+playwright-report/

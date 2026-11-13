@@ -1,0 +1,68 @@
+name: E2E (test dymny)
+
+# Plan naprawczy, etap 9 (A26): logowanie → czat → odpowiedź → notatka
+# widoczna w /notes, w prawdziwej przeglądarce. Decyzja właściciela
+# (2026-11-13): na LOKALNEJ bazie Supabase stawianej w tym jobie — produkcja
+# nie jest dotykana, nie ma nowych sekretów. Model to atrapa (e2e/gemini-mock.ts).
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "supabase/**"
+      - "e2e/**"
+      - "playwright.config.ts"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/e2e.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: test dymny (lokalny Supabase)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.58.5
+
+      # Baza + logowanie + API + storage (migracje tworzą kubełki). Bez
+      # studia, realtime i reszty usług, których test nie używa.
+      - name: Lokalny Supabase (nakłada wszystkie migracje)
+        run: supabase start -x studio,imgproxy,mailpit,realtime,edge-runtime,logflare,vector,supavisor,postgres-meta
+
+      - name: Klucze lokalnego Supabase
+        run: |
+          eval "$(supabase status -o env)"
+          echo "JARVIS_SUPABASE_URL=$API_URL" >> "$GITHUB_ENV"
+          echo "JARVIS_SUPABASE_PUBLISHABLE_KEY=${PUBLISHABLE_KEY:-$ANON_KEY}" >> "$GITHUB_ENV"
+          echo "JARVIS_SUPABASE_SERVICE_ROLE_KEY=${SECRET_KEY:-$SERVICE_ROLE_KEY}" >> "$GITHUB_ENV"
+
+      - name: Przeglądarka
+        run: npx playwright install --with-deps chromium
+
+      - name: Test dymny
+        run: npm run test:e2e -- --trace off
+
+      - name: Zrzuty z nieudanego testu
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: test-results/
+          retention-days: 7
