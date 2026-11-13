@@ -30,5 +30,7 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Test
-        run: npm test
+      # Testy z pomiarem pokrycia: próg dla src/lib/agents (vitest.config.ts,
+      # plan naprawczy etap 9) — spadek poniżej poziomu z etapu 4 = czerwony CI.
+      - name: Test (z progiem pokrycia)
+        run: npm run test:coverage
