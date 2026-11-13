@@ -47,3 +47,28 @@ describe("adaptGeminiBody", () => {
     expect(adaptGeminiBody("gemini-3.8-flash", b)).toBe(b);
   });
 });
+
+describe("adaptGeminiBody — role tur (zgłoszenie 2026-11-13: HTTP 400 „Role 'function' is not supported”)", () => {
+  const withTools = {
+    contents: [
+      { role: "user", parts: [{ text: "Zrób prezentację" }] },
+      { role: "model", parts: [{ functionCall: { name: "x", args: {} } }] },
+      { role: "function", parts: [{ functionResponse: { name: "x", response: {} } }] },
+    ],
+  };
+
+  it("3.x/4.x: wynik narzędzia idzie jako tura „user”", () => {
+    const out = adaptGeminiBody("gemini-3.8-flash", withTools) as typeof withTools;
+    expect(out.contents.map((c) => c.role)).toEqual(["user", "model", "user"]);
+    expect(out.contents[2].parts).toEqual(withTools.contents[2].parts);
+  });
+
+  it("także bez generationConfig i w treści jako tekst", () => {
+    const out = adaptGeminiBody("gemini-4-hydrogen", JSON.stringify(withTools)) as string;
+    expect((JSON.parse(out) as typeof withTools).contents[2].role).toBe("user");
+  });
+
+  it("2.x: bez zmian", () => {
+    expect(adaptGeminiBody("gemini-2.5-flash", withTools)).toBe(withTools);
+  });
+});

@@ -69,6 +69,10 @@ describe("Gemini 3.x w pętli agenta", () => {
       functionCall: { name: "list_notes", args: {} },
       thoughtSignature: "sig-123",
     });
+    // Gemini 3.x odrzuca rolę „function” (HTTP 400) — wynik narzędzia jako „user”.
+    expect(second.map((c) => c.role)).not.toContain("function");
+    expect(second.at(-1)!.role).toBe("user");
+    expect(second.at(-1)!.parts[0]).toHaveProperty("functionResponse");
     for (const b of bodies) {
       const gc = b.generationConfig as Record<string, unknown>;
       expect(gc).not.toHaveProperty("temperature");
