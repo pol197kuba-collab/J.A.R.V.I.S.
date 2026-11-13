@@ -380,6 +380,12 @@ przyczynę, dla której awaria była niewidoczna.
       to pierwsza rzecz do naprawy w tym etapie.
       Stan 2026-11-12: logów z 13.11 jeszcze nie ma; ostatnie przebiegi po W7
       (Commute Watch 16:08 UTC, Morning Brief 12:54 UTC) zielone.
+      2026-11-13: Morning Brief wystartował o 05:00 (04:00 UTC), push wyszedł
+      05:00:48 („wysłano na 1 urządz.”), telefon pokazał go ok. 07:30 —
+      domyślny priorytet „normal” odkładany przez Androida (Doze). Naprawione:
+      urgency „high” + TTL 12 h. Ten sam przebieg: tekst „facts” mimo kluczy
+      modeli — przepisanie padało po cichu; job pokazuje teraz powód (naprawa
+      przyczyny po pierwszym przebiegu z powodem w logu).
 - [x] **`recall` a obca treść (luka w A2d).** Wpis pamięci o pochodzeniu
       `tool` albo `unknown` zwrócony przez `recall` jest obcą treścią:
       ustawia `untrustedSeen` i dostaje notę, tak jak wynik `fetch_url`.
