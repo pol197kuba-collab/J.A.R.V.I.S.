@@ -41,6 +41,11 @@ jobs:
         with:
           version: 2.58.5
 
+      # Stare migracje (sprzed automatu) nigdy nie były nakładane na pustą
+      # bazę — poprawki tylko na kopii roboczej, repo bez zmian.
+      - name: Poprawki starych migracji do odtworzenia na czystej bazie
+        run: bash e2e/fix-legacy-migrations.sh
+
       # Baza + logowanie + API + storage (migracje tworzą kubełki). Bez
       # studia, realtime i reszty usług, których test nie używa.
       - name: Lokalny Supabase (nakłada wszystkie migracje)
