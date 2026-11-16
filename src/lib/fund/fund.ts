@@ -17,7 +17,7 @@ import {
   type SimResult,
 } from "./engine";
 import { computeMetrics, type FundMetrics } from "./metrics";
-import { basketSignals, monkeySignals, PLAYERS, type PlayerDef } from "./players";
+import { basketSignals, BASKET_SYMBOLS, monkeySignals, PLAYERS, type PlayerDef } from "./players";
 
 export type PredictionRow = {
   id: string;
@@ -76,7 +76,9 @@ export function buildFund(
   if (valid.length === 0) return null;
   const start = valid.reduce((m, p) => (p.made_on < m ? p.made_on : m), valid[0].made_on);
   const universe = [...new Set(valid.map((p) => p.symbol))];
-  const book = { closes, instruments: instrumentsFor(universe) };
+  // Koszyk gra własną, stałą listą pewniaków — tylko tymi, które mają notowania.
+  const basket = BASKET_SYMBOLS.filter((s) => (closes.get(s)?.length ?? 0) > 0);
+  const book = { closes, instruments: instrumentsFor([...universe, ...basket]) };
 
   // Dni i instrumenty, na których grali prawdziwi gracze — tam rzuca małpa.
   // Chwila rzutu = najwcześniejsza prognoza graczy na tym instrumencie i dniu.
@@ -91,7 +93,7 @@ export function buildFund(
   const symbolDays = [...sd.values()];
 
   const signalsFor = (player: PlayerDef): FundSignal[] => {
-    if (player.kind === "benchmark") return basketSignals(universe, start);
+    if (player.kind === "benchmark") return basketSignals(basket, start);
     if (player.kind === "monkey") return monkeySignals(symbolDays);
     const source = player.source ?? player.key;
     const horizon = player.horizonDays ?? 7;

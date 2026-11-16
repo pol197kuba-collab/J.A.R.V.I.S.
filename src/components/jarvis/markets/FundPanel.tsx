@@ -406,9 +406,10 @@ export function FundPanel({
           ustawieniach. Pożyczona gotówka kosztuje 7% rocznie, pożyczone papiery 1–10% rocznie.
           Margin call: gdy kapitał spadnie poniżej połowy wymaganego depozytu, wszystko jest
           zamykane. Pozycja żyje tyle, ile horyzont prognozy (2 dni; gracz kontrolny — 7 dni).
-          Koszyk kupuje wszystko po równo w dniu startu i trzyma bez dźwigni; małpa rzuca losowo —
-          oba zawsze na zasadach domyślnych, żeby było z czym porównać. Zmiana ustawień przelicza
-          całą grę od dnia startu.
+          Koszyk kupuje po równo kilka „pewniaków” (S&P 500, Nasdaq, świat, złoto, BTC, ETH, Apple,
+          Microsoft, NVIDIA, PKO BP) w dniu startu i trzyma bez dźwigni; małpa rzuca losowo — oba
+          zawsze na zasadach domyślnych, żeby było z czym porównać. Zmiana ustawień przelicza całą
+          grę od dnia startu.
         </PanelHint>
       </Fold>
 

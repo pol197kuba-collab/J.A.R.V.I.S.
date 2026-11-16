@@ -11,7 +11,7 @@ import { fetchAllPages } from "@/lib/db/paginate";
 import type { PricePoint } from "@/lib/markets/series";
 import { addDays, DEFAULT_RULES, type LiveEvent } from "./engine";
 import { buildFund, type FundRun, type PredictionRow } from "./fund";
-import { CONTROL_HORIZON, MAIN_HORIZON } from "./players";
+import { BASKET_SYMBOLS, CONTROL_HORIZON, MAIN_HORIZON } from "./players";
 import { parseFundSettings, rulesForPlayer, type FundSettings } from "./settings";
 
 type Db = SupabaseClient<Database>;
@@ -136,7 +136,9 @@ export async function computeFund(
   if (live.length === 0) return null;
 
   const start = live.reduce((m, p) => (p.made_on < m ? p.made_on : m), live[0].made_on);
-  const symbols = [...new Set([...live.map((p) => p.symbol), "USDPLN", "EURPLN"])];
+  const symbols = [
+    ...new Set([...live.map((p) => p.symbol), ...BASKET_SYMBOLS, "USDPLN", "EURPLN"]),
+  ];
   const quotes = await fetchAllPages<{ symbol: string; quote_date: string; close: number }>(
     (from, to) =>
       db

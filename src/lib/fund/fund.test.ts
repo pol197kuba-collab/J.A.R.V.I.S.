@@ -428,20 +428,6 @@ describe("gracze odniesienia", () => {
     expect(s[0].weight).toBeCloseTo(1 / 8);
   });
 
-  it("koszyk z bardzo wieloma instrumentami nadal kupuje (cel wprost omija pasmo 2%)", () => {
-    const syms = Array.from({ length: 132 }, (_, i) => `S${i}`);
-    const start = "2026-10-01";
-    const closes = Object.fromEntries(syms.map((s) => [s, series(start, [10, 10, 11, 12])]));
-    const inst = Object.fromEntries(syms.map((s) => [s, PLN_EQ]));
-    const r = simulate(basketSignals(syms, start), book(closes, inst), {
-      start,
-      end: addDays(start, 3),
-    });
-    expect(r.trades).toHaveLength(132);
-    expect(r.holdings).toHaveLength(132);
-    expect(r.nav[r.nav.length - 1].investedPln).toBeGreaterThan(90_000);
-  });
-
   it("małpa: deterministyczna i tylko na podanych instrumentach", () => {
     const sd = days("2026-10-01", 30).flatMap((day) =>
       ["A", "B"].map((symbol) => ({ symbol, day })),
@@ -519,7 +505,8 @@ describe("buildFund", () => {
     expect(learned.result.trades).toHaveLength(0);
     expect(learned.metrics.returnPct).toBe(0);
     const basket = run.players.find((p) => p.key === "basket")!;
-    expect(new Set(basket.result.trades.map((t) => t.symbol))).toEqual(new Set(["BTC", "CDR.PL"]));
+    // Koszyk gra własną listą pewniaków (BTC ma notowania, CDR.PL nie jest na liście).
+    expect(new Set(basket.result.trades.map((t) => t.symbol))).toEqual(new Set(["BTC"]));
   });
 
   it("brak prognoz — null", async () => {
@@ -546,7 +533,11 @@ describe("fundRows", () => {
           horizon_days: 2,
         },
       ],
-      new Map([["CDR.PL", series(start, [10, 10.37, 11])]]),
+      new Map([
+        ["CDR.PL", series(start, [10, 10.37, 11])],
+        ["BTC", series(start, [100, 101, 102])],
+        ["USDPLN", series(start, [4, 4, 4])],
+      ]),
       addDays(start, 2),
     )!;
     const ids = new Map(run.players.map((p) => [p.key, `id-${p.key}`]));

@@ -439,11 +439,6 @@ export function simulate(
       confidence: signal.confidence,
     };
     const mid = px * fx;
-    // Cel wprost (koszyk) to rozkład z góry — pasmo tolerancji (2% portfela)
-    // zablokowałoby go przy dużej liczbie instrumentów (132 × 0,76% < 2%) i
-    // koszyk nie kupiłby nic. Zostaje tylko zwykły grosz-próg.
-    const explicit = signal.weight !== undefined;
-    const minOpen = explicit ? 1 : rules.minTradePln;
 
     /** Zamyka `units` (> 0) z bieżącej pozycji — sprzedaż długiej albo odkup krótkiej. */
     const close = (units: number): void => {
@@ -472,7 +467,7 @@ export function simulate(
     /** Otwiera/powiększa pozycję o `amountPln` (> 0) w stronę `long`. */
     const open = (amountPln: number, long: boolean): void => {
       const budget = Math.min(amountPln, buyingPowerAt(date) / (1 + rules.commissionRate));
-      if (budget < minOpen) return;
+      if (budget < rules.minTradePln) return;
       const held = holdings.get(signal.symbol) ?? { units: 0, costPln: 0 };
       const price = long ? px * (1 + half) : px * (1 - half);
       const units = budget / (price * fx);
@@ -495,7 +490,7 @@ export function simulate(
     };
 
     const nav = navAt(date);
-    const minTrade = explicit ? minOpen : Math.max(rules.minTradePln, rules.minTradeNavShare * nav);
+    const minTrade = Math.max(rules.minTradePln, rules.minTradeNavShare * nav);
     const held = holdings.get(signal.symbol);
     const current = held ? held.units * mid : 0;
     const desired = target * nav;

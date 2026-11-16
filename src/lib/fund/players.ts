@@ -1,8 +1,7 @@
 // FUNDUSZ — gracze odniesienia. Czysta logika.
 //
-// Koszyk „kup i trzymaj wszystko”: w dniu startu po równo we wszystkie
-// instrumenty, na których grają pozostali (krypto, akcje, indeksy, surowce,
-// waluty), potem bez ruchu. Odpowiada na pytanie: czy myślenie w ogóle
+// Koszyk „kup i trzymaj”: w dniu startu po równo w kilka najpewniejszych
+// instrumentów (BASKET_SYMBOLS), potem bez ruchu. Odpowiada na pytanie: czy myślenie w ogóle
 // dało więcej niż samo bycie na rynku?
 //
 // Małpa z rzutkami: losowe prognozy na tych samych instrumentach i w te same
@@ -50,6 +49,26 @@ export const PLAYERS: PlayerDef[] = [
   { key: "monkey", label: "Małpa z rzutkami", kind: "monkey" },
 ];
 
+/**
+ * Koszyk „zwykłego Kowalskiego”: kilka powszechnie uważanych za najpewniejsze
+ * instrumentów — szeroki rynek (S&P 500, Nasdaq 100, cały świat), złoto, dwie
+ * największe kryptowaluty, trzy gigantyczne spółki USA i największy polski
+ * bank. Po równo (10% każdy), kup i trzymaj. Brak notowań instrumentu = jest
+ * pomijany, reszta dzieli portfel.
+ */
+export const BASKET_SYMBOLS: readonly string[] = [
+  "SPY.US",
+  "QQQ.US",
+  "ACWI.US",
+  "GLD.US",
+  "BTC",
+  "ETH",
+  "AAPL.US",
+  "MSFT.US",
+  "NVDA.US",
+  "PKO.PL",
+];
+
 export function basketSignals(symbols: string[], startDay: string): FundSignal[] {
   const unique = [...new Set(symbols)].sort();
   if (unique.length === 0) return [];
@@ -60,7 +79,7 @@ export function basketSignals(symbols: string[], startDay: string): FundSignal[]
     direction: "up" as const,
     confidence: 100,
     weight,
-    reason: "Koszyk: po równo we wszystkie instrumenty, kup i trzymaj.",
+    reason: "Koszyk: po równo w kilka pewniaków, kup i trzymaj.",
     predictionId: null,
   }));
 }
