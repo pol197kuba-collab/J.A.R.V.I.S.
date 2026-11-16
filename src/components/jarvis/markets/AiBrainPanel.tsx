@@ -11,6 +11,7 @@ import { PanelHint } from "@/components/jarvis/fuel/chrome";
 import type { FundView } from "@/lib/fund/fund.functions";
 import type { AiBrain, PredictionScoreboard } from "@/lib/markets/markets.functions";
 import type { AssetClass } from "@/lib/markets/assets";
+import { learningVerdict } from "@/lib/markets/brain";
 import { CLASS_LABEL } from "./marketsDigest";
 import { Fold } from "./Fold";
 import { pctFmt } from "./fundFormat";
@@ -114,20 +115,13 @@ export function AiBrainPanel({
   const fundPct = (key: string) =>
     fund?.players.find((p) => p.key === key)?.metrics?.returnPct ?? null;
 
-  const enough =
-    (plain?.resolved ?? 0) >= minimum &&
-    (learned?.resolved ?? 0) >= minimum &&
-    plain?.hitRate != null &&
-    learned?.hitRate != null;
-  const diff = enough ? learned!.hitRate! - plain!.hitRate! : null;
-  const verdict =
-    diff === null
-      ? `Za wcześnie na werdykt — potrzeba po ${minimum} rozliczonych prognoz każdego (jest ${plain?.resolved ?? 0} i ${learned?.resolved ?? 0}).`
-      : Math.abs(diff) < 3
-        ? `Na razie bez różnicy: wnioski nie zmieniają trafności (${diff >= 0 ? "+" : "−"}${Math.abs(Math.round(diff))} pp).`
-        : diff > 0
-          ? `Wnioski pomagają: +${Math.round(diff)} pp trafności względem tego samego AI bez nich.`
-          : `Wnioski na razie szkodzą: −${Math.round(-diff)} pp trafności względem tego samego AI bez nich.`;
+  const verdict = learningVerdict({
+    minimum,
+    plain: plain ?? null,
+    learned: learned ?? null,
+    plainFund: fundPct("ai"),
+    learnedFund: fundPct("ai_learned"),
+  });
   const ds = brain.divergenceScore;
 
   const active = brain.timeline.filter((s) => s.active);

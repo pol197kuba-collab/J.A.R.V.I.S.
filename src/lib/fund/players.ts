@@ -117,3 +117,60 @@ export function monkeySignals(
   }
   return out;
 }
+
+/**
+ * Jak gra każdy gracz — prostym językiem, do karty gracza. Zgodne z kodem:
+ * zmiana sposobu gry (prognozy, koszyk, małpa) = zmiana tego opisu.
+ */
+export const PLAYER_STYLE: Record<string, { how: string; character: string }> = {
+  ai: {
+    how:
+      "Codziennie model AI przegląda każdy instrument: jak zmieniała się cena, czy idzie w górę czy w dół, " +
+      "czy nie jest „przegrzana” albo „wyprzedana” i co piszą o nim w wiadomościach. Na tej podstawie mówi, " +
+      "czy w ciągu 2 dni cena wzrośnie, spadnie, czy zostanie w miejscu, i jak bardzo jest tego pewny. " +
+      "Fundusz robi dokładnie to: wzrost = kupno, spadek = gra na spadki, „bez zmian” = nic nie robi. " +
+      "Im większa pewność, tym większa stawka. Pozycję trzyma ok. 2 dni, chyba że kolejna prognoza ją potwierdzi.",
+    character: "Szybki i ruchliwy — reaguje na to, co dzieje się teraz, dużo transakcji.",
+  },
+  ai_learned: {
+    how:
+      "Ten sam model i te same dane co „AI”, ale dostaje dodatkowo kilka wniosków policzonych z historii: " +
+      "w jakiej sytuacji rynku (np. trend spadkowy na krypto) dane zagranie zarabiało, a w jakiej traciło, " +
+      "oraz w jakiej sytuacji jest dziś każdy instrument. Gra na tych samych zasadach co „AI” — różni się " +
+      "tylko tymi wnioskami, więc porównanie obu pokazuje, czy nauka na własnej historii coś daje.",
+    character:
+      "Jak „AI”, ale ostrożniejszy tam, gdzie historia mówi, że coś nie działa, i śmielszy tam, gdzie działało.",
+  },
+  signals: {
+    how:
+      "Bez sztucznej inteligencji — czysta arytmetyka. Kilka prostych miar z wykresu (czy cena jest nad średnią, " +
+      "jak szybko ostatnio rosła lub spadała, czy jest blisko dołka czy szczytu ostatnich tygodni) „głosuje”, " +
+      "a wynik decyduje o kierunku i pewności. Wydźwięk wiadomości też się liczy, ale słabiej niż wykres. " +
+      "Prognoza na 2 dni, zagrana tak jak u „AI”.",
+    character:
+      "Mechaniczny i przewidywalny — zawsze ta sama reguła, bez emocji i bez interpretacji.",
+  },
+  ai_7d: {
+    how:
+      "To samo AI i ta sama codzienna analiza, ale gra prognozę na tydzień zamiast na 2 dni. Pozycje trzyma " +
+      "dłużej i zmienia je rzadziej. To grupa kontrolna: sprawdza, czy skrócenie horyzontu do 2 dni " +
+      "było dobrym pomysłem.",
+    character: "Spokojniejszy — patrzy na dłuższy ruch, mniej reaguje na codzienne wahania.",
+  },
+  basket: {
+    how:
+      "Zachowuje się jak zwykły inwestor. W pierwszym dniu gry kupuje po równo 10 popularnych „pewniaków”: " +
+      "indeksy S&P 500, Nasdaq 100 i cały świat, złoto, Bitcoina i Ethereum, Apple, Microsofta, NVIDIĘ " +
+      "i PKO BP. Potem nic nie robi — nie sprzedaje, nie dokupuje, bez pożyczania i bez gry na spadki.",
+    character:
+      "Punkt odniesienia „kup i zapomnij” — gracz, który go nie bije, nie daje nic ponad samo bycie na rynku.",
+  },
+  monkey: {
+    how:
+      "Prognozy rzuca na ślepo: w te same dni i na te same instrumenty co prawdziwi gracze losuje, czy cena " +
+      "wzrośnie, spadnie czy stoi, i z jaką pewnością. Gra na tych samych zasadach i płaci te same koszty " +
+      "co reszta.",
+    character:
+      "Punkt odniesienia „czysty przypadek” — gracz, który nie bije małpy, nie ma w prognozach żadnej wartości.",
+  },
+};

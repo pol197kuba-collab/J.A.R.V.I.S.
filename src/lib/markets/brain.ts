@@ -170,3 +170,54 @@ export function learningFunnel(rows: ReadonlyArray<{ source: string; symbol: str
   }
   return { total: rows.length, bySource, byClass };
 }
+
+/**
+ * Werdykt A/B „AI z wnioskami” wobec zwykłego AI. Najpierw złotówki (wynik w
+ * funduszu — po to są prognozy), potem trafność, ale z szumem: różnica
+ * mniejsza niż ~2 błędy standardowe to remis, nie „wnioski szkodzą”.
+ * Trafności w %, wyniki funduszu w % (null = brak).
+ */
+export function learningVerdict(v: {
+  minimum: number;
+  plain: { hitRate: number | null; resolved: number } | null;
+  learned: { hitRate: number | null; resolved: number } | null;
+  plainFund: number | null;
+  learnedFund: number | null;
+}): string {
+  const n1 = v.plain?.resolved ?? 0;
+  const n2 = v.learned?.resolved ?? 0;
+  const parts: string[] = [];
+
+  if (v.plainFund !== null && v.learnedFund !== null) {
+    const d = v.learnedFund - v.plainFund;
+    const pp = `${Math.abs(d).toLocaleString("pl-PL", { maximumFractionDigits: 1 })} pp`;
+    parts.push(
+      Math.abs(d) < 1
+        ? `W złotówkach bez różnicy (${d >= 0 ? "+" : "−"}${pp} wyniku funduszu).`
+        : d > 0
+          ? `W złotówkach wnioski pomagają: +${pp} wyniku funduszu względem tego samego AI bez nich.`
+          : `W złotówkach wnioski na razie szkodzą: −${pp} wyniku funduszu względem tego samego AI bez nich.`,
+    );
+  }
+
+  const h1 = v.plain?.hitRate ?? null;
+  const h2 = v.learned?.hitRate ?? null;
+  if (n1 < v.minimum || n2 < v.minimum || h1 === null || h2 === null) {
+    parts.push(
+      `Trafność: za wcześnie — potrzeba po ${v.minimum} rozliczonych prognoz każdego (jest ${n1} i ${n2}).`,
+    );
+    return parts.join(" ");
+  }
+  const diff = h2 - h1;
+  const p = ((h1 / 100) * n1 + (h2 / 100) * n2) / (n1 + n2);
+  const noise = 2 * Math.sqrt(p * (1 - p) * (1 / n1 + 1 / n2)) * 100;
+  const d = `${diff >= 0 ? "+" : "−"}${Math.abs(Math.round(diff))} pp`;
+  parts.push(
+    Math.abs(diff) < noise
+      ? `Trafność: remis (${d}, w granicach przypadku ±${Math.round(noise)} pp).`
+      : diff > 0
+        ? `Trafność: wnioski pomagają (${d}).`
+        : `Trafność: wnioski szkodzą (${d}).`,
+  );
+  return parts.join(" ");
+}

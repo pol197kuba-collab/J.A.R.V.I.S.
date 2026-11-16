@@ -84,3 +84,32 @@ describe("learningFunnel", () => {
     });
   });
 });
+
+describe("learningVerdict", () => {
+  it("najpierw złotówki; różnica trafności w granicach przypadku to remis", async () => {
+    const { learningVerdict } = await import("./brain");
+    // dane z 16.11: 94 vs 86 trafień na 251, fundusz +16,3% vs +22,2%
+    const v = learningVerdict({
+      minimum: 20,
+      plain: { hitRate: (94 / 251) * 100, resolved: 251 },
+      learned: { hitRate: (86 / 251) * 100, resolved: 251 },
+      plainFund: 16.3,
+      learnedFund: 22.2,
+    });
+    expect(v).toContain("W złotówkach wnioski pomagają: +5,9 pp");
+    expect(v).toContain("Trafność: remis (−3 pp");
+    expect(v).not.toContain("szkodzą");
+  });
+
+  it("duża różnica trafności przy dużej próbce to wynik, nie przypadek", async () => {
+    const { learningVerdict } = await import("./brain");
+    const v = learningVerdict({
+      minimum: 20,
+      plain: { hitRate: 30, resolved: 1000 },
+      learned: { hitRate: 45, resolved: 1000 },
+      plainFund: null,
+      learnedFund: null,
+    });
+    expect(v).toBe("Trafność: wnioski pomagają (+15 pp).");
+  });
+});
