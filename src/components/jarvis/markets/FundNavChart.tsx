@@ -69,7 +69,9 @@ export function FundNavChart({
   const ribbon = useMemo(
     () => ({
       rows: rows.length,
-      stacked: players.length > 1,
+      // Jedna płaszczyzna: wszystkie krzywe czytane na tej samej osi PLN.
+      // Ustawione jedna za drugą wyglądały na różne kwoty (perspektywa).
+      stacked: false,
       dateLabel: (i: number) => (rows[i]?.label as string) ?? "",
       formatY: (v: number) => `${plnFmt(v / 1000, 1)}k`,
       series: players.map((p) => {

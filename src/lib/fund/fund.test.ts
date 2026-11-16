@@ -428,6 +428,20 @@ describe("gracze odniesienia", () => {
     expect(s[0].weight).toBeCloseTo(1 / 8);
   });
 
+  it("koszyk z bardzo wieloma instrumentami nadal kupuje (cel wprost omija pasmo 2%)", () => {
+    const syms = Array.from({ length: 132 }, (_, i) => `S${i}`);
+    const start = "2026-10-01";
+    const closes = Object.fromEntries(syms.map((s) => [s, series(start, [10, 10, 11, 12])]));
+    const inst = Object.fromEntries(syms.map((s) => [s, PLN_EQ]));
+    const r = simulate(basketSignals(syms, start), book(closes, inst), {
+      start,
+      end: addDays(start, 3),
+    });
+    expect(r.trades).toHaveLength(132);
+    expect(r.holdings).toHaveLength(132);
+    expect(r.nav[r.nav.length - 1].investedPln).toBeGreaterThan(90_000);
+  });
+
   it("małpa: deterministyczna i tylko na podanych instrumentach", () => {
     const sd = days("2026-10-01", 30).flatMap((day) =>
       ["A", "B"].map((symbol) => ({ symbol, day })),
