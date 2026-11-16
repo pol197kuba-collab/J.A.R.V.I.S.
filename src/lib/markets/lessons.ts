@@ -8,8 +8,11 @@
 // kolejnych dni dotyczą w dużej części tego samego tygodnia, więc 60 prognoz
 // z trzech tygodni to realnie kilka niezależnych obserwacji. Dlatego:
 // - wniosek wymaga MIN_CASES przypadków z co najmniej MIN_WEEKS tygodni;
-// - trafność jest „ściągana" do poziomu losowego (BASELINE) z siłą
-//   PRIOR_WEIGHT przypadków — mała próbka nie da skrajnego wniosku;
+// - trafność jest „ściągana" do tego, jak często rynek w tej sytuacji sam
+//   tak kończył (nie do sztywnego 1/3), z siłą PRIOR_WEIGHT przypadków —
+//   mała próbka nie da skrajnego wniosku;
+// - wniosek o trafności sprzeczny z wnioskiem w złotówkach nie idzie do
+//   promptu, a wnioski raz wprowadzone trzymają się z histerezą;
 // - liczone jest tylko okno ostatnich dni (LESSON_WINDOW_DAYS), bo rynek
 //   zmienia charakter, a wniosek z września nie musi obowiązywać w grudniu.
 // Czysta logika, bez I/O.
@@ -37,6 +40,12 @@ export const MAX_LESSONS = 8;
 export const MIN_PNL_PCT = 0.5;
 /** Ile miejsc w MAX_LESSONS jest zarezerwowanych na wnioski w złotówkach. */
 export const MAX_PNL_LESSONS = 3;
+/** Histereza: ile dni wstecz wniosek liczy się jako „już działający”. */
+export const HOLD_DAYS = 7;
+/** Działający wniosek zostaje, dopóki spełnia taki ułamek progu. */
+export const HOLD_FACTOR = 0.5;
+/** Premia siły działającego wniosku przy wyborze miejsc w prompcie. */
+export const INCUMBENT_BONUS = 1.5;
 
 export type LessonInput = {
   symbol: string;
@@ -65,7 +74,7 @@ export type Lesson = {
    * albo średni wynik zagrania po kosztach jako ułamek (pnl, np. −0,012).
    */
   rate: number;
-  /** Ta sama wartość ściągnięta do poziomu losowego — ona decyduje o wniosku. */
+  /** Ta sama wartość ściągnięta do punktu odniesienia — ona decyduje o wniosku. */
   shrunkRate: number;
   textPl: string;
 };
@@ -128,26 +137,64 @@ function scopeLabel(regime: string, assetClass: string | null): string {
   return assetClass ? `${r}, ${CLASS_PL[assetClass] ?? assetClass}` : r;
 }
 
-/**
- * Wnioski z rozliczonych prognoz, najmocniejsze pierwsze.
- *
- * @param rows rozliczone, nie-kopie, dowolne źródło
- * @param now  „teraz" w ms — parametr, żeby test był deterministyczny
- */
-export function deriveLessons(
-  rows: LessonInput[],
-  now: number = Date.now(),
-  /** Horyzont prognoz w wierszach — tylko do treści wniosków („po 2 dniach”). */
-  opts: { horizonDays?: number } = {},
-): Lesson[] {
-  const h = opts.horizonDays ?? 7;
+type Candidate = Lesson & { strength: number; key: string };
+
+/** Okno wniosków: rozliczone, z reżimem, z ostatnich LESSON_WINDOW_DAYS dni. */
+function windowed(rows: LessonInput[], now: number): LessonInput[] {
   const since = now - LESSON_WINDOW_DAYS * 86_400_000;
-  const recent = rows.filter(
+  return rows.filter(
     (r) => r.regime && Date.parse(r.madeAt) >= since && Number.isFinite(r.actualChangePct),
   );
-  const lessons: Array<Lesson & { strength: number }> = [];
+}
 
-  // 1) Jak wypada dany kierunek w danej sytuacji — wszystkie klasy razem i per klasa.
+/** Jedna obserwacja na instrument i dzień (sygnały i AI dotyczą tej samej ceny). */
+function uniqueObservations(rows: LessonInput[]): LessonInput[] {
+  const seen = new Set<string>();
+  return rows.filter((r) => {
+    const k = `${r.symbol}|${r.madeAt.slice(0, 10)}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+/**
+ * Jak często rynek w danej sytuacji (reżim × klasa, „*” = wszystkie klasy)
+ * kończył w danym kierunku — punkt odniesienia dla trafności prognoz. Zamiast
+ * sztywnego 1/3: „bez zmian” trafione w 49% to nie sukces, gdy cena zostawała
+ * w paśmie w 58% przypadków. Też ściągane do 1/3 — mała próbka nie daje
+ * skrajnego punktu odniesienia; poniżej MIN_CASES obserwacji zostaje 1/3.
+ */
+function marketBaselines(unique: LessonInput[]): (key: string, direction: string) => number {
+  const counts = new Map<string, { n: number; up: number; flat: number; down: number }>();
+  for (const r of unique) {
+    for (const key of [`${r.regime}|*`, `${r.regime}|${classOf(r.symbol)}`]) {
+      const c = counts.get(key) ?? { n: 0, up: 0, flat: 0, down: 0 };
+      c.n += 1;
+      c[realized(r)] += 1;
+      counts.set(key, c);
+    }
+  }
+  return (key, direction) => {
+    const c = counts.get(key);
+    if (!c || c.n < MIN_CASES || !(direction in c)) return BASELINE;
+    const hits = c[direction as "up" | "flat" | "down"];
+    return (hits + PRIOR_WEIGHT * BASELINE) / (c.n + PRIOR_WEIGHT);
+  };
+}
+
+/**
+ * Wszyscy kandydaci na wnioski. `factor` skaluje progi (MIN_DEVIATION,
+ * MIN_PNL_PCT) — 1 = pełne progi dla nowego wniosku, mniej = progi
+ * podtrzymania wniosku, który już działał (histereza).
+ */
+function candidates(recent: LessonInput[], h: number, factor: number): Candidate[] {
+  const lessons: Candidate[] = [];
+  const unique = uniqueObservations(recent);
+  const baseline = marketBaselines(unique);
+
+  // 1) Jak wypada dany kierunek w danej sytuacji — wszystkie klasy razem i per
+  //    klasa — wobec tego, jak często rynek sam tak się zachowywał.
   const scopes: Array<(r: LessonInput) => string | null> = [
     (r) => `${r.regime}|*|${r.direction}`,
     (r) => `${r.regime}|${classOf(r.symbol)}|${r.direction}`,
@@ -159,14 +206,15 @@ export function deriveLessons(
       const weeks = new Set(group.map((r) => weekOf(r.madeAt))).size;
       if (n < MIN_CASES || weeks < MIN_WEEKS) continue;
       const hits = group.filter((r) => r.outcome === "hit").length;
-      const shrunk = shrink(hits, n);
-      const deviation = shrunk - BASELINE;
-      if (Math.abs(deviation) < MIN_DEVIATION) continue;
+      const base = baseline(`${regime}|${cls}`, direction);
+      const shrunk = (hits + PRIOR_WEIGHT * base) / (n + PRIOR_WEIGHT);
+      const deviation = shrunk - base;
+      if (Math.abs(deviation) < MIN_DEVIATION * factor) continue;
       const assetClass = cls === "*" ? null : cls;
       const verdict =
         deviation < 0
-          ? "wyraźnie gorzej niż losowo — w tej sytuacji rozważ inny kierunek albo niską pewność"
-          : "lepiej niż losowo — ten typ prognozy w tej sytuacji działa";
+          ? "gorzej niż sam rynek — w tej sytuacji rozważ inny kierunek albo niską pewność"
+          : "lepiej niż sam rynek — ten typ prognozy w tej sytuacji działa";
       lessons.push({
         kind: "direction",
         regime,
@@ -179,22 +227,15 @@ export function deriveLessons(
         textPl:
           `Sytuacja „${scopeLabel(regime, assetClass)}”: prognozy ${DIRECTION_PL[direction]} ` +
           `trafiły ${hits} z ${n} razy (${pct(hits / n)}; ostrożnie liczone ${pct(shrunk)} ` +
-          `wobec ~33% losowo, ${weeks} tyg.) — ${verdict}.`,
+          `wobec ${pct(base)} — tak często rynek w tej sytuacji tak kończył, ${weeks} tyg.) — ${verdict}.`,
         strength: Math.abs(deviation) * Math.sqrt(n),
+        key: `direction|${regime}|${cls}|${direction}|${deviation < 0 ? "-" : "+"}`,
       });
     }
   }
 
   // 2) Co rynek faktycznie robił w danej sytuacji — niezależnie od tego, co
-  // przewidywaliśmy. Jedna obserwacja na instrument i dzień (sygnały i AI
-  // dotyczą tej samej ceny — liczenie obu podwoiłoby wagę).
-  const seen = new Set<string>();
-  const unique = recent.filter((r) => {
-    const k = `${r.symbol}|${r.madeAt.slice(0, 10)}`;
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
+  //    przewidywaliśmy.
   for (const keyOf of [
     (r: LessonInput) => `${r.regime}|*`,
     (r: LessonInput) => `${r.regime}|${classOf(r.symbol)}`,
@@ -210,7 +251,7 @@ export function deriveLessons(
         (a, b) => b[1] - a[1],
       )[0];
       const shrunk = shrink(topCount, n);
-      if (shrunk - BASELINE < MIN_DEVIATION) continue;
+      if (shrunk - BASELINE < MIN_DEVIATION * factor) continue;
       const assetClass = cls === "*" ? null : cls;
       lessons.push({
         kind: "base_rate",
@@ -226,12 +267,12 @@ export function deriveLessons(
           `została w paśmie w ${pct(counts.flat / n)}, spadła w ${pct(counts.down / n)} przypadków ` +
           `(${n} obserwacji, ${weeks} tyg.).`,
         strength: (shrunk - BASELINE) * Math.sqrt(n),
+        key: `base_rate|${regime}|${cls}|${top}|+`,
       });
     }
   }
 
   // 3) Ile dawało zagranie prognozy w funduszu — w złotówkach, po kosztach.
-  const money: Array<Lesson & { strength: number }> = [];
   for (const keyOf of scopes) {
     for (const [key, { rows: group }] of groupBy(recent, keyOf)) {
       const [regime, cls, direction] = key.split("|");
@@ -248,7 +289,7 @@ export function deriveLessons(
       );
       const mean = sum / n;
       const shrunk = sum / (n + PRIOR_WEIGHT);
-      if (Math.abs(shrunk) < MIN_PNL_PCT) continue;
+      if (Math.abs(shrunk) < MIN_PNL_PCT * factor) continue;
       const assetClass = cls === "*" ? null : cls;
       const action =
         direction === "up"
@@ -258,7 +299,7 @@ export function deriveLessons(
         shrunk < 0
           ? "w tej sytuacji to traci pieniądze — nie stawiaj tego kierunku albo daj niską pewność"
           : "w tej sytuacji to zarabia";
-      money.push({
+      lessons.push({
         kind: "pnl",
         regime,
         assetClass,
@@ -272,15 +313,79 @@ export function deriveLessons(
           `w ${h} dni po kosztach (≈ ${signedPl(Math.round(mean * 100), 0)} zł na każde 10 000 zł; ` +
           `ostrożnie liczone ${signedPl(shrunk, 1)}%, ${n} przypadków, ${weeks} tyg.) — ${verdict}.`,
         strength: Math.abs(shrunk) * Math.sqrt(n),
+        key: `pnl|${regime}|${cls}|${direction}|${shrunk < 0 ? "-" : "+"}`,
       });
     }
   }
+  return lessons;
+}
 
-  const strip = ({ strength: _strength, ...lesson }: Lesson & { strength: number }): Lesson =>
-    lesson;
-  const pnl = money.sort((a, b) => b.strength - a.strength).slice(0, MAX_PNL_LESSONS);
-  const rest = lessons.sort((a, b) => b.strength - a.strength).slice(0, MAX_LESSONS - pnl.length);
-  return [...pnl, ...rest].map(strip);
+/**
+ * Wniosek o trafności, który kłóci się z wnioskiem w złotówkach o tej samej
+ * sytuacji, nie trafia do promptu. Fundusz liczy się w złotówkach: gdy krótka
+ * sprzedaż w trendzie spadkowym zarabia, zdanie „«bez zmian» trafia częściej”
+ * ciągnęło model do braku pozycji (0 zł). Gdy zagranie traci, „bez zmian”
+ * zostaje — wtedy nie ma sprzeczności. Wniosek w zł o całej sytuacji
+ * (wszystkie klasy) wycisza też wnioski o trafności per klasa.
+ */
+function contradicts(pnl: Lesson, l: Lesson): boolean {
+  return (
+    l.kind === "direction" &&
+    l.regime === pnl.regime &&
+    (pnl.assetClass === null || pnl.assetClass === l.assetClass) &&
+    // ten sam kierunek — wniosek w zł mówi więcej; „bez zmian” — tylko gdy
+    // zagranie zarabia (wtedy brak pozycji to oddane pieniądze)
+    (l.direction === pnl.direction || (l.direction === "flat" && pnl.shrunkRate > 0))
+  );
+}
+
+/** Wybór do promptu: najpierw wnioski w zł, potem reszta bez sprzecznych z nimi. */
+function select(all: Candidate[]): Candidate[] {
+  const byStrength = [...all].sort((a, b) => b.strength - a.strength || a.key.localeCompare(b.key));
+  const pnl = byStrength.filter((l) => l.kind === "pnl").slice(0, MAX_PNL_LESSONS);
+  const rest = byStrength
+    .filter((l) => l.kind !== "pnl" && !pnl.some((p) => contradicts(p, l)))
+    .slice(0, MAX_LESSONS - pnl.length);
+  return [...pnl, ...rest];
+}
+
+/**
+ * Wnioski z rozliczonych prognoz, najmocniejsze pierwsze.
+ *
+ * HISTEREZA: wniosek, który był w prompcie w ostatnich HOLD_DAYS dniach,
+ * zostaje, dopóki spełnia połowę progu (HOLD_FACTOR) i ma ten sam wydźwięk, a
+ * przy wyborze miejsc dostaje premię (INCUMBENT_BONUS). Bez tego wnioski
+ * wchodziły i wypadały codziennie (z progiem ±1 przypadku), model co dzień
+ * dostawał inny zestaw i nie dało się ocenić, czy nauka działa. Zestaw
+ * „wczoraj” jest odtwarzany z tych samych wierszy (prognozy rozliczone przed
+ * danym dniem: dzień + horyzont), więc funkcja zostaje czysta.
+ *
+ * @param rows rozliczone, nie-kopie, dowolne źródło
+ * @param now  „teraz" w ms — parametr, żeby test był deterministyczny
+ */
+export function deriveLessons(
+  rows: LessonInput[],
+  now: number = Date.now(),
+  /** Horyzont prognoz w wierszach — do treści wniosków i odtworzenia dni wstecz. */
+  opts: { horizonDays?: number } = {},
+): Lesson[] {
+  const h = opts.horizonDays ?? 7;
+  const DAY = 86_400_000;
+
+  const incumbents = new Set<string>();
+  for (let k = 1; k <= HOLD_DAYS; k++) {
+    const t = now - k * DAY;
+    const settled = rows.filter((r) => Date.parse(r.madeAt) + h * DAY <= t);
+    for (const l of select(candidates(windowed(settled, t), h, 1))) incumbents.add(l.key);
+  }
+
+  const recent = windowed(rows, now);
+  const fresh = new Set(candidates(recent, h, 1).map((l) => l.key));
+  const pool = candidates(recent, h, HOLD_FACTOR)
+    .filter((l) => fresh.has(l.key) || incumbents.has(l.key))
+    .map((l) => (incumbents.has(l.key) ? { ...l, strength: l.strength * INCUMBENT_BONUS } : l));
+
+  return select(pool).map(({ strength: _s, key: _k, ...lesson }) => lesson);
 }
 
 export type LessonProgress = {

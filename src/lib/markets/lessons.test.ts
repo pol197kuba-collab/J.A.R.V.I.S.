@@ -27,14 +27,21 @@ function series(
 
 describe("deriveLessons", () => {
   it("krypto z października: 69 chybionych wzrostów w trendzie wzrostowym to wniosek ostrzegawczy", () => {
-    const rows = series(69, (i) => ({ outcome: i < 5 ? "hit" : "miss" }), ["BTC", "ETH", "SOL"]);
-    const lessons = deriveLessons(rows, NOW);
+    // Chybione wzrosty bez straty w zł — sam wniosek o trafności, nie o pieniądzach.
+    const ups = series(
+      69,
+      (i) => (i < 5 ? { outcome: "hit", actualChangePct: 4 } : { actualChangePct: -0.1 }),
+      ["BTC", "ETH", "SOL"],
+    );
+    // W tym samym czasie rynek rósł często — wzrosty były trafiane gorzej niż sam rynek.
+    const market = series(40, { direction: "flat", actualChangePct: 4 }, ["XRP", "DOGE"]);
+    const lessons = deriveLessons([...ups, ...market], NOW);
     const warn = lessons.find((l) => l.kind === "direction" && l.direction === "up");
     expect(warn).toBeDefined();
     expect(warn!.cases).toBe(69);
     expect(warn!.shrunkRate).toBeLessThan(0.15);
     expect(warn!.textPl).toContain("trafiły 5 z 69");
-    expect(warn!.textPl).toContain("gorzej niż losowo");
+    expect(warn!.textPl).toContain("gorzej niż sam rynek");
   });
 
   it("mała próbka nie daje wniosku, nawet przy 0% trafności", () => {
@@ -140,5 +147,85 @@ describe("wnioski w złotówkach", () => {
     expect(
       deriveLessons(series(40, { actualChangePct: 0.3 }), NOW).filter((l) => l.kind === "pnl"),
     ).toEqual([]);
+  });
+});
+
+describe("punkt odniesienia z rynku, bez sprzeczności, histereza", () => {
+  it("„bez zmian” trafione rzadziej, niż cena zostawała w paśmie, nie jest sukcesem", () => {
+    const day = (i: number, perDay: number) =>
+      new Date(NOW - (8 + Math.floor(i / perDay)) * DAY).toISOString();
+    const flats = series(
+      100,
+      (i) => ({
+        direction: "flat",
+        regime: "downtrend",
+        madeAt: day(i, 4),
+        ...(i < 49
+          ? { outcome: "hit", actualChangePct: 0.5 }
+          : { outcome: "miss", actualChangePct: -4 }),
+      }),
+      ["BTC", "ETH", "SOL", "XRP"],
+    );
+    const others = series(
+      40,
+      (i) => ({
+        direction: "up",
+        regime: "downtrend",
+        outcome: "miss",
+        actualChangePct: 0.5,
+        madeAt: day(i, 2),
+      }),
+      ["DOGE", "ADA"],
+    );
+    const flat = deriveLessons([...flats, ...others], NOW).filter(
+      (l) => l.kind === "direction" && l.direction === "flat",
+    );
+    // Przy sztywnym 1/3 byłoby „lepiej niż losowo — działa” (49% wobec 33%).
+    expect(flat.some((l) => l.textPl.includes("działa"))).toBe(false);
+    expect(flat.some((l) => l.textPl.includes("gorzej niż sam rynek"))).toBe(true);
+  });
+
+  it("wniosek w zł wycisza sprzeczny wniosek o trafności „bez zmian” w tej samej sytuacji", () => {
+    const shorts = series(
+      40,
+      { direction: "down", regime: "downtrend", outcome: "hit", actualChangePct: -3 },
+      ["BTC", "ETH"],
+    );
+    const flats = series(
+      40,
+      { direction: "flat", regime: "downtrend", outcome: "hit", actualChangePct: 0.2 },
+      ["SOL", "XRP"],
+    );
+    const lessons = deriveLessons([...shorts, ...flats], NOW);
+    expect(lessons.some((l) => l.kind === "pnl" && l.direction === "down")).toBe(true);
+    expect(lessons.some((l) => l.kind === "direction" && l.direction === "flat")).toBe(false);
+    expect(lessons.some((l) => l.kind === "direction" && l.direction === "down")).toBe(false);
+  });
+
+  it("działający wniosek zostaje, gdy słabnie do połowy progu; nowy przy tym poziomie nie wchodzi", () => {
+    const at = (daysBack: number) => new Date(NOW - daysBack * DAY).toISOString();
+    const row = (daysBack: number, actualChangePct: number, symbol = "BTC"): LessonInput => ({
+      symbol,
+      direction: "up",
+      regime: "uptrend",
+      outcome: "miss",
+      actualChangePct,
+      flatBandPct: 3,
+      madeAt: at(daysBack),
+    });
+    const pnlUp = (rows: LessonInput[]) =>
+      deriveLessons(rows, NOW, { horizonDays: 2 }).find(
+        (l) => l.kind === "pnl" && l.direction === "up",
+      );
+    // Do wczoraj: 35 strat po −0,3% (+ koszty) — wniosek o stracie w zł działał.
+    // Dziś doszło 5 zysków: wniosek słabnie poniżej pełnego progu, ale zostaje.
+    const old = Array.from({ length: 35 }, (_, i) => row(3 + i, -0.3));
+    const recent = ["ETH", "SOL", "XRP", "DOGE", "ADA"].map((s) => row(2, 1.4, s));
+    const held = pnlUp([...old, ...recent]);
+    expect(held).toBeDefined();
+    expect(Math.abs(held!.shrunkRate * 100)).toBeLessThan(0.5);
+    // Ten sam dzisiejszy poziom bez historii — za słaby na nowy wniosek.
+    const flatOld = Array.from({ length: 40 }, (_, i) => row(2 + i, -0.0875));
+    expect(pnlUp(flatOld)).toBeUndefined();
   });
 });
