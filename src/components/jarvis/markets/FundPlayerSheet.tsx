@@ -24,6 +24,7 @@ import {
   type FundTrade,
 } from "@/lib/fund/fund.functions";
 import { episodes, type Episode } from "@/lib/fund/history";
+import { PLAYER_STYLE } from "@/lib/fund/players";
 import { describeSettings, settingsFor, type FundSettings } from "@/lib/fund/settings";
 import { exposure, leverageTone, type PlayerSummary } from "@/lib/fund/summary";
 import { isWaiting } from "@/lib/fund/verdict";
@@ -238,6 +239,20 @@ export function FundPlayerSheet({
               </SheetTitle>
               <SheetDescription className="text-[11px]">{rules}</SheetDescription>
             </SheetHeader>
+
+            {PLAYER_STYLE[player.key] && (
+              <div className="mt-3 min-w-0 border-l border-primary/30 pl-3">
+                <p className="font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
+                  Jak gra
+                </p>
+                <p className="mt-1 break-words text-[12px] leading-relaxed text-foreground/85">
+                  {PLAYER_STYLE[player.key].how}
+                </p>
+                <p className="mt-1.5 break-words text-[11px] leading-relaxed text-muted-foreground">
+                  {PLAYER_STYLE[player.key].character}
+                </p>
+              </div>
+            )}
 
             <div className="mt-4 grid grid-cols-3 gap-3">
               <Stat

@@ -15,7 +15,7 @@ import {
   type PriceBook,
 } from "./engine";
 import { computeMetrics } from "./metrics";
-import { basketSignals, monkeySignals } from "./players";
+import { BASKET_SYMBOLS, basketSignals, monkeySignals, PLAYERS, PLAYER_STYLE } from "./players";
 
 const days = (start: string, n: number) => Array.from({ length: n }, (_, i) => addDays(start, i));
 
@@ -422,6 +422,15 @@ describe("metryki", () => {
 });
 
 describe("gracze odniesienia", () => {
+  it("każdy gracz ma opis, jak gra; opis koszyka zgadza się z jego składem", () => {
+    for (const p of PLAYERS) {
+      expect(PLAYER_STYLE[p.key]?.how.length).toBeGreaterThan(50);
+      expect(PLAYER_STYLE[p.key]?.character.length).toBeGreaterThan(10);
+    }
+    expect(BASKET_SYMBOLS).toHaveLength(10);
+    expect(PLAYER_STYLE.basket.how).toContain("10");
+  });
+
   it("koszyk: po równo, kup i trzymaj", () => {
     const s = basketSignals(["B", "A", "A", "C", "D", "E", "F", "G", "H"], "2026-10-01");
     expect(s).toHaveLength(8);
