@@ -32,6 +32,7 @@ import { rescueStuckAgents } from "../src/lib/agents/agentStatus.rescue";
 import { warsawDate, warsawHour } from "../src/lib/format/warsaw";
 import { sendPushToOwner, type PushResult } from "../src/lib/notifications/push.server";
 import { startJob } from "../src/lib/jobs/jobRun";
+import { describeKeys, jobModelKeys } from "../src/lib/jobs/modelKeys.server";
 
 const args = new Set(process.argv.slice(2));
 const DRY_RUN = args.has("--dry-run");
@@ -86,20 +87,19 @@ function requireEnv(name: string): string {
 }
 
 async function main(): Promise<void> {
-  // Klucze modeli są opcjonalne. Bez nich briefing powstaje z samych liczb —
-  // uboższy język, ten sam komplet informacji. To nie jest awaria.
-  const keys = {
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY?.trim() || null,
-    geminiApiKey: process.env.GEMINI_API_KEY?.trim() || null,
-  };
-  if (!keys.anthropicApiKey && !keys.geminiApiKey) {
-    warn("Brak kluczy modeli — briefing zostanie złożony z samych liczb.");
-  }
-
   // Jedna droga uwierzytelnienia: service role + JARVIS_OWNER_ID (etap 6b,
   // src/lib/jobs/jobRun.ts). Logowanie hasłem ukryło awarię kluczy po etapie 5.
   const job = startJob("morning-brief");
   const { db, ownerId } = job;
+
+  // Klucze modeli z Ustawień → Klucze API (sekrety GitHuba tylko jako zapas).
+  // Są opcjonalne: bez nich briefing powstaje z samych liczb — uboższy język,
+  // ten sam komplet informacji. To nie jest awaria.
+  const keys = await jobModelKeys(ownerId);
+  notice(describeKeys(keys));
+  if (!keys.anthropicApiKey && !keys.geminiApiKey) {
+    warn("Brak kluczy modeli — briefing zostanie złożony z samych liczb.");
+  }
 
   if (DRY_RUN) {
     // Podgląd: zbieramy fakty i składamy tekst, ale niczego nie zapisujemy

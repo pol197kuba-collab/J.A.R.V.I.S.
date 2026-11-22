@@ -42,7 +42,7 @@ import {
 } from "../src/lib/brain/labels";
 import type { Vec3 } from "../src/lib/brain/projection";
 import { computeInsights } from "../src/lib/brain/insights";
-import { readOwnerSecrets } from "../src/lib/secrets/ownerSecrets.server";
+import { jobModelKeys } from "../src/lib/jobs/modelKeys.server";
 import { startJob } from "../src/lib/jobs/jobRun";
 
 const args = new Set(process.argv.slice(2));
@@ -98,18 +98,17 @@ async function main(): Promise<void> {
     }
   }
 
-  // Klucz Gemini: sekret joba albo klucz użytkownika z aplikacji.
-  let geminiKey = process.env.GEMINI_API_KEY?.trim() || null;
-  if (!geminiKey) {
-    // Brak klucza to świadoma degradacja (słowa kluczowe zamiast nazw), ale
-    // NIEUDANY odczyt kluczy to awaria — czerwony przebieg (etap 6b).
-    try {
-      const { data } = await readOwnerSecrets(ownerId, "gemini_api_key");
-      geminiKey = data?.gemini_api_key?.trim() || null;
-    } catch (err) {
-      await report("klucze", err instanceof Error ? err.message : String(err));
+  // Klucz Gemini: z Ustawień → Klucze API, sekret joba tylko jako zapas.
+  // Brak klucza to świadoma degradacja (słowa kluczowe zamiast nazw), ale
+  // NIEUDANY odczyt kluczy bez zapasu to awaria — czerwony przebieg (etap 6b).
+  const keys = await jobModelKeys(ownerId);
+  const geminiKey = keys.geminiApiKey;
+  if (keys.readError) {
+    if (!geminiKey) {
+      await report("klucze", keys.readError);
       process.exit(1);
     }
+    warn(`Odczyt kluczy z ustawień nieudany, używam sekretu joba: ${keys.readError}`);
   }
   if (!geminiKey) {
     warn("Brak klucza Gemini — bez dogonienia embeddingów i z nazwami gromad ze słów kluczowych.");
