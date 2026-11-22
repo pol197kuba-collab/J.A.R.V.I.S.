@@ -56,10 +56,6 @@ function fmtPx(v: number): string {
 const zl = (v: number) => `${Math.round(v).toLocaleString("pl-PL")} zł`;
 const pct = (v: number, digits = 1) =>
   `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toLocaleString("pl-PL", { maximumFractionDigits: digits, minimumFractionDigits: digits })}%`;
-const mult = (v: number) =>
-  `${v.toLocaleString("pl-PL", { maximumFractionDigits: 2, minimumFractionDigits: v < 10 ? 2 : 0 })}×`;
-const units = (v: number) =>
-  v.toLocaleString("pl-PL", { maximumFractionDigits: v >= 100 ? 0 : v >= 1 ? 3 : 6 });
 const day = (iso: string) => {
   const d = new Date(`${iso}T12:00:00Z`);
   return d.toLocaleDateString("pl-PL", { weekday: "short", day: "2-digit", month: "2-digit" });
@@ -171,8 +167,8 @@ function PlayCard({
             stop: play.stop * k,
             take: play.take * k,
             expiresOn: play.expiresOn,
-            lots: play.lots,
-            units: play.units,
+            lots: null,
+            units: null,
             snapshot: { ...play, news: play.news.slice(0, 2) },
           },
         },
@@ -196,10 +192,6 @@ function PlayCard({
   };
 
   const long = play.side === "buy";
-  const size =
-    play.lots !== null
-      ? `${play.lots.toLocaleString("pl-PL", { maximumFractionDigits: 2 })} lota`
-      : `${units(play.units)} szt.`;
 
   return (
     <article
@@ -241,8 +233,8 @@ function PlayCard({
         <Field label="wejście" value={`~${fmtPx(play.entry)}`} sub={play.currency} />
         <Field
           label="dźwignia"
-          value={`1:${play.leverage}`}
-          sub={`ekspozycja ${mult(play.exposure)} kapitału`}
+          value={play.leverage > 1 ? `1:${play.leverage}` : "bez dźwigni"}
+          sub={`limit XTB 1:${play.leverageCap}`}
         />
         <Field
           label="stop-loss"
@@ -256,18 +248,22 @@ function PlayCard({
           sub={`${pct((long ? 1 : -1) * play.takePct * 100)} od wejścia`}
           tone="text-success"
         />
-        <Field
-          label="wielkość"
-          value={size}
-          sub={`wartość ${zl(play.nominalPln)} · depozyt ${zl(play.marginPln)}`}
-        />
+        <Field label="ile zagrać" value={play.portfolioHint} />
         <Field label="trzymaj do" value={day(play.expiresOn)} sub="horyzont prognozy 2 dni" />
       </div>
-      <p className="mt-2.5 border-t border-primary/15 pt-2 text-[11px] text-muted-foreground">
-        Przy SL tracisz ~{zl(play.riskPln)} · przy TP zarabiasz ~{zl(play.rewardPln)} · zgodność{" "}
-        {play.agree}/{play.total}
-      </p>
-      {play.sizeNote && <p className="mt-1 text-[11px] text-warning">{play.sizeNote}</p>}
+      <div className="mt-2.5 space-y-1 border-t border-primary/15 pt-2 text-[11px]">
+        <p className="text-foreground">
+          Za {zl(play.stakePln)}
+          {play.leverage > 1 && ` (pozycja ${zl(play.positionPln)})`}: przy TP{" "}
+          <b className="text-success">~+{zl(play.profitPln)}</b>, przy SL{" "}
+          <b className="text-destructive">~−{zl(play.lossPln)}</b>
+        </p>
+        <p className="text-muted-foreground">
+          w tym koszty brokera ok. {zl(play.costPln)} (spread
+          {play.nights > 0 ? ` + ${play.nights} ${play.nights === 1 ? "noc" : "noce"}` : ""}) ·
+          zgodność graczy {play.agree}/{play.total}
+        </p>
+      </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
         <button
@@ -427,9 +423,8 @@ function PlayCard({
                 Wyszukaj <b>{play.xtbName}</b> → <b>{long ? "KUP" : "SPRZEDAJ"}</b>
               </li>
               <li>
-                Wolumen <b>{size}</b>
-                {play.lots === null &&
-                  " (wpisz wielkość kontraktu w ustawieniach Doradcy, żeby liczyć loty)"}
+                Dźwignia <b>{play.leverage > 1 ? `1:${play.leverage}` : "bez dźwigni (1:1)"}</b>,
+                stawka <b>{play.portfolioHint}</b>
               </li>
               <li>
                 Stop-loss <b>{fmtPx(play.stop)}</b> · Take-profit <b>{fmtPx(play.take)}</b>
@@ -574,141 +569,37 @@ function NumberField({
   );
 }
 
-function SettingsView({
-  settings,
-  symbols,
-  onDone,
-}: {
-  settings: AdvisorSettings;
-  symbols: Array<{ symbol: string; xtbName: string }>;
-  onDone: () => void;
-}) {
-  const [draft, setDraft] = useState(settings);
+function SettingsView({ settings, onDone }: { settings: AdvisorSettings; onDone: () => void }) {
+  const [stake, setStake] = useState(settings.stakePln);
   const qc = useQueryClient();
   const save = useServerFn(saveAdvisorSettings);
   const m = useMutation({
-    mutationFn: () => save({ data: { settings: draft } }),
+    mutationFn: () => save({ data: { settings: { ...settings, stakePln: stake } } }),
     onSuccess: () => {
-      toast.success("Ustawienia Doradcy zapisane.");
+      toast.success("Zapisane.");
       void qc.invalidateQueries({ queryKey: ADVISOR_QUERY_KEY });
       onDone();
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
   });
-  const setXtb = (
-    symbol: string,
-    key: "name" | "contractSize" | "minLot" | "lotStep",
-    raw: string,
-  ) => {
-    const cur = { ...(draft.xtb[symbol] ?? {}) };
-    if (key === "name") cur.name = raw || undefined;
-    else cur[key] = raw === "" ? undefined : Number(raw.replace(",", "."));
-    setDraft({ ...draft, xtb: { ...draft.xtb, [symbol]: cur } });
-  };
 
   return (
-    <div className="min-w-0 space-y-6 pb-6">
-      <div className="grid grid-cols-2 gap-4 @max-[340px]:grid-cols-1">
-        <NumberField
-          label="Kapitał"
-          value={draft.capitalPln}
-          step={500}
-          suffix="zł"
-          onChange={(capitalPln) => setDraft({ ...draft, capitalPln })}
-        />
-        <NumberField
-          label="Ryzyko na mocne zagranie"
-          value={draft.riskPct}
-          step={0.5}
-          suffix="%"
-          onChange={(riskPct) => setDraft({ ...draft, riskPct })}
-        />
-        <NumberField
-          label="Maks. pozycja"
-          value={draft.maxExposure}
-          step={0.5}
-          suffix="× kapitału"
-          onChange={(maxExposure) => setDraft({ ...draft, maxExposure })}
-        />
-        <NumberField
-          label="Push od siły"
-          value={draft.pushMinStrength}
-          step={5}
-          onChange={(pushMinStrength) => setDraft({ ...draft, pushMinStrength })}
-        />
-        <NumberField
-          label="Push od godziny"
-          value={draft.pushFromHour}
-          onChange={(pushFromHour) => setDraft({ ...draft, pushFromHour })}
-        />
-        <NumberField
-          label="Push do godziny"
-          value={draft.pushToHour}
-          onChange={(pushToHour) => setDraft({ ...draft, pushToHour })}
-        />
-        <NumberField
-          label="Stop-loss (× σ)"
-          value={draft.stopSigma}
-          step={0.1}
-          onChange={(stopSigma) => setDraft({ ...draft, stopSigma })}
-        />
-        <NumberField
-          label="Take-profit (× σ)"
-          value={draft.takeSigma}
-          step={0.1}
-          onChange={(takeSigma) => setDraft({ ...draft, takeSigma })}
-        />
-      </div>
+    <div className="min-w-0 space-y-5 pb-6">
+      <NumberField
+        label="Kwota zagrania"
+        value={stake}
+        step={100}
+        suffix="zł"
+        onChange={setStake}
+      />
       <p className="text-[11px] leading-relaxed text-muted-foreground">
-        Średni sygnał gra za 60% ryzyka, słaby za 30%. Dźwignia konta to limit ESMA, który stosuje
-        XTB (krypto 1:2, akcje i ETF 1:5, złoto i główne indeksy 1:20).
+        Karty przeliczają każdy sygnał na tę kwotę: ile mniej więcej zarobisz przy take-profit i
+        stracisz przy stop-lossie, po kosztach brokera (spread i opłata za noc w XTB, szacunkowo).
       </p>
-
-      <Section title="Instrumenty w XTB">
-        <p className="text-[11px] leading-relaxed text-muted-foreground">
-          Nazwy są domyślne. Wielkość kontraktu (ile jednostek to 1 lot), minimalny lot i krok weź z
-          tabeli specyfikacji XTB — bez nich karta pokazuje sztuki zamiast lotów.
-        </p>
-        <div className="space-y-3">
-          {symbols.map(({ symbol, xtbName }) => {
-            const s = draft.xtb[symbol] ?? {};
-            return (
-              <div
-                key={symbol}
-                className="grid min-w-0 grid-cols-4 items-end gap-2 @max-[380px]:grid-cols-2"
-              >
-                <label className="min-w-0">
-                  <span className="block truncate text-[10px] text-muted-foreground">{symbol}</span>
-                  <input
-                    value={s.name ?? ""}
-                    placeholder={xtbName}
-                    onChange={(e) => setXtb(symbol, "name", e.target.value)}
-                    className="mt-1 h-8 w-full min-w-0 rounded border border-primary/20 bg-transparent px-1.5 font-mono text-[11px]"
-                  />
-                </label>
-                {(["contractSize", "minLot", "lotStep"] as const).map((k) => (
-                  <label key={k} className="min-w-0">
-                    <span className="block truncate text-[10px] text-muted-foreground">
-                      {k === "contractSize" ? "1 lot =" : k === "minLot" ? "min. lot" : "krok"}
-                    </span>
-                    <input
-                      inputMode="decimal"
-                      value={s[k] ?? ""}
-                      onChange={(e) => setXtb(symbol, k, e.target.value)}
-                      className="mt-1 h-8 w-full min-w-0 rounded border border-primary/20 bg-transparent px-1.5 font-mono text-[11px]"
-                    />
-                  </label>
-                ))}
-              </div>
-            );
-          })}
-        </div>
-      </Section>
-
       <div className="flex gap-2">
         <button
           type="button"
-          disabled={m.isPending}
+          disabled={m.isPending || !(stake > 0)}
           onClick={() => m.mutate()}
           className="font-display min-h-10 flex-1 border border-primary/60 bg-primary/10 text-[10px] uppercase tracking-[0.16em] text-primary disabled:opacity-40"
         >
@@ -780,18 +671,14 @@ export function AdvisorSheet({
           </SheetTitle>
           <SheetDescription className="text-[11px]">
             {a
-              ? `Stan na ${new Date(a.generatedAt).toLocaleString("pl-PL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} · ${a.mode === "deep" ? `głęboka analiza${a.model ? ` · ${a.model}` : ""}` : "zgodność 4 graczy AI"} · broker XTB · kapitał ${zl(a.settings.capitalPln)}`
+              ? `Stan na ${new Date(a.generatedAt).toLocaleString("pl-PL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} · ${a.mode === "deep" ? `głęboka analiza${a.model ? ` · ${a.model}` : ""}` : "zgodność 4 graczy AI"} · broker XTB · kwota ${zl(a.settings.stakePln)}`
               : "Jak zagrać na rynku tak, jak grają gracze AI."}
           </SheetDescription>
         </SheetHeader>
 
         <div className="@container mt-4 min-w-0">
           {view === "settings" && a ? (
-            <SettingsView
-              settings={a.settings}
-              symbols={a.plays.map((p) => ({ symbol: p.symbol, xtbName: p.xtbName }))}
-              onDone={() => setView("plays")}
-            />
+            <SettingsView settings={a.settings} onDone={() => setView("plays")} />
           ) : (
             <div className="min-w-0 space-y-4 pb-6">
               <div className="flex flex-wrap gap-2">

@@ -46,11 +46,9 @@ export function playsToNotify(
 const sideWord = (side: "buy" | "sell") => (side === "buy" ? "KUP" : "SPRZEDAJ");
 
 export function playMessage(p: Play, fmt: (v: number) => string): { title: string; body: string } {
-  const size =
-    p.lots !== null ? `${String(p.lots).replace(".", ",")} lota` : `${fmt(p.units)} szt.`;
   return {
     title: `${p.side === "buy" ? "▲" : "▼"} ${sideWord(p.side)} ${p.label} · siła ${p.strength} (${GRADE_LABEL[p.grade]})`,
-    body: `XTB ${p.xtbName} · 1:${p.leverage} · ${size} · SL ${fmt(p.stop)} · TP ${fmt(p.take)} · do ${p.expiresOn}`,
+    body: `XTB ${p.xtbName} · dźwignia 1:${p.leverage} · ${p.portfolioHint} · SL ${fmt(p.stop)} · TP ${fmt(p.take)} · do ${p.expiresOn}`,
   };
 }
 

@@ -189,7 +189,10 @@ async function loadVotes(
 // ---------------------------------------------------------------- ceny ----
 
 async function loadPrices(db: Db, symbols: string[], today: string) {
-  const all = [...new Set([...symbols, "USDPLN", "EURPLN"])];
+  const closes = new Map<string, PricePoint[]>();
+  const last = new Map<string, { price: number; at: string }>();
+  if (symbols.length === 0) return { closes, last };
+  const all = [...new Set(symbols)];
   const rows = await fetchAllPages<{
     symbol: string;
     quote_date: string;
@@ -206,8 +209,6 @@ async function loadPrices(db: Db, symbols: string[], today: string) {
       .order("symbol", { ascending: true })
       .range(from, to),
   );
-  const closes = new Map<string, PricePoint[]>();
-  const last = new Map<string, { price: number; at: string }>();
   for (const r of rows) {
     const close = Number(r.close);
     if (!(close > 0)) continue;
@@ -216,15 +217,7 @@ async function loadPrices(db: Db, symbols: string[], today: string) {
     closes.set(r.symbol, list);
     last.set(r.symbol, { price: close, at: r.source === "live" ? r.updated_at : r.quote_date });
   }
-  const fx = (currency: string): number | null =>
-    currency === "PLN"
-      ? 1
-      : currency === "USD"
-        ? (last.get("USDPLN")?.price ?? null)
-        : currency === "EUR"
-          ? (last.get("EURPLN")?.price ?? null)
-          : null;
-  return { closes, last, fx };
+  return { closes, last };
 }
 
 // ---------------------------------------------------------------- newsy ----
@@ -429,7 +422,7 @@ export async function computeAdvice(
   }
 
   const symbols = [...votes.keys()];
-  const [{ closes, last, fx }, news, history] = await Promise.all([
+  const [{ closes, last }, news, history] = await Promise.all([
     loadPrices(db, symbols, today),
     loadNews(db, symbols),
     loadHistory(db, ownerId, today),
@@ -438,8 +431,7 @@ export async function computeAdvice(
   const instruments: AdvisorInstrument[] = symbols.flatMap((symbol) => {
     const asset = assetBySymbol(symbol);
     const px = last.get(symbol);
-    const rate = asset ? fx(asset.currency) : null;
-    if (!asset || !px || rate === null) return [];
+    if (!asset || !px) return [];
     const v = votes.get(symbol) ?? [];
     const c = consensus(v);
     const ctx = context.get(symbol);
@@ -451,7 +443,6 @@ export async function computeAdvice(
         currency: asset.currency,
         price: px.price,
         priceAt: px.at,
-        fxToPln: rate,
         closes: closes.get(symbol) ?? [],
         votes: v,
         regime: ctx?.regime ?? null,

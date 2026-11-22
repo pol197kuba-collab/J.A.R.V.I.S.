@@ -38,7 +38,6 @@ const inst = (over: Partial<AdvisorInstrument> = {}): AdvisorInstrument => ({
   currency: "USD",
   price: 100,
   priceAt: null,
-  fxToPln: 4,
   closes: closes(),
   votes: [
     v("ai", "down", 80),
@@ -83,50 +82,47 @@ describe("esmaLeverage", () => {
 });
 
 describe("buildPlay", () => {
-  it("short with SL above / TP below and risk = capital × risk%", () => {
-    const p = buildPlay(inst(), { ...DEFAULT_ADVISOR_SETTINGS, maxExposure: 5 }, "2026-11-22")!;
+  it("short: SL above, TP below; P&L for the stake after broker costs", () => {
+    const p = buildPlay(inst(), DEFAULT_ADVISOR_SETTINGS, "2026-11-22")!;
     expect(p.side).toBe("sell");
     expect(p.strength).toBe(75);
     expect(p.grade).toBe("strong");
     expect(p.stop).toBeGreaterThan(p.entry);
     expect(p.take).toBeLessThan(p.entry);
-    // 10 000 zł × 2% = 200 zł ryzyka przy SL (bez ograniczeń)
-    expect(p.riskPln).toBeCloseTo(200, 0);
-    expect(p.rewardPln / p.riskPln).toBeCloseTo(1.5, 5);
+    // mocny sygnał na krypto: dźwignia do 1:5, ale limit ESMA 1:2
     expect(p.leverage).toBe(2);
-    expect(p.marginPln).toBeCloseTo(p.nominalPln / 2, 5);
+    expect(p.leverageCap).toBe(2);
+    expect(p.portfolioHint).toBe("nie więcej niż 5% portfela");
+    expect(p.positionPln).toBe(2000);
     expect(p.expiresOn).toBe("2026-11-24");
-    expect(p.lots).toBeNull();
+    expect(p.nights).toBe(2);
+    // koszty: spread 0,22% + 2 noce × 0,06% od 2000 zł = 6,8 zł
+    expect(p.costPln).toBeCloseTo(6.8, 5);
+    expect(p.profitPln).toBeCloseTo(2000 * p.takePct - 6.8, 5);
+    expect(p.lossPln).toBeCloseTo(2000 * p.stopPct + 6.8, 5);
   });
 
-  it("weaker signal risks less", () => {
-    const p = buildPlay(
-      inst({ votes: [v("ai", "up", 60), v("signals", "up", 50)] }),
-      { ...DEFAULT_ADVISOR_SETTINGS, maxExposure: 5 },
+  it("weaker signal: less leverage, smaller hint", () => {
+    const medium = buildPlay(
+      inst({
+        symbol: "AAPL.US",
+        assetClass: "equity",
+        votes: [v("ai", "up", 60), v("signals", "up", 50)],
+      }),
+      DEFAULT_ADVISOR_SETTINGS,
+      "2026-11-18",
+    )!;
+    expect(medium.grade).toBe("medium");
+    expect(medium.leverage).toBe(2);
+    expect(medium.portfolioHint).toMatch(/2–3%/);
+    const weak = buildPlay(
+      inst({ votes: [v("ai", "up", 40), v("signals", "up", 30)] }),
+      { ...DEFAULT_ADVISOR_SETTINGS, stakePln: 500 },
       "2026-11-22",
     )!;
-    expect(p.grade).toBe("medium");
-    expect(p.riskPln).toBeCloseTo(120, 0);
-  });
-
-  it("caps exposure and says so", () => {
-    const s = { ...DEFAULT_ADVISOR_SETTINGS, riskPct: 20, maxExposure: 0.5 };
-    const p = buildPlay(inst(), s, "2026-11-22")!;
-    expect(p.nominalPln).toBeCloseTo(5000, 5);
-    expect(p.sizeNote).toMatch(/Ograniczone/);
-  });
-
-  it("rounds to XTB lots and enforces the minimum lot", () => {
-    const s = {
-      ...DEFAULT_ADVISOR_SETTINGS,
-      xtb: { BTC: { contractSize: 1, lotStep: 0.01, minLot: 0.01 } },
-    };
-    const p = buildPlay(inst(), s, "2026-11-22")!;
-    expect(p.lots).not.toBeNull();
-    expect(Math.abs(p.lots! * 100 - Math.round(p.lots! * 100))).toBeLessThan(1e-9);
-    const tiny = buildPlay(inst({ price: 1_000_000 }), s, "2026-11-22")!;
-    expect(tiny.lots).toBe(0.01);
-    expect(tiny.sizeNote).toMatch(/Minimalna pozycja/);
+    expect(weak.grade).toBe("weak");
+    expect(weak.leverage).toBe(1);
+    expect(weak.positionPln).toBe(500);
   });
 
   it("no play on too few votes, weak consensus or short history", () => {
@@ -159,25 +155,25 @@ describe("buildPlay", () => {
   it("order text is one line for XTB", () => {
     const p = buildPlay(inst(), DEFAULT_ADVISOR_SETTINGS, "2026-11-22")!;
     expect(orderText(p, (x) => x.toFixed(2))).toMatch(
-      /^XTB BITCOIN: SPRZEDAJ .* · SL .* · TP .* · zamknij do 2026-11-24$/,
+      /^XTB BITCOIN: SPRZEDAJ · dźwignia 1:2 · SL .* · TP .* · zamknij do 2026-11-24$/,
     );
   });
 });
 
 describe("parseAdvisorSettings", () => {
-  it("defaults on garbage, keeps valid values and XTB specs", () => {
+  it("defaults on garbage, keeps the stake, ignores old fields", () => {
     expect(parseAdvisorSettings(null)).toEqual(DEFAULT_ADVISOR_SETTINGS);
     const s = parseAdvisorSettings({
+      stakePln: 2500,
       capitalPln: 25000,
-      riskPct: 99,
+      xtb: { BTC: { contractSize: 1 } },
       pushFromHour: 22,
       pushToHour: 6,
-      xtb: { BTC: { name: " BITCOIN ", contractSize: 1 }, "bad key!": { name: "x" } },
     });
-    expect(s.capitalPln).toBe(25000);
-    expect(s.riskPct).toBe(2);
+    expect(s.stakePln).toBe(2500);
     expect(s.pushToHour).toBe(23);
-    expect(s.xtb).toEqual({ BTC: { name: "BITCOIN", contractSize: 1 } });
+    expect(s).not.toHaveProperty("xtb");
+    expect(parseAdvisorSettings({ stakePln: -5 }).stakePln).toBe(1000);
   });
 });
 
