@@ -17,6 +17,7 @@ import type { Database, Json } from "../src/integrations/supabase/types";
 import { ORLEN_PRODUCTS } from "../src/lib/fuel/orlen";
 import { ingestMarket, ingestNews, ingestPrices, type Db } from "../src/lib/fuel/ingest.server";
 import { evaluateStandingOrders } from "../src/lib/orders/evaluate.server";
+import { describeKeys, jobModelKeys } from "../src/lib/jobs/modelKeys.server";
 import { startJob } from "../src/lib/jobs/jobRun";
 
 const args = new Set(process.argv.slice(2));
@@ -67,15 +68,18 @@ async function main(): Promise<void> {
     return;
   }
 
-  const geminiKey = process.env.GEMINI_API_KEY?.trim() || null;
-  if (!geminiKey) {
-    warn("Brak GEMINI_API_KEY — newsy dostaną ocenę heurystyczną zamiast streszczeń po polsku.");
-  }
-
   // Jedna droga uwierzytelnienia: service role + JARVIS_OWNER_ID (etap 6b,
   // src/lib/jobs/jobRun.ts). Logowanie hasłem ukryło awarię kluczy po etapie 5.
   const job = startJob("orlen-prices");
   const { db, ownerId } = job;
+
+  // Klucz Gemini z Ustawień → Klucze API; sekret GitHuba tylko jako zapas.
+  const keys = await jobModelKeys(ownerId);
+  notice(describeKeys(keys));
+  const geminiKey = keys.geminiApiKey;
+  if (!geminiKey) {
+    warn("Brak klucza Gemini — newsy dostaną ocenę heurystyczną zamiast streszczeń po polsku.");
+  }
 
   const failures: string[] = [];
 

@@ -30,6 +30,7 @@ import {
   type PlayerEvent,
 } from "../src/lib/markets/live";
 import { askAlarm } from "../src/lib/markets/alarm.server";
+import { jobModelKeys } from "../src/lib/jobs/modelKeys.server";
 import { openPositionSymbols, watchPositions } from "../src/lib/advisor/notify.server";
 import { createModelBudget, DAILY_TOKEN_BUDGET, warsawDay } from "../src/lib/markets/budget";
 import { computeSignals } from "../src/lib/markets/signals";
@@ -81,10 +82,8 @@ function inDailyWindow(now: Date): boolean {
 async function main() {
   const startedAt = new Date();
   const { db, ownerId } = await auth();
-  const keys = {
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY?.trim() || null,
-    geminiApiKey: process.env.GEMINI_API_KEY?.trim() || null,
-  };
+  // Klucze z Ustawień → Klucze API; sekrety GitHuba tylko jako zapas.
+  const keys = await jobModelKeys(ownerId);
 
   const finish = async (failures: number) => {
     await db.from("job_runs").insert({

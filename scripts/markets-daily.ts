@@ -40,6 +40,7 @@ import {
 } from "../src/lib/markets/ingest.server";
 import { evaluateStandingOrders } from "../src/lib/orders/evaluate.server";
 import { recomputeFund } from "../src/lib/fund/fund.server";
+import { describeKeys, jobModelKeys } from "../src/lib/jobs/modelKeys.server";
 import { notifyNewPlays } from "../src/lib/advisor/notify.server";
 import {
   decideMarketRun,
@@ -99,24 +100,23 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Klucze modeli są opcjonalne: bez nich newsy dostają ocenę heurystyczną,
-  // a typer zapisuje wyłącznie prognozę sygnałową. Job kończy się wtedy
-  // sukcesem — uboższy wynik to nie awaria.
-  const keys = {
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY?.trim() || null,
-    geminiApiKey: process.env.GEMINI_API_KEY?.trim() || null,
-  };
-  if (!keys.anthropicApiKey && !keys.geminiApiKey) {
-    warn(
-      "Brak ANTHROPIC_API_KEY i GEMINI_API_KEY — newsy dostaną ocenę heurystyczną, " +
-        "a prognoza zapisze się tylko jako sygnałowa.",
-    );
-  }
-
   // Jedna droga uwierzytelnienia: service role + JARVIS_OWNER_ID (etap 6b,
   // src/lib/jobs/jobRun.ts). Logowanie hasłem ukryło awarię kluczy po etapie 5.
   const job = startJob("market-grid");
   const { db, ownerId } = job;
+
+  // Klucze modeli z Ustawień → Klucze API (te same, które testuje aplikacja);
+  // sekrety GitHuba tylko jako zapas. Są opcjonalne: bez nich newsy dostają
+  // ocenę heurystyczną, a typer zapisuje wyłącznie prognozę sygnałową — to
+  // uboższy wynik, nie awaria.
+  const keys = await jobModelKeys(ownerId);
+  notice(describeKeys(keys));
+  if (!keys.anthropicApiKey && !keys.geminiApiKey) {
+    warn(
+      "Brak kluczy Claude i Gemini — newsy dostaną ocenę heurystyczną, " +
+        "a prognoza zapisze się tylko jako sygnałowa.",
+    );
+  }
 
   // ---------- 0. Czy ten przebieg w ogóle ma działać ----------
   // Job uruchamia baza (workflow_dispatch) dwa razy: rano dla akcji, ETF-ów i
