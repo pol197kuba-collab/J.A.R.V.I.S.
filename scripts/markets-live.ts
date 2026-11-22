@@ -30,6 +30,7 @@ import {
   type PlayerEvent,
 } from "../src/lib/markets/live";
 import { askAlarm } from "../src/lib/markets/alarm.server";
+import { openPositionSymbols, watchPositions } from "../src/lib/advisor/notify.server";
 import { createModelBudget, DAILY_TOKEN_BUDGET, warsawDay } from "../src/lib/markets/budget";
 import { computeSignals } from "../src/lib/markets/signals";
 import { loadWatchlist, type Db } from "../src/lib/markets/ingest.server";
@@ -133,9 +134,12 @@ async function main() {
   // Wspólny takt rynku: ceny WSZYSTKICH obserwowanych instrumentów (wykres,
   // sygnały) plus tych, na których gracze mają pozycje albo zlecenia.
   const watch = await loadWatchlist(db, ownerId).catch(() => [] as string[]);
+  // Pozycje „zagrałem” z Doradcy też potrzebują ceny na żywo.
+  const advisorSymbols = await openPositionSymbols(db, ownerId).catch(() => [] as string[]);
   const symbols = [
     ...new Set([
       ...watch,
+      ...advisorSymbols,
       ...players.flatMap((p) => [...p.pending, ...p.live].map((x) => x.symbol)),
     ]),
   ];
@@ -174,6 +178,21 @@ async function main() {
       if (error) warn(`zapis notowań na żywo: ${error.message}`);
       else notice(`notowania na żywo zapisane: ${rows.length}`);
     }
+  }
+
+  // ---------- 2b. Doradca: pilnowanie pozycji „zagrałem” ----------
+  try {
+    const live = new Map([...prices].map(([symbol, p]) => [symbol, p.price]));
+    const w = await watchPositions(db, ownerId, live);
+    if (w.checked > 0) {
+      notice(
+        w.windowClosed
+          ? `doradca: ${w.checked} pozycji, poza godzinami powiadomień`
+          : `doradca: ${w.checked} pozycji, ${w.sent} powiadomień`,
+      );
+    }
+  } catch (err) {
+    warn(`doradca: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   // ---------- 3. decyzje ----------

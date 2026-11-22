@@ -14,6 +14,90 @@ export type Database = {
   }
   public: {
     Tables: {
+      advisor_journal: {
+        Row: {
+          action: string
+          alerts: string[]
+          closed_at: string | null
+          closed_reason: string | null
+          created_at: string
+          entry_price: number
+          expires_on: string
+          id: string
+          label: string
+          lots: number | null
+          owner_id: string
+          play: Json
+          side: string
+          status: string
+          stop_price: number
+          strength: number
+          symbol: string
+          take_price: number
+          units: number | null
+        }
+        Insert: {
+          action: string
+          alerts?: string[]
+          closed_at?: string | null
+          closed_reason?: string | null
+          created_at?: string
+          entry_price: number
+          expires_on: string
+          id?: string
+          label: string
+          lots?: number | null
+          owner_id: string
+          play?: Json
+          side: string
+          status?: string
+          stop_price: number
+          strength: number
+          symbol: string
+          take_price: number
+          units?: number | null
+        }
+        Update: {
+          action?: string
+          alerts?: string[]
+          closed_at?: string | null
+          closed_reason?: string | null
+          created_at?: string
+          entry_price?: number
+          expires_on?: string
+          id?: string
+          label?: string
+          lots?: number | null
+          owner_id?: string
+          play?: Json
+          side?: string
+          status?: string
+          stop_price?: number
+          strength?: number
+          symbol?: string
+          take_price?: number
+          units?: number | null
+        }
+        Relationships: []
+      }
+      advisor_settings: {
+        Row: {
+          owner_id: string
+          settings: Json
+          updated_at: string
+        }
+        Insert: {
+          owner_id: string
+          settings?: Json
+          updated_at?: string
+        }
+        Update: {
+          owner_id?: string
+          settings?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       agent_runs: {
         Row: {
           agent_id: string

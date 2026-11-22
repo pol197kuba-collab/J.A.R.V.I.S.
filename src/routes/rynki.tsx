@@ -17,7 +17,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Bell, RefreshCw, TriangleAlert } from "lucide-react";
+import { Bell, Crosshair, RefreshCw, TriangleAlert } from "lucide-react";
+import { AdvisorSheet } from "@/components/jarvis/markets/AdvisorSheet";
 
 import { HudPanel } from "@/components/jarvis/HudPanel";
 import { Chips, EmptyState, LiveDot, PanelHint, StatTile } from "@/components/jarvis/fuel/chrome";
@@ -112,6 +113,11 @@ function MarketsPage() {
   // quotes come with the grid (at most 3, the most recent).
   const [previews, setPreviews] = useState<string[]>([]);
   const [ordersOpen, setOrdersOpen] = useState(false);
+  const [advisorOpen, setAdvisorOpen] = useState(false);
+  // Push Doradcy prowadzi na /rynki?doradca=1 — od razu otwórz karty.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("doradca")) setAdvisorOpen(true);
+  }, []);
 
   const fetchCatalog = useServerFn(getAssetCatalog);
   const catalog = useQuery({
@@ -360,6 +366,14 @@ function MarketsPage() {
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           <LiveDot active={grid.isFetching} label={grid.isFetching ? "SYNC" : "LIVE"} />
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setAdvisorOpen(true)}
+              className="font-display flex items-center gap-1.5 border border-primary/70 bg-primary/15 px-3 py-1 text-[9px] uppercase tracking-widest text-primary transition hover:bg-primary/25"
+            >
+              <Crosshair className="h-3 w-3" />
+              Doradca
+            </button>
             <button
               type="button"
               onClick={() => setOrdersOpen(true)}
@@ -620,6 +634,7 @@ function MarketsPage() {
       </HudPanel>
 
       {/* Rozkazy (powiadomienia o progach cen) — w wysuwanym panelu, nie na stronie. */}
+      <AdvisorSheet open={advisorOpen} onOpenChange={setAdvisorOpen} />
       <Sheet open={ordersOpen} onOpenChange={setOrdersOpen}>
         <SheetContent
           side="right"
