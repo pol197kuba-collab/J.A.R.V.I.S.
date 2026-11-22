@@ -40,6 +40,7 @@ import {
 } from "../src/lib/markets/ingest.server";
 import { evaluateStandingOrders } from "../src/lib/orders/evaluate.server";
 import { recomputeFund } from "../src/lib/fund/fund.server";
+import { notifyNewPlays } from "../src/lib/advisor/notify.server";
 import {
   decideMarketRun,
   lastRunOfSession,
@@ -274,6 +275,20 @@ async function main(): Promise<void> {
     }
   } catch (err) {
     await report("fundusz", err instanceof Error ? err.message : String(err));
+  }
+
+  // ---------- 5b. Doradca ----------
+  // Po funduszu, na świeżych prognozach: mocne zagrania → push (raz dziennie
+  // na instrument i kierunek, w oknie godzin z ustawień Doradcy).
+  try {
+    const advisor = await notifyNewPlays(db, ownerId);
+    notice(
+      advisor.windowClosed
+        ? "doradca: poza godzinami powiadomień — bez push"
+        : `doradca: ${advisor.sent} powiadomień o mocnych zagraniach`,
+    );
+  } catch (err) {
+    await report("doradca", err instanceof Error ? err.message : String(err));
   }
 
   // ---------- 6. Stałe rozkazy ----------

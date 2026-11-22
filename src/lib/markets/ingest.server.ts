@@ -354,6 +354,11 @@ export async function buildOutlook(
      * wieczorem krypto/surowce/waluty — schedule.ts). Brak = wszystkie.
      */
     classes?: readonly AssetClass[];
+    /**
+     * Zapytaj model BEZ zapisu prognoz (głęboka analiza Doradcy): świeże
+     * werdykty na teraz, które nie wchodzą do funduszu ani do trafności.
+     */
+    callModel?: boolean;
   } = {},
 ): Promise<{ rows: OutlookRow[]; model: string | null }> {
   const watch = await loadWatchlist(supabase, userId);
@@ -469,7 +474,8 @@ export async function buildOutlook(
   );
   const chosen = new Set(ranked.slice(0, MODEL_INSTRUMENTS).map((p) => p.asset.symbol));
   const forModel = prepared.filter((p) => chosen.has(p.asset.symbol));
-  const useModel = record && Boolean(keys.anthropicApiKey || keys.geminiApiKey);
+  const useModel =
+    (record || opts.callModel === true) && Boolean(keys.anthropicApiKey || keys.geminiApiKey);
   const budget = createModelBudget(supabase, userId);
 
   // Darwin: który wariant promptu typera prognozuje dziś (champion albo
