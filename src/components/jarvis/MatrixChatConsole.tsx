@@ -4,6 +4,8 @@ import { cn } from "@/lib/utils";
 import { useAgentChatChannel } from "@/lib/ai/useAgentChatChannel";
 import { useVoiceCommands } from "./VoiceCommandContext";
 import { useSingleVoiceCommand } from "./useSingleVoiceCommand";
+import { LinkifiedText } from "./LinkifiedText";
+import { VoiceMuteToggle } from "./VoiceMuteToggle";
 
 // Transmission-log styled chat console for the /jarvis matrix view.
 // Deliberately different from the Dashboard ChatPanel (bubbles): here every
@@ -126,6 +128,7 @@ export function MatrixChatConsole() {
           >
             {typing ? "link · active" : "link · idle"}
           </span>
+          <VoiceMuteToggle />
           {messages.length > 0 && (
             <button
               type="button"
@@ -186,7 +189,7 @@ export function MatrixChatConsole() {
                     jarvis ? "text-foreground/90" : "text-white/70",
                   )}
                 >
-                  {m.text}
+                  <LinkifiedText text={m.text} />
                 </p>
               </div>
             </div>

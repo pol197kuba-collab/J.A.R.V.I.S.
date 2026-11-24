@@ -28,6 +28,40 @@ export function isSpeakingNow() {
   return speakingCount > 0;
 }
 
+// ---- wyciszenie głosu (wybór użytkownika, pamiętany w przeglądarce) ----
+// Długie odpowiedzi woli się czasem przeczytać niż słuchać. Wyciszony głos
+// nic nie mówi sam z siebie; jawne „odsłuchaj” (np. poranny brief) mówi
+// dalej (`force`).
+const MUTE_KEY = "jarvis.voiceMuted";
+const MUTE_EVENT = "jarvis:voice-muted";
+
+export function isVoiceMuted(): boolean {
+  try {
+    return typeof window !== "undefined" && window.localStorage.getItem(MUTE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setVoiceMuted(muted: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    if (muted) window.localStorage.setItem(MUTE_KEY, "1");
+    else window.localStorage.removeItem(MUTE_KEY);
+  } catch {
+    /* tryb prywatny — wybór działa do końca sesji strony */
+  }
+  if (muted) speakCancel();
+  window.dispatchEvent(new CustomEvent(MUTE_EVENT, { detail: muted }));
+}
+
+export function onVoiceMuted(handler: (muted: boolean) => void) {
+  if (typeof window === "undefined") return () => {};
+  const fn = (e: Event) => handler((e as CustomEvent<boolean>).detail);
+  window.addEventListener(MUTE_EVENT, fn as EventListener);
+  return () => window.removeEventListener(MUTE_EVENT, fn as EventListener);
+}
+
 // FIFO queue so back-to-back speak() calls (e.g. greeting + module-load
 // confirmation) play sequentially instead of cancelling each other.
 type SpeakLang = "auto" | "en" | "pl";
@@ -158,9 +192,13 @@ function stripMarkdownForSpeech(text: string): string {
 }
 
 /** Enqueue a phrase. Plays after any in-flight speech finishes. */
-export function speak(text: string, opts?: { skipChirp?: boolean; lang?: SpeakLang }) {
+export function speak(
+  text: string,
+  opts?: { skipChirp?: boolean; lang?: SpeakLang; force?: boolean },
+) {
   try {
     if (typeof window === "undefined") return;
+    if (!opts?.force && isVoiceMuted()) return;
     // Agent Town (pixel RPG) speaks in bubbles and blips, never in a synthetic
     // voice — it would talk over the scene that is still playing out.
     if (getUiMode() === "town") return;

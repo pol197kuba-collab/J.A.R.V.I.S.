@@ -3,6 +3,7 @@ import { Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAgentChatChannel } from "@/lib/ai/useAgentChatChannel";
 import { LinkifiedText } from "./LinkifiedText";
+import { VoiceMuteToggle } from "./VoiceMuteToggle";
 
 export function ChatPanel() {
   const { messages, typing, activeAgent, agents, switchAgent, send, clear } = useAgentChatChannel();
@@ -61,6 +62,7 @@ export function ChatPanel() {
           </select>
         </div>
         <div className="flex items-center gap-3">
+          <VoiceMuteToggle />
           {messages.length > 0 && (
             <button
               type="button"
