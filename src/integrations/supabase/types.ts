@@ -1240,27 +1240,39 @@ export type Database = {
         Row: {
           as_of: string
           cost_pln: number
+          expires_on: string | null
           owner_id: string
           portfolio_id: string
+          ref_px: number | null
+          stop_pct: number | null
           symbol: string
+          take_pct: number | null
           units: number
           value_pln: number
         }
         Insert: {
           as_of: string
           cost_pln: number
+          expires_on?: string | null
           owner_id: string
           portfolio_id: string
+          ref_px?: number | null
+          stop_pct?: number | null
           symbol: string
+          take_pct?: number | null
           units: number
           value_pln: number
         }
         Update: {
           as_of?: string
           cost_pln?: number
+          expires_on?: string | null
           owner_id?: string
           portfolio_id?: string
+          ref_px?: number | null
+          stop_pct?: number | null
           symbol?: string
+          take_pct?: number | null
           units?: number
           value_pln?: number
         }

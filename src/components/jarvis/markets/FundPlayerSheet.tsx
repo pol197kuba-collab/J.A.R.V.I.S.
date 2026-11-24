@@ -6,7 +6,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -23,6 +23,7 @@ import {
   type FundPlayer,
   type FundTrade,
 } from "@/lib/fund/fund.functions";
+import { exitLevels, type ExitLevel } from "@/lib/fund/exits";
 import { episodes, type Episode } from "@/lib/fund/history";
 import { PLAYER_STYLE } from "@/lib/fund/players";
 import { describeSettings, settingsFor, type FundSettings } from "@/lib/fund/settings";
@@ -41,7 +42,7 @@ const price = (symbol: string, v: number | null) => {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <p className="font-display mt-6 text-[9px] uppercase tracking-[0.25em] text-primary/70">
+    <p className="font-display mt-6 text-[10px] uppercase tracking-[0.25em] text-primary/70">
       {children}
     </p>
   );
@@ -50,7 +51,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div className="min-w-0">
-      <p className="font-display truncate text-[8px] uppercase tracking-widest text-muted-foreground">
+      <p className="font-display truncate text-[10px] uppercase tracking-widest text-muted-foreground">
         {label}
       </p>
       <p
@@ -63,9 +64,8 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
   );
 }
 
-function Trend({ change }: { change: number | null }) {
-  if (change === null) return <span className="w-14 shrink-0" />;
-  const Icon = change > 0.05 ? ArrowUpRight : change < -0.05 ? ArrowDownRight : Minus;
+function DayChange({ change }: { change: number | null }) {
+  if (change === null) return null;
   const color =
     change > 0.05
       ? "var(--success)"
@@ -73,43 +73,127 @@ function Trend({ change }: { change: number | null }) {
         ? "var(--destructive)"
         : "var(--muted-foreground)";
   return (
-    <span
-      className="flex w-14 shrink-0 items-center justify-end gap-0.5 font-mono text-[10px]"
-      style={{ color }}
-      title="Zmiana ceny instrumentu w ostatniej sesji"
-    >
-      <Icon className="h-3 w-3" aria-hidden />
-      {pctFmt(change, 1)}
+    <span style={{ color }} title="Zmiana ceny instrumentu w ostatniej sesji">
+      {" "}
+      · dziś {pctFmt(change, 1)}
     </span>
   );
 }
 
-function HoldingRow({ h }: { h: FundHolding }) {
+function ExitPart({
+  label,
+  level,
+  symbol,
+  color,
+  title,
+}: {
+  label: string;
+  level: ExitLevel;
+  symbol: string;
+  color: string;
+  title: string;
+}) {
+  return (
+    <span title={title}>
+      <span style={{ color }}>{label}</span> {price(symbol, level.price)}
+      {level.distancePct !== null && ` (${pctFmt(level.distancePct, 1)})`}
+    </span>
+  );
+}
+
+/** SL / TP i koniec horyzontu otwartej pozycji; nic, gdy gracz ich nie ma. */
+function ExitLine({ h, short }: { h: FundHolding; short: boolean }) {
+  const lv = exitLevels(short ? "short" : "long", h.refPx, h.stopPct, h.takePct, h.last);
+  if (!lv.stop && !lv.take && !h.expiresOn) return null;
+  const parts: React.ReactNode[] = [];
+  if (lv.stop)
+    parts.push(
+      <ExitPart
+        key="sl"
+        label="SL"
+        level={lv.stop}
+        symbol={h.symbol}
+        color="var(--destructive)"
+        title="Stop-loss: przy tej cenie pozycja zamknie się ze stratą. W nawiasie: ile cena musi się jeszcze ruszyć od obecnej."
+      />,
+    );
+  if (lv.take)
+    parts.push(
+      <ExitPart
+        key="tp"
+        label="TP"
+        level={lv.take}
+        symbol={h.symbol}
+        color="var(--success)"
+        title="Take-profit: przy tej cenie pozycja zamknie się z zyskiem. W nawiasie: ile cena musi się jeszcze ruszyć od obecnej."
+      />,
+    );
+  if (h.expiresOn)
+    parts.push(
+      <span
+        key="exp"
+        title="Koniec horyzontu prognozy — bez nowego potwierdzenia pozycja zostanie wtedy zamknięta."
+      >
+        do {shortDate(h.expiresOn)}
+      </span>,
+    );
+  return (
+    <p className="min-w-0 break-words pl-5 font-mono text-[11px] text-muted-foreground">
+      {parts.map((p, i) => (
+        <span key={i}>
+          {i > 0 && " · "}
+          {p}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+function HoldingRow({ h, open }: { h: FundHolding; open: Episode | undefined }) {
   const short = h.units < 0;
   const pl = h.valuePln - h.costPln;
   const plPct = h.costPln !== 0 ? (pl / Math.abs(h.costPln)) * 100 : null;
+  const units = plnFmt(Math.abs(h.units), Math.abs(h.units) < 10 ? 4 : 0);
+  const Icon = short ? ArrowDownRight : ArrowUpRight;
   return (
-    <li className="flex min-w-0 items-center gap-2 border-b border-primary/10 py-2">
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-xs text-foreground">
+    <li className="min-w-0 border-b border-primary/10 py-2.5">
+      <div className="flex min-w-0 items-baseline gap-2">
+        <Icon
+          className={`h-3.5 w-3.5 shrink-0 self-center ${short ? "text-destructive" : "text-success"}`}
+          aria-hidden
+        />
+        <p className="min-w-0 flex-1 truncate text-xs text-foreground">
           {name(h.symbol)}
-          <span className="ml-1.5 font-display text-[8px] uppercase tracking-widest text-muted-foreground">
+          <span className="ml-1.5 font-display text-[10px] uppercase tracking-widest text-muted-foreground">
             {short ? "na spadek" : "na wzrost"}
           </span>
         </p>
-        <p className="truncate font-mono text-[10px] text-muted-foreground">
-          {plnFmt(Math.abs(h.units), Math.abs(h.units) < 10 ? 4 : 0)} szt. · teraz{" "}
-          {price(h.symbol, h.last)}
-        </p>
-      </div>
-      <div className="shrink-0 text-right">
-        <p className="font-mono text-[11px] text-foreground">{plnFmt(Math.abs(h.valuePln))} zł</p>
-        <p className="font-mono text-[10px]" style={{ color: signColor(pl) }}>
+        <span
+          className="shrink-0 font-mono text-[12px] font-bold"
+          style={{ color: signColor(pl) }}
+          title="Wynik niezrealizowany: wartość teraz − koszt wejścia"
+        >
           {zlFmt(pl)}
-          {plPct !== null && ` · ${pctFmt(plPct, 1)}`}
-        </p>
+        </span>
       </div>
-      <Trend change={h.change1d} />
+      <div className="mt-0.5 flex min-w-0 items-baseline gap-2 pl-5">
+        <p className="min-w-0 flex-1 break-words font-mono text-[11px] text-muted-foreground">
+          {short ? "Sprzedał" : "Kupił"} {units} szt.
+          {open && ` ${shortDate(open.openedOn)}`}
+          {open && ` po ${price(h.symbol, open.entryPrice)}`} · {plnFmt(Math.abs(h.costPln))} zł
+        </p>
+        {plPct !== null && (
+          <span className="shrink-0 font-mono text-[11px]" style={{ color: signColor(pl) }}>
+            {pctFmt(plPct, 1)}
+          </span>
+        )}
+      </div>
+      <p className="min-w-0 break-words pl-5 font-mono text-[11px] text-muted-foreground">
+        Teraz {price(h.symbol, h.last)} · {short ? "odkup" : "wartość"}{" "}
+        {plnFmt(Math.abs(h.valuePln))} zł
+        <DayChange change={h.change1d} />
+      </p>
+      <ExitLine h={h} short={short} />
     </li>
   );
 }
@@ -137,7 +221,7 @@ function EpisodeRow({ e }: { e: Episode }) {
           {closed ? zlFmt(e.realizedPln) : "otwarta"}
         </span>
       </div>
-      <p className="mt-0.5 pl-5 font-mono text-[10px] text-muted-foreground">
+      <p className="mt-0.5 pl-5 font-mono text-[11px] text-muted-foreground">
         {shortDate(e.openedOn)} po {price(e.symbol, e.entryPrice)} ({plnFmt(e.entryPln)} zł)
         {closed
           ? ` → ${shortDate(e.closedOn!)} po ${price(e.symbol, e.exitPrice)}`
@@ -161,21 +245,21 @@ function TradeRow({ t }: { t: FundTrade }) {
     t.side === "buy" ? (closing ? "Odkup" : "Kupno") : closing ? "Sprzedaż" : "Krótka sprzedaż";
   return (
     <li className="flex min-w-0 items-baseline gap-2 border-b border-primary/10 py-1.5 text-[11px]">
-      <span className="w-11 shrink-0 font-mono text-[10px] text-muted-foreground">
+      <span className="w-11 shrink-0 font-mono text-[11px] text-muted-foreground">
         {shortDate(t.executedOn)}
       </span>
       <span className="min-w-0 flex-1 truncate text-foreground/90">
         {action} {name(t.symbol)}
-        <span className="ml-1 font-mono text-[10px] text-muted-foreground">
+        <span className="ml-1 font-mono text-[11px] text-muted-foreground">
           {plnFmt(t.units, t.units < 10 ? 4 : 0)} × {price(t.symbol, t.price)}
         </span>
       </span>
-      <span className="shrink-0 font-mono text-[10px] text-foreground/80">
+      <span className="shrink-0 font-mono text-[11px] text-foreground/80">
         {plnFmt(t.notionalPln)} zł
       </span>
       {closing && (
         <span
-          className="w-16 shrink-0 text-right font-mono text-[10px]"
+          className="w-16 shrink-0 text-right font-mono text-[11px]"
           style={{ color: signColor(t.realizedPln ?? 0) }}
         >
           {zlFmt(t.realizedPln ?? 0)}
@@ -209,6 +293,13 @@ export function FundPlayerSheet({
   const history = useMemo(() => episodes(detail.data?.trades ?? []), [detail.data]);
   const closed = history.filter((e) => e.closedOn !== null);
   const wins = closed.filter((e) => e.realizedPln > 0).length;
+  const openBySymbol = useMemo(
+    () => new Map(history.filter((e) => e.closedOn === null).map((e) => [e.symbol, e])),
+    [history],
+  );
+  const holdings = detail.data?.holdings ?? [];
+  const openPl = holdings.reduce((a, h) => a + h.valuePln - h.costPln, 0);
+  const openCost = holdings.reduce((a, h) => a + Math.abs(h.costPln), 0);
 
   const m = player?.metrics ?? null;
   const exp = player ? exposure(positions, player.navPln) : null;
@@ -242,7 +333,7 @@ export function FundPlayerSheet({
 
             {PLAYER_STYLE[player.key] && (
               <div className="mt-3 min-w-0 border-l border-primary/30 pl-3">
-                <p className="font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
+                <p className="font-display text-[10px] uppercase tracking-[0.25em] text-primary/70">
                   Jak gra
                 </p>
                 <p className="mt-1 break-words text-[12px] leading-relaxed text-foreground/85">
@@ -285,7 +376,7 @@ export function FundPlayerSheet({
               <Stat label="Razem w grze" value={`${plnFmt(exp?.grossPln ?? 0)} zł`} />
             </div>
             {exp && exp.shortPln > 0.5 && (
-              <p className="mt-2 min-w-0 break-words font-mono text-[10px] leading-relaxed text-muted-foreground">
+              <p className="mt-2 min-w-0 break-words font-mono text-[11px] leading-relaxed text-muted-foreground">
                 Gotówka na koncie ({plnFmt(player.cashPln)} zł) zawiera wpływy z krótkiej sprzedaży
                 — to pożyczone papiery, które trzeba odkupić ({plnFmt(exp.shortPln)} zł), nie wolne
                 środki. Własne środki = gotówka − odkup + pozycje na wzrost.
@@ -293,7 +384,7 @@ export function FundPlayerSheet({
             )}
             {tone !== "calm" && exp?.leverage != null && (
               <p
-                className="mt-1 font-mono text-[10px] leading-relaxed"
+                className="mt-1 font-mono text-[11px] leading-relaxed"
                 style={{ color: toneColor }}
               >
                 Pozycje warte {plnFmt(exp.leverage, 1)}× własnych środków — ruch rynku o 10% to ok.{" "}
@@ -308,21 +399,30 @@ export function FundPlayerSheet({
             ) : (
               <>
                 <SectionTitle>Portfel teraz</SectionTitle>
-                {(detail.data?.holdings.length ?? 0) === 0 ? (
-                  <p className="mt-2 font-mono text-[10px] text-muted-foreground">
+                {holdings.length === 0 ? (
+                  <p className="mt-2 font-mono text-[11px] text-muted-foreground">
                     Sama gotówka: {plnFmt(player.cashPln)} zł.
                   </p>
                 ) : (
-                  <ul className="mt-1">
-                    {detail.data!.holdings.map((h) => (
-                      <HoldingRow key={h.symbol} h={h} />
-                    ))}
-                  </ul>
+                  <>
+                    <p className="mt-1 min-w-0 break-words font-mono text-[11px] text-muted-foreground">
+                      {holdings.length} otwartych · weszło za {plnFmt(openCost)} zł · wynik teraz{" "}
+                      <span className="font-bold" style={{ color: signColor(openPl) }}>
+                        {zlFmt(openPl)}
+                        {openCost > 0 && ` (${pctFmt((openPl / openCost) * 100, 1)})`}
+                      </span>
+                    </p>
+                    <ul className="mt-1">
+                      {holdings.map((h) => (
+                        <HoldingRow key={h.symbol} h={h} open={openBySymbol.get(h.symbol)} />
+                      ))}
+                    </ul>
+                  </>
                 )}
 
                 <SectionTitle>Historia pozycji</SectionTitle>
                 {history.length === 0 ? (
-                  <p className="mt-2 font-mono text-[10px] text-muted-foreground">
+                  <p className="mt-2 font-mono text-[11px] text-muted-foreground">
                     Jeszcze żadnej transakcji.
                   </p>
                 ) : (

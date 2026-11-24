@@ -47,7 +47,7 @@ const day = (iso: string) =>
 
 function SubTitle({ children }: { children: React.ReactNode }) {
   return (
-    <p className="font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
+    <p className="font-display text-[10px] uppercase tracking-[0.25em] text-primary/70">
       {children}
     </p>
   );
@@ -68,7 +68,7 @@ function Side({
   const enough = (row?.resolved ?? 0) >= minimum;
   return (
     <div className="min-w-0">
-      <p className="font-display truncate text-[10px] uppercase tracking-[0.18em] text-foreground">
+      <p className="font-display truncate text-[11px] uppercase tracking-[0.18em] text-foreground">
         {name}
       </p>
       <p className="mt-1 font-mono text-[12px] tabular-nums">
@@ -159,7 +159,7 @@ export function AiBrainPanel({
           {h !== 2 && ` (z prognoz ${h}-dniowych)`}
         </SubTitle>
         {brain.lessons.length === 0 ? (
-          <div className="mt-2 space-y-1 font-mono text-[10px] leading-snug text-muted-foreground">
+          <div className="mt-2 space-y-1 font-mono text-[11px] leading-snug text-muted-foreground">
             <p>
               Jeszcze żadnego. Wniosek wymaga co najmniej 12 rozliczonych przypadków z dwóch tygodni
               i trafności wyraźnie innej niż losowa — do tego czasu „AI z wnioskami” nie gra.
@@ -187,7 +187,7 @@ export function AiBrainPanel({
                   <p className="min-w-0 break-words text-[12px] leading-snug text-foreground/90">
                     {l.textPl}
                   </p>
-                  <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                  <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
                     <span style={{ color: KIND[l.kind].color }}>{KIND[l.kind].label}</span> ·{" "}
                     {l.cases} przypadków z {l.weeks} tyg.
                     {span && span.days > 0
@@ -200,7 +200,7 @@ export function AiBrainPanel({
           </ul>
         )}
         {brain.progress.enoughButRandom > 0 && (
-          <p className="mt-2 font-mono text-[10px] text-muted-foreground">
+          <p className="mt-2 font-mono text-[11px] text-muted-foreground">
             {brain.progress.enoughButRandom}{" "}
             {brain.progress.enoughButRandom === 1 ? "sytuacja ma" : "sytuacje mają"} już dość
             danych, ale wynik jest tam losowy — tu nie ma czego się nauczyć.
@@ -216,7 +216,7 @@ export function AiBrainPanel({
           {brain.windowDays} dni — wszystkich graczy, bo liczy się to, co rynek zrobił w danej
           sytuacji, a nie kto ją przewidywał.
         </p>
-        <p className="mt-1 font-mono text-[10px] leading-relaxed text-muted-foreground">
+        <p className="mt-1 font-mono text-[11px] leading-relaxed text-muted-foreground">
           {Object.entries(f.bySource)
             .sort((a, b) => b[1] - a[1])
             .map(([k, v]) => `${SOURCE[k] ?? k} ${v}`)
@@ -245,13 +245,13 @@ export function AiBrainPanel({
                 <li key={`${d.symbol}-${d.madeOn}`} className="min-w-0">
                   <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 text-[12px]">
                     <span className="text-foreground">{d.label}</span>
-                    <span className="font-mono text-[10px] text-muted-foreground">
+                    <span className="font-mono text-[11px] text-muted-foreground">
                       {day(d.madeOn)}
                     </span>
-                    <span className="font-mono text-[10px]" style={{ color: a.color }}>
+                    <span className="font-mono text-[11px]" style={{ color: a.color }}>
                       AI: {a.label} {mark(d.plain.outcome)}
                     </span>
-                    <span className="font-mono text-[10px]" style={{ color: b.color }}>
+                    <span className="font-mono text-[11px]" style={{ color: b.color }}>
                       z wnioskami: {b.label} {mark(d.learned.outcome)}
                     </span>
                   </p>
@@ -272,7 +272,7 @@ export function AiBrainPanel({
           <ul className="space-y-1.5">
             {expired.map((s) => (
               <li key={s.key} className="min-w-0 text-[11px] leading-snug text-foreground/70">
-                <span className="font-mono text-[10px] text-muted-foreground">
+                <span className="font-mono text-[11px] text-muted-foreground">
                   {day(s.firstSeen)}–{day(s.lastSeen)} ·{" "}
                 </span>
                 {s.text}

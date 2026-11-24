@@ -39,13 +39,13 @@ function LiveStrip({ live }: { live: NonNullable<FundView["live"]> }) {
   const t = live.today;
   return (
     <div className="mt-3 min-w-0 border border-primary/15 px-3 py-2">
-      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] text-muted-foreground">
+      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <span
             className="h-1.5 w-1.5 rounded-full"
             style={{ background: ok ? "var(--success)" : "var(--warning)" }}
           />
-          <span className="font-display text-[9px] uppercase tracking-widest text-primary/80">
+          <span className="font-display text-[10px] uppercase tracking-widest text-primary/80">
             Na żywo
           </span>
         </span>
@@ -67,7 +67,7 @@ function LiveStrip({ live }: { live: NonNullable<FundView["live"]> }) {
               key={`${e.at}-${e.player}-${e.symbol}-${e.kind}`}
               className="min-w-0 break-words text-[11px] leading-snug text-foreground/80"
             >
-              <span className="font-mono text-[10px] text-muted-foreground">
+              <span className="font-mono text-[11px] text-muted-foreground">
                 {new Date(e.at).toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" })}
               </span>{" "}
               {assetBySymbol(e.symbol)?.label ?? e.symbol} · {LIVE_KIND[e.kind] ?? e.kind}
@@ -109,7 +109,7 @@ function RankRow({
         onClick={onOpen}
         className="flex w-full min-w-0 items-center gap-2.5 border-b border-primary/10 px-1 py-2.5 text-left transition-colors hover:bg-primary/5"
       >
-        <span className="w-4 shrink-0 font-mono text-[10px] text-muted-foreground">
+        <span className="w-4 shrink-0 font-mono text-[11px] text-muted-foreground">
           {rank === null ? "–" : `${rank}.`}
         </span>
         <Swatch
@@ -118,7 +118,7 @@ function RankRow({
         />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm text-foreground">{player.label}</span>
-          <span className="block truncate font-mono text-[10px] text-muted-foreground">
+          <span className="block truncate font-mono text-[11px] text-muted-foreground">
             {waiting
               ? `nie gra — czeka na ${waitingFor(player.key)}`
               : pending
@@ -152,7 +152,7 @@ function RankRow({
           </span>
           {!waiting && (
             <span
-              className="block font-mono text-[10px]"
+              className="block font-mono text-[11px]"
               style={{ color: signColor(totalPln ?? 0) }}
             >
               {zlFmt(totalPln ?? player.navPln - 100_000)}
@@ -238,11 +238,11 @@ export function FundPanel({
           Gra od {dayPl(view.startedOn ?? settings.startOn)}
           <span className="ml-2 text-muted-foreground">· 100 000 zł na gracza · papier</span>
         </p>
-        <p className="mt-1 min-w-0 break-words font-mono text-[10px] text-muted-foreground">
+        <p className="mt-1 min-w-0 break-words font-mono text-[11px] text-muted-foreground">
           {describeSettings(settings.global)}
           {own > 0 && ` · ${own} ${own === 1 ? "gracz AI ma" : "graczy AI ma"} własne`}
         </p>
-        <p className="mt-1 flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
+        <p className="mt-1 flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
           <span
             className="h-1.5 w-1.5 shrink-0 rounded-full"
             style={{
@@ -268,7 +268,7 @@ export function FundPanel({
         <button
           type="button"
           onClick={() => setSettingsOpen(true)}
-          className="font-display flex h-9 items-center gap-1.5 border border-primary/50 px-3 text-[9px] uppercase tracking-widest text-primary transition hover:bg-primary/20"
+          className="font-display flex h-9 items-center gap-1.5 border border-primary/50 px-3 text-[10px] uppercase tracking-widest text-primary transition hover:bg-primary/20"
         >
           <SlidersHorizontal className="h-3 w-3" />
           Ustawienia
@@ -277,7 +277,7 @@ export function FundPanel({
           type="button"
           disabled={recomputing}
           onClick={onRecompute}
-          className="font-display flex h-9 items-center gap-1.5 border border-primary/50 px-3 text-[9px] uppercase tracking-widest text-primary transition hover:bg-primary/20 disabled:opacity-40"
+          className="font-display flex h-9 items-center gap-1.5 border border-primary/50 px-3 text-[10px] uppercase tracking-widest text-primary transition hover:bg-primary/20 disabled:opacity-40"
         >
           <RefreshCw className={recomputing ? "h-3 w-3 animate-spin" : "h-3 w-3"} />
           Przelicz
@@ -331,7 +331,7 @@ export function FundPanel({
 
       <div className="mt-4 grid gap-x-8 gap-y-2 @min-[900px]:grid-cols-[minmax(0,0.9fr)_minmax(0,1.3fr)]">
         <div className="min-w-0">
-          <p className="font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
+          <p className="font-display text-[10px] uppercase tracking-[0.25em] text-primary/70">
             Ranking · kliknij gracza
           </p>
           <ul className="mt-1" aria-label="Ranking graczy">
@@ -352,11 +352,11 @@ export function FundPanel({
           </ul>
         </div>
         <div className="min-w-0">
-          <p className="font-display text-[9px] uppercase tracking-[0.25em] text-primary/70">
+          <p className="font-display text-[10px] uppercase tracking-[0.25em] text-primary/70">
             Kapitał w czasie
           </p>
           {view.nav.length < 2 ? (
-            <p className="mt-3 font-mono text-[10px] text-muted-foreground">
+            <p className="mt-3 font-mono text-[11px] text-muted-foreground">
               Wykres pojawi się po drugim dniu gry.
             </p>
           ) : (
@@ -368,7 +368,7 @@ export function FundPanel({
                       color={PLAYER_COLOR[p.key] ?? "var(--muted-foreground)"}
                       dashed={p.kind !== "source"}
                     />
-                    <span className="font-display text-[9px] uppercase tracking-widest text-muted-foreground">
+                    <span className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">
                       {p.label}
                     </span>
                   </li>

@@ -17,6 +17,8 @@ import { fetchAllPages } from "@/lib/db/paginate";
 import {
   catalogQuotes,
   computeSeriesStats,
+  rangeStart,
+  type CatalogQuoteRow,
   normalizeSeries,
   sessionsPerWeekFor,
   type PricePoint,
@@ -719,34 +721,56 @@ export const getAiBrain = createServerFn({ method: "GET" })
   });
 
 /** Ostatnia cena i zmiana dnia każdego instrumentu z katalogu (lista obok wykresu). */
-export type CatalogQuote = { last: number; change1d: number | null; date: string };
+export type CatalogQuote = CatalogQuoteRow;
+
+type QuoteRow = { symbol: string; quote_date: string; close: number };
 
 /**
  * Ceny CAŁEGO katalogu z cache'u notowań — bez żadnego zapytania do
  * zewnętrznych API (te wypełnia wieczorny job dla wszystkich instrumentów
  * i takt rynku dla obserwowanych). Dzięki temu lista pokazuje cenę także
  * przy instrumentach, których nie obserwujesz.
+ *
+ * `days` = zakres wykresu: zmiana w liście liczy się od pierwszego notowania
+ * w tym zakresie. Bez ciągnięcia całej historii — tylko ostatnie dwa
+ * tygodnie i krótkie okno na początku zakresu.
  */
 export const getCatalogQuotes = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }): Promise<Record<string, CatalogQuote>> => {
+  .inputValidator((input: unknown) =>
+    z
+      .object({ days: z.number().int().min(7).max(1000).optional() })
+      .optional()
+      .parse(input),
+  )
+  .handler(async ({ context, data }): Promise<Record<string, CatalogQuote>> => {
     const { supabase } = context;
-    const since = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
-    const rows = await fetchAllPages<{ symbol: string; quote_date: string; close: number }>(
-      (from, to) =>
-        supabase
+    const symbols = MARKET_ASSETS.map((a) => a.symbol);
+    const recentFrom = rangeStart(14);
+    const window = (from: string, to: string | null) =>
+      fetchAllPages<QuoteRow>((a, b) => {
+        let q = supabase
           .from("market_quotes")
           .select("symbol, quote_date, close")
-          .in(
-            "symbol",
-            MARKET_ASSETS.map((a) => a.symbol),
-          )
-          .gte("quote_date", since)
+          .in("symbol", symbols)
+          .gte("quote_date", from);
+        if (to) q = q.lt("quote_date", to);
+        return q
           .order("quote_date", { ascending: true })
           .order("symbol", { ascending: true })
-          .range(from, to),
-    );
-    return catalogQuotes(rows);
+          .range(a, b);
+      });
+    const since = data?.days ? rangeStart(data.days) : undefined;
+    // Okno startowe: 10 dni od początku zakresu łapie pierwsze notowanie
+    // także po długim weekendzie / świętach. Gdy zakres jest krótszy niż
+    // dwa tygodnie, wystarczy jedno zapytanie.
+    const early = since !== undefined && since < recentFrom;
+    const startTo = early ? rangeStart(Math.max(data!.days! - 10, 14)) : null;
+    const [recent, start] = await Promise.all([
+      window(early ? recentFrom : (since ?? recentFrom), null),
+      early ? window(since!, startTo) : Promise.resolve([] as QuoteRow[]),
+    ]);
+    return catalogQuotes([...start, ...recent], since);
   });
 
 export const getAssetCatalog = createServerFn({ method: "GET" })

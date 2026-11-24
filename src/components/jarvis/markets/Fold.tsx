@@ -30,11 +30,11 @@ export function Fold({
           className="h-3.5 w-3.5 shrink-0 text-primary/70 transition-transform group-open:rotate-90"
           aria-hidden
         />
-        <span className="font-display min-w-0 flex-1 text-[9px] uppercase tracking-[0.25em] text-primary/80">
+        <span className="font-display min-w-0 flex-1 text-[10px] uppercase tracking-[0.25em] text-primary/80">
           {title}
         </span>
         {hint && (
-          <span className="shrink-0 font-mono text-[10px] text-muted-foreground @max-[380px]:hidden">
+          <span className="shrink-0 font-mono text-[11px] text-muted-foreground @max-[380px]:hidden">
             {hint}
           </span>
         )}

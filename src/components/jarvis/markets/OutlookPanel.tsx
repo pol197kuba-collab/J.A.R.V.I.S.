@@ -74,7 +74,7 @@ export function OutlookPanel({
                     {row.label}
                   </span>
                   <span
-                    className="font-display shrink-0 text-[9px] uppercase tracking-widest"
+                    className="font-display shrink-0 text-[10px] uppercase tracking-widest"
                     style={{ color: style.color }}
                   >
                     {style.label}
@@ -89,13 +89,13 @@ export function OutlookPanel({
                 </div>
 
                 <div className="mt-1 flex min-w-0 items-center gap-2">
-                  <span className="font-mono shrink-0 text-[10px] text-muted-foreground">
+                  <span className="font-mono shrink-0 text-[11px] text-muted-foreground">
                     {formatPrice(row.lastPrice, row.currency)}
                   </span>
                   <span className="min-w-0 flex-1">
                     <ConfidenceBar value={row.confidence} color={style.color} />
                   </span>
-                  <span className="font-mono shrink-0 text-[10px] text-muted-foreground">
+                  <span className="font-mono shrink-0 text-[11px] text-muted-foreground">
                     pewność {row.confidence}%
                   </span>
                 </div>
@@ -106,7 +106,7 @@ export function OutlookPanel({
                   {row.drivers.slice(0, 5).map((driver) => (
                     <div key={driver.label} className="flex min-w-0 items-start gap-2">
                       <span
-                        className="font-mono mt-0.5 w-10 shrink-0 text-right text-[10px]"
+                        className="font-mono mt-0.5 w-10 shrink-0 text-right text-[11px]"
                         style={{
                           color:
                             driver.contribution > 0
@@ -119,21 +119,21 @@ export function OutlookPanel({
                         {driver.contribution > 0 ? "+" : ""}
                         {driver.contribution.toFixed(0)}
                       </span>
-                      <p className="min-w-0 break-words font-mono text-[10px] leading-relaxed text-muted-foreground">
+                      <p className="min-w-0 break-words font-mono text-[11px] leading-relaxed text-muted-foreground">
                         {driver.note}
                       </p>
                     </div>
                   ))}
 
                   {row.sentimentItems > 0 && (
-                    <p className="min-w-0 break-words font-mono text-[10px] text-muted-foreground">
+                    <p className="min-w-0 break-words font-mono text-[11px] text-muted-foreground">
                       Newsy: wydźwięk {row.sentimentScore} z {row.sentimentItems} pozycji (waga 25%
                       wobec 75% dla notowań).
                     </p>
                   )}
 
                   {row.ai?.rationalePl && (
-                    <p className="min-w-0 break-words font-mono text-[10px] leading-relaxed text-primary/80">
+                    <p className="min-w-0 break-words font-mono text-[11px] leading-relaxed text-primary/80">
                       <Sparkles className="mr-1 inline h-2.5 w-2.5" />
                       {row.ai.rationalePl}
                     </p>
@@ -141,7 +141,7 @@ export function OutlookPanel({
 
                   {disagrees && row.ai && (
                     <p
-                      className="min-w-0 break-words font-mono text-[10px]"
+                      className="min-w-0 break-words font-mono text-[11px]"
                       style={{ color: "var(--warning)" }}
                     >
                       Model widzi to inaczej niż sygnały ({DIRECTION[row.ai.direction].label},

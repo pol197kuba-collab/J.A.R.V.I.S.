@@ -47,7 +47,7 @@ function Choice<T extends string | number | boolean>({
 }) {
   return (
     <div className="min-w-0">
-      <p className="font-display text-[9px] uppercase tracking-[0.22em] text-muted-foreground">
+      <p className="font-display text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
         {name}
       </p>
       <div role="group" aria-label={name} className="mt-1.5 flex flex-wrap gap-1.5">
@@ -58,7 +58,7 @@ function Choice<T extends string | number | boolean>({
             aria-pressed={value === o.v}
             onClick={() => onChange(o.v)}
             className={cn(
-              "font-display h-8 min-w-12 rounded border px-2.5 text-[10px] uppercase tracking-[0.14em] transition-colors",
+              "font-display h-8 min-w-12 rounded border px-2.5 text-[11px] uppercase tracking-[0.14em] transition-colors",
               value === o.v
                 ? "border-primary/60 bg-primary/15 text-primary"
                 : "border-primary/15 text-muted-foreground hover:text-foreground",
@@ -83,7 +83,7 @@ function PlayerKnobs({
     <div className="space-y-4">
       <div className="min-w-0">
         <p className="flex items-baseline justify-between gap-2">
-          <span className="font-display text-[9px] uppercase tracking-[0.22em] text-muted-foreground">
+          <span className="font-display text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
             Agresywność
           </span>
           <span className="font-display text-[11px] uppercase tracking-[0.14em] text-primary">
@@ -103,7 +103,7 @@ function PlayerKnobs({
           }
           className="mt-2 w-full accent-[var(--primary)]"
         />
-        <p className="mt-0.5 flex justify-between font-mono text-[9px] text-muted-foreground">
+        <p className="mt-0.5 flex justify-between font-mono text-[10px] text-muted-foreground">
           <span>ostrożnie</span>
           <span>agresywnie</span>
         </p>
@@ -200,7 +200,7 @@ export function FundSettingsSheet({
         <div className="mt-4 min-w-0 space-y-5 pb-6">
           <div className="grid grid-cols-2 gap-4">
             <label className="min-w-0">
-              <span className="font-display block text-[9px] uppercase tracking-[0.22em] text-muted-foreground">
+              <span className="font-display block text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
                 Start gry
               </span>
               <input
@@ -232,7 +232,7 @@ export function FundSettingsSheet({
                 aria-selected={tab === t.id}
                 onClick={() => setTab(t.id)}
                 className={cn(
-                  "font-display shrink-0 rounded px-2 py-1.5 text-[9px] uppercase tracking-[0.16em] transition-colors",
+                  "font-display shrink-0 rounded px-2 py-1.5 text-[10px] uppercase tracking-[0.16em] transition-colors",
                   tab === t.id
                     ? "bg-primary/15 text-primary"
                     : "text-muted-foreground hover:text-foreground",
@@ -287,7 +287,7 @@ export function FundSettingsSheet({
               type="button"
               disabled={mutation.isPending}
               onClick={() => mutation.mutate(draft)}
-              className="font-display h-9 border border-primary/50 px-4 text-[10px] uppercase tracking-widest text-primary transition hover:bg-primary/20 disabled:opacity-40"
+              className="font-display h-9 border border-primary/50 px-4 text-[11px] uppercase tracking-widest text-primary transition hover:bg-primary/20 disabled:opacity-40"
             >
               {mutation.isPending ? "Przeliczam…" : "Zapisz i przelicz"}
             </button>
@@ -295,7 +295,7 @@ export function FundSettingsSheet({
               type="button"
               disabled={mutation.isPending}
               onClick={() => setDraft(DEFAULT_FUND_SETTINGS)}
-              className="font-display h-9 px-3 text-[9px] uppercase tracking-widest text-muted-foreground transition hover:text-foreground disabled:opacity-40"
+              className="font-display h-9 px-3 text-[10px] uppercase tracking-widest text-muted-foreground transition hover:text-foreground disabled:opacity-40"
             >
               Domyślne
             </button>

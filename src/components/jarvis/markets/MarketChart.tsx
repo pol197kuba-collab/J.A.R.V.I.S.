@@ -52,7 +52,7 @@ function MarketTooltip({
   if (!active || !payload?.length) return null;
   return (
     <div className="pointer-events-none rounded border border-primary/30 bg-popover px-2.5 py-1.5 shadow-lg">
-      <p className="font-display text-[8px] uppercase tracking-widest text-muted-foreground">
+      <p className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">
         {String(label)}
       </p>
       <div className="mt-1 space-y-0.5">
@@ -65,7 +65,7 @@ function MarketTooltip({
                 className="h-1.5 w-1.5 shrink-0 rounded-full"
                 style={{ background: entry.color }}
               />
-              <span className="font-display min-w-0 truncate text-[9px] uppercase tracking-wider text-muted-foreground">
+              <span className="font-display min-w-0 truncate text-[10px] uppercase tracking-wider text-muted-foreground">
                 {entry.name}
               </span>
               <span className="ml-auto shrink-0 font-mono text-[11px] font-bold text-foreground">
@@ -74,7 +74,7 @@ function MarketTooltip({
                   : mode === "index"
                     ? value.toFixed(1)
                     : value.toLocaleString("pl-PL", { maximumFractionDigits: 2 })}
-                <span className="ml-1 text-[9px] text-muted-foreground">
+                <span className="ml-1 text-[10px] text-muted-foreground">
                   {mode === "index" ? "pkt" : (currencyByKey[key] ?? "")}
                 </span>
               </span>
@@ -199,7 +199,7 @@ export function MarketChart({
           const row = rows[i];
           if (!row) return null;
           return (
-            <div className="font-display text-center text-[10px] uppercase tracking-[0.16em] text-foreground [text-shadow:0_0_10px_black,0_0_14px_var(--reactor)]">
+            <div className="font-display text-center text-[11px] uppercase tracking-[0.16em] text-foreground [text-shadow:0_0_10px_black,0_0_14px_var(--reactor)]">
               {visible.map((s) => {
                 const v = row[keyFor(s.symbol)] ?? row[fcKeyFor(s.symbol)];
                 if (typeof v !== "number") return null;
@@ -212,7 +212,7 @@ export function MarketChart({
                     {mode === "index"
                       ? v.toFixed(1)
                       : v.toLocaleString("pl-PL", { maximumFractionDigits: 2 })}{" "}
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="text-[11px] text-muted-foreground">
                       {mode === "index" ? "pkt" : s.currency}
                     </span>
                   </b>
@@ -244,7 +244,7 @@ export function MarketChart({
           <CartesianGrid stroke="var(--primary)" strokeOpacity={0.08} vertical={false} />
           <XAxis
             dataKey="label"
-            tick={{ fontSize: 9, fill: "var(--muted-foreground)" }}
+            tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
             tickLine={false}
             axisLine={false}
             minTickGap={24}
@@ -252,7 +252,7 @@ export function MarketChart({
           <YAxis
             width={56}
             domain={["auto", "auto"]}
-            tick={{ fontSize: 9, fill: "var(--muted-foreground)" }}
+            tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
             tickLine={false}
             axisLine={false}
             tickFormatter={(v: number) =>
@@ -272,7 +272,7 @@ export function MarketChart({
               verticalAlign="top"
               height={24}
               wrapperStyle={{
-                fontSize: 9,
+                fontSize: 10,
                 textTransform: "uppercase",
                 letterSpacing: "0.1em",
                 color: "var(--muted-foreground)",

@@ -55,7 +55,9 @@ export function fundRows(run: FundRun, ownerId: string, portfolioIds: Map<string
         reason: t.reason,
       });
     }
+    const exits = new Map(p.result.live.map((l) => [l.symbol, l]));
     for (const h of p.result.holdings) {
+      const l = exits.get(h.symbol);
       positions.push({
         owner_id: ownerId,
         portfolio_id,
@@ -64,6 +66,10 @@ export function fundRows(run: FundRun, ownerId: string, portfolioIds: Map<string
         cost_pln: pln(h.costPln),
         value_pln: pln(h.valuePln),
         as_of: run.end,
+        ref_px: l?.refPx ?? null,
+        stop_pct: l?.stop ?? null,
+        take_pct: l?.take ?? null,
+        expires_on: l?.expiresOn ?? null,
       });
     }
     for (const n of p.result.nav) {

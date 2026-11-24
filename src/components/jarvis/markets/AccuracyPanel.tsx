@@ -29,17 +29,17 @@ function TokenMeter({ tokens }: { tokens: NonNullable<PredictionScoreboard["toke
   return (
     <div className="min-w-0">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
+        <span className="font-display text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
           Tokeny modelu dziś
         </span>
-        <span className="font-mono text-[10px] text-foreground">
+        <span className="font-mono text-[11px] text-foreground">
           {tokens.used.toLocaleString("pl-PL")} / {tokens.limit.toLocaleString("pl-PL")}
         </span>
       </div>
       <div className="mt-1 h-1.5 w-full overflow-hidden bg-primary/10">
         <div className="h-full" style={{ width: `${share * 100}%`, background: color }} />
       </div>
-      <p className="mt-1 font-mono text-[9px] text-muted-foreground">
+      <p className="mt-1 font-mono text-[10px] text-muted-foreground">
         prognozy{" "}
         {(tokens.byPurpose.forecast + tokens.byPurpose.forecast_learned).toLocaleString("pl-PL")} ·
         newsy {tokens.byPurpose.news.toLocaleString("pl-PL")} · alarmy{" "}
@@ -75,14 +75,14 @@ function RateRows({
 }) {
   if (rows.length === 0) {
     return (
-      <p className="font-mono text-[10px] text-muted-foreground/70">Brak rozliczonych prognoz.</p>
+      <p className="font-mono text-[11px] text-muted-foreground/70">Brak rozliczonych prognoz.</p>
     );
   }
   return (
     <div className="space-y-1.5">
       {rows.map((row) => (
         <div key={row.key} className="flex min-w-0 items-center gap-2">
-          <span className="font-display min-w-0 flex-1 truncate text-[10px] uppercase tracking-widest text-muted-foreground">
+          <span className="font-display min-w-0 flex-1 truncate text-[11px] uppercase tracking-widest text-muted-foreground">
             {labels?.[row.key] ?? assetBySymbol(row.key)?.label ?? row.key}
           </span>
           <span
@@ -91,7 +91,7 @@ function RateRows({
           >
             {row.hitRate === null ? "—" : `${row.hitRate.toFixed(0)}%`}
           </span>
-          <span className="font-mono w-16 shrink-0 text-right text-[9px] text-muted-foreground/70">
+          <span className="font-mono w-16 shrink-0 text-right text-[10px] text-muted-foreground/70">
             {row.hits}/{row.resolved}
           </span>
         </div>
@@ -114,26 +114,26 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
       <div className="mt-3 space-y-4">
         {board.tokens && <TokenMeter tokens={board.tokens} />}
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-          <span className="font-mono text-[10px] text-muted-foreground">
+          <span className="font-mono text-[11px] text-muted-foreground">
             rozliczone: <span className="text-foreground">{board.resolved}</span>
           </span>
-          <span className="font-mono text-[10px] text-muted-foreground">
+          <span className="font-mono text-[11px] text-muted-foreground">
             oczekujące: <span className="text-foreground">{board.pending}</span>
           </span>
           {board.stale > 0 && (
-            <span className="font-mono text-[10px] text-muted-foreground/70">
+            <span className="font-mono text-[11px] text-muted-foreground/70">
               pominięte kopie: {board.stale}
             </span>
           )}
           {board.justResolved > 0 && (
-            <span className="font-mono text-[10px]" style={{ color: "var(--success)" }}>
+            <span className="font-mono text-[11px]" style={{ color: "var(--success)" }}>
               +{board.justResolved} rozliczono teraz
             </span>
           )}
         </div>
 
         <div>
-          <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
+          <p className="font-display text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
             Wg źródła
           </p>
           <div className="mt-1.5">
@@ -141,7 +141,7 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
           </div>
         </div>
 
-        <p className="font-mono text-[10px] text-muted-foreground">
+        <p className="font-mono text-[11px] text-muted-foreground">
           Wnioski, z których korzysta „AI z wnioskami”: panel MÓZG AI powyżej.
         </p>
       </div>
@@ -149,7 +149,7 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
       <Fold title="Szczegóły skuteczności" hint="kierunek · sytuacja · instrument">
         <div className="space-y-4">
           <div>
-            <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
+            <p className="font-display text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
               Wg kierunku
             </p>
             <div className="mt-1.5">
@@ -159,7 +159,7 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
 
           {board.byRegime.length > 0 && (
             <div>
-              <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
+              <p className="font-display text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
                 Wg sytuacji rynkowej
               </p>
               <div className="mt-1.5">
@@ -170,7 +170,7 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
 
           {board.bySourceFixedBand.length > 0 && (
             <div>
-              <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
+              <p className="font-display text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
                 Dla porównania: stary próg ±1%
               </p>
               <div className="mt-1.5 opacity-70">
@@ -181,7 +181,7 @@ export function AccuracyPanel({ board }: { board: PredictionScoreboard }) {
 
           {board.bySymbol.length > 0 && (
             <div>
-              <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
+              <p className="font-display text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
                 Wg instrumentu
               </p>
               <div className="no-scrollbar mt-1.5 max-h-40 overflow-x-hidden overflow-y-auto">

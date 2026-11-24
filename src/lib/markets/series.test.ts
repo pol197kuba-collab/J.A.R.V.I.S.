@@ -136,8 +136,46 @@ describe("catalogQuotes", () => {
       { symbol: "PKO.PL", quote_date: "2026-11-05", close: 60 },
       { symbol: "BAD", quote_date: "2026-11-05", close: 0 },
     ]);
-    expect(q["PKO.PL"]).toEqual({ last: 66, change1d: expect.closeTo(10, 6), date: "2026-11-06" });
-    expect(q["MSFT.US"]).toEqual({ last: 500, change1d: null, date: "2026-11-05" });
+    expect(q["PKO.PL"]).toEqual({
+      last: 66,
+      change1d: expect.closeTo(10, 6),
+      changeRange: null,
+      date: "2026-11-06",
+    });
+    expect(q["MSFT.US"]).toEqual({
+      last: 500,
+      change1d: null,
+      changeRange: null,
+      date: "2026-11-05",
+    });
     expect(q.BAD).toBeUndefined();
+  });
+});
+
+describe("changeSince", () => {
+  it("liczy od pierwszego notowania w zakresie do ostatniego", async () => {
+    const { changeSince } = await import("./series");
+    const pts = [
+      { date: "2026-10-01", close: 50 },
+      { date: "2026-10-03", close: 100 },
+      { date: "2026-10-10", close: 110 },
+    ];
+    expect(changeSince(pts, "2026-10-02")).toBeCloseTo(10);
+    expect(changeSince(pts, "2026-10-10")).toBeNull();
+    expect(changeSince([], "2026-10-01")).toBeNull();
+  });
+
+  it("catalogQuotes z since daje zmianę w zakresie", async () => {
+    const { catalogQuotes } = await import("./series");
+    const q = catalogQuotes(
+      [
+        { symbol: "A", quote_date: "2026-10-01", close: 100 },
+        { symbol: "A", quote_date: "2026-10-20", close: 120 },
+        { symbol: "A", quote_date: "2026-10-21", close: 90 },
+      ],
+      "2026-10-01",
+    );
+    expect(q.A.changeRange).toBeCloseTo(-10);
+    expect(q.A.change1d).toBeCloseTo(-25);
   });
 });
