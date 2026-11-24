@@ -34,14 +34,23 @@ export type ListRow = CatalogAsset & {
   /** Last close and the change of the day; null until quotes are known. */
   last: number | null;
   change1d: number | null;
+  /** Change over the chart's range (30D / 90D / …); null until known. */
+  changeRange: number | null;
   currency: string | null;
+};
+
+type ListQuote = {
+  last: number | null;
+  change1d: number | null;
+  changeRange?: number | null;
+  currency: string;
 };
 
 /** The catalog grouped by category: watched first, then by name. Empty categories are left out. */
 export function instrumentGroups(
   catalog: readonly CatalogAsset[],
   watched: ReadonlySet<string>,
-  quotes: ReadonlyMap<string, { last: number | null; change1d: number | null; currency: string }>,
+  quotes: ReadonlyMap<string, ListQuote>,
 ): Array<{ cls: AssetClass; label: string; rows: ListRow[] }> {
   return CLASS_ORDER.map((cls) => ({
     cls,
@@ -55,6 +64,7 @@ export function instrumentGroups(
           watched: watched.has(a.symbol),
           last: q?.last ?? null,
           change1d: q?.change1d ?? null,
+          changeRange: q?.changeRange ?? null,
           currency: q?.currency ?? null,
         };
       })

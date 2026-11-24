@@ -1,6 +1,6 @@
 // The instrument list beside the chart on /rynki: every instrument the module
 // can follow, in category tabs (plus "Obserwowane"), each with its price and
-// change of the day. A click puts it on the chart (no scrolling to a watchlist
+// change over the chart's range (30D / 90D / …, follows the range chips). A click puts it on the chart (no scrolling to a watchlist
 // below the fold any more); the star adds it to / removes it from the
 // watchlist. It scrolls inside itself, so it never pushes the chart away.
 
@@ -28,12 +28,15 @@ export function InstrumentList({
   onSelect,
   onToggleWatch,
   busySymbol,
+  rangeLabel,
 }: {
   groups: Group[];
   selected: readonly string[];
   onSelect: (symbol: string) => void;
   onToggleWatch: (symbol: string, watched: boolean) => void;
   busySymbol: string | null;
+  /** The chart's range ("90D"), shown with each row's change. */
+  rangeLabel: string;
 }) {
   const [tab, setTab] = useState<"watched" | AssetClass>("watched");
   const watched = useMemo(() => groups.flatMap((g) => g.rows.filter((r) => r.watched)), [groups]);
@@ -58,7 +61,7 @@ export function InstrumentList({
             aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
             className={cn(
-              "font-display shrink-0 rounded px-2 py-1.5 text-[9px] uppercase tracking-[0.18em] transition-colors",
+              "font-display shrink-0 rounded px-2 py-1.5 text-[11px] uppercase tracking-[0.16em] transition-colors",
               tab === t.id
                 ? "bg-primary/15 text-primary"
                 : "text-muted-foreground hover:text-foreground",
@@ -74,7 +77,7 @@ export function InstrumentList({
           chips right above the chart, so picking and seeing stay on one screen */}
       <ul className="no-scrollbar mt-2 min-h-0 flex-1 overflow-y-auto overflow-x-hidden @max-[899px]:flex @max-[899px]:gap-2 @max-[899px]:overflow-x-auto @max-[899px]:overflow-y-hidden">
         {rows.length === 0 && (
-          <li className="px-1 py-6 text-center font-mono text-[11px] text-muted-foreground">
+          <li className="px-1 py-6 text-center font-mono text-[12px] text-muted-foreground">
             {tab === "watched"
               ? "Nic nie obserwujesz — dodaj gwiazdką w kategoriach."
               : "Brak instrumentów."}
@@ -83,7 +86,7 @@ export function InstrumentList({
         {rows.map((r) => {
           const on = selected.includes(r.symbol);
           return (
-            <li key={r.symbol} className="relative @max-[899px]:w-[200px] @max-[899px]:shrink-0">
+            <li key={r.symbol} className="relative @max-[899px]:w-[220px] @max-[899px]:shrink-0">
               <div
                 className={cn(
                   "flex min-w-0 items-center gap-2 border-b border-primary/10 py-2 pr-1 pl-2 @max-[899px]:rounded @max-[899px]:border-b-0 @max-[899px]:bg-primary/[0.05]",
@@ -107,22 +110,26 @@ export function InstrumentList({
                   <span className="min-w-0 flex-1">
                     <span
                       className={cn(
-                        "font-display block truncate text-[11px] uppercase tracking-[0.14em]",
+                        "font-display block truncate text-[13px] uppercase tracking-[0.12em]",
                         on ? "text-primary" : "text-foreground",
                       )}
                     >
                       {r.label}
                     </span>
-                    <span className="block truncate font-mono text-[9px] text-muted-foreground">
+                    <span className="block truncate font-mono text-[11px] text-muted-foreground">
                       {r.symbol}
                     </span>
                   </span>
-                  <span className="shrink-0 text-right font-mono text-[11px] tabular-nums">
+                  <span className="shrink-0 text-right font-mono text-[13px] tabular-nums">
                     <span className="block text-foreground">
                       {r.last !== null && r.currency ? formatPrice(r.last, r.currency) : "—"}
                     </span>
-                    <span className="block text-[10px]" style={{ color: changeColor(r.change1d) }}>
-                      {formatPercent(r.change1d)}
+                    <span
+                      className="block text-[12px]"
+                      style={{ color: changeColor(r.changeRange) }}
+                      title={`Zmiana w zakresie wykresu (${rangeLabel}). Dziś: ${formatPercent(r.change1d)}`}
+                    >
+                      {formatPercent(r.changeRange)}
                     </span>
                   </span>
                 </button>
@@ -137,7 +144,7 @@ export function InstrumentList({
                   className="shrink-0 rounded p-1.5 transition-colors hover:bg-primary/10 disabled:opacity-40"
                 >
                   <Star
-                    className="h-3.5 w-3.5"
+                    className="h-4 w-4"
                     strokeWidth={1.6}
                     style={{
                       color: r.watched ? "var(--reactor)" : "var(--muted-foreground)",

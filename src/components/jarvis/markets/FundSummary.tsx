@@ -25,15 +25,15 @@ export function SymbolComparison({ view }: { view: FundView }) {
     [view.summary, view.players],
   );
   if (players.length === 0 || rows.length === 0) {
-    return <p className="font-mono text-[10px] text-muted-foreground">Brak transakcji.</p>;
+    return <p className="font-mono text-[11px] text-muted-foreground">Brak transakcji.</p>;
   }
   const cols = {
     gridTemplateColumns: `minmax(0,1fr) repeat(${players.length}, minmax(0, var(--fund-col)))`,
   };
   return (
-    <div className="min-w-0 text-[11px] [--fund-col:3.4rem] @max-[420px]:text-[10px] @max-[420px]:[--fund-col:2.7rem]">
+    <div className="min-w-0 text-[11px] [--fund-col:3.4rem] @max-[420px]:text-[11px] @max-[420px]:[--fund-col:2.7rem]">
       <div className="grid items-end gap-x-1.5 border-b border-primary/15 pb-1.5" style={cols}>
-        <span className="font-display text-[8px] uppercase tracking-widest text-muted-foreground">
+        <span className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">
           Instrument
         </span>
         {players.map((p) => (
@@ -42,7 +42,7 @@ export function SymbolComparison({ view }: { view: FundView }) {
               color={PLAYER_COLOR[p.key] ?? "var(--muted-foreground)"}
               dashed={p.kind !== "source"}
             />
-            <span className="font-display w-full truncate text-right text-[8px] uppercase tracking-wider text-muted-foreground">
+            <span className="font-display w-full truncate text-right text-[10px] uppercase tracking-wider text-muted-foreground">
               {PLAYER_SHORT[p.key] ?? p.label}
             </span>
           </span>
@@ -70,7 +70,7 @@ export function SymbolComparison({ view }: { view: FundView }) {
         </div>
       ))}
       <div className="grid items-center gap-x-1.5 pt-2" style={cols}>
-        <span className="font-display text-[9px] uppercase tracking-widest text-primary/80">
+        <span className="font-display text-[10px] uppercase tracking-widest text-primary/80">
           Razem
         </span>
         {players.map((p) => {
@@ -86,7 +86,7 @@ export function SymbolComparison({ view }: { view: FundView }) {
           );
         })}
       </div>
-      <p className="mt-2 font-mono text-[10px] leading-relaxed text-muted-foreground">
+      <p className="mt-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
         Wynik w zł na instrumencie: zamknięte transakcje (po prowizjach) + otwarte pozycje. Na górze
         instrumenty, na których agenci razem stracili najwięcej. „·” = gracz nim nie grał.
       </p>

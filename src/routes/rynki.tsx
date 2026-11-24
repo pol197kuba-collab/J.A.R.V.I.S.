@@ -48,7 +48,7 @@ import {
 import { StandingOrdersPanel } from "@/components/jarvis/orders/StandingOrdersPanel";
 import { listStandingOrders } from "@/lib/orders/orders.functions";
 import { getFund, recomputeFundNow } from "@/lib/fund/fund.functions";
-import { formatPercent, formatPrice } from "@/lib/markets/series";
+import { changeSince, formatPercent, formatPrice, rangeStart } from "@/lib/markets/series";
 import { projectForecast, type ForecastPoint } from "@/lib/markets/projection";
 import {
   addToWatchlist,
@@ -130,8 +130,9 @@ function MarketsPage() {
   // wykresu pokazuje je też przy instrumentach, których nie obserwujesz.
   const fetchCatalogQuotes = useServerFn(getCatalogQuotes);
   const catalogQuotes = useQuery({
-    queryKey: ["market-catalog-quotes"],
-    queryFn: () => fetchCatalogQuotes(),
+    queryKey: ["market-catalog-quotes", range],
+    queryFn: () => fetchCatalogQuotes({ data: { days: range } }),
+    placeholderData: (prev) => prev,
     refetchInterval: 5 * 60_000,
     staleTime: 2 * 60_000,
   });
@@ -306,6 +307,8 @@ function MarketsPage() {
   });
 
   const primary = series.find((s) => s.symbol === visibleSymbols[0]) ?? null;
+  const rangeLabel = RANGES.find((r) => r.value === range)?.label ?? `${range}D`;
+  const primaryRange = primary ? changeSince(primary.points, rangeStart(range)) : null;
   const missing = useMemo(() => grid.data?.missing ?? [], [grid.data]);
   // Wybrany instrument nie ma (jeszcze) serii: mów, co się dzieje, zamiast
   // odsyłać do obserwowanych — wybrać można wszystko z listy.
@@ -332,18 +335,26 @@ function MarketsPage() {
     const currencyOf = new Map((catalog.data?.assets ?? []).map((a) => [a.symbol, a.currency]));
     const quotes = new Map<
       string,
-      { last: number | null; change1d: number | null; currency: string }
+      { last: number | null; change1d: number | null; changeRange: number | null; currency: string }
     >(
       Object.entries(catalogQuotes.data ?? {}).map(([symbol, q]) => [
         symbol,
-        { last: q.last, change1d: q.change1d, currency: currencyOf.get(symbol) ?? "" },
+        {
+          last: q.last,
+          change1d: q.change1d,
+          changeRange: q.changeRange,
+          currency: currencyOf.get(symbol) ?? "",
+        },
       ]),
     );
-    // serie na wykresie są świeższe (właśnie dociągnięte) — mają pierwszeństwo
+    // serie na wykresie są świeższe (właśnie dociągnięte) — mają pierwszeństwo;
+    // ich zmiana w zakresie to dokładnie to, co pokazuje wykres
+    const since = rangeStart(range);
     for (const s of series) {
       quotes.set(s.symbol, {
         last: s.stats.last,
         change1d: s.stats.change1d,
+        changeRange: changeSince(s.points, since),
         currency: s.currency,
       });
     }
@@ -352,7 +363,7 @@ function MarketsPage() {
       new Set(watchedSeries.map((s) => s.symbol)),
       quotes,
     );
-  }, [catalog.data, catalogQuotes.data, series, watchedSeries]);
+  }, [catalog.data, catalogQuotes.data, series, watchedSeries, range]);
   const watchBusy = addMutation.isPending
     ? (addMutation.variables ?? null)
     : removeMutation.isPending
@@ -369,17 +380,17 @@ function MarketsPage() {
             <button
               type="button"
               onClick={() => setAdvisorOpen(true)}
-              className="font-display flex items-center gap-1.5 border border-primary/70 bg-primary/15 px-3 py-1 text-[9px] uppercase tracking-widest text-primary transition hover:bg-primary/25"
+              className="font-display flex items-center gap-1.5 border border-primary/70 bg-primary/15 px-3 py-1 text-[11px] uppercase tracking-widest text-primary transition hover:bg-primary/25"
             >
-              <Crosshair className="h-3 w-3" />
+              <Crosshair className="h-3.5 w-3.5" />
               Doradca
             </button>
             <button
               type="button"
               onClick={() => setOrdersOpen(true)}
-              className="font-display flex items-center gap-1.5 border border-primary/50 px-3 py-1 text-[9px] uppercase tracking-widest text-primary transition hover:bg-primary/20"
+              className="font-display flex items-center gap-1.5 border border-primary/50 px-3 py-1 text-[11px] uppercase tracking-widest text-primary transition hover:bg-primary/20"
             >
-              <Bell className="h-3 w-3" />
+              <Bell className="h-3.5 w-3.5" />
               Powiadomienia
               {activeOrders > 0 && <span className="text-muted-foreground">{activeOrders}</span>}
             </button>
@@ -387,10 +398,10 @@ function MarketsPage() {
               type="button"
               disabled={refreshMutation.isPending}
               onClick={() => refreshMutation.mutate()}
-              className="font-display flex items-center gap-1.5 border border-primary/50 px-3 py-1 text-[9px] uppercase tracking-widest text-primary transition hover:bg-primary/20 disabled:opacity-40"
+              className="font-display flex items-center gap-1.5 border border-primary/50 px-3 py-1 text-[11px] uppercase tracking-widest text-primary transition hover:bg-primary/20 disabled:opacity-40"
             >
               <RefreshCw
-                className={refreshMutation.isPending ? "h-3 w-3 animate-spin" : "h-3 w-3"}
+                className={refreshMutation.isPending ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"}
               />
               Odśwież
             </button>
@@ -469,13 +480,19 @@ function MarketsPage() {
                     "Wybierz instrument"}
                 </p>
                 {primary && (
-                  <p className="mt-1 font-mono text-[13px] tabular-nums">
+                  <p className="mt-1 font-mono text-[15px] tabular-nums">
                     {formatPrice(primary.stats.last, primary.currency)}
-                    <span className="ml-2" style={{ color: changeColor(primary.stats.change1d) }}>
-                      {formatPercent(primary.stats.change1d)}
+                    <span className="ml-2" style={{ color: changeColor(primaryRange) }}>
+                      {rangeLabel} {formatPercent(primaryRange)}
+                    </span>
+                    <span
+                      className="ml-2 text-[12px]"
+                      style={{ color: changeColor(primary.stats.change1d) }}
+                    >
+                      dziś {formatPercent(primary.stats.change1d)}
                     </span>
                     {primary.watched === false && (
-                      <span className="ml-2 text-[10px] text-muted-foreground">podgląd</span>
+                      <span className="ml-2 text-[12px] text-muted-foreground">podgląd</span>
                     )}
                   </p>
                 )}
@@ -532,10 +549,11 @@ function MarketsPage() {
                 isWatched ? removeMutation.mutate(symbol) : addMutation.mutate(symbol)
               }
               busySymbol={watchBusy}
+              rangeLabel={rangeLabel}
             />
-            <p className="mt-2 font-mono text-[9px] leading-relaxed text-muted-foreground">
-              Zmiany w sesjach (tydzień akcji = 5, krypto = 7). Dane z darmowych źródeł —
-              orientacyjne.
+            <p className="mt-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
+              Zmiana w zakresie wykresu ({rangeLabel}) — od pierwszego notowania w nim. Dane z
+              darmowych źródeł — orientacyjne.
             </p>
           </div>
         </div>
@@ -619,7 +637,7 @@ function MarketsPage() {
                     className="mt-0.5 h-3 w-3 shrink-0"
                     style={{ color: "var(--warning)" }}
                   />
-                  <p className="min-w-0 break-words font-mono text-[10px] text-muted-foreground">
+                  <p className="min-w-0 break-words font-mono text-[11px] text-muted-foreground">
                     <span className="text-foreground">{m.label}</span> ({m.symbol}): {m.reason}
                   </p>
                 </div>

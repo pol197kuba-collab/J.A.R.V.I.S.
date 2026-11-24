@@ -158,13 +158,42 @@ export function formatPercent(value: number | null): string {
 }
 
 /**
- * Wiersze notowań (dowolna kolejność, wiele instrumentów) → ostatnia cena i
- * zmiana względem poprzedniego zamknięcia, per instrument. Lista obok wykresu
- * pokazuje to dla całego katalogu, nie tylko obserwowanych.
+ * Zmiana (%) od pierwszego notowania w zakresie (data ≥ `since`) do
+ * ostatniego. Ta sama baza co wykres: jego seria zaczyna się od pierwszego
+ * notowania ≥ since. Punkty posortowane rosnąco po dacie.
+ */
+export function changeSince(
+  points: ReadonlyArray<{ date: string; close: number }>,
+  since: string,
+): number | null {
+  const base = points.find((p) => p.date >= since && Number.isFinite(p.close) && p.close > 0);
+  const last = points[points.length - 1];
+  if (!base || !last || base === last || !Number.isFinite(last.close)) return null;
+  return (last.close / base.close - 1) * 100;
+}
+
+/** Początek zakresu `days` dni wstecz (YYYY-MM-DD) — tak samo jak getMarketGrid. */
+export const rangeStart = (days: number, now = Date.now()): string =>
+  new Date(now - days * 86_400_000).toISOString().slice(0, 10);
+
+export type CatalogQuoteRow = {
+  last: number;
+  change1d: number | null;
+  /** Zmiana od początku zakresu (since); null bez `since` albo bez notowań w nim. */
+  changeRange: number | null;
+  date: string;
+};
+
+/**
+ * Wiersze notowań (dowolna kolejność, wiele instrumentów) → ostatnia cena,
+ * zmiana względem poprzedniego zamknięcia i — z `since` — zmiana od początku
+ * zakresu, per instrument. Lista obok wykresu pokazuje to dla całego
+ * katalogu, nie tylko obserwowanych.
  */
 export function catalogQuotes(
   rows: ReadonlyArray<{ symbol: string; quote_date: string; close: number }>,
-): Record<string, { last: number; change1d: number | null; date: string }> {
+  since?: string,
+): Record<string, CatalogQuoteRow> {
   const by = new Map<string, Array<{ date: string; close: number }>>();
   for (const r of rows) {
     const close = Number(r.close);
@@ -173,7 +202,7 @@ export function catalogQuotes(
     list.push({ date: r.quote_date, close });
     by.set(r.symbol, list);
   }
-  const out: Record<string, { last: number; change1d: number | null; date: string }> = {};
+  const out: Record<string, CatalogQuoteRow> = {};
   for (const [symbol, list] of by) {
     list.sort((a, b) => a.date.localeCompare(b.date));
     const last = list[list.length - 1];
@@ -181,6 +210,7 @@ export function catalogQuotes(
     out[symbol] = {
       last: last.close,
       change1d: prev ? (last.close / prev.close - 1) * 100 : null,
+      changeRange: since ? changeSince(list, since) : null,
       date: last.date,
     };
   }

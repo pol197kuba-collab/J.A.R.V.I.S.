@@ -9,7 +9,7 @@ import { formatPln } from "./format";
 
 export function LiveDot({ active, label = "LIVE" }: { active: boolean; label?: string }) {
   return (
-    <span className="font-display flex items-center gap-1.5 text-[10px] uppercase tracking-[0.3em] text-primary">
+    <span className="font-display flex items-center gap-1.5 text-[11px] uppercase tracking-[0.3em] text-primary">
       <span
         className={cn(
           "h-1.5 w-1.5 rounded-full bg-[color:var(--success)]",
@@ -39,7 +39,7 @@ export function StatTile({
       className="holo-stat min-w-0 border-l border-primary/15 pl-3 first:border-l-0 first:pl-0"
       style={color ? ({ "--holo-beam": color } as React.CSSProperties) : undefined}
     >
-      <p className="font-display text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
+      <p className="font-display text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
         {label}
       </p>
       <p
@@ -47,10 +47,10 @@ export function StatTile({
         style={{ color: color ?? "var(--foreground)" }}
       >
         {value}
-        {unit && <span className="ml-1 text-[10px] font-normal text-muted-foreground">{unit}</span>}
+        {unit && <span className="ml-1 text-[11px] font-normal text-muted-foreground">{unit}</span>}
       </p>
       {hint && (
-        <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">{hint}</p>
+        <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">{hint}</p>
       )}
     </div>
   );
@@ -80,7 +80,7 @@ export function Chips<T extends string | number>({
           aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
           className={cn(
-            "font-display px-2.5 py-1 text-[9px] uppercase tracking-widest transition",
+            "font-display px-2.5 py-1 text-[11px] uppercase tracking-widest transition",
             value === option.value
               ? "bg-primary/20 text-primary"
               : "text-muted-foreground hover:bg-primary/10",
@@ -135,7 +135,7 @@ export function SeriesTooltip({
 
 export function PanelHint({ children }: { children: ReactNode }) {
   return (
-    <p className="mt-2 min-w-0 break-words font-mono text-[10px] leading-relaxed text-muted-foreground">
+    <p className="mt-2 min-w-0 break-words font-mono text-[11px] leading-relaxed text-muted-foreground">
       {children}
     </p>
   );
@@ -144,7 +144,7 @@ export function PanelHint({ children }: { children: ReactNode }) {
 export function EmptyState({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-24 items-center justify-center px-4 py-6 text-center">
-      <p className="font-display text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+      <p className="font-display text-[11px] uppercase tracking-[0.25em] text-muted-foreground">
         {children}
       </p>
     </div>

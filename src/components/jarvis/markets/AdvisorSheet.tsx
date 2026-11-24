@@ -87,7 +87,7 @@ function GradeBadge({ play }: { play: Play }) {
   return (
     <span
       className={cn(
-        "font-display px-1.5 py-0.5 text-[9px] uppercase tracking-[0.18em]",
+        "font-display px-1.5 py-0.5 text-[10px] uppercase tracking-[0.18em]",
         play.grade === "strong"
           ? cn(sideTone(play.side), play.side === "buy" ? "bg-success/15" : "bg-destructive/15")
           : play.grade === "medium"
@@ -113,13 +113,13 @@ function Field({
 }) {
   return (
     <div className="min-w-0">
-      <p className="font-display text-[9px] uppercase tracking-[0.22em] text-muted-foreground">
+      <p className="font-display text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
         {label}
       </p>
       <p className={cn("break-words font-mono text-[14px] font-semibold text-foreground", tone)}>
         {value}
       </p>
-      {sub && <p className="text-[10px] text-muted-foreground">{sub}</p>}
+      {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
     </div>
   );
 }
@@ -127,7 +127,7 @@ function Field({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0 space-y-2">
-      <p className="font-display text-[10px] uppercase tracking-[0.25em] text-primary">● {title}</p>
+      <p className="font-display text-[11px] uppercase tracking-[0.25em] text-primary">● {title}</p>
       {children}
     </div>
   );
@@ -219,7 +219,7 @@ function PlayCard({
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <span className="font-display text-[9px] uppercase tracking-[0.22em] text-muted-foreground">
+          <span className="font-display text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
             siła
           </span>
           <span className={cn("font-mono text-[22px] font-bold leading-none", sideTone(play.side))}>
@@ -270,7 +270,7 @@ function PlayCard({
           type="button"
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
-          className="font-display flex min-h-10 flex-1 items-center justify-center gap-1.5 border border-primary/40 px-3 text-[10px] uppercase tracking-[0.16em] text-primary hover:bg-primary/10"
+          className="font-display flex min-h-10 flex-1 items-center justify-center gap-1.5 border border-primary/40 px-3 text-[11px] uppercase tracking-[0.16em] text-primary hover:bg-primary/10"
         >
           Szczegóły
           <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
@@ -278,7 +278,7 @@ function PlayCard({
         <button
           type="button"
           onClick={copy}
-          className="font-display flex min-h-10 flex-1 items-center justify-center gap-1.5 border border-primary/20 px-3 text-[10px] uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground"
+          className="font-display flex min-h-10 flex-1 items-center justify-center gap-1.5 border border-primary/20 px-3 text-[11px] uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground"
         >
           <Copy className="h-3.5 w-3.5" />
           Kopiuj zlecenie
@@ -390,7 +390,7 @@ function PlayCard({
                           {n.summaryPl}
                         </span>
                       )}
-                      <span className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+                      <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                         <span
                           className={
                             n.impact === "positive"
@@ -443,13 +443,13 @@ function PlayCard({
 
       <div className="mt-3 border-t border-primary/15 pt-3">
         {done ? (
-          <p className="font-display text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          <p className="font-display text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             {done.action === "played" ? `✓ Zagrane po ${fmtPx(done.entry)}` : "Pominięte"}
           </p>
         ) : entering ? (
           <div className="flex flex-wrap items-end gap-2">
             <label className="min-w-0 flex-1">
-              <span className="font-display block text-[9px] uppercase tracking-[0.22em] text-muted-foreground">
+              <span className="font-display block text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
                 Cena wejścia w XTB
               </span>
               <input
@@ -463,7 +463,7 @@ function PlayCard({
               type="button"
               disabled={act.isPending}
               onClick={() => act.mutate("played")}
-              className="font-display h-10 border border-primary/60 bg-primary/12 px-4 text-[10px] uppercase tracking-[0.16em] text-primary disabled:opacity-40"
+              className="font-display h-10 border border-primary/60 bg-primary/12 px-4 text-[11px] uppercase tracking-[0.16em] text-primary disabled:opacity-40"
             >
               Zapisz
             </button>
@@ -473,7 +473,7 @@ function PlayCard({
             <button
               type="button"
               onClick={() => setEntering(true)}
-              className="font-display min-h-10 flex-1 border border-primary/60 bg-primary/10 text-[10px] uppercase tracking-[0.16em] text-primary"
+              className="font-display min-h-10 flex-1 border border-primary/60 bg-primary/10 text-[11px] uppercase tracking-[0.16em] text-primary"
             >
               Zagrałem
             </button>
@@ -481,7 +481,7 @@ function PlayCard({
               type="button"
               disabled={act.isPending}
               onClick={() => act.mutate("skipped")}
-              className="font-display min-h-10 flex-1 border border-primary/20 text-[10px] uppercase tracking-[0.16em] text-muted-foreground disabled:opacity-40"
+              className="font-display min-h-10 flex-1 border border-primary/20 text-[11px] uppercase tracking-[0.16em] text-muted-foreground disabled:opacity-40"
             >
               Pomijam
             </button>
@@ -515,7 +515,7 @@ function OpenPositions({ entries }: { entries: AdvisorJournalEntry[] }) {
               <p className="break-words text-[13px] font-semibold">
                 <span className={sideTone(e.side)}>{e.side === "buy" ? "▲" : "▼"}</span> {e.label}
               </p>
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 wejście {fmtPx(e.entry)} · SL {fmtPx(e.stop)} · TP {fmtPx(e.take)} · do{" "}
                 {day(e.expiresOn)}
               </p>
@@ -524,7 +524,7 @@ function OpenPositions({ entries }: { entries: AdvisorJournalEntry[] }) {
               type="button"
               disabled={m.isPending}
               onClick={() => m.mutate(e.id)}
-              className="font-display shrink-0 border border-primary/25 px-2.5 py-2 text-[9px] uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground"
+              className="font-display shrink-0 border border-primary/25 px-2.5 py-2 text-[10px] uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground"
             >
               Zamknąłem
             </button>
@@ -552,7 +552,7 @@ function NumberField({
 }) {
   return (
     <label className="min-w-0">
-      <span className="font-display block text-[9px] uppercase tracking-[0.22em] text-muted-foreground">
+      <span className="font-display block text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
         {label}
       </span>
       <span className="mt-1.5 flex items-center gap-1.5">
@@ -601,14 +601,14 @@ function SettingsView({ settings, onDone }: { settings: AdvisorSettings; onDone:
           type="button"
           disabled={m.isPending || !(stake > 0)}
           onClick={() => m.mutate()}
-          className="font-display min-h-10 flex-1 border border-primary/60 bg-primary/10 text-[10px] uppercase tracking-[0.16em] text-primary disabled:opacity-40"
+          className="font-display min-h-10 flex-1 border border-primary/60 bg-primary/10 text-[11px] uppercase tracking-[0.16em] text-primary disabled:opacity-40"
         >
           Zapisz
         </button>
         <button
           type="button"
           onClick={onDone}
-          className="font-display min-h-10 flex-1 border border-primary/20 text-[10px] uppercase tracking-[0.16em] text-muted-foreground"
+          className="font-display min-h-10 flex-1 border border-primary/20 text-[11px] uppercase tracking-[0.16em] text-muted-foreground"
         >
           Anuluj
         </button>
@@ -686,7 +686,7 @@ export function AdvisorSheet({
                   type="button"
                   disabled={busy}
                   onClick={() => void advice.refetch()}
-                  className="font-display flex min-h-11 flex-1 items-center justify-center gap-2 border border-primary/60 bg-primary/10 px-3 text-[10px] uppercase tracking-[0.18em] text-primary disabled:opacity-40"
+                  className="font-display flex min-h-11 flex-1 items-center justify-center gap-2 border border-primary/60 bg-primary/10 px-3 text-[11px] uppercase tracking-[0.18em] text-primary disabled:opacity-40"
                 >
                   <RefreshCw className={cn("h-3.5 w-3.5", advice.isFetching && "animate-spin")} />
                   Analizuj teraz
@@ -695,7 +695,7 @@ export function AdvisorSheet({
                   type="button"
                   disabled={busy || (a?.deepLeft ?? 0) === 0}
                   onClick={() => deep.mutate()}
-                  className="font-display flex min-h-11 flex-1 items-center justify-center gap-2 border border-primary/30 px-3 text-[10px] uppercase tracking-[0.18em] text-primary disabled:opacity-40"
+                  className="font-display flex min-h-11 flex-1 items-center justify-center gap-2 border border-primary/30 px-3 text-[11px] uppercase tracking-[0.18em] text-primary disabled:opacity-40"
                 >
                   <BrainCircuit className={cn("h-3.5 w-3.5", deep.isPending && "animate-pulse")} />
                   Głęboka analiza{a ? ` (${a.deepLeft})` : ""}

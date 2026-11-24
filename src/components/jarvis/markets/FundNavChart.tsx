@@ -25,7 +25,7 @@ function NavTooltip({ active, payload, label }: TooltipProps<number, string>) {
   const sorted = [...payload].sort((a, b) => Number(b.value) - Number(a.value));
   return (
     <div className="pointer-events-none rounded border border-primary/30 bg-popover px-2.5 py-1.5 shadow-lg">
-      <p className="font-display text-[8px] uppercase tracking-widest text-muted-foreground">
+      <p className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">
         {String(label)}
       </p>
       <div className="mt-1 space-y-0.5">
@@ -35,12 +35,12 @@ function NavTooltip({ active, payload, label }: TooltipProps<number, string>) {
               className="h-1.5 w-1.5 shrink-0 rounded-full"
               style={{ background: entry.color }}
             />
-            <span className="font-display min-w-0 truncate text-[9px] uppercase tracking-wider text-muted-foreground">
+            <span className="font-display min-w-0 truncate text-[10px] uppercase tracking-wider text-muted-foreground">
               {entry.name}
             </span>
             <span className="ml-auto shrink-0 font-mono text-[11px] font-bold text-foreground">
               {plnFmt(Number(entry.value))}
-              <span className="ml-1 text-[9px] text-muted-foreground">zł</span>
+              <span className="ml-1 text-[10px] text-muted-foreground">zł</span>
             </span>
           </div>
         ))}
@@ -101,7 +101,7 @@ export function FundNavChart({
             .filter((p) => typeof row[p.key] === "number")
             .sort((a, b) => Number(row[b.key]) - Number(row[a.key]));
           return (
-            <div className="font-display text-center text-[10px] uppercase tracking-[0.16em] text-foreground [text-shadow:0_0_10px_black,0_0_14px_var(--reactor)]">
+            <div className="font-display text-center text-[11px] uppercase tracking-[0.16em] text-foreground [text-shadow:0_0_10px_black,0_0_14px_var(--reactor)]">
               {sorted.map((p) => (
                 <b
                   key={p.key}
@@ -109,7 +109,7 @@ export function FundNavChart({
                   style={{ color: PLAYER_COLOR[p.key] ?? "var(--muted-foreground)" }}
                 >
                   {plnFmt(Number(row[p.key]))}{" "}
-                  <span className="text-[9px] text-muted-foreground">zł · {p.label}</span>
+                  <span className="text-[10px] text-muted-foreground">zł · {p.label}</span>
                 </b>
               ))}
               {new Date(`${row.date}T00:00:00`).toLocaleDateString("pl-PL")}
@@ -127,7 +127,7 @@ export function FundNavChart({
           <CartesianGrid stroke="var(--primary)" strokeOpacity={0.08} vertical={false} />
           <XAxis
             dataKey="label"
-            tick={{ fontSize: 9, fill: "var(--muted-foreground)" }}
+            tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
             tickLine={false}
             axisLine={false}
             minTickGap={24}
@@ -135,7 +135,7 @@ export function FundNavChart({
           <YAxis
             width={52}
             domain={["auto", "auto"]}
-            tick={{ fontSize: 9, fill: "var(--muted-foreground)" }}
+            tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
             tickLine={false}
             axisLine={false}
             tickFormatter={(v: number) => `${plnFmt(v / 1000, 1)}k`}

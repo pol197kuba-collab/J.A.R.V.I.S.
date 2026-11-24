@@ -58,7 +58,7 @@ function FilterRow<T extends string>({
 }) {
   const chip = (active: boolean) =>
     cn(
-      "font-display shrink-0 rounded px-2 py-1 text-[9px] uppercase tracking-[0.16em] transition-colors",
+      "font-display shrink-0 rounded px-2 py-1 text-[10px] uppercase tracking-[0.16em] transition-colors",
       active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground",
     );
   return (
@@ -67,7 +67,7 @@ function FilterRow<T extends string>({
       aria-label={name}
       className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden"
     >
-      <span className="font-display mr-1 shrink-0 text-[8px] uppercase tracking-[0.22em] text-muted-foreground/70">
+      <span className="font-display mr-1 shrink-0 text-[10px] uppercase tracking-[0.22em] text-muted-foreground/70">
         {name}
       </span>
       <button
@@ -108,7 +108,7 @@ function FeedList({ feeds }: { feeds: readonly FeedHealth[] }) {
               aria-hidden
             />
             <span className="min-w-0 flex-1 truncate text-foreground/85">{f.label}</span>
-            <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+            <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
               {f.count7d} / 7 dni · {f.lastAt ? relativeTime(f.lastAt) : st.label}
             </span>
           </li>
@@ -193,14 +193,14 @@ export function MarketNewsPanel({
               className="mt-0.5 h-3.5 w-3.5 shrink-0"
               style={{ color: "var(--warning)" }}
             />
-            <p className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">
+            <p className="font-display text-[11px] uppercase tracking-widest text-muted-foreground">
               Zaciąg newsów nie przyniósł nic
             </p>
           </div>
           {errors.map((err) => (
             <p
               key={err}
-              className="min-w-0 break-words pl-5 font-mono text-[10px] leading-relaxed text-muted-foreground"
+              className="min-w-0 break-words pl-5 font-mono text-[11px] leading-relaxed text-muted-foreground"
             >
               {err}
             </p>
@@ -228,13 +228,13 @@ export function MarketNewsPanel({
     <>
       {filterSymbol && (
         <div className="mt-3 flex items-center gap-2">
-          <span className="font-display text-[9px] uppercase tracking-widest text-muted-foreground">
+          <span className="font-display text-[10px] uppercase tracking-widest text-muted-foreground">
             Filtr: {filterSymbol}
           </span>
           <button
             type="button"
             onClick={onClearFilter}
-            className="font-display border border-primary/40 px-2 py-0.5 text-[9px] uppercase tracking-widest text-primary hover:bg-primary/20"
+            className="font-display border border-primary/40 px-2 py-0.5 text-[10px] uppercase tracking-widest text-primary hover:bg-primary/20"
           >
             POKAŻ WSZYSTKIE
           </button>
@@ -247,7 +247,7 @@ export function MarketNewsPanel({
       </div>
 
       {shown.length === 0 && (
-        <p className="mt-3 font-mono text-[10px] text-muted-foreground">
+        <p className="mt-3 font-mono text-[11px] text-muted-foreground">
           Nic dla tych filtrów — wybierz „Wszystkie” w którymś rzędzie.
         </p>
       )}
@@ -273,14 +273,14 @@ export function MarketNewsPanel({
                   </p>
 
                   {item.summaryPl && (
-                    <p className="mt-0.5 min-w-0 break-words font-mono text-[10px] leading-relaxed text-muted-foreground">
+                    <p className="mt-0.5 min-w-0 break-words font-mono text-[11px] leading-relaxed text-muted-foreground">
                       {item.summaryPl}
                     </p>
                   )}
 
                   <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                     <span
-                      className="font-display text-[9px] uppercase tracking-widest"
+                      className="font-display text-[10px] uppercase tracking-widest"
                       style={{ color: style.color }}
                     >
                       {style.label} · {item.impactScore}
@@ -289,20 +289,20 @@ export function MarketNewsPanel({
                       item.symbols.map((s) => (
                         <span
                           key={s}
-                          className="font-mono rounded border border-primary/30 px-1 text-[9px] text-primary"
+                          className="font-mono rounded border border-primary/30 px-1 text-[10px] text-primary"
                         >
                           {s}
                         </span>
                       ))
                     ) : (
-                      <span className="font-mono text-[9px] text-muted-foreground/70">
+                      <span className="font-mono text-[10px] text-muted-foreground/70">
                         ogólnorynkowy
                       </span>
                     )}
                     {item.classifiedBy === "ai" && (
                       <Sparkles className="h-2.5 w-2.5 shrink-0 text-primary/70" />
                     )}
-                    <span className="font-mono ml-auto shrink-0 text-[9px] text-muted-foreground/70">
+                    <span className="font-mono ml-auto shrink-0 text-[10px] text-muted-foreground/70">
                       {item.source ?? feedLabel(item.feedTag)} · {relativeTime(item.publishedAt)}
                     </span>
                     <ExternalLink className="h-2.5 w-2.5 shrink-0 text-muted-foreground/60" />
