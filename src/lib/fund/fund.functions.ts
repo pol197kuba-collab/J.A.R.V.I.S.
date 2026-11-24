@@ -357,6 +357,11 @@ export type FundHolding = {
   /** Ostatnie zamknięcie i zmiana dnia instrumentu (%), gdy są notowania. */
   last: number | null;
   change1d: number | null;
+  /** Progi ryzyka (null = brak): cena odniesienia, stop/take jako ułamek ruchu, koniec horyzontu. */
+  refPx: number | null;
+  stopPct: number | null;
+  takePct: number | null;
+  expiresOn: string | null;
 };
 
 export type FundPlayerDetail = {
@@ -364,6 +369,12 @@ export type FundPlayerDetail = {
   holdings: FundHolding[];
   /** Wszystkie transakcje gracza, od najnowszej. */
   trades: FundTrade[];
+};
+
+const num = (v: number | string | null | undefined): number | null => {
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 };
 
 export const getFundPlayer = createServerFn({ method: "GET" })
@@ -422,10 +433,30 @@ export const getFundPlayer = createServerFn({ method: "GET" })
       reason: o.reason,
     }));
 
-    const { data: posRows } = await supabase
+    type PosRow = {
+      symbol: string;
+      units: number;
+      value_pln: number;
+      cost_pln: number;
+      ref_px?: number | null;
+      stop_pct?: number | null;
+      take_pct?: number | null;
+      expires_on?: string | null;
+    };
+    const first = await supabase
       .from("fund_positions")
-      .select("symbol, units, value_pln, cost_pln")
-      .eq("portfolio_id", portfolio.id);
+      .select("symbol, units, value_pln, cost_pln, ref_px, stop_pct, take_pct, expires_on")
+      .eq("portfolio_id", portfolio.id)
+      .returns<PosRow[]>();
+    let posRows = first.data;
+    if (first.error) {
+      // Baza bez kolumn progów (migracja jeszcze nie weszła) — pozycje i tak pokazujemy.
+      ({ data: posRows } = await supabase
+        .from("fund_positions")
+        .select("symbol, units, value_pln, cost_pln")
+        .eq("portfolio_id", portfolio.id)
+        .returns<PosRow[]>());
+    }
     const symbols = (posRows ?? []).map((p) => p.symbol);
     // dwa ostatnie zamknięcia każdego instrumentu → strzałka trendu dnia
     const closes = new Map<string, number[]>();
@@ -453,6 +484,10 @@ export const getFundPlayer = createServerFn({ method: "GET" })
           costPln: Number(p.cost_pln),
           last: c[0] ?? null,
           change1d: c.length === 2 && c[1] !== 0 ? ((c[0] - c[1]) / c[1]) * 100 : null,
+          refPx: num(p.ref_px),
+          stopPct: num(p.stop_pct),
+          takePct: num(p.take_pct),
+          expiresOn: p.expires_on ?? null,
         };
       })
       .sort((a, b) => Math.abs(b.valuePln) - Math.abs(a.valuePln));

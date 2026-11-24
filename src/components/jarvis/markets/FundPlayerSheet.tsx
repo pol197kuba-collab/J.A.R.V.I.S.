@@ -23,6 +23,7 @@ import {
   type FundPlayer,
   type FundTrade,
 } from "@/lib/fund/fund.functions";
+import { exitLevels, type ExitLevel } from "@/lib/fund/exits";
 import { episodes, type Episode } from "@/lib/fund/history";
 import { PLAYER_STYLE } from "@/lib/fund/players";
 import { describeSettings, settingsFor, type FundSettings } from "@/lib/fund/settings";
@@ -79,6 +80,75 @@ function DayChange({ change }: { change: number | null }) {
   );
 }
 
+function ExitPart({
+  label,
+  level,
+  symbol,
+  color,
+  title,
+}: {
+  label: string;
+  level: ExitLevel;
+  symbol: string;
+  color: string;
+  title: string;
+}) {
+  return (
+    <span title={title}>
+      <span style={{ color }}>{label}</span> {price(symbol, level.price)}
+      {level.distancePct !== null && ` (${pctFmt(level.distancePct, 1)})`}
+    </span>
+  );
+}
+
+/** SL / TP i koniec horyzontu otwartej pozycji; nic, gdy gracz ich nie ma. */
+function ExitLine({ h, short }: { h: FundHolding; short: boolean }) {
+  const lv = exitLevels(short ? "short" : "long", h.refPx, h.stopPct, h.takePct, h.last);
+  if (!lv.stop && !lv.take && !h.expiresOn) return null;
+  const parts: React.ReactNode[] = [];
+  if (lv.stop)
+    parts.push(
+      <ExitPart
+        key="sl"
+        label="SL"
+        level={lv.stop}
+        symbol={h.symbol}
+        color="var(--destructive)"
+        title="Stop-loss: przy tej cenie pozycja zamknie się ze stratą. W nawiasie: ile cena musi się jeszcze ruszyć od obecnej."
+      />,
+    );
+  if (lv.take)
+    parts.push(
+      <ExitPart
+        key="tp"
+        label="TP"
+        level={lv.take}
+        symbol={h.symbol}
+        color="var(--success)"
+        title="Take-profit: przy tej cenie pozycja zamknie się z zyskiem. W nawiasie: ile cena musi się jeszcze ruszyć od obecnej."
+      />,
+    );
+  if (h.expiresOn)
+    parts.push(
+      <span
+        key="exp"
+        title="Koniec horyzontu prognozy — bez nowego potwierdzenia pozycja zostanie wtedy zamknięta."
+      >
+        do {shortDate(h.expiresOn)}
+      </span>,
+    );
+  return (
+    <p className="min-w-0 break-words pl-5 font-mono text-[10px] text-muted-foreground">
+      {parts.map((p, i) => (
+        <span key={i}>
+          {i > 0 && " · "}
+          {p}
+        </span>
+      ))}
+    </p>
+  );
+}
+
 function HoldingRow({ h, open }: { h: FundHolding; open: Episode | undefined }) {
   const short = h.units < 0;
   const pl = h.valuePln - h.costPln;
@@ -123,6 +193,7 @@ function HoldingRow({ h, open }: { h: FundHolding; open: Episode | undefined }) 
         {plnFmt(Math.abs(h.valuePln))} zł
         <DayChange change={h.change1d} />
       </p>
+      <ExitLine h={h} short={short} />
     </li>
   );
 }
