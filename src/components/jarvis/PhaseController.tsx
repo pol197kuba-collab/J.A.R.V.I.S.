@@ -18,6 +18,7 @@ import { audio } from "@/lib/audio/AudioEngine";
 import { supabase } from "@/integrations/supabase/client";
 import { MODE_HOME, getUiMode } from "@/lib/theme/uiMode";
 import { shouldUseIntro, type IntroMode } from "@/lib/theme/loginScene";
+import { clearResumable, isResumable, markResumable } from "./sessionResume";
 
 // Suppress unused-import warning — kept so refactors don't drop the dep.
 void AppSidebar;
@@ -45,6 +46,9 @@ export function PhaseController() {
   // The scene reported p = 1 (overlay gone, rendering stopped) — safe to unmount.
   const [sceneDone, setSceneDone] = useState(false);
   const introBridge = useRef(createIntroBridge());
+  // Wznowienie po odświeżeniu: odczytane raz przy pierwszym starcie strony;
+  // po dezaktywacji (powrót do „booting” w tej samej sesji) już nie.
+  const resumeOnBoot = useRef<boolean | null>(null);
   const sceneActive = intro === "landing" || intro === "login";
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isPublicRoute = pathname === "/reset-password" || pathname.startsWith("/.lovable/oauth/");
@@ -53,6 +57,7 @@ export function PhaseController() {
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_OUT") {
+        clearResumable();
         setPhase("booting");
       }
     });
@@ -98,9 +103,27 @@ export function PhaseController() {
   useEffect(() => {
     if (phase !== "booting") return;
     setSplash("on");
-    setIntro(shouldUseIntro());
     setSceneDone(false);
     setLandingGone(false);
+    if (resumeOnBoot.current === null) resumeOnBoot.current = isResumable();
+    if (resumeOnBoot.current) {
+      // Odświeżenie w trakcie pracy: przy ważnej sesji od razu pulpit na
+      // bieżącym adresie (intro zostaje null, więc nic poza splashem nie
+      // mignie); bez sesji — zwykły start. Idempotentne, więc podwójny
+      // efekt w StrictMode niczego nie psuje.
+      void supabase.auth.getSession().then(({ data }) => {
+        resumeOnBoot.current = false;
+        if (data.session) {
+          setSplash((s) => (s === "on" ? "fading" : s));
+          setPhase((cur) => (cur === "booting" ? "dashboard_active" : cur));
+        } else {
+          clearResumable();
+          setIntro(shouldUseIntro());
+        }
+      });
+      return;
+    }
+    setIntro(shouldUseIntro());
   }, [phase]);
 
   // Classic paths have nothing to wait for: fade the splash as soon as the mode is
@@ -153,6 +176,16 @@ export function PhaseController() {
   useEffect(() => {
     if (phase === "dashboard_active") audio.startHum();
     else audio.stopHum();
+  }, [phase]);
+
+  // Pulpit aktywny → przeładowanie tej karty wraca na otwartą stronę
+  // (sessionResume.ts); dezaktywacja to wyjście z aplikacji.
+  useEffect(() => {
+    if (phase === "dashboard_active") markResumable();
+    if (phase === "shutdown") {
+      clearResumable();
+      resumeOnBoot.current = false;
+    }
   }, [phase]);
 
   // Public routes bypass the whole phase machine. This early return MUST sit

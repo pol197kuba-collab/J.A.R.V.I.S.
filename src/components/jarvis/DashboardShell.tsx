@@ -16,6 +16,7 @@ import { ArkRebootProvider, useArkReboot } from "@/components/jarvis/ArkRebootCo
 import { ArkRebootOverlay } from "@/components/jarvis/ArkRebootOverlay";
 import { RebootButton } from "@/components/jarvis/RebootButton";
 import { MobileBottomNav } from "@/components/jarvis/MobileBottomNav";
+import { SpeechControl } from "@/components/jarvis/SpeechControl";
 import { useRouterState } from "@tanstack/react-router";
 import { CommandPalette } from "@/components/jarvis/CommandPalette";
 import { DesktopNav, OPEN_COCKPIT_EVENT } from "@/components/jarvis/DesktopNav";
@@ -131,6 +132,7 @@ function DashboardShellInner({ phase, onShutdown }: { phase: AppPhase; onShutdow
           )
         )}
         <CommandPalette />
+        <SpeechControl />
         <ArkRebootOverlay />
         <Toaster theme="dark" position="top-right" richColors />
         {phase === "shutdown" && (

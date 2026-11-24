@@ -151,3 +151,74 @@ export function freshness(iso: string, now: Date = new Date()): number {
   const days = Math.max(0, (now.getTime() - t) / 86_400_000);
   return 0.35 + 0.65 * Math.exp(-days / 30);
 }
+
+// ---------- sieć wspomnień: układ i połączenia ----------
+
+/** Promień (w jednostkach bazy), do którego rozciągamy zbyt ciasną chmurę. */
+export const SPREAD_TARGET = 0.7;
+/** Najwięcej, ile razy rozciągamy — przy jednej-dwóch gwiazdach nie wybuchamy sceny. */
+const SPREAD_MAX = 8;
+
+/**
+ * Mała baza (kilka wspomnień) daje z UMAP ciasny kłębek w środku sceny —
+ * kropki zlewają się w jedną plamę. Rozciąga układ wokół środka ciężkości
+ * tak, by 90% gwiazd mieściło się w promieniu SPREAD_TARGET. Duża chmura
+ * (już szeroka) zostaje bez zmian. Gromady jadą razem z gwiazdami.
+ */
+export function spreadLayout<S extends Positioned, C extends Positioned>(
+  stars: readonly S[],
+  clusters: readonly C[],
+): { stars: S[]; clusters: C[] } {
+  if (stars.length === 0) return { stars: [...stars], clusters: [...clusters] };
+  const cx = stars.reduce((a, s) => a + s.x, 0) / stars.length;
+  const cy = stars.reduce((a, s) => a + s.y, 0) / stars.length;
+  const cz = stars.reduce((a, s) => a + s.z, 0) / stars.length;
+  const radii = stars.map((s) => Math.hypot(s.x - cx, s.y - cy, s.z - cz)).sort((a, b) => a - b);
+  const r90 = radii[Math.min(radii.length - 1, Math.floor(radii.length * 0.9))];
+  const k = r90 > 1e-6 ? Math.min(SPREAD_MAX, Math.max(1, SPREAD_TARGET / r90)) : 1;
+  const move = <T extends Positioned>(p: T): T => ({
+    ...p,
+    x: cx + (p.x - cx) * k,
+    y: cy + (p.y - cy) * k,
+    z: cz + (p.z - cz) * k,
+  });
+  return { stars: stars.map(move), clusters: clusters.map(move) };
+}
+
+/**
+ * Krawędzie sieci: każda widoczna gwiazda łączy się z `k` najbliższymi
+ * widocznymi. Pary bez powtórzeń (i < j), posortowane. Przy dużej bazie
+ * liczy tylko pierwsze `max` gwiazd, żeby nie robić O(n²) na tysiącach.
+ */
+export function networkEdges(
+  stars: readonly (Positioned & { visible: boolean })[],
+  k = 2,
+  max = 800,
+): Array<[number, number]> {
+  const idx = stars
+    .map((s, i) => (s.visible ? i : -1))
+    .filter((i) => i >= 0)
+    .slice(0, max);
+  const seen = new Set<string>();
+  const out: Array<[number, number]> = [];
+  for (const i of idx) {
+    const s = stars[i];
+    const near = idx
+      .filter((j) => j !== i)
+      .map((j) => ({
+        j,
+        d: (stars[j].x - s.x) ** 2 + (stars[j].y - s.y) ** 2 + (stars[j].z - s.z) ** 2,
+      }))
+      .sort((a, b) => a.d - b.d || a.j - b.j)
+      .slice(0, k);
+    for (const { j } of near) {
+      const a = Math.min(i, j);
+      const b = Math.max(i, j);
+      const key = `${a}-${b}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push([a, b]);
+    }
+  }
+  return out.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+}

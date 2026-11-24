@@ -10,6 +10,9 @@
 // server-function runtime has no existing multipart/base64 handling for.
 //
 // v1 scope (explicit product decision, 2026-07-20): .txt/.md + PDF only.
+// 2026-11-24: + Word (.docx/.odt), arkusze (.xlsx/.csv — także do liczenia
+// przez analyze_table, tabela document_tables) i zdjęcia (OCR + opis przez
+// Gemini, imageText.server.ts); limit 10 MB.
 // Kept conservative on purpose — this environment's server-function
 // execution budget is a real, previously-confirmed constraint (see
 // flightRadar.ts's timeout history), so processing is capped hard rather
@@ -25,19 +28,35 @@ import type { Json } from "@/integrations/supabase/types";
 import { logServerError, logServerWarn } from "@/lib/system/logServerError";
 import { CHUNK_SIZE_CHARS, CHUNK_OVERLAP_CHARS, chunkText, sanitizeFilename } from "./chunking";
 import { readOwnerSecrets } from "@/lib/secrets/ownerSecrets.server";
+import type { SheetTable } from "./extract";
 // tools.server.ts is a .server.ts module — this file is a *.functions.ts
 // file, which ships to the client bundle (see client.server.ts's own
 // comment on this). Load it dynamically inside the handler, same pattern
 // runtime.functions.ts already uses for runtime.server.ts, never as a
 // top-level import here.
 
-export const ALLOWED_EXTENSIONS = [".txt", ".md", ".markdown", ".pdf"] as const;
+export const ALLOWED_EXTENSIONS = [
+  ".txt",
+  ".md",
+  ".markdown",
+  ".pdf",
+  ".docx",
+  ".odt",
+  ".xlsx",
+  ".csv",
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".webp",
+  ".heic",
+  ".heif",
+] as const;
 type AllowedExtension = (typeof ALLOWED_EXTENSIONS)[number];
 
 // Raw upload cap — a fast pre-check before any download/extraction work.
 // Deliberately small; the real gate is MAX_CHUNKS_PER_DOCUMENT below, since
 // bytes don't map 1:1 to extractable characters (especially for PDF).
-export const MAX_FILE_SIZE_BYTES = 3 * 1024 * 1024; // 3 MB
+export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB (zdjęcia z telefonu)
 
 // Hard cap on chunks processed per document. Chosen conservatively: even
 // in the pathological worst case (every embedding call individually
@@ -164,12 +183,47 @@ export const processDocumentFn = createServerFn({ method: "POST" })
     if (dlErr || !blob) return fail(`storage download failed: ${dlErr?.message ?? "no data"}`);
 
     const ext = extensionOf(doc.filename);
+    // Klucz Gemini jest potrzebny i tak (embeddingi), a zdjęcie czyta model —
+    // więc sprawdzamy go przed ekstrakcją.
+    const { data: secret } = await readOwnerSecrets(userId, "gemini_api_key");
+    const apiKey = secret?.gemini_api_key?.trim();
+    if (!apiKey) {
+      return fail("no Gemini key linked — add one in Settings to process documents");
+    }
+
     let text: string;
+    let tables: SheetTable[] = [];
     try {
+      // Ekstraktory (fflate) i OCR tylko po stronie serwera, ładowane tutaj —
+      // ten plik importuje też strona /documents (ALLOWED_EXTENSIONS).
+      const { extractDocx, extractOdt, extractXlsx, parseCsv, tablesToText } =
+        await import("./extract");
+      const { IMAGE_MIME, imageToText } = await import("./imageText.server");
+      const bytes = new Uint8Array(await blob.arrayBuffer());
       if (ext === ".pdf") {
-        text = await extractPdfText(new Uint8Array(await blob.arrayBuffer()));
+        text = await extractPdfText(bytes);
+      } else if (ext === ".docx") {
+        text = extractDocx(bytes);
+      } else if (ext === ".odt") {
+        text = extractOdt(bytes);
+      } else if (ext === ".xlsx") {
+        tables = extractXlsx(bytes);
+        text = tablesToText(tables);
+      } else if (ext === ".csv") {
+        const rows = parseCsv(new TextDecoder("utf-8").decode(bytes));
+        tables = rows.length > 0 ? [{ name: doc.filename, rows }] : [];
+        text = tablesToText(tables);
+      } else if (IMAGE_MIME[ext]) {
+        text = await imageToText({
+          bytes,
+          mimeType: IMAGE_MIME[ext],
+          filename: doc.filename,
+          apiKey,
+          db: supabase,
+          ownerId: userId,
+        });
       } else {
-        text = await blob.text();
+        text = new TextDecoder("utf-8").decode(bytes);
       }
     } catch (err) {
       return fail(`text extraction failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -183,12 +237,6 @@ export const processDocumentFn = createServerFn({ method: "POST" })
       return fail(
         `document too large for now (${chunks.length} chunks, max ${MAX_CHUNKS_PER_DOCUMENT}) — try a shorter document`,
       );
-    }
-
-    const { data: secret } = await readOwnerSecrets(userId, "gemini_api_key");
-    const apiKey = secret?.gemini_api_key?.trim();
-    if (!apiKey) {
-      return fail("no Gemini key linked — add one in Settings to process documents");
     }
 
     // Embed in small parallel batches: fast enough to stay inside this
@@ -217,6 +265,32 @@ export const processDocumentFn = createServerFn({ method: "POST" })
     }));
     const { error: insErr } = await supabase.from("document_chunks").insert(rows);
     if (insErr) return fail(`chunk storage failed: ${insErr.message}`);
+
+    // Arkusze: pełne dane do liczenia (analyze_table M.E.T.R.I.C.-a).
+    if (tables.length > 0) {
+      await supabase.from("document_tables").delete().eq("document_id", doc.id);
+      const { error: tblErr } = await supabase.from("document_tables").insert(
+        tables.map((t, i) => ({
+          document_id: doc.id,
+          user_id: userId,
+          sheet_index: i,
+          name: t.name.slice(0, 200),
+          rows: t.rows as unknown as Json,
+          row_count: t.rows.length,
+          col_count: Math.max(0, ...t.rows.map((r) => r.length)),
+        })),
+      );
+      if (tblErr) {
+        // Wyszukiwanie działa i bez tego — tylko liczenie na arkuszu nie.
+        await logServerWarn(
+          supabase,
+          userId,
+          "documents",
+          `spreadsheet data not stored (${doc.filename}): ${tblErr.message} — analyze_table unavailable for it`,
+          { document_id: doc.id } as Json,
+        );
+      }
+    }
 
     const embeddedCount = embeddings.filter(Boolean).length;
     if (embeddedCount === 0 && chunks.length > 0) {

@@ -5,6 +5,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { embedText, toVectorLiteral } from "@/lib/ai/embed";
 import { recordBrainTrace } from "./memory.server";
 import { type Tool, clampInt, sanitizeForOrFilter, toolLedger } from "./shared.server";
+import { analyzeTable, type Filter, type TableQuery } from "@/lib/documents/tableMath";
 
 // ---------------------------------------------------------------------------
 // M.E.T.R.I.C. tools — RAG over public.documents / public.document_chunks
@@ -220,6 +221,135 @@ export const readDocumentTool: Tool = {
       truncated,
     } as Json);
     return { filename: doc.filename, status: doc.status, truncated, content };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// M.E.T.R.I.C. — liczenie na arkuszach (.xlsx / .csv). Pełne dane leżą w
+// document_tables; liczy kod (src/lib/documents/tableMath.ts), nie model.
+// ---------------------------------------------------------------------------
+
+const FILTER_OPS = new Set(["eq", "neq", "contains", "gt", "gte", "lt", "lte"]);
+
+export const analyzeTableTool: Tool = {
+  risk: "read",
+  untrustedOutput: true,
+  declaration: {
+    name: "analyze_table",
+    description:
+      "Compute over the FULL data of an uploaded spreadsheet (.xlsx / .csv) — never sum or average spreadsheet numbers yourself. Start with operation 'describe' to see the column names and types. 'aggregate' computes sum/avg/min/max/count of value_column, optionally per group_by column and after filters; sort 'key' gives a trend over a date/period column. 'rows' returns matching rows. Columns may be named by header text or by letter (A, B…). Polish number formats ('1 234,56 zł') are understood. Find document_id with list_documents.",
+    parameters: {
+      type: "object",
+      properties: {
+        document_id: {
+          type: "string",
+          description: "The spreadsheet document id (list_documents).",
+        },
+        sheet: {
+          type: "string",
+          description: "Sheet name (or 1-based number). Default: the first sheet.",
+        },
+        operation: { type: "string", enum: ["describe", "aggregate", "rows"] },
+        group_by: { type: "string", description: "aggregate: column to group by." },
+        value_column: { type: "string", description: "aggregate: numeric column to compute on." },
+        agg: { type: "string", enum: ["sum", "avg", "min", "max", "count"] },
+        filters: {
+          type: "array",
+          description: "Row filters applied before computing.",
+          items: {
+            type: "object",
+            properties: {
+              column: { type: "string" },
+              op: { type: "string", enum: ["eq", "neq", "contains", "gt", "gte", "lt", "lte"] },
+              value: { type: "string" },
+            },
+            required: ["column", "op", "value"],
+          },
+        },
+        sort: { type: "string", enum: ["value_desc", "value_asc", "key"] },
+        limit: {
+          type: "integer",
+          description: "Max groups / rows returned (default 50, max 200).",
+        },
+      },
+      required: ["document_id", "operation"],
+    },
+  },
+  async execute(args, ctx) {
+    const documentId = String(args.document_id ?? "").trim();
+    if (!documentId) return { error: "missing_document_id" };
+    const op = String(args.operation ?? "");
+    if (op !== "describe" && op !== "aggregate" && op !== "rows") {
+      return { error: "operation must be describe, aggregate or rows" };
+    }
+
+    const { data: sheets, error } = await ctx.supabase
+      .from("document_tables")
+      .select("sheet_index, name, rows, row_count, col_count, documents(filename)")
+      .eq("document_id", documentId)
+      .eq("user_id", ctx.userId)
+      .order("sheet_index", { ascending: true });
+    if (error) {
+      await ctx.logEvent("error", "tool.analyze_table", error.message, {
+        document_id: documentId,
+      } as Json);
+      return { error: error.message };
+    }
+    if (!sheets || sheets.length === 0) {
+      return {
+        error: "no_table_data",
+        hint: "This document has no spreadsheet data (only .xlsx / .csv uploaded after this feature). Use read_document instead.",
+      };
+    }
+
+    const wanted = String(args.sheet ?? "").trim();
+    const byNumber = /^\d+$/.test(wanted) ? sheets[Number(wanted) - 1] : undefined;
+    const sheet =
+      byNumber ??
+      (wanted
+        ? (sheets.find((s) => s.name.toLowerCase() === wanted.toLowerCase()) ??
+          sheets.find((s) => s.name.toLowerCase().includes(wanted.toLowerCase())))
+        : sheets[0]);
+    if (!sheet) return { error: "unknown_sheet", sheets: sheets.map((s) => s.name) };
+
+    const filters = Array.isArray(args.filters)
+      ? (args.filters as Array<Record<string, unknown>>)
+          .filter((f) => f && FILTER_OPS.has(String(f.op)))
+          .map((f) => ({
+            column: String(f.column ?? ""),
+            op: String(f.op) as Filter["op"],
+            value: String(f.value ?? ""),
+          }))
+      : undefined;
+
+    const result = analyzeTable(sheet.rows as unknown as string[][], {
+      operation: op,
+      group_by: args.group_by ? String(args.group_by) : undefined,
+      value_column: args.value_column ? String(args.value_column) : undefined,
+      agg: args.agg ? (String(args.agg) as TableQuery["agg"]) : undefined,
+      filters,
+      sort: args.sort ? (String(args.sort) as TableQuery["sort"]) : undefined,
+      limit: clampInt(args.limit, 1, 200, 50),
+    });
+
+    const filename = (sheet.documents as { filename?: string } | null)?.filename ?? null;
+    await ctx.logEvent(
+      "info",
+      "tool.analyze_table",
+      `${op}: ${filename ?? documentId} / ${sheet.name}`,
+      {
+        document_id: documentId,
+        sheet: sheet.name,
+        operation: op,
+      } as Json,
+    );
+    return {
+      filename,
+      sheet: sheet.name,
+      sheets: sheets.map((s) => s.name),
+      size: { rows: sheet.row_count, columns: sheet.col_count },
+      ...result,
+    };
   },
 };
 

@@ -869,6 +869,50 @@ export type Database = {
           },
         ]
       }
+      document_tables: {
+        Row: {
+          col_count: number
+          created_at: string
+          document_id: string
+          id: string
+          name: string
+          row_count: number
+          rows: Json
+          sheet_index: number
+          user_id: string
+        }
+        Insert: {
+          col_count: number
+          created_at?: string
+          document_id: string
+          id?: string
+          name: string
+          row_count: number
+          rows: Json
+          sheet_index: number
+          user_id: string
+        }
+        Update: {
+          col_count?: number
+          created_at?: string
+          document_id?: string
+          id?: string
+          name?: string
+          row_count?: number
+          rows?: Json
+          sheet_index?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_tables_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       documents: {
         Row: {
           char_count: number | null

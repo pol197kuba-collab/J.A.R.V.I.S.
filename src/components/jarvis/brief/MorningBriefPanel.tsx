@@ -97,7 +97,9 @@ export function MorningBriefPanel({ index = 0 }: { index?: number }) {
           {data && (
             <button
               type="button"
-              onClick={() => (speaking ? speakCancel() : speak(data.spoken, { lang: "pl" }))}
+              onClick={() =>
+                speaking ? speakCancel() : speak(data.spoken, { lang: "pl", force: true })
+              }
               aria-label={speaking ? "Przerwij odczyt" : "Przeczytaj briefing"}
               className="font-display flex items-center gap-1.5 rounded border border-primary/40 px-2 py-1 text-[9px] uppercase tracking-[0.2em] text-primary transition hover:bg-primary/10"
             >
