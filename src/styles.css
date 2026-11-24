@@ -3851,3 +3851,41 @@ html[data-backdrop3d] .jarvis-bg-root {
 .commute-map-btn:hover {
   background: color-mix(in oklab, var(--primary) 18%, transparent);
 }
+
+/* ---------- Mózg: podpisy sieci wspomnień ----------
+   Ostry tekst ze świetlistą obwódką zamiast ramki z rozmyciem tła —
+   czytelny nad kosmosem i nie „pływa” razem z poświatą bloomu. */
+.brain-node-label,
+.brain-cluster-label {
+  text-shadow:
+    0 0 2px var(--background),
+    0 0 6px var(--background),
+    0 0 10px color-mix(in oklab, var(--primary) 45%, transparent);
+}
+.brain-node-label::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 1px;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: color-mix(in oklab, var(--primary) 70%, transparent);
+  box-shadow: 0 0 6px var(--primary);
+}
+.brain-cluster-label {
+  padding-bottom: 3px;
+  border-bottom: 1px solid color-mix(in oklab, var(--primary) 45%, transparent);
+}
+.brain-node-label[data-side="left"]::before {
+  display: none;
+}
+.brain-node-label[data-side="left"]::after {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 1px;
+  margin-left: 6px;
+  vertical-align: middle;
+  background: color-mix(in oklab, var(--primary) 70%, transparent);
+  box-shadow: 0 0 6px var(--primary);
+}

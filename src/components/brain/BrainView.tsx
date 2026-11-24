@@ -51,6 +51,7 @@ import {
   nearestNeighbors,
   relativeAge,
   searchStars,
+  spreadLayout,
   TYPE_LABEL,
   TYPE_LABEL_PLURAL,
   TYPE_DOT,
@@ -90,8 +91,10 @@ export function BrainView({
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
-  const stars = useMemo(() => data?.stars ?? [], [data]);
-  const clusters = useMemo(() => data?.clusters ?? [], [data]);
+  // Mała baza daje ciasny kłębek — rozciągnięty, żeby sieć była czytelna.
+  const spread = useMemo(() => spreadLayout(data?.stars ?? [], data?.clusters ?? []), [data]);
+  const stars = spread.stars;
+  const clusters = spread.clusters;
   const clusterNames = useMemo(() => new Map(clusters.map((c) => [c.id, c.name])), [clusters]);
 
   const { webgl, mode, setMode, effectiveMode } = useBrainMode();

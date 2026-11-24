@@ -112,3 +112,49 @@ describe("stripAskPrefix", () => {
     expect(stripAskPrefix("raport sprzedaży")).toBe("raport sprzedaży");
   });
 });
+
+describe("spreadLayout", () => {
+  it("rozciąga ciasny kłębek do promienia SPREAD_TARGET wokół środka", async () => {
+    const { spreadLayout, SPREAD_TARGET } = await import("./scene");
+    const stars = [
+      { x: 0.1, y: 0, z: 0 },
+      { x: -0.1, y: 0, z: 0 },
+      { x: 0, y: 0.1, z: 0 },
+      { x: 0, y: -0.1, z: 0 },
+    ];
+    const r = spreadLayout(stars, [{ x: 0.05, y: 0, z: 0 }]);
+    expect(Math.hypot(r.stars[0].x, r.stars[0].y, r.stars[0].z)).toBeCloseTo(SPREAD_TARGET);
+    expect(r.clusters[0].x).toBeCloseTo(0.05 * (SPREAD_TARGET / 0.1));
+  });
+
+  it("szerokiej chmury nie rusza, pojedynczej gwiazdy też", async () => {
+    const { spreadLayout } = await import("./scene");
+    const wide = [
+      { x: 1, y: 0, z: 0 },
+      { x: -1, y: 0, z: 0 },
+    ];
+    expect(spreadLayout(wide, []).stars).toEqual(wide);
+    expect(spreadLayout([{ x: 0.2, y: 0.1, z: 0 }], []).stars[0]).toEqual({ x: 0.2, y: 0.1, z: 0 });
+  });
+});
+
+describe("networkEdges", () => {
+  it("łączy każdą widoczną gwiazdę z k najbliższymi, bez powtórzeń i bez ukrytych", async () => {
+    const { networkEdges } = await import("./scene");
+    const s = [
+      { x: 0, y: 0, z: 0, visible: true },
+      { x: 1, y: 0, z: 0, visible: true },
+      { x: 2, y: 0, z: 0, visible: true },
+      { x: 0.5, y: 0, z: 0, visible: false },
+    ];
+    expect(networkEdges(s, 1)).toEqual([
+      [0, 1],
+      [1, 2],
+    ]);
+    expect(networkEdges(s, 2)).toEqual([
+      [0, 1],
+      [0, 2],
+      [1, 2],
+    ]);
+  });
+});
