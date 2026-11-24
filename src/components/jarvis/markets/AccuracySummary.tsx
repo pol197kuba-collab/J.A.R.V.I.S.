@@ -57,7 +57,7 @@ export function AccuracySummary({ board }: { board: PredictionScoreboard }) {
                 />
               </div>
               {row && (
-                <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                <p className="mt-1 font-mono text-[10px] @min-[480px]:text-[11px] text-muted-foreground">
                   {row.hits} trafionych z {row.resolved} rozliczonych
                 </p>
               )}

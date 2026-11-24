@@ -380,17 +380,17 @@ function MarketsPage() {
             <button
               type="button"
               onClick={() => setAdvisorOpen(true)}
-              className="font-display flex items-center gap-1.5 border border-primary/70 bg-primary/15 px-3 py-1 text-[11px] uppercase tracking-widest text-primary transition hover:bg-primary/25"
+              className="font-display flex items-center gap-1.5 border border-primary/70 bg-primary/15 px-3 py-1 text-[9px] @min-[480px]:text-[11px] uppercase tracking-widest text-primary transition hover:bg-primary/25"
             >
-              <Crosshair className="h-3.5 w-3.5" />
+              <Crosshair className="h-3 w-3 @min-[480px]:h-3.5 @min-[480px]:w-3.5" />
               Doradca
             </button>
             <button
               type="button"
               onClick={() => setOrdersOpen(true)}
-              className="font-display flex items-center gap-1.5 border border-primary/50 px-3 py-1 text-[11px] uppercase tracking-widest text-primary transition hover:bg-primary/20"
+              className="font-display flex items-center gap-1.5 border border-primary/50 px-3 py-1 text-[9px] @min-[480px]:text-[11px] uppercase tracking-widest text-primary transition hover:bg-primary/20"
             >
-              <Bell className="h-3.5 w-3.5" />
+              <Bell className="h-3 w-3 @min-[480px]:h-3.5 @min-[480px]:w-3.5" />
               Powiadomienia
               {activeOrders > 0 && <span className="text-muted-foreground">{activeOrders}</span>}
             </button>
@@ -398,10 +398,14 @@ function MarketsPage() {
               type="button"
               disabled={refreshMutation.isPending}
               onClick={() => refreshMutation.mutate()}
-              className="font-display flex items-center gap-1.5 border border-primary/50 px-3 py-1 text-[11px] uppercase tracking-widest text-primary transition hover:bg-primary/20 disabled:opacity-40"
+              className="font-display flex items-center gap-1.5 border border-primary/50 px-3 py-1 text-[9px] @min-[480px]:text-[11px] uppercase tracking-widest text-primary transition hover:bg-primary/20 disabled:opacity-40"
             >
               <RefreshCw
-                className={refreshMutation.isPending ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"}
+                className={
+                  refreshMutation.isPending
+                    ? "h-3 w-3 @min-[480px]:h-3.5 @min-[480px]:w-3.5 animate-spin"
+                    : "h-3 w-3 @min-[480px]:h-3.5 @min-[480px]:w-3.5"
+                }
               />
               Odśwież
             </button>
@@ -480,19 +484,21 @@ function MarketsPage() {
                     "Wybierz instrument"}
                 </p>
                 {primary && (
-                  <p className="mt-1 font-mono text-[15px] tabular-nums">
+                  <p className="mt-1 font-mono text-[13px] @min-[480px]:text-[15px] tabular-nums">
                     {formatPrice(primary.stats.last, primary.currency)}
                     <span className="ml-2" style={{ color: changeColor(primaryRange) }}>
                       {rangeLabel} {formatPercent(primaryRange)}
                     </span>
                     <span
-                      className="ml-2 text-[12px]"
+                      className="ml-2 text-[10px] @min-[480px]:text-[12px]"
                       style={{ color: changeColor(primary.stats.change1d) }}
                     >
                       dziś {formatPercent(primary.stats.change1d)}
                     </span>
                     {primary.watched === false && (
-                      <span className="ml-2 text-[12px] text-muted-foreground">podgląd</span>
+                      <span className="ml-2 text-[10px] @min-[480px]:text-[12px] text-muted-foreground">
+                        podgląd
+                      </span>
                     )}
                   </p>
                 )}
@@ -551,7 +557,7 @@ function MarketsPage() {
               busySymbol={watchBusy}
               rangeLabel={rangeLabel}
             />
-            <p className="mt-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
+            <p className="mt-2 font-mono text-[9px] @min-[480px]:text-[11px] leading-relaxed text-muted-foreground">
               Zmiana w zakresie wykresu ({rangeLabel}) — od pierwszego notowania w nim. Dane z
               darmowych źródeł — orientacyjne.
             </p>
@@ -637,7 +643,7 @@ function MarketsPage() {
                     className="mt-0.5 h-3 w-3 shrink-0"
                     style={{ color: "var(--warning)" }}
                   />
-                  <p className="min-w-0 break-words font-mono text-[11px] text-muted-foreground">
+                  <p className="min-w-0 break-words font-mono text-[10px] @min-[480px]:text-[11px] text-muted-foreground">
                     <span className="text-foreground">{m.label}</span> ({m.symbol}): {m.reason}
                   </p>
                 </div>
