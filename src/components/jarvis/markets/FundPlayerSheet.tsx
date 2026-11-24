@@ -6,7 +6,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -63,9 +63,8 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
   );
 }
 
-function Trend({ change }: { change: number | null }) {
-  if (change === null) return <span className="w-14 shrink-0" />;
-  const Icon = change > 0.05 ? ArrowUpRight : change < -0.05 ? ArrowDownRight : Minus;
+function DayChange({ change }: { change: number | null }) {
+  if (change === null) return null;
   const color =
     change > 0.05
       ? "var(--success)"
@@ -73,43 +72,57 @@ function Trend({ change }: { change: number | null }) {
         ? "var(--destructive)"
         : "var(--muted-foreground)";
   return (
-    <span
-      className="flex w-14 shrink-0 items-center justify-end gap-0.5 font-mono text-[10px]"
-      style={{ color }}
-      title="Zmiana ceny instrumentu w ostatniej sesji"
-    >
-      <Icon className="h-3 w-3" aria-hidden />
-      {pctFmt(change, 1)}
+    <span style={{ color }} title="Zmiana ceny instrumentu w ostatniej sesji">
+      {" "}
+      · dziś {pctFmt(change, 1)}
     </span>
   );
 }
 
-function HoldingRow({ h }: { h: FundHolding }) {
+function HoldingRow({ h, open }: { h: FundHolding; open: Episode | undefined }) {
   const short = h.units < 0;
   const pl = h.valuePln - h.costPln;
   const plPct = h.costPln !== 0 ? (pl / Math.abs(h.costPln)) * 100 : null;
+  const units = plnFmt(Math.abs(h.units), Math.abs(h.units) < 10 ? 4 : 0);
+  const Icon = short ? ArrowDownRight : ArrowUpRight;
   return (
-    <li className="flex min-w-0 items-center gap-2 border-b border-primary/10 py-2">
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-xs text-foreground">
+    <li className="min-w-0 border-b border-primary/10 py-2.5">
+      <div className="flex min-w-0 items-baseline gap-2">
+        <Icon
+          className={`h-3.5 w-3.5 shrink-0 self-center ${short ? "text-destructive" : "text-success"}`}
+          aria-hidden
+        />
+        <p className="min-w-0 flex-1 truncate text-xs text-foreground">
           {name(h.symbol)}
           <span className="ml-1.5 font-display text-[8px] uppercase tracking-widest text-muted-foreground">
             {short ? "na spadek" : "na wzrost"}
           </span>
         </p>
-        <p className="truncate font-mono text-[10px] text-muted-foreground">
-          {plnFmt(Math.abs(h.units), Math.abs(h.units) < 10 ? 4 : 0)} szt. · teraz{" "}
-          {price(h.symbol, h.last)}
-        </p>
-      </div>
-      <div className="shrink-0 text-right">
-        <p className="font-mono text-[11px] text-foreground">{plnFmt(Math.abs(h.valuePln))} zł</p>
-        <p className="font-mono text-[10px]" style={{ color: signColor(pl) }}>
+        <span
+          className="shrink-0 font-mono text-[12px] font-bold"
+          style={{ color: signColor(pl) }}
+          title="Wynik niezrealizowany: wartość teraz − koszt wejścia"
+        >
           {zlFmt(pl)}
-          {plPct !== null && ` · ${pctFmt(plPct, 1)}`}
-        </p>
+        </span>
       </div>
-      <Trend change={h.change1d} />
+      <div className="mt-0.5 flex min-w-0 items-baseline gap-2 pl-5">
+        <p className="min-w-0 flex-1 break-words font-mono text-[10px] text-muted-foreground">
+          {short ? "Sprzedał" : "Kupił"} {units} szt.
+          {open && ` ${shortDate(open.openedOn)}`}
+          {open && ` po ${price(h.symbol, open.entryPrice)}`} · {plnFmt(Math.abs(h.costPln))} zł
+        </p>
+        {plPct !== null && (
+          <span className="shrink-0 font-mono text-[10px]" style={{ color: signColor(pl) }}>
+            {pctFmt(plPct, 1)}
+          </span>
+        )}
+      </div>
+      <p className="min-w-0 break-words pl-5 font-mono text-[10px] text-muted-foreground">
+        Teraz {price(h.symbol, h.last)} · {short ? "odkup" : "wartość"}{" "}
+        {plnFmt(Math.abs(h.valuePln))} zł
+        <DayChange change={h.change1d} />
+      </p>
     </li>
   );
 }
@@ -209,6 +222,13 @@ export function FundPlayerSheet({
   const history = useMemo(() => episodes(detail.data?.trades ?? []), [detail.data]);
   const closed = history.filter((e) => e.closedOn !== null);
   const wins = closed.filter((e) => e.realizedPln > 0).length;
+  const openBySymbol = useMemo(
+    () => new Map(history.filter((e) => e.closedOn === null).map((e) => [e.symbol, e])),
+    [history],
+  );
+  const holdings = detail.data?.holdings ?? [];
+  const openPl = holdings.reduce((a, h) => a + h.valuePln - h.costPln, 0);
+  const openCost = holdings.reduce((a, h) => a + Math.abs(h.costPln), 0);
 
   const m = player?.metrics ?? null;
   const exp = player ? exposure(positions, player.navPln) : null;
@@ -308,16 +328,25 @@ export function FundPlayerSheet({
             ) : (
               <>
                 <SectionTitle>Portfel teraz</SectionTitle>
-                {(detail.data?.holdings.length ?? 0) === 0 ? (
+                {holdings.length === 0 ? (
                   <p className="mt-2 font-mono text-[10px] text-muted-foreground">
                     Sama gotówka: {plnFmt(player.cashPln)} zł.
                   </p>
                 ) : (
-                  <ul className="mt-1">
-                    {detail.data!.holdings.map((h) => (
-                      <HoldingRow key={h.symbol} h={h} />
-                    ))}
-                  </ul>
+                  <>
+                    <p className="mt-1 min-w-0 break-words font-mono text-[10px] text-muted-foreground">
+                      {holdings.length} otwartych · weszło za {plnFmt(openCost)} zł · wynik teraz{" "}
+                      <span className="font-bold" style={{ color: signColor(openPl) }}>
+                        {zlFmt(openPl)}
+                        {openCost > 0 && ` (${pctFmt((openPl / openCost) * 100, 1)})`}
+                      </span>
+                    </p>
+                    <ul className="mt-1">
+                      {holdings.map((h) => (
+                        <HoldingRow key={h.symbol} h={h} open={openBySymbol.get(h.symbol)} />
+                      ))}
+                    </ul>
+                  </>
                 )}
 
                 <SectionTitle>Historia pozycji</SectionTitle>
