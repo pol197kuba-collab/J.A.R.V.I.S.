@@ -18,6 +18,7 @@ import { type SupabaseClient } from "@supabase/supabase-js";
 import { type Database } from "@/integrations/supabase/types";
 import { readDailyBriefTool } from "./tools/brief.server";
 import {
+  analyzeTableTool,
   listDocumentsTool,
   listGeneratedFilesTool,
   readDocumentTool,
@@ -88,6 +89,7 @@ export const ALL_TOOLS: Tool[] = [
   listDocumentsTool,
   searchDocumentsTool,
   readDocumentTool,
+  analyzeTableTool,
   listGeneratedFilesTool,
   readGeneratedFileTool,
   queueDocumentJob,

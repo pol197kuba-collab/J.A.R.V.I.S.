@@ -153,7 +153,9 @@ function DocumentsPage() {
       if (!created.ok) {
         const msg =
           created.reason === "unsupported_type"
-            ? `Nieobsługiwany format — dozwolone: ${ALLOWED_EXTENSIONS.join(", ")}`
+            ? file.name.toLowerCase().endsWith(".doc")
+              ? "Stary format .doc nie jest obsługiwany — zapisz plik w Wordzie jako .docx i prześlij ponownie"
+              : `Nieobsługiwany format — dozwolone: ${ALLOWED_EXTENSIONS.join(", ")}`
             : created.reason === "too_large"
               ? `Plik za duży (limit ${formatBytes(MAX_FILE_SIZE_BYTES)})`
               : `Błąd: ${created.message ?? created.reason}`;
@@ -216,8 +218,9 @@ function DocumentsPage() {
           <span className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
             {documents.length} DOCS {isFetching ? "// syncing…" : ""}
           </span>
-          <span className="text-[11px] text-muted-foreground">
-            {ALLOWED_EXTENSIONS.join(" / ")} · max {formatBytes(MAX_FILE_SIZE_BYTES)}
+          <span className="text-[11px] text-muted-foreground" title={ALLOWED_EXTENSIONS.join(" ")}>
+            PDF · Word (.docx, .odt) · Excel / CSV · zdjęcia (odczyt tekstu) · tekst · max{" "}
+            {formatBytes(MAX_FILE_SIZE_BYTES)}
           </span>
         </div>
       </HudPanel>

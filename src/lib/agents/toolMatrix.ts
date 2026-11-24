@@ -32,6 +32,7 @@ const CATEGORY_OF: Readonly<Record<string, ToolCategoryId>> = {
   list_documents: "documents",
   search_documents: "documents",
   read_document: "documents",
+  analyze_table: "documents",
   list_generated_files: "documents",
   read_generated_file: "documents",
   generate_document: "documents",

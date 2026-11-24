@@ -273,6 +273,8 @@ describe("klasa ryzyka narzędzi", () => {
     );
     expect(untrusted.sort()).toEqual(
       [
+        // komórki arkusza to treść z pliku użytkownika — jak read_document
+        "analyze_table",
         "fetch_url",
         "read_document",
         "read_generated_file",
